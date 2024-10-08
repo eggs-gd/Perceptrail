@@ -2,8 +2,11 @@ import React, {useState} from 'react';
 import './App.css';
 import {photos} from './misc/photos';
 
-import Grid from "./gallery/Grid";
-import Focused from "./gallery/Focused";
+import GridView from "./gallery/GridView";
+import SingleView from "./gallery/SingleView";
+import TopBar from "./gallery/TopBar";
+import DetailsView from "./gallery/DetailsView";
+import FocusButtons from "./gallery/FocusButtons";
 
 function App() {
     const [index, setIndex] = useState(-1);
@@ -11,8 +14,13 @@ function App() {
         <div className="App">
             <header className="App-header"/>
             <div>
-                <Grid photos={photos} index={index} setIndex={setIndex}/>
-                <Focused photos={photos} index={index} setIndex={setIndex}/>
+                <TopBar photos={photos} index={index} setIndex={setIndex}/>
+                <GridView photos={photos} index={index} setIndex={setIndex}/>
+            </div>
+            <div>
+                <SingleView photos={photos} index={index} setIndex={setIndex}/>
+                <DetailsView photos={photos} index={index} setIndex={setIndex}/>
+                <FocusButtons photos={photos} index={index} setIndex={setIndex}/>
             </div>
         </div>
     );

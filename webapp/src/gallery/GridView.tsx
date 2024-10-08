@@ -3,7 +3,7 @@ import PhotoAlbum from "react-photo-album";
 import "react-photo-album/styles.css";
 import {CursorProps} from "./CursorProps";
 
-export default function Grid(props: Readonly<CursorProps>) {
+export default function GridView(props: Readonly<CursorProps>) {
     return (
             <PhotoAlbum
                 layout="rows"
