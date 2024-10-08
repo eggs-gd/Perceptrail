@@ -1,27 +1,38 @@
 import React, {useState} from 'react';
 import './App.css';
-import {photos} from './misc/photos';
+import {photos as photoSet} from './data/photos';
 
 import GridView from "./gallery/GridView";
 import SingleView from "./gallery/SingleView";
 import TopBar from "./gallery/TopBar";
-import DetailsView from "./gallery/DetailsView";
-import FocusButtons from "./gallery/FocusButtons";
+//import "@perseptrail/perceptors";
+import {DatePerceptor, IPerceptor} from "@perseptrail/perceptors";
+
+
+const enabledPerceptors: IPerceptor[] = [
+    new DatePerceptor(),
+]
 
 function App() {
+    const [photos, setPhotos] = useState(photoSet);
     const [index, setIndex] = useState(-1);
+
+    const [singleOn, setSingleOn] = useState(false);
+
     return (
         <div className="App">
-            <header className="App-header"/>
-            <div>
-                <TopBar photos={photos} index={index} setIndex={setIndex}/>
-                <GridView photos={photos} index={index} setIndex={setIndex}/>
-            </div>
-            <div>
-                <SingleView photos={photos} index={index} setIndex={setIndex}/>
-                <DetailsView photos={photos} index={index} setIndex={setIndex}/>
-                <FocusButtons photos={photos} index={index} setIndex={setIndex}/>
-            </div>
+            {!singleOn && <header className="App-header">
+                <TopBar photos={photos} index={index}
+                />
+            </header>}
+            <GridView
+                photos={photos} index={index} setIndex={setIndex}
+                openSingle={setSingleOn}
+            />
+            <SingleView
+                photos={photos} index={index} setIndex={setIndex}
+                isSingleOpened={singleOn} openSingle={setSingleOn}
+            />
         </div>
     );
 }

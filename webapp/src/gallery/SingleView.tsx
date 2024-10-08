@@ -11,25 +11,32 @@ import Video from "yet-another-react-lightbox/plugins/video";
 // import Zoom from "yet-another-react-lightbox/plugins/zoom";
 // import "yet-another-react-lightbox/plugins/captions.css";
 // import "yet-another-react-lightbox/plugins/thumbnails.css";
+import {ISingleProps} from "./IViewProps";
+import FocusButtons from "./single/FocusButtons";
+import DetailsView from "./single/DetailsView";
 
-import {CursorProps} from "./CursorProps";
-
-export default function SingleView(props: Readonly<CursorProps>) {
+export default function SingleView(props: Readonly<ISingleProps>) {
     return (
-        <Lightbox
-            slides={props.photos?.map(p => {
-                p.width *= 100;
-                p.height *= 100;
-                return p;
-            })}
-            open={props.index >= 0}
-            index={props.index}
-            close={() => {}}
-            on = {{view: ({index:i}) => props.setIndex(i)}}
-            // enable optional lightbox plugins
-            plugins={[
-                Video, // Captions, Fullscreen, Slideshow, Thumbnails, Zoom
-            ]}
-        />
+        <>
+            <Lightbox
+                slides={props.photos?.map(p => {
+                    p.width *= 100;
+                    p.height *= 100;
+                    return p;
+                })}
+                open={props.isSingleOpened}
+                index={props.index}
+                close={() => {
+                    props.openSingle(false)
+                }}
+                on={{view: ({index: i}) => props.setIndex(i)}}
+                // enable optional lightbox plugins
+                plugins={[
+                    Video, // Captions, Fullscreen, Slideshow, Thumbnails, Zoom
+                ]}
+            />
+            <DetailsView photos={props.photos} index={props.index} setIndex={props.setIndex}/>
+            <FocusButtons photos={props.photos} index={props.index} setIndex={props.setIndex}/>
+        </>
     );
 }
