@@ -5,8 +5,9 @@ import {photos as photoSet} from './data/photos';
 import GridView from "./gallery/GridView";
 import SingleView from "./gallery/SingleView";
 import TopBar from "./gallery/TopBar";
-//import "@perseptrail/perceptors";
 import {DatePerceptor, IPerceptor} from "@perseptrail/perceptors";
+
+
 
 
 const enabledPerceptors: IPerceptor[] = [
