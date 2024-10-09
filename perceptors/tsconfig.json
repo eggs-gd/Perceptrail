@@ -1,27 +1,15 @@
 {
-  // Change this to match your project
-  "include": ["src/**/*"],
-  // We don't need to transpile these directories
-  "exclude": ["node_modules", "dist"],
-
   "compilerOptions": {
-    // Tells TypeScript to read JS files, as
-    // normally they are ignored as source files
-    "allowJs": true,
-    // Generate d.ts files
-    "declaration": true,
-    // This compiler run should
-    // only output d.ts files
-    "emitDeclarationOnly": false,
-    // go to js file when using IDE functions like
-    // "Go to Definition" in VSCode
-    "declarationMap": true,
-    "strict": true,
-    "esModuleInterop": true,
-    "moduleResolution":"Node",
-    "outDir": "./dist", // Вказати вихідну папку для компіляції
-    "rootDir": "./src", // Вказати папку, де знаходяться вихідні файли
-    "skipLibCheck": true,
+    "target": "ES2020",                    // Сучасна ціль компіляції
+    "module": "ESNext",                    // Використовуємо модулі ES
+    "moduleResolution": "node",            // Як модулі будуть знайдені (у стилі Node.js)
+    "declaration": true,                   // Генерує файли .d.ts для підтримки типів
+    "sourceMap": true,                     // Генерує source maps для дебагу
+    "outDir": "./dist",                    // Каталог для зібраного коду
+    "esModuleInterop": true,               // Покращує сумісність з CommonJS модулями
+    "skipLibCheck": true,                  // Пропуск перевірки типів у бібліотеках
+    "forceConsistentCasingInFileNames": true // Обов'язкове використання однакових регістрів у назвах файлів
   },
-  "lib": ["es2015"]
+  "include": ["src"],                       // Включаємо всі файли з src
+  "exclude": ["node_modules", "dist"]               // Виключаємо node_modules
 }
