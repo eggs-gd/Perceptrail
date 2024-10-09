@@ -1,21 +1,21 @@
 {
   "name": "@perceprtail/backend",
-  "version": "0.0.0",
-  "main": "dist/app.js",
+  "version": "0.0.1",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
-    "start": "tsc && node dist/app.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "start": "node --loader ts-node/esm ./src/index.ts"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
+  "type": "module",
+  "dependencies": {
+    "express": "^4.21.1"
+  },
   "devDependencies": {
     "@types/express": "^5.0.0",
-    "tslint": "^5.20.1",
+    "eslint": "^9.12.0",
+    "ts-node": "^10.9.2",
     "typescript": "^5.6.2"
-  },
-  "dependencies": {
-    "express": "^4.21.0"
   }
 }
