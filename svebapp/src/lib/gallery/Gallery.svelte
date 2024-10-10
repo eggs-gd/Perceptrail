@@ -1,18 +1,16 @@
 <script lang="ts">
-    import Img from "./components/Img.svelte";
+    import ItemView from "./components/ItemView.svelte";
     import {layoutRaw} from "./layout";
-    import type {Item, ItemScaled} from "./types";
-    import {goto} from "$app/navigation";
-
+    import {GalleryEvent, type Item, type ItemScaled} from "./types";
+    import { createEventDispatcher } from 'svelte';
 
     export let images: Item[] = [];
     export let rowHeight = 220;
     export let gutter = 8;
-    export let imageComponent = Img;
 
     let scaledImages: ItemScaled[] = [];
     let width = 0;
-    
+
 
     function imgStyle(scaledWidth: number, scaledHeight: number, isLastInRow: boolean, isLastRow: boolean) {
         let marginRight = gutter + 'px',
@@ -34,6 +32,8 @@
             gutter
         }
     );
+
+    const dispatch = createEventDispatcher();
 
 </script>
 
@@ -65,22 +65,16 @@
 
 <div class="masonry" bind:clientWidth={width}>
     <div class="container" style="width: {width}px" class:hidden={!width}>
-        {#each scaledImages as {
-            index,
-            ratio,
-            scaledHeight,
-            scaledWidth,
-            isLastInRow,
-            isLastRow,
-            scaledWidthPc,
-            ...image
-        }}
+        {#each scaledImages as itm, index}
             <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
             <div class="image"
-                 style={imgStyle(scaledWidth, scaledHeight, isLastInRow, isLastRow )}
-                 on:click={(_) => goto("/item/" + index)}>
-                <slot {index} {image}>
-                    <svelte:component this={imageComponent} {...image}/>
+                 style={imgStyle(itm.scaledWidth, itm.scaledHeight, itm.isLastInRow, itm.isLastRow )}
+                 on:click={() => {
+                     dispatch(GalleryEvent.selectItem, index);
+                     dispatch(GalleryEvent.openItem, index);
+                 }}>
+                <slot {index} {itm}>
+                    <svelte:component this={ItemView} item ={itm}/>
                 </slot>
             </div>
         {/each}

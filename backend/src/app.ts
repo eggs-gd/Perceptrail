@@ -1,4 +1,5 @@
 import express from 'express';
+import items from './routes/items'
 
 const app = express();
 const port = 3000;
@@ -12,3 +13,5 @@ app.listen(port, () => {
     // }
     return console.log(`server is listening on ${port}`);
 });
+
+app.use('/items', items);

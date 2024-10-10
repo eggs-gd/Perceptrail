@@ -1,3 +1,8 @@
+export enum GalleryEvent {
+    selectItem = 'selectItem',
+    openItem = 'openItem',
+}
+
 export interface Item {
     src: string;
 
