@@ -8,7 +8,8 @@
     "outDir": "./dist",                    // Каталог для зібраного коду
     "esModuleInterop": true,               // Покращує сумісність з CommonJS модулями
     "skipLibCheck": true,                  // Пропуск перевірки типів у бібліотеках
-    "forceConsistentCasingInFileNames": true // Обов'язкове використання однакових регістрів у назвах файлів
+    "forceConsistentCasingInFileNames": true, // Обов'язкове використання однакових регістрів у назвах файлів
+    "resolveJsonModule": true
   },
   "include": ["src"],                       // Включаємо всі файли з src
   "exclude": ["node_modules", "dist"]               // Виключаємо node_modules

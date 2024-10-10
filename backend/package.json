@@ -6,11 +6,12 @@
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
-    "start": "node --loader ts-node/esm ./src/index.ts"
+    "start": "tsc && node ./dist/index.js"
   },
   "type": "module",
   "dependencies": {
-    "express": "^4.21.1"
+    "express": "^4.21.1",
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
