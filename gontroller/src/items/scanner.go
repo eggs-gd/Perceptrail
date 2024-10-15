@@ -1,4 +1,4 @@
-package main
+package items
 
 import (
 	"encoding/json"
@@ -13,7 +13,7 @@ type FolderContent struct {
 }
 
 // Функція для обробки запитів до конкретної папки
-func scanFolder(w http.ResponseWriter, r *http.Request) {
+func ScanFolder(w http.ResponseWriter, r *http.Request) {
 	// Читаємо параметр 'path' з URL
 	folderPath := r.URL.Query().Get("path")
 	if folderPath == "" {

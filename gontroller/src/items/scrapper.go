@@ -1,9 +1,11 @@
-package main
+package items
 
 import (
 	"encoding/json"
 	"fmt"
 	"image"
+	_ "image/jpeg"
+	_ "image/png"
 	"log"
 	"os"
 	"path/filepath"
@@ -19,7 +21,7 @@ type MediaInfo struct {
 	Ratio   float64 `json:"ratio"`
 }
 
-func scrape(folderPath string) {
+func Scrape(folderPath string) {
 	fileChannel := make(chan string)
 	infosChannel := make(chan MediaInfo)
 	var wg sync.WaitGroup

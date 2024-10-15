@@ -1,6 +1,7 @@
 package main
 
 import (
+	"gontroller/src/items"
 	"log"
 	"os"
 
@@ -18,7 +19,7 @@ func main() {
 		log.Fatal("MEDIA_FOLDER not set in .env file")
 	}
 
-	scrape(folderPath)
+	items.Scrape(folderPath)
 
 	// // Вказуємо шлях і функцію обробник
 	// http.HandleFunc("/scan", scanFolder)

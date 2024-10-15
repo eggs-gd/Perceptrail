@@ -1,5 +1,7 @@
 .idea
 
+gontroller/bin/*
+
 # Logs
 logs
 *.log
