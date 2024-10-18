@@ -1,14 +1,19 @@
 package main
 
 import (
-	"gontroller/src/items"
 	"log"
 	"os"
 
+	"github.com/google/uuid"
 	"github.com/joho/godotenv"
+
+	exiftool "gontroller/src/pkg/exif"
 )
 
 func main() {
+	id := uuid.New()
+	log.Println(id.String())
+
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatalf("Error loading .env file")
@@ -19,7 +24,8 @@ func main() {
 		log.Fatal("MEDIA_FOLDER not set in .env file")
 	}
 
-	items.Scrape(folderPath)
+	exiftool.Process(folderPath)
+	//playground.Run(folderPath)
 
 	// // Вказуємо шлях і функцію обробник
 	// http.HandleFunc("/scan", scanFolder)

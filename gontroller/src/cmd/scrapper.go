@@ -1,7 +1,6 @@
-package items
+package playground
 
 import (
-	"encoding/json"
 	"fmt"
 	"image"
 	_ "image/jpeg"
@@ -19,40 +18,6 @@ type MediaInfo struct {
 	Width   int     `json:"width"`
 	Height  int     `json:"height"`
 	Ratio   float64 `json:"ratio"`
-}
-
-func Scrape(folderPath string) {
-	fileChannel := make(chan string)
-	infosChannel := make(chan MediaInfo)
-	var wg sync.WaitGroup
-
-	mediaInfos := []MediaInfo{}
-
-	wg.Add(1)
-	go getFilesList(folderPath, fileChannel, &wg)
-
-	for filePath := range fileChannel {
-		wg.Add(1)
-		go processFile(filePath, infosChannel, &wg)
-	}
-
-	go watchInfos(&mediaInfos, infosChannel)
-
-	wg.Wait()
-	close(infosChannel)
-
-	outputFile := filepath.Join(folderPath, "media_info.json")
-	file, err := json.MarshalIndent(mediaInfos, "", "  ")
-	if err != nil {
-		log.Fatalf("Error marshaling JSON: %v\n", err)
-	}
-
-	err = os.WriteFile(outputFile, file, 0644)
-	if err != nil {
-		log.Fatalf("Error writing file: %v\n", err)
-	}
-
-	fmt.Printf("Media info saved to %s\n", outputFile)
 }
 
 func watchInfos(mediaInfos *[]MediaInfo, infos <-chan MediaInfo) {
@@ -83,8 +48,7 @@ func getFilesList(folderPath string, fileChannel chan<- string, wg *sync.WaitGro
 
 }
 
-func processFile(filePath string, infos chan<- MediaInfo, wg *sync.WaitGroup) {
-	defer wg.Done()
+func processFile(filePath string) MediaInfo {
 
 	dimensions := getDimensions(filePath)
 	sidecar := getSidecarFile(filePath)
@@ -96,7 +60,7 @@ func processFile(filePath string, infos chan<- MediaInfo, wg *sync.WaitGroup) {
 		Height:  dimensions[1],
 		Ratio:   float64(dimensions[0]) / float64(dimensions[1]),
 	}
-	infos <- info
+	return info
 }
 
 func isMediaFile(filePath string) bool {
