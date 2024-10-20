@@ -3,7 +3,7 @@ package playground
 import (
 	"encoding/json"
 	"fmt"
-	"gontroller/src/tsugor"
+	"gontroller/ext/tsugor"
 	"log"
 	"os"
 	"path/filepath"

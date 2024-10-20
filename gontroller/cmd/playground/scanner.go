@@ -1,4 +1,4 @@
-package items
+package playground
 
 import (
 	"encoding/json"

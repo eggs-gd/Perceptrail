@@ -3,7 +3,9 @@ package tsugor
 
 import "sync"
 
-func decorate[Ti any, To any](count int, chin <-chan Ti, chout chan<- To, fn func(input Ti) To, extWg *sync.WaitGroup) {
+type Decorator[Ti any, To any] func(Ti) To
+
+func decorate[Ti any, To any](count int, chin <-chan Ti, chout chan<- To, fn Decorator[Ti, To], extWg *sync.WaitGroup) {
 	var intWg = sync.WaitGroup{}
 
 	if extWg != nil {
@@ -24,7 +26,7 @@ func decorate[Ti any, To any](count int, chin <-chan Ti, chout chan<- To, fn fun
 	close(chout)
 }
 
-// Take raw data from first channel and put decarodated data to second.
+// DecorateSync Take raw data from first channel and put decarodated data to second.
 // After input channel will be closed externally - complete job and close output channel also
 //
 // Parameters:
@@ -37,7 +39,7 @@ func DecorateSync[Ti any, To any](count int, chin <-chan Ti, chout chan<- To, fn
 	decorate(count, chin, chout, fn, nil)
 }
 
-// Take raw data from first channel and put decarodated data to second.
+// DecorateAsync Take raw data from first channel and put decarodated data to second.
 // After input channel will be closed externally - complete job and close output channel also
 //
 // Parameters:

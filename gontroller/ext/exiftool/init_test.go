@@ -1,6 +1,9 @@
 package exiftool
 
-import "runtime"
+import (
+	"log"
+	"runtime"
+)
 
 func init() {
 	if runtime.GOOS == "windows" {
@@ -9,4 +12,5 @@ func init() {
 	} else {
 		Exec = "dist/exiftool"
 	}
+	log.Println("Init from exiftool")
 }

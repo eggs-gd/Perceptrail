@@ -9,7 +9,7 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${workspaceFolder}/gontroller/src",
+            "program": "${workspaceFolder}/gontroller/",
             //"env": {},
             //"args": [],
             "envFile": "${workspaceFolder}/gontroller/.env"

@@ -26,3 +26,27 @@ func Unmarshal(data []byte, m map[string][]byte) error {
 	}
 	return nil
 }
+
+func UnmarshalObj(data []byte, m *[]map[string][]byte) error {
+	startObject := []byte("======== ")
+	data = bytes.Replace(data, startObject, []byte("path: "), 1)
+
+	i := bytes.IndexByte(data, '\n')
+	if i < 0 {
+		return errors.New("exiftool: unexpected end of output")
+	}
+
+	j := bytes.Index(data[:i], []byte(": "))
+	if j < 0 {
+		return errors.New("exiftool: missing separator")
+	}
+
+	key := string(bytes.TrimSpace(data[:j]))
+	val := bytes.TrimSuffix(data[j+2:i], []byte("\r"))
+
+	var itm = make(map[string][]byte)
+
+	itm[key] = val
+	*m = append(*m, itm)
+	return Unmarshal(data[i+1:], itm)
+}

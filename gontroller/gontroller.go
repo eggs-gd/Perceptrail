@@ -1,30 +1,30 @@
 package main
 
 import (
+	"gontroller/pkg/chain"
 	"log"
 	"os"
-
-	"github.com/google/uuid"
-	"github.com/joho/godotenv"
-
-	exiftool "gontroller/src/pkg/exif"
+	"sync"
 )
 
 func main() {
-	id := uuid.New()
-	log.Println(id.String())
-
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatalf("Error loading .env file")
-	}
+	// id := uuid.New()
+	// log.Println(id.String())
 
 	folderPath := os.Getenv("MEDIA_FOLDER")
 	if folderPath == "" {
 		log.Fatal("MEDIA_FOLDER not set in .env file")
 	}
 
-	exiftool.Process(folderPath)
+	var wg sync.WaitGroup
+
+	var ch = chain.NewChain(folderPath)
+	defer ch.Close()
+
+	wg.Add(1)
+	ch.Run(&wg)
+
+	//exif.Process(folderPath)
 	//playground.Run(folderPath)
 
 	// // Вказуємо шлях і функцію обробник
