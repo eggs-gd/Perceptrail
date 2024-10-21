@@ -1,4 +1,4 @@
-@startuml Item Import Flow
+@startuml ML Flow
 
 queue "MQTT" as MQTT
 

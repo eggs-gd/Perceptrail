@@ -1,4 +1,4 @@
-@startuml Item Import Flow
+@startuml Client Flow
 
 actor "Client" as Client
 queue "MQTT" as MQTT
