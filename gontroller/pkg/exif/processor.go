@@ -37,11 +37,10 @@ var genericTags []string = []string{
 
 type Monitor struct {
 	wg      *sync.WaitGroup
-	workers []*exiftool.Server //*fsnotify.Watcher
+	workers []*exiftool.Server
 
 	filesChan <-chan t.ItemPath
 	infosChan chan<- t.ItemExif
-	//decorator t.FromPathToExif
 }
 
 func NewMonitorPool(count int, filesChan <-chan t.ItemPath, infosChan chan<- t.ItemExif, wg *sync.WaitGroup) *Monitor {

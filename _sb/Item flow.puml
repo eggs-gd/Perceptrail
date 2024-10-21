@@ -2,9 +2,12 @@
 
 actor "Client" as Client
 queue "MQTT" as MQTT
+participant "ML" as ML
+database "DB" as DB
+control "Gorm" as Gorm #LightCoral
 
-participant "Server" as Server
-control "Broadcast" as Broadcast
+box "Gontroller"
+collections "Chain" as Chain #LightSeaGreen
 
 control "FS Watcher" as Watcher
 queue "Files\nchannel" as FilesCh #LightGreen
@@ -19,123 +22,133 @@ queue "Infos\nChannel" as InfoCh #LightGreen
 control "Photo\nProcessor" as PhotoProcessor
 control "Video\nProcessor" as VideoProcessor
 queue "Items\nchannel" as ItemsCh #LightGreen
-
-database "DB" as DB
-participant "ML" as ML
+end box
 
 == Gontroller ==
-activate Server
-activate MQTT
-Server -> Server: Startup
-Server -> Watcher: Run
+Chain -> Chain: Startup
+activate Chain #LightSeaGreen
+Chain -> Watcher: Run
+deactivate Chain
 
-activate Watcher
-loop #LightGray
+activate Watcher #LightSeaGreen
+loop #LightGreen
     Watcher --> Watcher: Wait FS event
     Watcher -> FilesCh: There is changes\np := path\ng := NewGuid()
     deactivate Watcher
-    activate FilesCh
+    activate FilesCh #LightSeaGreen
     
 end
 
 loop #LightGreen Files channel subscribe 
     FilesCh -> EXIF: p -> path\ng -> NewGuid()
-    deactivate FilesCh
-    activate EXIF
+    deactivate FilesCh #LightSeaGreen
+    activate EXIF #LightSeaGreen
     EXIF -> ExifCh: p, g,\nImageSize,\nImageWidth,\nMIMEType
     deactivate EXIF
-    activate ExifCh
+    activate ExifCh #LightSeaGreen
 end
 
-loop
+loop#LightCyan Validating Loop
     ExifCh -> Preprocessor: p, g,\nImageSize,\nImageWidth,\nMIMEType
     deactivate ExifCh
-    activate Preprocessor
+    activate Preprocessor #LightBlue
+    activate Preprocessor #Orange
     
     Preprocessor -> Preprocessor: Check Mimetype
     
-    alt MimeType == image/* || video/*
-        Preprocessor -> DB: Check if it is new/changed/known
-        activate DB
+    alt MimeType == */*
+        Preprocessor ->x Gorm: Save as Known Unwanted
+        activate Gorm
 
         
-    else MimeType == */*
-        Preprocessor ->x Preprocessor: Ignore
+    else MimeType == image/* || video/*
+        Preprocessor -> InfoCh: 
+        destroy Preprocessor
+        activate InfoCh #Orange
+        Preprocessor -> Gorm: Check if it is new/changed/known
         deactivate Preprocessor
     end
 
     alt known
-        DB -> Preprocessor: known and same hash
+        Gorm -> Preprocessor: known and same hash
         activate Preprocessor
         Preprocessor ->x Preprocessor: Ignore
         deactivate Preprocessor
 
     else new
-        DB -> Preprocessor: new
+        Gorm -> Preprocessor: new
         activate Preprocessor
-        Preprocessor -> Broadcast: New Item
+        Preprocessor -> Chain: New Item
         deactivate Preprocessor
-        activate Broadcast
-        Broadcast -> InfoCh: New Item
+        activate Chain
+        Chain -> InfoCh: New Item
         activate InfoCh
-        Broadcast -> Server: New Item
-        deactivate Broadcast
+        Chain -->> MQTT: New Item
+        deactivate Chain
+        activate MQTT
 
     else changed
-        DB -> Preprocessor: known but different hash
-        deactivate DB
+        Gorm -> Preprocessor: known but different hash
+        deactivate Gorm
         activate Preprocessor
-        Preprocessor -> Broadcast: Change guid to known\nUpdate Item
+        Preprocessor -> Chain: Change guid to known\nUpdate Item
         deactivate Preprocessor
-        activate Broadcast
-        Broadcast -> InfoCh: Updated Item
-        Broadcast -> Server: Updated Item
-        deactivate Broadcast
+        activate Chain
+        Chain -> InfoCh: Updated Item
+        Chain -->> MQTT: Updated Item
+        deactivate Chain
 
     end
 end
 
-        group Photo
-            InfoCh -> PhotoProcessor: image/*
-            activate PhotoProcessor
-            PhotoProcessor -> ItemsCh: scaled photo
-            deactivate PhotoProcessor
-            activate ItemsCh
-        end
-        group Video
-            InfoCh -> VideoProcessor: video/*
-            deactivate InfoCh
-            activate VideoProcessor
-            VideoProcessor -> ItemsCh: scaled video
-            deactivate VideoProcessor
-        end
+group #LightYellow Photo
+    InfoCh -> PhotoProcessor: image/*
+    activate PhotoProcessor
+    PhotoProcessor -> ItemsCh: scaled photo
+    deactivate PhotoProcessor
+    activate ItemsCh
+end
+group #LightYellow Video
+    InfoCh -> VideoProcessor: video/*
+    deactivate InfoCh
+    deactivate InfoCh
+    activate VideoProcessor
+    VideoProcessor -> ItemsCh: scaled video
+    deactivate VideoProcessor
+end
 
-ItemsCh -> Broadcast: Processed Item
+ItemsCh -> Chain: Processed Item
 deactivate ItemsCh
-activate Broadcast
-Broadcast -> Server: Processed Item
-deactivate Broadcast
+activate Chain
+Chain -->> MQTT: Processed Item
+deactivate Chain
+deactivate MQTT
+
 
 == Async Ops ==
 group New Item
-    Server -->> MQTT: New Item
+    Chain -->> MQTT: New Item
+    activate MQTT
+    activate Chain
     MQTT -->> Client: New Item
     activate Client
     Client -> Client: Draw Preloader\nCheck Size\nFix Grid Layout
 end
 
 group Updated Item
-    Server -->> MQTT: Updated Item
+    Chain -->> MQTT: Updated Item
     MQTT -->> Client: Updated Item
     Client -> Client: Check Size\nFix Grid Layout
 end
 
 group Processed Item
-    Server -->> MQTT: Processed Item
+    Chain -->> MQTT: Processed Item
+    deactivate Chain
     MQTT -->> ML: Processed Item
     activate ML
 
     MQTT -->> Client: Processed Item
+    deactivate MQTT
     Client -> Client: Draw Thumb\nEnable View Screen
     deactivate Client
 end
@@ -148,14 +161,16 @@ ML <- ML: Objects
 ML <- ML: Plugin #3
 ML <- ML: Plugin #4
 ML <- ML: Plugin #5
-ML -> MQTT: ML Done
+ML -->> MQTT: ML Done
 deactivate ML
+activate MQTT
 autonumber stop
 
 group ML Results
-MQTT -> Server: New ML Metadata
-Server -> DB: Update Metadata
-MQTT -> Client: Show ML results
+MQTT -->> Gorm: New ML Metadata
+MQTT -->> Client: Show ML results
+deactivate MQTT
+
 end
 
 @enduml
