@@ -3,7 +3,7 @@ package exif
 import (
 	"errors"
 	"gontroller/ext/exiftool"
-	t "gontroller/pkg/types"
+	t "gontroller/pkg/_t"
 	"log"
 	"strconv"
 	"strings"
@@ -13,8 +13,6 @@ import (
 var commonArgs []string = []string{
 	"-srcfile",
 	"@",
-	//"-r",
-	//"-json",
 }
 
 var genericTags []string = []string{

@@ -1,7 +1,7 @@
 package fswatcher
 
 import (
-	t "gontroller/pkg/types"
+	t "gontroller/pkg/_t"
 	"log"
 	"os"
 	"path/filepath"

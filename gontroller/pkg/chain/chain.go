@@ -1,10 +1,11 @@
 package chain
 
 import (
+	t "gontroller/pkg/_t"
+	exf "gontroller/pkg/exif"
+	fsw "gontroller/pkg/fswatcher"
+
 	"encoding/json"
-	"gontroller/pkg/exif"
-	w "gontroller/pkg/fswatcher"
-	t "gontroller/pkg/types"
 	"log"
 	"strings"
 	"sync"
@@ -22,8 +23,8 @@ type Chain struct {
 	videoChan chan t.ItemExif
 	//var itemChan chan t.ItemInfo = make(chan t.ItemInfo)
 
-	fsm *w.Monitor
-	etm *exif.Monitor
+	fsm *fsw.Monitor
+	etm *exf.Monitor
 
 	wg *sync.WaitGroup
 }
@@ -44,8 +45,8 @@ func NewChain(path string) *Chain {
 func (ch *Chain) Run(wg *sync.WaitGroup) {
 	ch.wg = wg
 
-	ch.fsm = w.NewMonitor(ch.path, ch.fileChan, wg)
-	ch.etm = exif.NewMonitorPool(10, ch.fileChan, ch.exifChan, wg)
+	ch.fsm = fsw.NewMonitor(ch.path, ch.fileChan, wg)
+	ch.etm = exf.NewMonitorPool(10, ch.fileChan, ch.exifChan, wg)
 
 	wg.Add(1)
 	go func() {
