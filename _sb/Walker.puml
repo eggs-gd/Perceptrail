@@ -1,0 +1,67 @@
+@startuml Walker and validating
+
+control fp.Walk
+collections fileCh
+
+control exifreader
+collections exifCh
+
+control validator
+
+control gorm
+control decorator
+collections itemCh
+
+
+activate fp.Walk
+fp.Walk -> fileCh: new path
+deactivate fp.Walk
+activate fileCh
+fileCh -> exifreader: new path
+deactivate fileCh
+activate exifreader
+exifreader -> exifCh: exif...
+deactivate exifreader
+activate exifCh
+exifCh -> validator: exif...
+deactivate exifCh
+activate validator
+
+validator -> gorm: hash(path,\nexif...\nbytesize)
+deactivate validator
+activate gorm
+
+alt found the same
+    note over validator, gorm: same path and same hash
+    gorm ->x validator: <font color=red><b>nil
+
+else found moved
+    note over validator, gorm: same hash, different path,\nold path <b><font color=red>not exists
+    gorm <- gorm: update path
+    gorm ->x validator: <font color=red><b>nil
+
+else don't found
+    note over validator, gorm: path and hash not found
+    gorm <- gorm: create
+    gorm -> validator: <font color=green><b>new guid
+    activate validator
+
+else found copy
+    note over validator, gorm: same hash, different path,\nold path <b><font color=red>also exists
+    gorm <- gorm: create
+    gorm -> validator: <font color=green><b>new guid
+
+else found changed
+    note over validator, gorm: same path, different hash
+    gorm -> validator: <font color=blue><b>existing guid
+    deactivate gorm
+
+end
+
+validator -> decorator: guid, exif...
+deactivate validator
+activate decorator
+decorator -> itemCh: exif{} 
+deactivate decorator
+
+@enduml
