@@ -35,7 +35,7 @@ func decorate[Ti any, To any](count int, chin <-chan Ti, chout chan<- To, fn Dec
 // - chin: input channel, moderates outside, readonly for decorator
 // - chout: output channel, given from outside but will be closed inside after job done
 // - fn: converter from in data to out data, takes input, returns converted
-func DecorateSync[Ti any, To any](count int, chin <-chan Ti, chout chan<- To, fn func(input Ti) To) {
+func DecorateSync[Ti any, To any](count int, chin <-chan Ti, chout chan<- To, fn Decorator[Ti, To]) {
 	decorate(count, chin, chout, fn, nil)
 }
 
@@ -49,6 +49,6 @@ func DecorateSync[Ti any, To any](count int, chin <-chan Ti, chout chan<- To, fn
 // - chout: - output channel, given from outside but will be closed inside after job done
 // - fn: converter from in data to out data, takes input, returns converted
 // - extWg: if runs as goroutine itself, provide external WaitGroup to proper handling of result
-func DecorateAsync[Ti any, To any](count int, chin <-chan Ti, chout chan<- To, fn func(input Ti) To, extWg *sync.WaitGroup) {
+func DecorateAsync[Ti any, To any](count int, chin <-chan Ti, chout chan<- To, fn Decorator[Ti, To], extWg *sync.WaitGroup) {
 	decorate(count, chin, chout, fn, extWg)
 }

@@ -2,7 +2,7 @@ package chain
 
 import (
 	t "gontroller/pkg/_t"
-	exf "gontroller/pkg/exif"
+	exf "gontroller/pkg/exifreader"
 	fsw "gontroller/pkg/fswatcher"
 
 	"encoding/json"
@@ -76,12 +76,11 @@ func (ch *Chain) Run(wg *sync.WaitGroup) {
 
 func (ch *Chain) Close() {
 	//ch.wg.Done()
+	close(ch.fileChan)
+	close(ch.exifChan)
 
 	close(ch.photoChan)
 	close(ch.videoChan)
-
-	close(ch.exifChan)
-	close(ch.fileChan)
 
 	//var itemChan chan t.ItemInfo = make(chan t.ItemInfo)
 
