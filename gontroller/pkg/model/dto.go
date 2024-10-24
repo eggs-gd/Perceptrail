@@ -7,7 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type ItemDo struct {
+type ItemDto struct {
 	gorm.Model
 	/* gorm.Model is:
 	ID        uint `gorm:"primaryKey"`
