@@ -1,13 +1,14 @@
 package chain
 
-type IDecorator[Ti any, To any] interface {
+type Decorator[Ti any, To any] interface {
 	Decorate(in Ti) To
+	Close()
 }
 
 type decoratorRunner[Ti any, To any] struct {
 	chin      <-chan Ti
 	chout     chan<- To
-	processor IDecorator[Ti, To]
+	processor Decorator[Ti, To]
 }
 
 func (d *decoratorRunner[Ti, To]) Process() {
@@ -17,7 +18,11 @@ func (d *decoratorRunner[Ti, To]) Process() {
 	}
 }
 
-func NewDecorator[Ti any, To any](chin <-chan Ti, chout chan<- To, decorator IDecorator[Ti, To]) ControlBase {
+func (d *decoratorRunner[Ti, To]) Close() {
+	d.processor.Close()
+}
+
+func NewDecorator[Ti any, To any](chin <-chan Ti, chout chan<- To, decorator Decorator[Ti, To]) Processor {
 	return &decoratorRunner[Ti, To]{
 		chin, chout, decorator,
 	}

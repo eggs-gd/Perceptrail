@@ -1,20 +1,20 @@
 package chain
 
-type ControlBase interface {
+type Processor interface {
 	Process()
+	Close()
 }
 
-type IChain interface {
-	ControlBase
-	AddStep(actor *ControlBase)
-	Stop()
+type ChainProcessor interface {
+	Processor
+	AddStep(actor *Processor)
 }
 
 type Chain struct {
-	actors []ControlBase
+	actors []Processor
 }
 
-func (ch *Chain) AddStep(a ControlBase) {
+func (ch *Chain) AddStep(a Processor) {
 	ch.actors = append(ch.actors, a)
 }
 
@@ -24,6 +24,8 @@ func (ch *Chain) Process() {
 	}
 }
 
-func (ch *Chain) Stop() {
-
+func (ch *Chain) Close() {
+	for _, a := range ch.actors {
+		a.Close()
+	}
 }

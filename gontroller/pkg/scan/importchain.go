@@ -16,14 +16,15 @@ func Run() {
 	var wg *sync.WaitGroup
 
 	var files chan t.ItemPath = make(chan t.ItemPath)
-	var rawexifs chan exif.RawExif = make(chan exif.RawExif)
+	var rawexifs chan t.RawExif = make(chan t.RawExif)
 
 	var items chan model.ItemDto = make(chan model.ItemDto)
 
-	var photos chan model.ItemDto = make(chan model.ItemDto)
-	var videos chan model.ItemDto = make(chan model.ItemDto)
+	// var photos chan model.ItemDto = make(chan model.ItemDto)
+	// var videos chan model.ItemDto = make(chan model.ItemDto)
 
 	importChain = &chain.Chain{}
+	defer importChain.Close()
 
 	// start point
 	fileWalker := fswatcher.NewMonitor("", files, wg)
@@ -41,4 +42,6 @@ func Run() {
 
 	wg.Add(1)
 	go fileWalker.Walk()
+
+	wg.Wait()
 }

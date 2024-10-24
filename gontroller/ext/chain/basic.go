@@ -4,7 +4,7 @@ package chain
 import "sync"
 
 // Decorate converts struct from Ti to To
-type Decorate[Ti any, To any] func(Ti) To
+type Decorate[Ti any, To any] func(Ti) (To, error)
 
 func decorate[Ti any, To any](count int, chin <-chan Ti, chout chan<- To, fn Decorate[Ti, To], extWg *sync.WaitGroup) {
 	var intWg = sync.WaitGroup{}
@@ -18,7 +18,12 @@ func decorate[Ti any, To any](count int, chin <-chan Ti, chout chan<- To, fn Dec
 		go func() {
 			defer intWg.Done()
 			for input := range chin {
-				chout <- fn(input)
+				res, err := fn(input)
+				if err != nil {
+					//Log? error channel?
+					continue
+				}
+				chout <- res
 			}
 		}()
 	}
@@ -33,8 +38,7 @@ func decorate[Ti any, To any](count int, chin <-chan Ti, chout chan<- To, fn Dec
 // Parameters:
 // - [Ti, To]: type in type out
 // - count: amount of workers
-// - chin: input channel, moderates outside, readonly for decorator
-// - chout: output channel, given from outside but will be closed inside after job done
+// - chin, chout: channels from and to
 // - fn: converter from in data to out data, takes input, returns converted
 func DecorateSync[Ti any, To any](count int, chin <-chan Ti, chout chan<- To, fn Decorate[Ti, To]) {
 	decorate(count, chin, chout, fn, nil)
@@ -46,8 +50,7 @@ func DecorateSync[Ti any, To any](count int, chin <-chan Ti, chout chan<- To, fn
 // Parameters:
 // - [Ti, To]: type in type out
 // - count: amount of workers
-// - chin: input channel, moderates outside, readonly for decorator
-// - chout: - output channel, given from outside but will be closed inside after job done
+// - chin, chout: channels from and to
 // - fn: converter from in data to out data, takes input, returns converted
 // - extWg: if runs as goroutine itself, provide external WaitGroup to proper handling of result
 func DecorateAsync[Ti any, To any](count int, chin <-chan Ti, chout chan<- To, fn Decorate[Ti, To], extWg *sync.WaitGroup) {

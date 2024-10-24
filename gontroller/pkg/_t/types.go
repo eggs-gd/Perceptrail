@@ -2,6 +2,8 @@ package t
 
 type ItemPath string
 
+type RawExif map[string][]byte
+
 type Size struct {
 	W int
 	H int

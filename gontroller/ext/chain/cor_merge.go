@@ -3,13 +3,14 @@ package chain
 // Merge takes many inputs and put them to one channel with[out] conversion
 type Merge[Ti any, To any] func([]Ti) To
 
-type IMerge[Ti any, To any] interface {
+type Merger[Ti any, To any] interface {
 	Merge([]Ti) To
+	Close()
 }
 type mergeRunner[Ti any, To any] struct {
 	chin      []<-chan Ti
 	chout     chan<- To
-	processor IMerge[Ti, To]
+	processor Merger[Ti, To]
 }
 
 func (m *mergeRunner[Ti, To]) Process() {
@@ -28,7 +29,11 @@ func (m *mergeRunner[Ti, To]) Process() {
 	}
 }
 
-func NewMerger[Ti any, To any](chin []<-chan Ti, chout chan<- To, processor IMerge[Ti, To]) ControlBase {
+func (m *mergeRunner[Ti, To]) Close() {
+	m.processor.Close()
+}
+
+func NewMerger[Ti any, To any](chin []<-chan Ti, chout chan<- To, processor Merger[Ti, To]) Processor {
 	return &mergeRunner[Ti, To]{
 		chin, chout, processor,
 	}

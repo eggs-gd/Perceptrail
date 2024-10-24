@@ -48,7 +48,7 @@ func getFilesList(folderPath string, fileChannel chan<- string, wg *sync.WaitGro
 
 }
 
-func processFile(filePath string) MediaInfo {
+func processFile(filePath string) (MediaInfo, error) {
 
 	dimensions := getDimensions(filePath)
 	sidecar := getSidecarFile(filePath)
@@ -60,7 +60,7 @@ func processFile(filePath string) MediaInfo {
 		Height:  dimensions[1],
 		Ratio:   float64(dimensions[0]) / float64(dimensions[1]),
 	}
-	return info
+	return info, nil
 }
 
 func isMediaFile(filePath string) bool {

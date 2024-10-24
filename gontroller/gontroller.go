@@ -24,6 +24,8 @@ func main() {
 	wg.Add(1)
 	ch.Run(&wg)
 
+	wg.Wait()
+
 	//exif.Process(folderPath)
 	//playground.Run(folderPath)
 

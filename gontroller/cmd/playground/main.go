@@ -3,7 +3,7 @@ package playground
 import (
 	"encoding/json"
 	"fmt"
-	"gontroller/ext/tsugor"
+	"gontroller/ext/chain"
 	"log"
 	"os"
 	"path/filepath"
@@ -21,7 +21,7 @@ func Run(path string) {
 	go getFilesList(path, fileChannel, &wg)
 
 	wg.Add(1)
-	go tsugor.DecorateAsync(10, fileChannel, infosChannel, processFile, &wg)
+	go chain.DecorateAsync(10, fileChannel, infosChannel, processFile, &wg)
 
 	go watchInfos(&mediaInfos, infosChannel)
 
