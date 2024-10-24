@@ -15,12 +15,6 @@ type Proxy struct {
 	db *gorm.DB
 }
 
-type ValidationApi interface {
-}
-
-type ItemsApi interface {
-}
-
 func NewProxy() *Proxy {
 	if db == nil {
 		db = initDB()

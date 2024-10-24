@@ -1,7 +1,7 @@
 package main
 
 import (
-	"gontroller/pkg/chain"
+	"gontroller/pkg/scan"
 	"log"
 	"os"
 	"sync"
@@ -18,7 +18,7 @@ func main() {
 
 	var wg sync.WaitGroup
 
-	var ch = chain.NewChain(folderPath)
+	var ch = scan.NewChain(folderPath)
 	defer ch.Close()
 
 	wg.Add(1)

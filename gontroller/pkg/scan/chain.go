@@ -1,8 +1,8 @@
-package chain
+package scan
 
 import (
 	t "gontroller/pkg/_t"
-	exf "gontroller/pkg/exifreader"
+	exf "gontroller/pkg/exif"
 	fsw "gontroller/pkg/fswatcher"
 
 	"encoding/json"

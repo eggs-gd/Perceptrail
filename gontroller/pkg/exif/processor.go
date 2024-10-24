@@ -10,31 +10,6 @@ import (
 	"sync"
 )
 
-var commonArgs []string = []string{
-	"-srcfile",
-	"@",
-}
-
-var genericTags []string = []string{
-	//"-FileType",
-	"-MIMEType",
-	"-ExifImageWidth",
-	"-ExifImageHeight",
-	"-ImageWidth",
-	"-ImageHeight",
-	// "-ThumbnailImageWidth",
-	// "-ThumbnailImageHeight",
-	// "-DisplayWidth",
-	// "-DisplayHeight",
-	// "-ImageSize",
-	// "-SourceImageWidth",
-	// "-SourceImageHeight",
-	"-Duration",
-	"-AvgBitrate",
-	"-VideoCodec",
-	"-AudioCodec",
-}
-
 type Monitor struct {
 	wg      *sync.WaitGroup
 	workers []*exiftool.Server
