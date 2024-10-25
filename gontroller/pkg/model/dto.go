@@ -7,6 +7,16 @@ import (
 	"gorm.io/gorm"
 )
 
+type ItemState int
+
+const (
+	New        ItemState = iota // Just have source path and not veryfied size/date from raw source (View can show preloaders)
+	Processing                  // transcoding in progress but real size is veryfied
+	Ready                       // all done
+	Dirty                       // Something changed and have to be rechecked
+	Deleted                     // Deleted
+)
+
 type ItemDto struct {
 	gorm.Model
 	/* gorm.Model is:
@@ -15,9 +25,11 @@ type ItemDto struct {
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt
 	*/
-	GUID      string `gorm:"uniqueIndex"`
-	HashShort string `gorm:"index"` // Fast hash based on size, exifdata
-	HashFull  string `gorm:"index"` // Hash of whole file
+	GUID      string    `gorm:"uniqueIndex"`
+	HashShort string    `gorm:"index"` // Fast hash based on size, exifdata
+	HashFull  string    `gorm:"index"` // Hash of whole file
+	MimeType  string    `gorm:"index"` //
+	State     ItemState `gorm:"index"` // Current state of item
 
 	Date time.Time // CreationDate of asset
 	Path string    // Source path
@@ -28,10 +40,6 @@ type ItemDto struct {
 	// Tags   []Tag   `gorm:"many2many:item_tags;"`
 	// Albums []Album `gorm:"many2many:item_albums;"`
 
-	//----------------
-	// SrcSet []SrcSet `gorm:"foreignKey:ItemID"`             // Will be created dynamically with given presets, looks like not needed
-	// Exif   Exif     `gorm:"embedded;embeddedPrefix:exif_"` // Whole exif data from asset, looks like not needed
-
 	// Geo
 	// GeoData GeoData `gorm:"embedded;embeddedPrefix:geo_"`
 
@@ -39,26 +47,6 @@ type ItemDto struct {
 	// Faces   []Face   `gorm:"foreignKey:ItemID"`
 	// Objects []Object `gorm:"foreignKey:ItemID"`
 }
-
-// type SrcSet struct {
-// 	ID     uint   `gorm:"primaryKey"`
-// 	ItemID uint   // Foreign Key до Item
-// 	Path   string // Шлях до зображення
-// 	Width  int    // Ширина
-// }
-
-// type Exif struct {
-// 	MimeType       string
-// 	ImageWidth     int
-// 	ImageHeight    int
-// 	ExifItemWidth  int
-// 	ExifItemHeight int
-// 	Duration       float32
-// 	AvgBitrate     float32
-// 	VideoCodec     string
-// 	AudioCodec     string
-// 	// Other fields
-// }
 
 // type Tag struct {
 // 	ID        uint   `gorm:"primaryKey"`

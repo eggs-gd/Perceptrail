@@ -1,4 +1,4 @@
-package exif
+package importer
 
 import (
 	"gontroller/ext/chain"
@@ -6,6 +6,32 @@ import (
 	t "gontroller/pkg/_t"
 	"log"
 )
+
+var commonArgs []string = []string{ // all sidecars
+	"-srcfile",
+	"@",
+	"-filesize#",
+}
+
+var genericTags []string = []string{ // Generic tags needed for db.Item
+	//"-FileType",
+	"-MIMEType",
+	"-ExifImageWidth",
+	"-ExifImageHeight",
+	"-ImageWidth",
+	"-ImageHeight",
+	// "-ThumbnailImageWidth",
+	// "-ThumbnailImageHeight",
+	// "-DisplayWidth",
+	// "-DisplayHeight",
+	// "-ImageSize",
+	// "-SourceImageWidth",
+	// "-SourceImageHeight",
+	"-Duration",
+	"-AvgBitrate",
+	"-VideoCodec",
+	"-AudioCodec",
+}
 
 type exifExtractor struct {
 	workers []*exiftool.Server
@@ -20,7 +46,7 @@ func (cd *exifExtractor) releaseWorker(worker *exiftool.Server) {
 	cd.freeCh <- worker
 }
 
-func (cd *exifExtractor) Decorate(in t.ItemPath) t.RawExif {
+func (cd *exifExtractor) Decorate(in t.ItemPath) (t.RawExif, error) {
 	args := append(genericTags, []string{string(in)}...)
 	log.Printf("ETM.Process.Command -> args: %v", args)
 
@@ -34,11 +60,11 @@ func (cd *exifExtractor) Decorate(in t.ItemPath) t.RawExif {
 	res := make(map[string][]byte)
 	err = exiftool.Unmarshal(out, res)
 	if err == nil {
-		res["path"] = []byte(in)
-		return t.RawExif(res)
+		res[t.PerceptrailPathFieldName] = []byte(in)
+		return t.RawExif(res), nil
 	}
 
-	return t.RawExif{}
+	return nil, nil
 }
 
 func (cd *exifExtractor) Close() {

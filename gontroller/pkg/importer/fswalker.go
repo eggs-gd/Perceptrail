@@ -1,4 +1,4 @@
-package fswatcher
+package importer
 
 import (
 	t "gontroller/pkg/_t"
@@ -10,20 +10,20 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-type Monitor struct {
+type fsMonitor struct {
 	watcher  *fsnotify.Watcher
 	path     string
 	fileChan chan<- t.ItemPath
 	wg       *sync.WaitGroup
 }
 
-func NewMonitor(path string, fileChan chan<- t.ItemPath, wg *sync.WaitGroup) *Monitor {
+func NewFsMonitor(path string, fileChan chan<- t.ItemPath, wg *sync.WaitGroup) *fsMonitor {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	m := &Monitor{
+	m := &fsMonitor{
 		watcher:  watcher,
 		path:     path,
 		fileChan: fileChan,
@@ -33,7 +33,7 @@ func NewMonitor(path string, fileChan chan<- t.ItemPath, wg *sync.WaitGroup) *Mo
 	return m
 }
 
-func (m *Monitor) Walk() {
+func (m *fsMonitor) Walk() {
 	defer m.wg.Done()
 	filepath.Walk(m.path,
 		func(p string, info os.FileInfo, err error) error {
@@ -48,7 +48,7 @@ func (m *Monitor) Walk() {
 		})
 }
 
-func (m *Monitor) Watch() {
+func (m *fsMonitor) Watch() {
 	defer m.wg.Done()
 	for {
 		select {
@@ -70,11 +70,11 @@ func (m *Monitor) Watch() {
 	}
 }
 
-func (m *Monitor) Close() {
+func (m *fsMonitor) Close() {
 	m.watcher.Close()
 }
 
-func (m *Monitor) processFile(path string) {
+func (m *fsMonitor) processFile(path string) {
 	log.Printf("FSM.processFile -> path: %v", path)
 	// todo: check if not known
 	m.fileChan <- t.ItemPath(path)

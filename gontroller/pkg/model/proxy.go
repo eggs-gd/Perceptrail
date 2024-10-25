@@ -25,6 +25,23 @@ func NewProxy() *Proxy {
 	}
 }
 
+func (p *Proxy) GetItemPathHash(path string, hashShort string) (ItemDto, error) {
+	var item ItemDto
+
+	// Check if the item exists in the database
+	err := p.db.Where("path = ?", path).Or("hash_short = ?", hashShort).First(&item).Error
+	return item, err
+}
+
+func (p *Proxy) UpdateItem(item ItemDto) error {
+	return p.db.Save(&item).Error
+}
+
+func (p *Proxy) CreateItem(item ItemDto) error {
+	//todo update guid
+	return db.Create(&item).Error
+}
+
 func initDB() *gorm.DB {
 	db, err := gorm.Open(sqlite.Open("media_library.db"), &config)
 	if err != nil {

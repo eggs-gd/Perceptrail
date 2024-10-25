@@ -1,7 +1,7 @@
 package main
 
 import (
-	"gontroller/pkg/scan"
+	"gontroller/pkg/importer"
 	"log"
 	"os"
 	"sync"
@@ -16,13 +16,10 @@ func main() {
 		log.Fatal("MEDIA_FOLDER not set in .env file")
 	}
 
-	var wg sync.WaitGroup
-
-	var ch = scan.NewChain(folderPath)
-	defer ch.Close()
+	wg := &sync.WaitGroup{}
 
 	wg.Add(1)
-	ch.Run(&wg)
+	importer.Run(folderPath, wg)
 
 	wg.Wait()
 
