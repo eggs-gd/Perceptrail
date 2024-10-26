@@ -10,7 +10,7 @@ import (
 
 var importChain *chain.Chain
 
-func Run(path string, wg *sync.WaitGroup) {
+func Chain(path string, wg *sync.WaitGroup) {
 
 	var errch chan error = make(chan error)
 

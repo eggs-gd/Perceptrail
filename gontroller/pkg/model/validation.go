@@ -52,6 +52,7 @@ func (p *Proxy) ValidateFile(data t.RawExif) error {
 	//var item Item
 
 	var path = string(data[t.PerceptrailPathFieldName])
+	var hashShort = p.GetHash()
 
 	// Check if the item exists in the database
 	item, err := p.GetItemPathHash(path, hashShort) //Where("path = ?", path).Or("hash_short = ?", hashShort).First(&item).Error

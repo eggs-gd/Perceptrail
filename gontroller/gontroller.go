@@ -19,7 +19,7 @@ func main() {
 	wg := &sync.WaitGroup{}
 
 	wg.Add(1)
-	importer.Run(folderPath, wg)
+	importer.Chain(folderPath, wg)
 
 	wg.Wait()
 
