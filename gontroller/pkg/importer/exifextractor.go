@@ -46,21 +46,29 @@ func (cd *exifExtractor) releaseWorker(worker *exiftool.Server) {
 	cd.freeCh <- worker
 }
 
-func (cd *exifExtractor) Decorate(in t.ItemPath) (t.RawExif, error) {
-	args := append(genericTags, []string{string(in)}...)
+func (cd *exifExtractor) Decorate(in []t.ItemEntry) (t.RawExif, error) {
+	paths := make([]string, len(in)) // створюємо новий масив потрібного розміру
+
+	for i, item := range in {
+		paths[i] = item.Path // зберігаємо поле Path в новий масив
+	}
+
+	args := append(genericTags, paths...)
 	log.Printf("ETM.Process.Command -> args: %v", args)
 
 	et := cd.getWorker()
 	defer cd.releaseWorker(et)
+
 	out, err := et.Command(args...)
 	if err != nil {
 		log.Printf("ETM.Process.Command -> Stdout err: %v\n", err)
 	}
 
 	res := make(map[string][]byte)
+	// todo: check it. Have to override main item due to sorting and same names with sidecars but not sure
 	err = exiftool.Unmarshal(out, res)
 	if err == nil {
-		res[t.PerceptrailPathFieldName] = []byte(in)
+		//res[t.PerceptrailPathFieldName] = []byte(in.Path)
 		return t.RawExif(res), nil
 	}
 
@@ -73,7 +81,7 @@ func (cd *exifExtractor) Close() {
 	}
 }
 
-func NewExifExtractor(count int, chin <-chan t.ItemPath, chout chan<- t.RawExif) chain.Processor {
+func NewExifExtractor(count int, chin <-chan []t.ItemEntry, chout chan<- t.RawExif) chain.Processor {
 	workers := make([]*exiftool.Server, count)
 	freeCh := make(chan *exiftool.Server, count)
 	for i := 0; i < count; i++ {

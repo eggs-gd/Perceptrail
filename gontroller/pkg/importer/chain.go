@@ -14,7 +14,7 @@ func Chain(path string, wg *sync.WaitGroup) {
 
 	var errch chan error = make(chan error)
 
-	var files chan t.ItemPath = make(chan t.ItemPath)
+	var files chan []t.ItemEntry = make(chan []t.ItemEntry)
 	var rawexifs chan t.RawExif = make(chan t.RawExif)
 
 	var items chan model.ItemDto = make(chan model.ItemDto)

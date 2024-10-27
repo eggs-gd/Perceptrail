@@ -7,7 +7,7 @@ import (
 )
 
 type importValidator struct {
-	model *model.Proxy
+	model model.ValidationApi
 }
 
 func (cd *importValidator) Decorate(in t.RawExif) (model.ItemDto, error) {

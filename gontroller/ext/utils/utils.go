@@ -2,6 +2,7 @@ package utils
 
 import (
 	t "gontroller/pkg/_t"
+	"slices"
 )
 
 func gcd(a, b int) int {
@@ -17,4 +18,12 @@ func GetRatio(size t.Size) t.Size {
 		W: size.W / gcd,
 		H: size.H / gcd,
 	}
+}
+
+func AppendUniq[T comparable](slice []T, elem T) []T {
+	if !slices.Contains(slice, elem) {
+		slice = append(slice, elem)
+	}
+
+	return slice
 }
