@@ -66,7 +66,7 @@ func (cd *exifExtractor) Decorate(in []model.FileDto) (model.ItemDto, error) {
 			log.Printf("ETM.Process.Command -> Stdout err: %v\n", err)
 		}
 
-		var res map[string][]byte
+		res := map[string][]byte{}
 		if err := exiftool.Unmarshal(out, res); err != nil {
 			return model.ItemDto{}, err
 		}

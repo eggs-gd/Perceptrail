@@ -55,6 +55,7 @@ func (m *fsMonitor) Walk() {
 			}
 			if !info.IsDir() {
 				res := m.processFile(path, info)
+				log.Printf("FSM.processinGesult -> files: %v, path: %v", res, path)
 				if res != nil {
 					m.fileChan <- res
 				}
@@ -84,6 +85,7 @@ func (m *fsMonitor) processFile(path string, info os.DirEntry) []model.FileDto {
 }
 
 func (m *fsMonitor) tryPutInGroup(entry t.ItemEntry) bool {
+	log.Printf("FSM.tryPutInGroup -> entry: %v", entry)
 	if len(m.currentGroup) == 0 {
 		m.currentGroup = append(m.currentGroup, entry)
 		return true
@@ -125,6 +127,7 @@ func (m *fsMonitor) tryPutInGroup(entry t.ItemEntry) bool {
 }
 
 func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []model.FileDto {
+	log.Printf("FSM.getAndSaveResult -> group: %v", group)
 	var dbitems []model.FileDto = make([]model.FileDto, len(group))
 
 	var changedFiles []model.FileDto
@@ -134,7 +137,7 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []model.FileDto {
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				dbitem, err = filesProxy.CreateFile(item)
-				utils.AppendUniq(changedFiles, dbitem)
+				changedFiles = utils.AppendUniq(changedFiles, dbitem)
 
 				if err != nil {
 					// cant create file
@@ -158,17 +161,19 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []model.FileDto {
 		}
 
 		if dbitem.LinkTo(dbitems[0]) && !dbitem.IsIgnored() {
-			utils.AppendUniq(changedFiles, dbitem)
+			changedFiles = utils.AppendUniq(changedFiles, dbitem)
 		}
 
 		if item.ModTime == dbitem.ModTime &&
 			item.Size == dbitem.Size {
 			continue // do nothing, skip
 		} else if !dbitem.IsIgnored() {
-			utils.AppendUniq(changedFiles, dbitem)
+			changedFiles = utils.AppendUniq(changedFiles, dbitem)
 		}
 	}
 
+	log.Printf("FSM.getAndSaveResult -> dbitems: %v", dbitems)
+	log.Printf("FSM.getAndSaveResult -> changedFiles: %v", changedFiles)
 	// ignore whole group if main file is not media
 	if !strings.Contains(dbitems[0].MimeType, "video/") &&
 		!strings.Contains(dbitems[0].MimeType, "image/") {

@@ -16,7 +16,7 @@ func Chain(path string, wg *sync.WaitGroup) {
 	var files chan []model.FileDto = make(chan []model.FileDto)
 	//var rawexifs chan t.RawExif = make(chan t.RawExif)
 
-	var items chan model.ItemDto = make(chan model.ItemDto)
+	var items chan model.ItemDto = make(chan model.ItemDto, 1000)
 
 	// var photos chan model.ItemDto = make(chan model.ItemDto)
 	// var videos chan model.ItemDto = make(chan model.ItemDto)

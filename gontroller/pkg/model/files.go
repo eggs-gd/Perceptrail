@@ -16,11 +16,11 @@ func (p *Proxy) CreateFile(entry t.ItemEntry) (FileDto, error) {
 }
 
 func (p *Proxy) UpdateFile(file FileDto) (FileDto, error) {
-	return file, p.db.Save(file).Error
+	return file, p.db.Save(&file).Error
 }
 
 func (p *Proxy) UpdateFiles(files []FileDto) ([]FileDto, error) {
-	return files, p.db.Save(files).Error
+	return files, p.db.Save(&files).Error
 }
 
 func (p *Proxy) GetFileByPath(path string) (FileDto, error) {

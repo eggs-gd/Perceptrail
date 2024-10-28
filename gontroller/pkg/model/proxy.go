@@ -31,6 +31,7 @@ func initDB() *gorm.DB {
 
 	err = db.AutoMigrate(
 		&ItemDto{},
+		&FileDto{},
 		// &Tag{},
 		// &Album{},
 	)

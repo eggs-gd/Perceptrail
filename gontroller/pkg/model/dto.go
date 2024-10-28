@@ -32,6 +32,10 @@ type FileDto struct {
 	t.ItemEntry
 }
 
+func (FileDto) TableName() string {
+	return "files"
+}
+
 func (f *FileDto) LinkTo(mainFile FileDto) bool {
 	if f.LinkedTo != mainFile.GUID {
 		f.LinkedTo = mainFile.GUID
@@ -77,6 +81,10 @@ type ItemDto struct {
 	// ML
 	// Faces   []Face   `gorm:"foreignKey:ItemID"`
 	// Objects []Object `gorm:"foreignKey:ItemID"`
+}
+
+func (ItemDto) TableName() string {
+	return "items"
 }
 
 // type Tag struct {

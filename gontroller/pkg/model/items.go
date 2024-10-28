@@ -2,7 +2,7 @@ package model
 
 func (p *Proxy) GetItemByGuid(guid string) (ItemDto, error) {
 	var item ItemDto
-	return item, p.db.Where("GUID = ?", guid).First(&item).Error
+	return item, p.db.Where("guid = ?", guid).First(&item).Error
 }
 
 func (p *Proxy) GetItemByPath(path string) (ItemDto, error) {
@@ -36,5 +36,5 @@ func (p *Proxy) UpdateItem(item ItemDto) (ItemDto, error) {
 }
 
 func (p *Proxy) UpdateItems(items []ItemDto) ([]ItemDto, error) {
-	return items, p.db.Save(items).Error
+	return items, p.db.Save(&items).Error
 }
