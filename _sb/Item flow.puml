@@ -1,24 +1,32 @@
 @startuml Item Flow
 
+!pragma teoz true
 actor "Client" as Client
 queue "MQTT" as MQTT
 participant "ML" as ML
+
+box gontroller
 database "DB" as DB
 control "Gorm" as Gorm #LightCoral
 
-box "Gontroller"
 collections "Chain" as Chain #LightSeaGreen
 
+box fswalker #LightCyan
 control "FsWalker" as Watcher
 queue "FileDto\nchannel" as FilesCh #LightGreen
+end box
 
+box metaprocessor #LightCyan
 control "MetaProcessor" as EXIF
-
 queue "ItemDto\nChannel" as InfoCh #LightGreen
+end box
 
+box transcoder #LightCyan
 control "Photo\nProcessor" as PhotoProcessor
 control "Video\nProcessor" as VideoProcessor
-queue "Items\nchannel" as ItemsCh #LightGreen
+collections "FS" as ItemsCh #LightGreen
+end box
+
 end box
 
 == Gontroller ==
@@ -29,72 +37,35 @@ deactivate Chain
 
 activate Watcher #LightSeaGreen
 loop #LightGreen
-    Watcher -> FilesCh: There is changes\np := path\ng := NewGuid()
+    Watcher <- Watcher: New file
+    alt Same Base Name As Current Group?
+    Watcher <- Watcher: Append\nto group?
+    else Different Base Name
+    Watcher <- Watcher: Close group?
+    Watcher <-> Gorm: Check\nmodeTime/size/guid\nknown/added/modified
+    activate Gorm
+    deactivate Gorm
+    end
+    Watcher -> FilesCh: Changed\n[]FileDto
     deactivate Watcher
     activate FilesCh #LightSeaGreen
     
 end
 
 loop #LightGreen Files channel subscribe 
-    FilesCh -> EXIF: p -> path\ng -> NewGuid()
+    FilesCh -> EXIF: []FileDto
     deactivate FilesCh #LightSeaGreen
     activate EXIF #LightSeaGreen
-    EXIF -> ExifCh: p, g,\nImageSize,\nImageWidth,\nMIMEType
+    EXIF <- EXIF: RawExif
+    EXIF -> Gorm: Check Guid/Hash/Path
+    activate Gorm
+    Gorm -> EXIF: NewGuid for unknown
+    deactivate Gorm
+    EXIF <- EXIF: Update Meta
+    EXIF <- EXIF: Update ItemState
+    EXIF -> InfoCh: changed ItemDto\nOne main Item\nmerged from all sidecars
     deactivate EXIF
-    activate ExifCh #LightSeaGreen
-end
-
-loop#LightCyan Validating Loop
-    ExifCh -> Preprocessor: p, g,\nImageSize,\nImageWidth,\nMIMEType
-    deactivate ExifCh
-    activate Preprocessor #LightBlue
-    activate Preprocessor #Orange
-    
-    Preprocessor -> Preprocessor: Check Mimetype
-    
-    alt MimeType == */*
-        Preprocessor ->x Gorm: Save as Known Unwanted
-        activate Gorm
-
-        
-    else MimeType == image/* || video/*
-        Preprocessor -> InfoCh: 
-        destroy Preprocessor
-        activate InfoCh #Orange
-        Preprocessor -> Gorm: Check if it is new/changed/known
-        deactivate Preprocessor
-    end
-
-    alt known
-        Gorm -> Preprocessor: known and same hash
-        activate Preprocessor
-        Preprocessor ->x Preprocessor: Ignore
-        deactivate Preprocessor
-
-    else new
-        Gorm -> Preprocessor: new
-        activate Preprocessor
-        Preprocessor -> Chain: New Item
-        deactivate Preprocessor
-        activate Chain
-        Chain -> InfoCh: New Item
-        activate InfoCh
-        Chain -->> MQTT: New Item
-        deactivate Chain
-        activate MQTT
-
-    else changed
-        Gorm -> Preprocessor: known but different hash
-        deactivate Gorm
-        activate Preprocessor
-        Preprocessor -> Chain: Change guid to known\nUpdate Item
-        deactivate Preprocessor
-        activate Chain
-        Chain -> InfoCh: Updated Item
-        Chain -->> MQTT: Updated Item
-        deactivate Chain
-
-    end
+    activate InfoCh
 end
 
 group #LightYellow Photo
