@@ -9,15 +9,12 @@ control "Gorm" as Gorm #LightCoral
 box "Gontroller"
 collections "Chain" as Chain #LightSeaGreen
 
-control "FS Watcher" as Watcher
-queue "Files\nchannel" as FilesCh #LightGreen
+control "FsWalker" as Watcher
+queue "FileDto\nchannel" as FilesCh #LightGreen
 
-control "Exif extractor" as EXIF
-queue "EXIF\nChannel" as ExifCh #LightGreen
+control "MetaProcessor" as EXIF
 
-control "Preprocess" as Preprocessor
-
-queue "Infos\nChannel" as InfoCh #LightGreen
+queue "ItemDto\nChannel" as InfoCh #LightGreen
 
 control "Photo\nProcessor" as PhotoProcessor
 control "Video\nProcessor" as VideoProcessor
@@ -32,7 +29,6 @@ deactivate Chain
 
 activate Watcher #LightSeaGreen
 loop #LightGreen
-    Watcher --> Watcher: Wait FS event
     Watcher -> FilesCh: There is changes\np := path\ng := NewGuid()
     deactivate Watcher
     activate FilesCh #LightSeaGreen

@@ -11,9 +11,9 @@ type ItemState int
 
 const (
 	New        ItemState = iota // Just have source path and not veryfied size/date from raw source (View can show preloaders)
+	Dirty                       // Something changed and have to be rechecked
 	Processing                  // transcoding in progress but real size is veryfied
 	Ready                       // all done
-	Dirty                       // Something changed and have to be rechecked
 	Deleted                     // Deleted
 )
 
@@ -44,6 +44,10 @@ func (f *FileDto) SetIgnored() {
 	f.LinkedTo = "-"
 }
 
+func (f *FileDto) IsIgnored() bool {
+	return f.LinkedTo == "-"
+}
+
 type ItemDto struct {
 	gorm.Model
 	/* gorm.Model is:
@@ -52,11 +56,11 @@ type ItemDto struct {
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt
 	*/
-	GUID      string    `gorm:"uniqueIndex"`
-	HashShort string    `gorm:"index"` // Fast hash based on size, exifdata
-	HashFull  string    `gorm:"index"` // Hash of whole file
-	MimeType  string    `gorm:"index"` //
-	State     ItemState `gorm:"index"` // Current state of item
+	Guid      string `gorm:"uniqueIndex"`
+	HashShort string `gorm:"index"` // Fast hash based on size, exifdata
+	// HashFull  string    `gorm:"index"` // Hash of whole file, make sense only if hashfull is chiper than transode. As an option enable for CPU setups
+	MimeType string    `gorm:"index"` //
+	State    ItemState `gorm:"index"` // Current state of item
 
 	Date time.Time // CreationDate of asset
 	Path string    // Source path

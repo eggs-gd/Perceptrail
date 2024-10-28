@@ -19,19 +19,19 @@ import (
 	"gorm.io/gorm"
 )
 
-var dbproxy model.FilesApi
+var filesProxy model.FilesApi
 
 type fsMonitor struct {
 	path         string
-	fileChan     chan<- []t.ItemEntry
+	fileChan     chan<- []model.FileDto
 	wg           *sync.WaitGroup
 	currentGroup []t.ItemEntry // current group of files
 	currentRun   time.Time     // timestamp for current walker run
 }
 
-func NewFsMonitor(path string, fileChan chan<- []t.ItemEntry, wg *sync.WaitGroup) *fsMonitor {
-	if dbproxy == nil {
-		dbproxy = model.NewProxy()
+func NewFsWalker(path string, fileChan chan<- []model.FileDto, wg *sync.WaitGroup) *fsMonitor {
+	if filesProxy == nil {
+		filesProxy = model.NewProxy()
 	}
 
 	m := &fsMonitor{
@@ -68,7 +68,7 @@ func (m *fsMonitor) Close() {
 	m.wg.Done()
 }
 
-func (m *fsMonitor) processFile(path string, info os.DirEntry) []t.ItemEntry {
+func (m *fsMonitor) processFile(path string, info os.DirEntry) []model.FileDto {
 	log.Printf("FSM.processFile -> path: %v", path)
 
 	item := t.NewItemEntryFromDirEntry(path, info)
@@ -124,18 +124,18 @@ func (m *fsMonitor) tryPutInGroup(entry t.ItemEntry) bool {
 	return false
 }
 
-func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []t.ItemEntry {
+func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []model.FileDto {
 	var dbitems []model.FileDto = make([]model.FileDto, len(group))
 
-	var changedFiles []t.ItemEntry
+	var changedFiles []model.FileDto
 
 	for i, item := range group {
-		dbitem, err := dbproxy.GetFileByPath(item.Path)
+		dbitem, err := filesProxy.GetFileByPath(item.Path)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				utils.AppendUniq(changedFiles, item)
+				dbitem, err = filesProxy.CreateFile(item)
+				utils.AppendUniq(changedFiles, dbitem)
 
-				dbitem, err = dbproxy.CreateFile(item)
 				if err != nil {
 					// cant create file
 					log.Printf("Error creating file: %v", err)
@@ -157,15 +157,15 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []t.ItemEntry {
 			continue
 		}
 
-		if dbitem.LinkTo(dbitems[0]) {
-			utils.AppendUniq(changedFiles, item)
+		if dbitem.LinkTo(dbitems[0]) && !dbitem.IsIgnored() {
+			utils.AppendUniq(changedFiles, dbitem)
 		}
 
 		if item.ModTime == dbitem.ModTime &&
 			item.Size == dbitem.Size {
 			continue // do nothing, skip
-		} else {
-			utils.AppendUniq(changedFiles, item)
+		} else if !dbitem.IsIgnored() {
+			utils.AppendUniq(changedFiles, dbitem)
 		}
 	}
 
@@ -179,11 +179,11 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []t.ItemEntry {
 		changedFiles = nil
 	}
 
-	dbproxy.UpdateFiles(dbitems)
+	filesProxy.UpdateFiles(dbitems)
 
-	if changedFiles != nil && len(changedFiles) > 0 {
-		if !slices.Contains(changedFiles, group[0]) {
-			changedFiles = append([]t.ItemEntry{group[0]}, changedFiles...)
+	if len(changedFiles) > 0 {
+		if !slices.Contains(changedFiles, dbitems[0]) {
+			changedFiles = append([]model.FileDto{dbitems[0]}, changedFiles...)
 		}
 
 		return changedFiles

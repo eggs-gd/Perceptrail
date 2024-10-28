@@ -20,9 +20,7 @@ func NewProxy() *Proxy {
 		db = initDB()
 	}
 
-	return &Proxy{
-		db: db,
-	}
+	return &Proxy{db}
 }
 
 func initDB() *gorm.DB {

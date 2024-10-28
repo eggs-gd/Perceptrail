@@ -3,8 +3,8 @@
 control fp.Walk
 collections fileCh
 
-control exifreader
-collections exifCh
+control exifreader #LightCoral
+collections exifCh #LightCoral
 
 box GateKeeper #LightSkyBlue
 control validator
@@ -15,15 +15,25 @@ collections itemCh
 
 
 activate fp.Walk
-fp.Walk -> fileCh: new path
+note over fp.Walk, fileCh #LightGreen
+Make group of files by name <b>[]FileEntry,
+First element is main file, others sidecars
+Sends only new/changed
+end note
+fp.Walk -> fileCh: new group
 deactivate fp.Walk
 activate fileCh
-fileCh -> exifreader: new path
+fileCh -> exifreader: new group
 deactivate fileCh
-activate exifreader
+activate exifreader #LightCoral
 exifreader -> exifCh: exif...
+note over fileCh, exifCh #LightCoral
+As soon as it takes list of files
+Better to merge exifreader with validator
+To be able to check whole group in a row
+end note
 deactivate exifreader
-activate exifCh
+activate exifCh #LightCoral
 exifCh -> validator: exif...
 deactivate exifCh
 activate validator
