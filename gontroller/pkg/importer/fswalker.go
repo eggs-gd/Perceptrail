@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -168,9 +169,23 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []t.ItemEntry {
 		}
 	}
 
+	// ignore whole group if main file is not media
+	if !strings.Contains(dbitems[0].MimeType, "video/") &&
+		!strings.Contains(dbitems[0].MimeType, "image/") {
+		for _, itm := range dbitems {
+			itm.SetIgnored()
+		}
+
+		changedFiles = nil
+	}
+
 	dbproxy.UpdateFiles(dbitems)
 
-	if len(changedFiles) > 0 {
+	if changedFiles != nil && len(changedFiles) > 0 {
+		if !slices.Contains(changedFiles, group[0]) {
+			changedFiles = append([]t.ItemEntry{group[0]}, changedFiles...)
+		}
+
 		return changedFiles
 	}
 

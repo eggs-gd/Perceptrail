@@ -40,6 +40,10 @@ func (f *FileDto) LinkTo(mainFile FileDto) bool {
 	return false
 }
 
+func (f *FileDto) SetIgnored() {
+	f.LinkedTo = "-"
+}
+
 type ItemDto struct {
 	gorm.Model
 	/* gorm.Model is:
