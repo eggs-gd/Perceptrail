@@ -2,6 +2,7 @@ package importer
 
 import (
 	"errors"
+	"gontroller/ext/chain"
 	"gontroller/ext/utils"
 	t "gontroller/pkg/_t"
 	"gontroller/pkg/model"
@@ -14,7 +15,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -22,31 +22,31 @@ import (
 
 var filesProxy model.FilesApi
 
+type inType struct {
+	path string
+	info os.DirEntry
+}
+
 type fsMonitor struct {
 	path         string
-	fileChan     chan<- []dto.FileDto
-	wg           *sync.WaitGroup
 	currentGroup []t.ItemEntry // current group of files
 	currentRun   time.Time     // timestamp for current walker run
 }
 
-func NewFsWalker(path string, fileChan chan<- []dto.FileDto, wg *sync.WaitGroup) *fsMonitor {
+func NewFsWalker(path string, chout chan<- []dto.FileDto) chain.Processor {
 	if filesProxy == nil {
 		filesProxy = model.NewProxy()
 	}
 
 	m := &fsMonitor{
 		path:         path,
-		fileChan:     fileChan,
-		wg:           wg,
 		currentGroup: []t.ItemEntry{},
 	}
 
-	return m
+	return chain.NewEntryPoint(chout, m)
 }
 
-func (m *fsMonitor) Walk() {
-	defer m.wg.Done()
+func (m *fsMonitor) Start(chin chan<- inType) {
 	m.currentRun = time.Now()
 	filepath.WalkDir(m.path,
 		func(path string, info os.DirEntry, err error) error {
@@ -55,11 +55,7 @@ func (m *fsMonitor) Walk() {
 				return err
 			}
 			if !info.IsDir() {
-				res := m.processFile(path, info)
-				log.Printf("FSM.processingResult -> files: %v, path: %v", res, filepath.Dir(path))
-				if res != nil {
-					m.fileChan <- res
-				}
+				chin <- inType{path, info}
 			}
 			return nil
 		})
@@ -70,21 +66,20 @@ func (m *fsMonitor) Walk() {
 
 func (m *fsMonitor) Close() {
 	m.currentGroup = nil
-	m.wg.Done()
 }
 
-func (m *fsMonitor) processFile(path string, info os.DirEntry) []dto.FileDto {
-	log.Printf("FSM.processFile -> path: %v", path)
+func (m *fsMonitor) Decorate(in inType) ([]dto.FileDto, error) {
+	log.Printf("FSM.processFile -> path: %v", in.path)
 
-	item := t.NewItemEntryFromDirEntry(path, info)
+	item := t.NewItemEntryFromDirEntry(in.path, in.info)
 	updateMimeType(&item)
 
 	if m.tryPutInGroup(item) {
-		return nil
+		return nil, nil
 	} else { // start new group
 		group := m.currentGroup
 		m.currentGroup = []t.ItemEntry{item}
-		return m.getAndSaveResult(group)
+		return m.getAndSaveResult(group), nil
 	}
 }
 

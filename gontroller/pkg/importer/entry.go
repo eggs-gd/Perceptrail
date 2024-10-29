@@ -2,12 +2,9 @@ package importer
 
 import (
 	"gontroller/ext/chain"
+	"gontroller/pkg/app"
 	"gontroller/pkg/model/dto"
 	"log"
-	"os"
-	"os/signal"
-	"sync"
-	"syscall"
 )
 
 // Enter: Path ->
@@ -27,10 +24,17 @@ import (
 // - video processor: model.ItemDto(video) -> ??? - transcoding from raw formats into x264/x265, scaling(?, generating gif preview?)
 // Exit ???? - set Ready state for Item to db (means that all needed files created and stored in formatted folders)
 
-var importChain *chain.Chain
+type ImporterService struct {
+	ctx app.AppContext
 
-func Chain(path string, wg *sync.WaitGroup) {
+	errch chan error
+	files chan []dto.FileDto
+	items chan dto.ItemDto
 
+	importChain chain.ChainProcessor
+}
+
+func NewImporterService(ctx app.AppContext) *ImporterService {
 	var errch chan error = make(chan error)
 
 	var files chan []dto.FileDto = make(chan []dto.FileDto)
@@ -45,28 +49,25 @@ func Chain(path string, wg *sync.WaitGroup) {
 		}
 	}()
 
-	importChain = chain.NewChainProcessor(errch, wg)
-	defer importChain.Close()
-
-	// start point
-	fileWalker := NewFsWalker(path, files, wg)
-
+	importChain := chain.NewChainProcessor(errch)
+	importChain.AddStep(NewFsWalker(ctx.Config().Path, files))
 	importChain.AddStep(NewMetaProcessor(5, files, items))
 	//importChain.AddStep(NewGatekeeper(5, rawexifs, items))
 
-	wg.Add(1)
-	go importChain.Process()
-
-	wg.Add(1)
-	go fileWalker.Walk()
-
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
-
-	<-stop
-	log.Printf("Chain Sys stop")
+	return &ImporterService{
+		ctx:         ctx,
+		errch:       errch,
+		files:       files,
+		items:       items,
+		importChain: importChain,
+	}
 }
 
-func Close() {
-	importChain.Close()
+func (s *ImporterService) Start() {
+	s.ctx.AddWg()
+	s.importChain.Process()
+}
+
+func (s *ImporterService) Stop() {
+	s.importChain.Close()
 }

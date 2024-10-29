@@ -15,13 +15,16 @@ type Processor interface {
 
 type ChainProcessor interface {
 	Processor
-	AddStep(actor *Processor)
+	AddStep(actor Processor)
 }
 
 type Chain struct {
-	wg     *sync.WaitGroup
-	errch  chan error
+	errch  chan<- error
 	actors []Processor
+}
+
+func (ch *Chain) setErrorChannel(errch chan<- error) {
+	ch.errch = errch
 }
 
 func (ch *Chain) AddStep(a Processor) {
@@ -30,9 +33,18 @@ func (ch *Chain) AddStep(a Processor) {
 }
 
 func (ch *Chain) Process() {
+
+	wg := &sync.WaitGroup{}
+
 	for _, actor := range ch.actors {
-		go actor.Process()
+		wg.Add(1)
+		go func(a Processor) {
+			a.Process()
+			wg.Done()
+		}(actor)
 	}
+
+	wg.Wait()
 }
 
 func (ch *Chain) Close() {
@@ -41,9 +53,8 @@ func (ch *Chain) Close() {
 	}
 }
 
-func NewChainProcessor(errch chan error, wg *sync.WaitGroup) *Chain {
-	return &Chain{
-		wg:    wg,
-		errch: errch,
-	}
+func NewChainProcessor(errch chan error) *Chain {
+	ch := &Chain{}
+	ch.setErrorChannel(errch)
+	return ch
 }

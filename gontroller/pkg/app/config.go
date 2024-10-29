@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-var AppConfig Config
+var appConfig Config
 
 /*
 app_name: "MyApp"
@@ -30,6 +30,7 @@ api_keys:
 */
 
 type Config struct {
+	Path    string `yaml:"path"`
 	AppName string `yaml:"app_name"`
 	Server  struct {
 		Host string `yaml:"host"`
@@ -55,7 +56,7 @@ func init() {
 	defer file.Close()
 
 	decoder := yaml.NewDecoder(file)
-	err = decoder.Decode(&AppConfig)
+	err = decoder.Decode(&appConfig)
 	if err != nil {
 		fmt.Printf("Error parsing config file: %v\n", err)
 		return
