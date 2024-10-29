@@ -60,6 +60,7 @@ func (p *Proxy) ValidateFile(item dto.FileDto, meta t.RawExif) (dto.ItemDto, err
 		// make sense only in CPU environments with a lot of transcoding work
 		itemByGUID, err = p.CreateItem(item)
 		itemByGUID.HashShort = hashShort
+		p.UpdateItem(itemByGUID)
 		return itemByGUID, err
 
 		/*
@@ -90,6 +91,7 @@ func (p *Proxy) ValidateFile(item dto.FileDto, meta t.RawExif) (dto.ItemDto, err
 			// modified, update short hash itemByGuid.HashShort = hashShort, regenerate thumbs
 			itemByGUID.State = dto.Dirty
 			itemByGUID.HashShort = hashShort
+			p.UpdateItem(itemByGUID)
 			return itemByGUID, nil
 		}
 
@@ -100,6 +102,7 @@ func (p *Proxy) ValidateFile(item dto.FileDto, meta t.RawExif) (dto.ItemDto, err
 			// todo for future -> provide some optimisation for thumbs/transcodes reusing between duplicates
 			itemByGUID.State = dto.Dirty
 			itemByGUID.HashShort = hashShort
+			p.UpdateItem(itemByGUID)
 			return itemByGUID, nil
 		}
 	}
