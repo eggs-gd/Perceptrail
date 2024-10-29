@@ -2,7 +2,7 @@ package importer
 
 import (
 	"gontroller/ext/chain"
-	"gontroller/pkg/model"
+	"gontroller/pkg/model/dto"
 	"log"
 	"sync"
 )
@@ -13,10 +13,10 @@ func Chain(path string, wg *sync.WaitGroup) {
 
 	var errch chan error = make(chan error)
 
-	var files chan []model.FileDto = make(chan []model.FileDto)
+	var files chan []dto.FileDto = make(chan []dto.FileDto)
 	//var rawexifs chan t.RawExif = make(chan t.RawExif)
 
-	var items chan model.ItemDto = make(chan model.ItemDto, 1000)
+	var items chan dto.ItemDto = make(chan dto.ItemDto, 1000)
 
 	// var photos chan model.ItemDto = make(chan model.ItemDto)
 	// var videos chan model.ItemDto = make(chan model.ItemDto)

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"gontroller/pkg/model/dto"
 	"log"
 
 	"gorm.io/driver/sqlite"
@@ -30,8 +31,8 @@ func initDB() *gorm.DB {
 	}
 
 	err = db.AutoMigrate(
-		&ItemDto{},
-		&FileDto{},
+		&dto.ItemDto{},
+		&dto.FileDto{},
 		// &Tag{},
 		// &Album{},
 	)

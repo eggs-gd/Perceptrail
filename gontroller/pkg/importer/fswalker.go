@@ -5,6 +5,7 @@ import (
 	"gontroller/ext/utils"
 	t "gontroller/pkg/_t"
 	"gontroller/pkg/model"
+	"gontroller/pkg/model/dto"
 	"log"
 	"mime"
 	"net/http"
@@ -23,13 +24,13 @@ var filesProxy model.FilesApi
 
 type fsMonitor struct {
 	path         string
-	fileChan     chan<- []model.FileDto
+	fileChan     chan<- []dto.FileDto
 	wg           *sync.WaitGroup
 	currentGroup []t.ItemEntry // current group of files
 	currentRun   time.Time     // timestamp for current walker run
 }
 
-func NewFsWalker(path string, fileChan chan<- []model.FileDto, wg *sync.WaitGroup) *fsMonitor {
+func NewFsWalker(path string, fileChan chan<- []dto.FileDto, wg *sync.WaitGroup) *fsMonitor {
 	if filesProxy == nil {
 		filesProxy = model.NewProxy()
 	}
@@ -69,7 +70,7 @@ func (m *fsMonitor) Close() {
 	m.wg.Done()
 }
 
-func (m *fsMonitor) processFile(path string, info os.DirEntry) []model.FileDto {
+func (m *fsMonitor) processFile(path string, info os.DirEntry) []dto.FileDto {
 	log.Printf("FSM.processFile -> path: %v", path)
 
 	item := t.NewItemEntryFromDirEntry(path, info)
@@ -126,18 +127,17 @@ func (m *fsMonitor) tryPutInGroup(entry t.ItemEntry) bool {
 	return false
 }
 
-func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []model.FileDto {
+func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []dto.FileDto {
 	log.Printf("FSM.getAndSaveResult -> group: %v", group)
-	var dbitems []model.FileDto = make([]model.FileDto, len(group))
-
-	var changedFiles []model.FileDto
+	var dbitems []dto.FileDto
+	var changedFiles []*dto.FileDto
 
 	for i, item := range group {
 		dbitem, err := filesProxy.GetFileByPath(item.Path)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				dbitem, err = filesProxy.CreateFile(item)
-				changedFiles = utils.AppendUniq(changedFiles, dbitem)
+				changedFiles = utils.AppendUniq(changedFiles, &dbitem)
 
 				if err != nil {
 					// cant create file
@@ -153,22 +153,22 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []model.FileDto {
 
 		if dbitem.ID != 0 {
 			dbitem.CheckTime = m.currentRun
-			dbitems[i] = dbitem
+			dbitems = utils.AppendUniq(dbitems, dbitem)
 		} else {
 			// something went wrong but should be catched above on creating phase
 			log.Printf("Error got empty file: %v", err)
 			continue
 		}
 
-		if dbitem.LinkTo(dbitems[0]) && !dbitem.IsIgnored() {
-			changedFiles = utils.AppendUniq(changedFiles, dbitem)
+		if dbitems[i].LinkTo(dbitems[0]) && !dbitem.IsIgnored() {
+			changedFiles = utils.AppendUniq(changedFiles, &dbitems[i])
 		}
 
 		if item.ModTime == dbitem.ModTime &&
 			item.Size == dbitem.Size {
 			continue // do nothing, skip
 		} else if !dbitem.IsIgnored() {
-			changedFiles = utils.AppendUniq(changedFiles, dbitem)
+			changedFiles = utils.AppendUniq(changedFiles, &dbitem)
 		}
 	}
 
@@ -177,21 +177,31 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []model.FileDto {
 	// ignore whole group if main file is not media
 	if !strings.Contains(dbitems[0].MimeType, "video/") &&
 		!strings.Contains(dbitems[0].MimeType, "image/") {
-		for _, itm := range dbitems {
-			itm.SetIgnored()
+		for i := range dbitems {
+			dbitems[i].SetIgnored()
 		}
 
 		changedFiles = nil
 	}
 
-	filesProxy.UpdateFiles(dbitems)
+	if _, err := filesProxy.UpdateFiles(dbitems); err != nil {
+		panic("can't update files")
+	}
 
 	if len(changedFiles) > 0 {
-		if !slices.Contains(changedFiles, dbitems[0]) {
-			changedFiles = append([]model.FileDto{dbitems[0]}, changedFiles...)
+		if !slices.Contains(changedFiles, &dbitems[0]) {
+			changedFiles = append([]*dto.FileDto{&dbitems[0]}, changedFiles...)
 		}
 
-		return changedFiles
+		result := make([]dto.FileDto, len(changedFiles))
+
+		// Копіюємо кожен елемент зі слайса посилань у слайс значень
+		for i, ptr := range changedFiles {
+			if ptr != nil { // перевірка на nil для безпеки
+				result[i] = *ptr
+			}
+		}
+		return result
 	}
 
 	return nil

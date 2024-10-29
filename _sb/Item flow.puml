@@ -7,7 +7,7 @@ participant "ML" as ML
 
 box gontroller
 database "DB" as DB
-control "Gorm" as Gorm #LightCoral
+control "Gorm" as Gorm
 
 collections "Chain" as Chain #LightSeaGreen
 
@@ -31,35 +31,36 @@ end box
 
 == Gontroller ==
 Chain -> Chain: Startup
-activate Chain #LightSeaGreen
+activate Chain
 Chain -> Watcher: Run
 deactivate Chain
 
-activate Watcher #LightSeaGreen
+activate Watcher
 loop #LightGreen
     Watcher <- Watcher: New file
     alt Same Base Name As Current Group?
     Watcher <- Watcher: Append\nto group?
     else Different Base Name
     Watcher <- Watcher: Close group?
-    Watcher <-> Gorm: Check\nmodeTime/size/guid\nknown/added/modified
+    Watcher -> Gorm: Check\nmodeTime/size/guid\nknown/added/modified
     activate Gorm
+    Gorm -> Watcher: New Guid if unknown
     deactivate Gorm
     end
     Watcher -> FilesCh: Changed\n[]FileDto
     deactivate Watcher
-    activate FilesCh #LightSeaGreen
+    activate FilesCh
     
 end
 
 loop #LightGreen Files channel subscribe 
     FilesCh -> EXIF: []FileDto
-    deactivate FilesCh #LightSeaGreen
-    activate EXIF #LightSeaGreen
+    deactivate FilesCh
+    activate EXIF
     EXIF <- EXIF: RawExif
     EXIF -> Gorm: Check Guid/Hash/Path
     activate Gorm
-    Gorm -> EXIF: NewGuid for unknown
+    Gorm -> EXIF: ItemFromFile(FileDto) for unknown
     deactivate Gorm
     EXIF <- EXIF: Update Meta
     EXIF <- EXIF: Update ItemState
@@ -77,7 +78,6 @@ group #LightYellow Photo
 end
 group #LightYellow Video
     InfoCh -> VideoProcessor: video/*
-    deactivate InfoCh
     deactivate InfoCh
     activate VideoProcessor
     VideoProcessor -> ItemsCh: scaled video
