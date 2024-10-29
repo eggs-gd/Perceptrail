@@ -75,7 +75,7 @@ func (m *fsMonitor) Decorate(in inType) ([]dto.FileDto, error) {
 	updateMimeType(&item)
 
 	if m.tryPutInGroup(item) {
-		return nil, nil
+		return nil, errors.New("FSM: Skip File")
 	} else { // start new group
 		group := m.currentGroup
 		m.currentGroup = []t.ItemEntry{item}

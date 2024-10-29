@@ -64,7 +64,6 @@ func NewImporterService(ctx app.AppContext) *ImporterService {
 }
 
 func (s *ImporterService) Start() {
-	s.ctx.AddWg()
 	s.importChain.Process()
 }
 

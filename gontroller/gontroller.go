@@ -10,27 +10,21 @@ import (
 )
 
 func main() {
-	folderPath := os.Getenv("MEDIA_FOLDER")
-	if folderPath == "" {
-		log.Fatal("MEDIA_FOLDER not set in .env file")
-	}
-
 	ctx := app.NewAppContext()
-	ctx.AddService(importer.NewImporterService(ctx))
-	ctx.StartApp()
+	svc := app.NewSvcContext()
 
-	ctx.wg.Add(1)
-	importer.Chain(folderPath, &ctx.wg)
-	defer importer.Close()
+	svc.AddService(importer.NewImporterService(ctx))
+	//svc.AddService(importer.NewTranscoderService(ctx))
+	//svc.AddService(importer.NewMaintenanceService(ctx))
 
-	ctx.wg.Wait()
+	go svc.StartApp()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
 	<-stop
 	log.Printf("Chain Sys stop")
-	ctx.StopApp()
+	svc.StopApp()
 
 	// // Вказуємо шлях і функцію обробник
 	// http.HandleFunc("/scan", scanFolder)

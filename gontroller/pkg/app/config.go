@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -47,7 +48,12 @@ type Config struct {
 }
 
 func init() {
-	configPath := "config.yml"
+
+	configPath := os.Getenv("GONTROLLER_CONFIG")
+	if configPath == "" {
+		log.Fatal("GONTROLLER_CONFIG not set in .env file")
+	}
+
 	file, err := os.Open(configPath)
 	if err != nil {
 		fmt.Printf("Error opening config file: %v\n", err)
