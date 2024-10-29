@@ -45,7 +45,6 @@ type Config struct {
 	APIKeys      map[string]string `yaml:"api_keys"`
 }
 
-// init функція
 func init() {
 	configPath := "config.yml"
 	file, err := os.Open(configPath)

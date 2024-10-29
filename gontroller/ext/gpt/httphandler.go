@@ -1,4 +1,4 @@
-package playground
+package gpt
 
 import (
 	"encoding/json"

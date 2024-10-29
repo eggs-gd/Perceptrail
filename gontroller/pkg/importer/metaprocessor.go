@@ -85,6 +85,8 @@ func (cd *exifExtractor) Decorate(in []dto.FileDto) (dto.ItemDto, error) {
 }
 
 func (cd *exifExtractor) Close() {
+	close(cd.freeCh)
+
 	for _, et := range cd.workers {
 		et.Close()
 	}

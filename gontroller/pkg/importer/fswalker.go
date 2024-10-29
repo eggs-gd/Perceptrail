@@ -63,6 +63,9 @@ func (m *fsMonitor) Walk() {
 			}
 			return nil
 		})
+
+	// todo process last file
+	// todo process removed files
 }
 
 func (m *fsMonitor) Close() {
