@@ -56,7 +56,7 @@ func (m *fsMonitor) Walk() {
 			}
 			if !info.IsDir() {
 				res := m.processFile(path, info)
-				log.Printf("FSM.processinGesult -> files: %v, path: %v", res, path)
+				log.Printf("FSM.processingResult -> files: %v, path: %v", res, filepath.Dir(path))
 				if res != nil {
 					m.fileChan <- res
 				}
@@ -137,6 +137,7 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []dto.FileDto {
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				dbitem, err = filesProxy.CreateFile(item)
+				log.Printf("FSM.getAndSaveResult -> changedFiles add new: %v", dbitems)
 				changedFiles = utils.AppendUniq(changedFiles, &dbitem)
 
 				if err != nil {
@@ -161,19 +162,19 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []dto.FileDto {
 		}
 
 		if dbitems[i].LinkTo(dbitems[0]) && !dbitem.IsIgnored() {
+			log.Printf("FSM.getAndSaveResult -> changedFiles add linked: %v", dbitems)
 			changedFiles = utils.AppendUniq(changedFiles, &dbitems[i])
 		}
 
-		if item.ModTime == dbitem.ModTime &&
-			item.Size == dbitem.Size {
+		if item.ModTime.UTC() == dbitems[i].ModTime.UTC() &&
+			item.Size == dbitems[i].Size {
 			continue // do nothing, skip
-		} else if !dbitem.IsIgnored() {
+		} else if !dbitems[i].IsIgnored() {
+			log.Printf("FSM.getAndSaveResult -> changedFiles ad changed: item: %v, dbitem: %v", item.ModTime, dbitems[i].ModTime)
 			changedFiles = utils.AppendUniq(changedFiles, &dbitem)
 		}
 	}
 
-	log.Printf("FSM.getAndSaveResult -> dbitems: %v", dbitems)
-	log.Printf("FSM.getAndSaveResult -> changedFiles: %v", changedFiles)
 	// ignore whole group if main file is not media
 	if !strings.Contains(dbitems[0].MimeType, "video/") &&
 		!strings.Contains(dbitems[0].MimeType, "image/") {
@@ -201,9 +202,14 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []dto.FileDto {
 				result[i] = *ptr
 			}
 		}
+
+		// log.Printf("FSM.getAndSaveResult -> dbitems: %v", dbitems)
+		// log.Printf("FSM.getAndSaveResult -> changedFiles: %v", changedFiles)
 		return result
 	}
 
+	// log.Printf("FSM.getAndSaveResult -> dbitems: %v", dbitems)
+	// log.Printf("FSM.getAndSaveResult -> changedFiles: %v", changedFiles)
 	return nil
 }
 
