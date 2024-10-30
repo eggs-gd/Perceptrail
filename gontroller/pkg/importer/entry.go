@@ -29,8 +29,8 @@ type ImporterService struct {
 	appCtx app.AppContext
 
 	errch chan error
-	files chan []dto.FileDto
-	items chan dto.ItemDto
+	files chan []*dto.FileDto
+	items chan *dto.ItemDto
 
 	importChain chain.ChainProcessor
 }
@@ -38,8 +38,8 @@ type ImporterService struct {
 func NewImporterService(ctx app.AppContext) *ImporterService {
 	var errch chan error = make(chan error)
 
-	var files chan []dto.FileDto = make(chan []dto.FileDto)
-	var items chan dto.ItemDto = make(chan dto.ItemDto, 1000)
+	var files chan []*dto.FileDto = make(chan []*dto.FileDto)
+	var items chan *dto.ItemDto = make(chan *dto.ItemDto, 1000)
 
 	// var photos chan model.ItemDto = make(chan model.ItemDto)
 	// var videos chan model.ItemDto = make(chan model.ItemDto)
@@ -53,7 +53,7 @@ func NewImporterService(ctx app.AppContext) *ImporterService {
 	importChain := chain.NewChainProcessor(errch)
 	importChain.AddStep(NewFsWalker(ctx.Config().Path, files))
 	importChain.AddStep(NewMetaProcessor(5, files, items))
-	//importChain.AddStep(NewTranscoder(5, rawexifs, items))
+	//importChain.AddStep(NewTranscoder(5, items, items))
 
 	return &ImporterService{
 		appCtx:      ctx,

@@ -37,7 +37,7 @@ type fsMonitor struct {
 	currentRun   time.Time     // timestamp for current walker run
 }
 
-func NewFsWalker(path string, chout chan<- []dto.FileDto) chain.Processor {
+func NewFsWalker(path string, chout chan<- []*dto.FileDto) chain.Processor {
 	if filesProxy == nil {
 		filesProxy = model.NewProxy()
 	}
@@ -87,7 +87,7 @@ func (m *fsMonitor) Stop() {
 	m.cancel()
 }
 
-func (m *fsMonitor) Decorate(in inType) ([]dto.FileDto, error) {
+func (m *fsMonitor) Decorate(in inType) ([]*dto.FileDto, error) {
 	log.Printf("FSM.processFile -> path: %v", in.path)
 
 	item := t.NewItemEntryFromDirEntry(in.path, in.info)
@@ -149,9 +149,9 @@ func (m *fsMonitor) tryPutInGroup(entry t.ItemEntry) bool {
 	return false
 }
 
-func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []dto.FileDto {
+func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []*dto.FileDto {
 	log.Printf("FSM.getAndSaveResult -> group: %v", group)
-	var dbitems []dto.FileDto
+	var dbitems []*dto.FileDto
 	var changedFiles []*dto.FileDto
 
 	for i, item := range group {
@@ -160,7 +160,7 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []dto.FileDto {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				dbitem, err = filesProxy.CreateFile(item)
 				log.Printf("FSM.getAndSaveResult -> changedFiles add new: %v", dbitem)
-				changedFiles = utils.AppendUniq(changedFiles, &dbitem)
+				changedFiles = utils.AppendUniq(changedFiles, dbitem)
 
 				if err != nil {
 					// cant create file
@@ -185,7 +185,7 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []dto.FileDto {
 
 		if dbitems[i].LinkTo(dbitems[0]) && !dbitem.IsIgnored() {
 			log.Printf("FSM.getAndSaveResult -> changedFiles add linked: %v", dbitems)
-			changedFiles = utils.AppendUniq(changedFiles, &dbitems[i])
+			changedFiles = utils.AppendUniq(changedFiles, dbitems[i])
 		}
 
 		if item.ModTime.UTC() == dbitems[i].ModTime.UTC() &&
@@ -193,7 +193,7 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []dto.FileDto {
 			continue // do nothing, skip
 		} else if !dbitems[i].IsIgnored() {
 			log.Printf("FSM.getAndSaveResult -> changedFiles ad changed: item: %v, dbitem: %v", item.ModTime, dbitems[i].ModTime)
-			changedFiles = utils.AppendUniq(changedFiles, &dbitem)
+			changedFiles = utils.AppendUniq(changedFiles, dbitem)
 		}
 	}
 
@@ -212,20 +212,11 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []dto.FileDto {
 	}
 
 	if len(changedFiles) > 0 {
-		if !slices.Contains(changedFiles, &dbitems[0]) {
-			changedFiles = append([]*dto.FileDto{&dbitems[0]}, changedFiles...)
+		if !slices.Contains(changedFiles, dbitems[0]) {
+			changedFiles = append([]*dto.FileDto{dbitems[0]}, changedFiles...)
 		}
 
-		result := make([]dto.FileDto, len(changedFiles))
-
-		// todo check if we can use links instead of copy
-		for i, ptr := range changedFiles {
-			if ptr != nil {
-				result[i] = *ptr
-			}
-		}
-
-		return result
+		return changedFiles
 	}
 
 	return nil

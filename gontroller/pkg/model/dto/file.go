@@ -25,7 +25,7 @@ func (FileDto) TableName() string {
 	return "files"
 }
 
-func (f *FileDto) LinkTo(mainFile FileDto) bool {
+func (f *FileDto) LinkTo(mainFile *FileDto) bool {
 	if f.LinkedTo != mainFile.GUID {
 		f.LinkedTo = mainFile.GUID
 		return true

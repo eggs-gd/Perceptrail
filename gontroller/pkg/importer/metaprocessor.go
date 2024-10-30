@@ -50,7 +50,7 @@ type exifExtractor struct {
 	freeCh  chan *exiftool.Server
 }
 
-func (cd *exifExtractor) Decorate(in []dto.FileDto) (dto.ItemDto, error) {
+func (cd *exifExtractor) Decorate(in []*dto.FileDto) (*dto.ItemDto, error) {
 	var result []t.RawExif
 
 	for i, item := range in {
@@ -73,7 +73,7 @@ func (cd *exifExtractor) Decorate(in []dto.FileDto) (dto.ItemDto, error) {
 
 		res := map[string][]byte{}
 		if err := exiftool.Unmarshal(out, res); err != nil {
-			return dto.ItemDto{}, err
+			return &dto.ItemDto{}, err
 		}
 
 		if err == nil {
@@ -92,7 +92,7 @@ func (cd *exifExtractor) Stop() {
 	}
 }
 
-func NewMetaProcessor(count int, chin <-chan []dto.FileDto, chout chan<- dto.ItemDto) chain.Processor {
+func NewMetaProcessor(count int, chin <-chan []*dto.FileDto, chout chan<- *dto.ItemDto) chain.Processor {
 	if validationProxy == nil {
 		validationProxy = model.NewProxy()
 	}
@@ -123,7 +123,7 @@ func (cd *exifExtractor) releaseWorker(worker *exiftool.Server) {
 	cd.freeCh <- worker
 }
 
-func (cd *exifExtractor) processMeta(in []dto.FileDto, exifs []t.RawExif) (dto.ItemDto, error) {
+func (cd *exifExtractor) processMeta(in []*dto.FileDto, exifs []t.RawExif) (*dto.ItemDto, error) {
 	res, err := validationProxy.ValidateFile(in[0], exifs[0])
 
 	// todo fill available meta

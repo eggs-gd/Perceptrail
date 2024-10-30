@@ -19,14 +19,14 @@ type ValidationApi interface {
 	// - full hash gate
 	//GetShortHash(rawExif t.RawExif, fileSizeBytes uint64) string
 
-	ValidateFile(item dto.FileDto, meta t.RawExif) (dto.ItemDto, error)
+	ValidateFile(item *dto.FileDto, meta t.RawExif) (*dto.ItemDto, error)
 }
 
-func (p *Proxy) getShortHash(item dto.FileDto, meta t.RawExif) string {
+func (p *Proxy) getShortHash(item *dto.FileDto, meta t.RawExif) string {
 	h := sha256.New()
 
 	// Write the file size to the hash
-	h.Write([]byte(fmt.Sprintf("%d", item.Size)))
+	h.Write([]byte(fmt.Sprintf("%d", &item.Size)))
 
 	// Process the EXIF data
 	var keys []string
@@ -43,7 +43,7 @@ func (p *Proxy) getShortHash(item dto.FileDto, meta t.RawExif) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func (p *Proxy) ValidateFile(item dto.FileDto, meta t.RawExif) (dto.ItemDto, error) {
+func (p *Proxy) ValidateFile(item *dto.FileDto, meta t.RawExif) (*dto.ItemDto, error) {
 	var hashShort = p.getShortHash(item, meta)
 	var err error
 
@@ -51,7 +51,7 @@ func (p *Proxy) ValidateFile(item dto.FileDto, meta t.RawExif) (dto.ItemDto, err
 
 	if itemByGUID.Guid != itemByPath.Guid {
 		// probably panic(). Path/Guid should be stable pair on files layer
-		return dto.ItemDto{}, fmt.Errorf("there is path/guid missmatch")
+		return &dto.ItemDto{}, fmt.Errorf("there is path/guid missmatch")
 	}
 
 	if itemByGUID.Guid == "" {
@@ -107,24 +107,24 @@ func (p *Proxy) ValidateFile(item dto.FileDto, meta t.RawExif) (dto.ItemDto, err
 		}
 	}
 
-	return dto.ItemDto{}, fmt.Errorf("something unknown went wrong in validator")
+	return &dto.ItemDto{}, fmt.Errorf("something unknown went wrong in validator")
 }
 
-func (p *Proxy) getItemsForValidation(file dto.FileDto, hashShort string) (byGuid dto.ItemDto, byPath dto.ItemDto, byHash dto.ItemDto) {
-	var itemByGUID, itemByPath dto.ItemDto
-	var itemsByHash []dto.ItemDto
+func (p *Proxy) getItemsForValidation(file *dto.FileDto, hashShort string) (byGuid *dto.ItemDto, byPath *dto.ItemDto, byHash *dto.ItemDto) {
+	var itemByGUID, itemByPath *dto.ItemDto
+	var itemsByHash []*dto.ItemDto
 	var err error
 
 	if itemByGUID, err = p.GetItemByGuid(file.GUID); err != nil {
-		itemByGUID = dto.ItemDto{}
+		itemByGUID = &dto.ItemDto{}
 	}
 
 	if itemByPath, err = p.GetItemByPath(file.Path); err != nil {
-		itemByPath = dto.ItemDto{}
+		itemByPath = &dto.ItemDto{}
 	}
 
 	if itemsByHash, err = p.GetItemsByHash(hashShort); err != nil || len(itemsByHash) == 0 {
-		return itemByGUID, itemByPath, dto.ItemDto{}
+		return itemByGUID, itemByPath, &dto.ItemDto{}
 	}
 
 	if len(itemsByHash) == 1 {
@@ -141,5 +141,5 @@ func (p *Proxy) getItemsForValidation(file dto.FileDto, hashShort string) (byGui
 	// more than one hash match but noone with our guid, counts as one more duplicate so return empty
 	// will be threated as new item ig byGuid also empty
 	// or modified if byGuid not empty
-	return itemByGUID, itemByPath, dto.ItemDto{}
+	return itemByGUID, itemByPath, &dto.ItemDto{}
 }
