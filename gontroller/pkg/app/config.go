@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/joho/godotenv"
 	"gopkg.in/yaml.v3"
 )
 
@@ -48,6 +49,11 @@ type Config struct {
 }
 
 func init() {
+
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatalf("Error loading .env file")
+	}
 
 	configPath := os.Getenv("GONTROLLER_CONFIG")
 	if configPath == "" {

@@ -6,31 +6,23 @@ import (
 )
 
 type svcContext struct {
-	ctx      context.Context
-	cancel   context.CancelFunc
 	wg       sync.WaitGroup
 	services []Service
 }
 
 type Service interface {
 	Start(context.Context)
-	Stop()
 }
 
 type SvcContext interface {
 	AddService(Service)
-
-	StartApp()
-	StopApp()
+	RunApp(context.Context)
 }
 
-func NewSvcContext(ctx context.Context) *svcContext {
-	cntx, cancel := context.WithCancel(ctx)
+func NewSvcContext() *svcContext {
 
 	return &svcContext{
-		ctx:    cntx,
-		cancel: cancel,
-		wg:     sync.WaitGroup{},
+		wg: sync.WaitGroup{},
 	}
 }
 
@@ -38,28 +30,18 @@ func (svc *svcContext) AddService(service Service) {
 	svc.services = append(svc.services, service)
 }
 
-func (svc *svcContext) StartApp() {
-	for {
-		select {
-		case <-svc.ctx.Done():
-			for _, service := range svc.services {
-				service.Stop()
-			}
-			svc.wg.Wait()
-			return
+func (svc *svcContext) RunApp(parentCtx context.Context) {
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
 
-		default:
-			for _, sv := range svc.services {
-				svc.wg.Add(1)
-				go func(s Service) {
-					defer svc.wg.Done()
-					s.Start(svc.ctx)
-				}(sv)
-			}
-		}
+	for _, sv := range svc.services {
+		svc.wg.Add(1)
+		go func(s Service) {
+			defer svc.wg.Done()
+			s.Start(ctx)
+		}(sv)
 	}
-}
 
-func (svc *svcContext) StopApp() {
-	svc.cancel()
+	<-ctx.Done()
+	svc.wg.Wait()
 }

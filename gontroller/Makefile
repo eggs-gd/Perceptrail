@@ -3,10 +3,10 @@
 .PHONY: run build test
 
 run:
-	go run ./
+	go run ./...
 
 build:
-	go build -o myapp ./
+	go build -o myapp ./...
 
 test:
 	go test ./...

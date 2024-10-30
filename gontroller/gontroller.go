@@ -12,24 +12,22 @@ import (
 
 func main() {
 	mainCtx, cancel := context.WithCancelCause(context.Background())
-
-	ctx := app.NewAppContext()
-	svc := app.NewSvcContext(mainCtx)
-
 	defer cancel(nil)
-
-	svc.AddService(importer.NewImporterService(ctx))
-	//svc.AddService(importer.NewTranscoderService(ctx))
-	//svc.AddService(importer.NewMaintenanceService(ctx))
-
-	go svc.StartApp()
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
+	ctx := app.NewAppContext()
+	svc := app.NewSvcContext()
+
+	svc.AddService(importer.NewImporterService(ctx))
+	//svc.AddService(importer.NewWebService(ctx)) // later
+	//svc.AddService(importer.NewMaintenanceService(ctx)) // later
+
+	go svc.RunApp(mainCtx)
+
 	<-stop
 	log.Printf("Chain Sys stop")
-	svc.StopApp()
 
 	// // Вказуємо шлях і функцію обробник
 	// http.HandleFunc("/scan", scanFolder)

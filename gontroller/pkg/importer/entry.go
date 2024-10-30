@@ -27,8 +27,6 @@ import (
 
 type ImporterService struct {
 	appCtx app.AppContext
-	ctx    context.Context
-	cancel context.CancelFunc
 
 	errch chan error
 	files chan []dto.FileDto
@@ -55,7 +53,7 @@ func NewImporterService(ctx app.AppContext) *ImporterService {
 	importChain := chain.NewChainProcessor(errch)
 	importChain.AddStep(NewFsWalker(ctx.Config().Path, files))
 	importChain.AddStep(NewMetaProcessor(5, files, items))
-	//importChain.AddStep(NewGatekeeper(5, rawexifs, items))
+	//importChain.AddStep(NewTranscoder(5, rawexifs, items))
 
 	return &ImporterService{
 		appCtx:      ctx,
@@ -67,10 +65,10 @@ func NewImporterService(ctx app.AppContext) *ImporterService {
 }
 
 func (s *ImporterService) Start(parentCtx context.Context) {
-	s.ctx, s.cancel = context.WithCancel(parentCtx)
-	s.importChain.Process(s.ctx)
-}
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
 
-func (s *ImporterService) Stop() {
-	s.importChain.Close()
+	s.importChain.Process(ctx)
+
+	<-ctx.Done()
 }

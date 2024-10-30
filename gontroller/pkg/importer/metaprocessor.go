@@ -84,7 +84,7 @@ func (cd *exifExtractor) Decorate(in []dto.FileDto) (dto.ItemDto, error) {
 	return cd.processMeta(in, result)
 }
 
-func (cd *exifExtractor) Close() {
+func (cd *exifExtractor) Stop() {
 	close(cd.freeCh)
 
 	for _, et := range cd.workers {

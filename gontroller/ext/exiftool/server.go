@@ -127,7 +127,9 @@ func (e *Server) restart() {
 func (e *Server) Close() error {
 	e.srvMtx.Lock()
 	defer e.srvMtx.Unlock()
-	defer close(e.chout)
+	if e.chout != nil {
+		defer close(e.chout)
+	}
 
 	if e.done {
 		return nil

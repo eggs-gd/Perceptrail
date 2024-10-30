@@ -52,11 +52,16 @@ func NewFsWalker(path string, chout chan<- []dto.FileDto) chain.Processor {
 
 func (m *fsMonitor) Start(chin chan<- inType, ctx context.Context) {
 	m.ctx, m.cancel = context.WithCancel(ctx)
+	defer m.Stop()
 
 	m.currentRun = time.Now()
-	filepath.WalkDir(m.path,
-		func(path string, info os.DirEntry, err error) error {
-			log.Printf("FSM.Walk -> file: %v, err: %v", path, err)
+	err := filepath.WalkDir(m.path, func(path string, info os.DirEntry, err error) error {
+		log.Printf("FSM.Walk -> file: %v, err: %v", path, err)
+		select {
+		case <-m.ctx.Done():
+			return m.ctx.Err()
+
+		default:
 			if err != nil {
 				return err
 			}
@@ -64,14 +69,22 @@ func (m *fsMonitor) Start(chin chan<- inType, ctx context.Context) {
 				chin <- inType{path, info}
 			}
 			return nil
-		})
+		}
+	})
 
+	if err != nil && !errors.Is(err, context.Canceled) {
+		log.Printf("Error in fsMonitor: %v", err)
+	}
+}
+
+func (m *fsMonitor) finalizeWalk() {
 	// todo process last file
 	// todo process removed files
 }
 
-func (m *fsMonitor) Close() {
-	m.currentGroup = nil
+func (m *fsMonitor) Stop() {
+	m.finalizeWalk()
+	m.cancel()
 }
 
 func (m *fsMonitor) Decorate(in inType) ([]dto.FileDto, error) {
@@ -81,11 +94,16 @@ func (m *fsMonitor) Decorate(in inType) ([]dto.FileDto, error) {
 	updateMimeType(&item)
 
 	if m.tryPutInGroup(item) {
-		return nil, errors.New("FSM: Skip File")
+		return nil, chain.ErrSkippedItem
 	} else { // start new group
 		group := m.currentGroup
 		m.currentGroup = []t.ItemEntry{item}
-		return m.getAndSaveResult(group), nil
+		res := m.getAndSaveResult(group)
+		if res == nil {
+			return nil, chain.ErrSkippedItem
+
+		}
+		return res, nil
 	}
 }
 
@@ -141,7 +159,7 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []dto.FileDto {
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				dbitem, err = filesProxy.CreateFile(item)
-				log.Printf("FSM.getAndSaveResult -> changedFiles add new: %v", dbitems)
+				log.Printf("FSM.getAndSaveResult -> changedFiles add new: %v", dbitem)
 				changedFiles = utils.AppendUniq(changedFiles, &dbitem)
 
 				if err != nil {
@@ -200,20 +218,16 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []dto.FileDto {
 
 		result := make([]dto.FileDto, len(changedFiles))
 
-		// Копіюємо кожен елемент зі слайса посилань у слайс значень
+		// todo check if we can use links instead of copy
 		for i, ptr := range changedFiles {
-			if ptr != nil { // перевірка на nil для безпеки
+			if ptr != nil {
 				result[i] = *ptr
 			}
 		}
 
-		// log.Printf("FSM.getAndSaveResult -> dbitems: %v", dbitems)
-		// log.Printf("FSM.getAndSaveResult -> changedFiles: %v", changedFiles)
 		return result
 	}
 
-	// log.Printf("FSM.getAndSaveResult -> dbitems: %v", dbitems)
-	// log.Printf("FSM.getAndSaveResult -> changedFiles: %v", changedFiles)
 	return nil
 }
 
