@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"gontroller/pkg/app"
 	"gontroller/pkg/importer"
 	"log"
@@ -10,8 +11,12 @@ import (
 )
 
 func main() {
+	mainCtx, cancel := context.WithCancelCause(context.Background())
+
 	ctx := app.NewAppContext()
-	svc := app.NewSvcContext()
+	svc := app.NewSvcContext(mainCtx)
+
+	defer cancel(nil)
 
 	svc.AddService(importer.NewImporterService(ctx))
 	//svc.AddService(importer.NewTranscoderService(ctx))

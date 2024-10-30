@@ -1,6 +1,7 @@
 package importer
 
 import (
+	"context"
 	"errors"
 	"gontroller/ext/chain"
 	"gontroller/ext/utils"
@@ -28,6 +29,9 @@ type inType struct {
 }
 
 type fsMonitor struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+
 	path         string
 	currentGroup []t.ItemEntry // current group of files
 	currentRun   time.Time     // timestamp for current walker run
@@ -46,7 +50,9 @@ func NewFsWalker(path string, chout chan<- []dto.FileDto) chain.Processor {
 	return chain.NewEntryPoint(chout, m)
 }
 
-func (m *fsMonitor) Start(chin chan<- inType) {
+func (m *fsMonitor) Start(chin chan<- inType, ctx context.Context) {
+	m.ctx, m.cancel = context.WithCancel(ctx)
+
 	m.currentRun = time.Now()
 	filepath.WalkDir(m.path,
 		func(path string, info os.DirEntry, err error) error {

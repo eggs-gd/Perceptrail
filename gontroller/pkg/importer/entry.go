@@ -1,6 +1,7 @@
 package importer
 
 import (
+	"context"
 	"gontroller/ext/chain"
 	"gontroller/pkg/app"
 	"gontroller/pkg/model/dto"
@@ -25,7 +26,9 @@ import (
 // Exit ???? - set Ready state for Item to db (means that all needed files created and stored in formatted folders)
 
 type ImporterService struct {
-	ctx app.AppContext
+	appCtx app.AppContext
+	ctx    context.Context
+	cancel context.CancelFunc
 
 	errch chan error
 	files chan []dto.FileDto
@@ -55,7 +58,7 @@ func NewImporterService(ctx app.AppContext) *ImporterService {
 	//importChain.AddStep(NewGatekeeper(5, rawexifs, items))
 
 	return &ImporterService{
-		ctx:         ctx,
+		appCtx:      ctx,
 		errch:       errch,
 		files:       files,
 		items:       items,
@@ -63,8 +66,9 @@ func NewImporterService(ctx app.AppContext) *ImporterService {
 	}
 }
 
-func (s *ImporterService) Start() {
-	s.importChain.Process()
+func (s *ImporterService) Start(parentCtx context.Context) {
+	s.ctx, s.cancel = context.WithCancel(parentCtx)
+	s.importChain.Process(s.ctx)
 }
 
 func (s *ImporterService) Stop() {

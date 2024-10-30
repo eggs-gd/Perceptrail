@@ -1,5 +1,7 @@
 package chain
 
+import "context"
+
 type Switcher[Ti any, To any] interface {
 	// Switch takes Ti and then makes decision where it should be placed
 	// mapping evaluates by order channels in parent struct and results
@@ -10,6 +12,9 @@ type Switcher[Ti any, To any] interface {
 	Close()
 }
 type switchRunner[Ti any, To any] struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+
 	cherr     chan<- error
 	chin      <-chan Ti
 	chout     []chan<- To
@@ -20,7 +25,9 @@ func (s *switchRunner[Ti, To]) setErrorChannel(cherr chan<- error) {
 	s.cherr = cherr
 }
 
-func (s *switchRunner[Ti, To]) Process() {
+func (s *switchRunner[Ti, To]) Process(ctx context.Context) {
+	s.ctx, s.cancel = context.WithCancel(ctx)
+
 	for input := range s.chin {
 		res, err := s.processor.Switch(input)
 		if err != nil {
