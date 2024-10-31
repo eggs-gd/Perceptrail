@@ -20,7 +20,7 @@ const (
 
 type ItemDto struct {
 	gorm.Model
-	/* gorm.Model is:
+	/* gorm.Model:
 	ID        uint `gorm:"primaryKey"`
 	CreatedAt time.Time
 	UpdatedAt time.Time

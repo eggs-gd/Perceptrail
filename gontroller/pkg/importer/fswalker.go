@@ -90,7 +90,7 @@ func (m *fsMonitor) Stop() {
 func (m *fsMonitor) Decorate(in inType) ([]*dto.FileDto, error) {
 	log.Printf("FSM.processFile -> path: %v", in.path)
 
-	item := t.NewItemEntryFromDirEntry(in.path, in.info)
+	item := newItemEntryFromDirEntry(in.path, in.info)
 	updateMimeType(&item)
 
 	if m.tryPutInGroup(item) {
@@ -254,4 +254,18 @@ func updateMimeTypeFromMeta(entry *t.ItemEntry) {
 	}
 
 	entry.MimeType = http.DetectContentType(buffer)
+}
+
+func newItemEntryFromDirEntry(path string, dirEntry os.DirEntry) t.ItemEntry {
+	i := t.ItemEntry{
+		Path: path,
+		Name: dirEntry.Name(),
+	}
+
+	info, err := dirEntry.Info()
+	if err == nil {
+		i.Size = info.Size()
+		i.ModTime = info.ModTime()
+	}
+	return i
 }

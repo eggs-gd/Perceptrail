@@ -19,6 +19,13 @@ type FileDto struct {
 	CheckTime time.Time `gorm:"index"`
 
 	t.ItemEntry
+	/* ItemEntry:
+	Path     string
+	Name     string
+	Size     int64
+	MimeType string
+	ModTime  time.Time
+	*/
 }
 
 func (FileDto) TableName() string {
