@@ -3,7 +3,8 @@ package main
 import (
 	"context"
 	"gontroller/pkg/app"
-	"gontroller/pkg/importer"
+	"gontroller/pkg/client"
+	"gontroller/pkg/scan"
 	"log"
 	"os"
 	"os/signal"
@@ -20,8 +21,8 @@ func main() {
 	ctx := app.NewAppContext()
 	svc := app.NewSvcContext()
 
-	svc.AddService(importer.NewImporterService(ctx))
-	//svc.AddService(importer.NewWebService(ctx)) // later
+	svc.AddService(scan.NewImporterService(ctx))
+	svc.AddService(client.NewWebService(ctx))
 	//svc.AddService(importer.NewMaintenanceService(ctx)) // later
 
 	go svc.RunApp(mainCtx)

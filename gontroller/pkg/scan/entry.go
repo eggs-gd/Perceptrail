@@ -1,4 +1,4 @@
-package importer
+package scan
 
 import (
 	"context"
@@ -25,7 +25,7 @@ import (
 // - video processor: model.ItemDto(video) -> ??? - transcoding from raw formats into x264/x265, scaling(?, generating gif preview?)
 // Exit ???? - set Ready state for Item to db (means that all needed files created and stored in formatted folders)
 
-type ImporterService struct {
+type importerService struct {
 	appCtx app.AppContext
 
 	errch chan error
@@ -35,7 +35,7 @@ type ImporterService struct {
 	importChain chain.ChainProcessor
 }
 
-func NewImporterService(ctx app.AppContext) *ImporterService {
+func NewImporterService(ctx app.AppContext) *importerService {
 	var errch chan error = make(chan error)
 
 	var files chan []*dto.FileDto = make(chan []*dto.FileDto)
@@ -55,7 +55,7 @@ func NewImporterService(ctx app.AppContext) *ImporterService {
 	importChain.AddStep(NewMetaProcessor(5, files, items))
 	//importChain.AddStep(NewTranscoder(5, items, items))
 
-	return &ImporterService{
+	return &importerService{
 		appCtx:      ctx,
 		errch:       errch,
 		files:       files,
@@ -64,7 +64,7 @@ func NewImporterService(ctx app.AppContext) *ImporterService {
 	}
 }
 
-func (s *ImporterService) Start(parentCtx context.Context) {
+func (s *importerService) Start(parentCtx context.Context) {
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 

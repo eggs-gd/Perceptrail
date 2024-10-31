@@ -1,4 +1,4 @@
-package importer
+package scan
 
 import (
 	"gontroller/ext/chain"
