@@ -13,10 +13,10 @@ const config = {
         // See https://kit.svelte.dev/docs/adapters for more information about adapters.
         adapter: adapter({
             // default options are shown
-            out: 'build',
-            precompress: false,
-            envPrefix: '',
-            deps: './deps.ts' // (relative to adapter-deno package)
+            // out: 'build',
+            // precompress: false,
+            // envPrefix: '',
+            // deps: './build/deps.ts' // (relative to adapter-deno package)
           })
     }
 };
