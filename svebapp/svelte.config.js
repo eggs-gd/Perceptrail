@@ -15,7 +15,7 @@ const config = {
             // default options are shown
             // out: 'build',
             // precompress: false,
-            // envPrefix: '',
+            envPrefix: 'SVEBAPP_',
             // deps: './build/deps.ts' // (relative to adapter-deno package)
           })
     }
