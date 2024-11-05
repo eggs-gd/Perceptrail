@@ -2,7 +2,12 @@
     import Img from "./Img.svelte";
     import {type Item} from '../types'
 
-    export let item: Item;
+    interface Props {
+        item: Item;
+        index: number;
+    }
+
+    let {item, index}: Props = $props();
 
 </script>
 

@@ -1,6 +1,10 @@
 <script lang="ts">
     import type {Item} from "$lib/gallery";
-    export let item: Item;
+    interface Props {
+        item: Item;
+    }
+
+    let { item }: Props = $props();
 
 </script>
 

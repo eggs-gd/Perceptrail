@@ -1,15 +1,26 @@
 <script lang="ts">
     import ItemView from "./components/ItemView.svelte";
     import {layoutRaw} from "./layout";
-    import {GalleryEvent, type Item, type ItemScaled} from "./types";
-    import { createEventDispatcher } from 'svelte';
+    import {type Item, type ItemScaled} from "./types";
 
-    export let images: Item[] = [];
-    export let rowHeight = 220;
-    export let gutter = 8;
+    interface Props {
+        images?: Item[];
+        rowHeight?: number;
+        gutter?: number;
+        selectItem: (item: number) => void,
+        openItem: (item: number) => void,
+    }
 
-    let scaledImages: ItemScaled[] = [];
-    let width = 0;
+    let {
+        images = [],
+        rowHeight = 220,
+        gutter = 8,
+        selectItem,
+        openItem
+    }: Props = $props();
+
+    let scaledImages: ItemScaled[] = $state([]);
+    let width = $state(0);
 
 
     function imgStyle(scaledWidth: number, scaledHeight: number, isLastInRow: boolean, isLastRow: boolean) {
@@ -25,15 +36,15 @@
         return `height: ${scaledHeight}px; flex: ${flex}; margin-right: ${marginRight}; margin-bottom: ${marginBottom};`;
     }
 
-    $: scaledImages = layoutRaw({
-            images,
-            containerWidth: width || 1280,
-            targetHeight: rowHeight,
-            gutter
-        }
-    );
-
-    const dispatch = createEventDispatcher();
+    $effect(() => {
+        scaledImages = layoutRaw({
+                images,
+                containerWidth: width || 1280,
+                targetHeight: rowHeight,
+                gutter
+            }
+        );
+    });
 
 </script>
 
@@ -66,16 +77,14 @@
 <div class="masonry" bind:clientWidth={width}>
     <div class="container" style="width: {width}px" class:hidden={!width}>
         {#each scaledImages as itm, index}
-            <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
+            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
             <div class="image"
                  style={imgStyle(itm.scaledWidth, itm.scaledHeight, itm.isLastInRow, itm.isLastRow )}
-                 on:click={() => {
-                     dispatch(GalleryEvent.selectItem, index);
-                     dispatch(GalleryEvent.openItem, index);
+                 onclick={() => {
+                     selectItem(index);
+                     openItem(index);
                  }}>
-                <slot {index} {itm}>
-                    <svelte:component this={ItemView} item ={itm}/>
-                </slot>
+                <ItemView item={itm} index={index}/>
             </div>
         {/each}
     </div>
