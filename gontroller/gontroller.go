@@ -29,12 +29,4 @@ func main() {
 
 	<-stop
 	log.Printf("Chain Sys stop")
-
-	// // Вказуємо шлях і функцію обробник
-	// http.HandleFunc("/scan", scanFolder)
-
-	// // Запускаємо сервер на порту 8080
-	// port := "8080"
-	// fmt.Printf("Starting server on port %s...\n", port)
-	// log.Fatal(http.ListenAndServe(":"+port, nil))
 }
