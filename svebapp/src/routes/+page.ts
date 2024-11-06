@@ -1,8 +1,12 @@
-import type {PageLoad} from './$types';
+import type { PageLoad } from './$types';
 import {db, type SvItem} from "./idb";
+import {browser} from "$app/environment";
 
 
 export const load: PageLoad = async ({data}: { data: { streamUrl: string } | null }) => {
+    if(!browser){
+        return {}
+    }
     if (!data) {
         console.error('Streaming url not found');
         return {};

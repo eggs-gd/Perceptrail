@@ -22,11 +22,12 @@
 
 </script>
 
-<img src={item.path}
-     srcset={`
-        /assets/${item.guid}/${item.guid}-250p.webp 250w,
-        /assets/${item.guid}/${item.guid}-800p.webp 800w,
-        /assets/${item.guid}/${item.guid}-1920p.webp 1920w`}
+<!--     srcset={`-->
+<!--        /assets/${item.guid}/${item.guid}-250p.webp 250w,-->
+<!--        /assets/${item.guid}/${item.guid}-800p.webp 800w,-->
+<!--        /assets/${item.guid}/${item.guid}-1920p.webp 1920w`}-->
+
+<img src={`/assets${item.path}`}
      sizes="
         (max-width: 600px) 250px,
         (max-width: 1200px) 800px,
