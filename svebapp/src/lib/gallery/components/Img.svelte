@@ -1,11 +1,36 @@
 <script lang="ts">
     import type {Item} from "$lib/gallery";
+
     interface Props {
         item: Item;
     }
 
-    let { item }: Props = $props();
+    /*
+    src="full.jpg"
+      srcset="
+        250p.webp 250w,
+        800p.webp 800w,
+        1920p.webp 1920w"
+      sizes="
+        (max-width: 600px) 250px,
+        (max-width: 1200px) 800px,
+        1920px"
+      alt="Responsive image"
+     */
+
+    let {item}: Props = $props();
 
 </script>
 
-<img src={item.src} width={item.width} height={item.height} alt={item.src}/>
+<img src={item.path}
+     srcset={`
+        /assets/${item.guid}/${item.guid}-250p.webp 250w,
+        /assets/${item.guid}/${item.guid}-800p.webp 800w,
+        /assets/${item.guid}/${item.guid}-1920p.webp 1920w`}
+     sizes="
+        (max-width: 600px) 250px,
+        (max-width: 1200px) 800px,
+        (min-width: 1200px) 1200px,
+        1920px"
+     width={item.width} height={item.height}
+     alt={item.guid}/>

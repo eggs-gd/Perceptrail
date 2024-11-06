@@ -23,6 +23,10 @@ func (s *webService) Start(parentCtx context.Context) {
 	defer cancel()
 
 	e := echo.New()
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{"http://localhost:3000"},
+		AllowMethods: []string{echo.GET, echo.POST, echo.PUT, echo.DELETE},
+	}))
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 

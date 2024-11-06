@@ -1,6 +1,5 @@
 import type {PageLoad} from './$types';
-import {db} from "./stores";
-import type {SvItem} from "$lib/server/server.api";
+import {db, type SvItem} from "./idb";
 
 
 export const load: PageLoad = async ({data}: { data: { streamUrl: string } | null }) => {

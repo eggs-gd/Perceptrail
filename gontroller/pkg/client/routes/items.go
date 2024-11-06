@@ -39,8 +39,9 @@ var itemsProxy model.ItemsApi
 
 type clientItem struct {
 	Guid     string    `json:"guid"`
-	MimeType string    `json:"mimeType"`
 	Date     time.Time `json:"date"`
+	MimeType string    `json:"mimeType"`
+	Path     string    `json:"path"`
 	Width    int16     `json:"width"`
 	Height   int16     `json:"height"`
 }
@@ -71,10 +72,11 @@ func streamClientItems(dbItems []*dto.ItemDto, w http.ResponseWriter) error {
 		for _, dbItem := range dbItems {
 			clientItem := clientItem{
 				Guid:     dbItem.Guid,
-				MimeType: dbItem.MimeType,
 				Date:     dbItem.Date,
-				Width:    int16(dbItem.Ratio.W),
-				Height:   int16(dbItem.Ratio.H),
+				MimeType: dbItem.MimeType,
+				Path:     dbItem.Path,
+				Width:    16, //int16(dbItem.Ratio.W),
+				Height:   9,  //int16(dbItem.Ratio.H),
 			}
 			itemsChannel <- clientItem
 		}
@@ -83,19 +85,11 @@ func streamClientItems(dbItems []*dto.ItemDto, w http.ResponseWriter) error {
 
 	w.Header().Set("Content-Type", "application/json")
 	encoder := json.NewEncoder(w)
-	// w.Write([]byte("["))
-	// first := true
 
 	for clientItem := range itemsChannel {
-		// if !first {
-		// 	w.Write([]byte(","))
-		// }
-		// first = false
 		if err := encoder.Encode(clientItem); err != nil {
 			return err
 		}
 	}
-
-	// w.Write([]byte("]"))
 	return nil
 }

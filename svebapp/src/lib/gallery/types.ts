@@ -1,6 +1,7 @@
 export interface Item {
     guid: string;
     mimeType: string;
+    path:string;
     width: number;
     height: number;
 }

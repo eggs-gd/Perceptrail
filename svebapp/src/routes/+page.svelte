@@ -1,8 +1,9 @@
 <script lang="ts">
     import Gallery from "$lib/gallery/Gallery.svelte";
     import {goto} from "$app/navigation";
-    import {currentIndex, currentItem, db} from "./stores";
+    import {currentIndex, currentItem} from "./stores";
     import {liveQuery} from "dexie";
+    import {db} from "./idb";
 
     let items = liveQuery(
         () => db.items.toArray()
