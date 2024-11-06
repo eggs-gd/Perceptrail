@@ -1,29 +1,8 @@
-import type {SvItem} from "$lib/server/server.api";
+import {SVEBAPP_SERVER_HOST, SVEBAPP_SERVER_PORT} from '$env/static/private'
 
-export async function load() {
-    const initialData = await fetchDataFromDatabase();
+export async function load({fetch}) {
+    const sv = `${SVEBAPP_SERVER_HOST}:${SVEBAPP_SERVER_PORT}`
     return {
-        initialData,
+        streamUrl: `http://${sv}/items`
     };
-}
-
-async function fetchDataFromDatabase() {
-    const sv = `${process.env.SVEBAPP_SERVER_HOST}:${process.env.SVEBAPP_SERVER_PORT}`
-    try {
-        const data = await fetch(`http://${sv}/items`);
-        const jdata = await data.json();
-        return prepareItems(jdata)
-    } catch (err) {
-        console.log(err);
-    }
-
-    return {};
-}
-
-function prepareItems(input: {}[]): SvItem[] {
-    const out: SvItem[] = []
-    input.map((itm) => {
-        out.push(itm as SvItem);
-    })
-    return out;
 }

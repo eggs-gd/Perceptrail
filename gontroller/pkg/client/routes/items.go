@@ -2,7 +2,6 @@ package routes
 
 import (
 	"encoding/json"
-	t "gontroller/pkg/_t"
 	"gontroller/pkg/model"
 	"gontroller/pkg/model/dto"
 	"net/http"
@@ -39,12 +38,11 @@ import (
 var itemsProxy model.ItemsApi
 
 type clientItem struct {
-	Guid     string
-	MimeType string
-	Date     time.Time
-	Path     string
-	Size     t.Size
-	Ratio    t.Size
+	Guid     string    `json:"guid"`
+	MimeType string    `json:"mimeType"`
+	Date     time.Time `json:"date"`
+	Width    int16     `json:"width"`
+	Height   int16     `json:"height"`
 }
 
 func RegisterItemsRoutes(segment string, e *echo.Echo) {
@@ -75,9 +73,8 @@ func streamClientItems(dbItems []*dto.ItemDto, w http.ResponseWriter) error {
 				Guid:     dbItem.Guid,
 				MimeType: dbItem.MimeType,
 				Date:     dbItem.Date,
-				Path:     dbItem.Path,
-				Size:     dbItem.Size,
-				Ratio:    dbItem.Ratio,
+				Width:    int16(dbItem.Ratio.W),
+				Height:   int16(dbItem.Ratio.H),
 			}
 			itemsChannel <- clientItem
 		}
@@ -86,19 +83,19 @@ func streamClientItems(dbItems []*dto.ItemDto, w http.ResponseWriter) error {
 
 	w.Header().Set("Content-Type", "application/json")
 	encoder := json.NewEncoder(w)
-	w.Write([]byte("["))
-	first := true
+	// w.Write([]byte("["))
+	// first := true
 
 	for clientItem := range itemsChannel {
-		if !first {
-			w.Write([]byte(","))
-		}
-		first = false
+		// if !first {
+		// 	w.Write([]byte(","))
+		// }
+		// first = false
 		if err := encoder.Encode(clientItem); err != nil {
 			return err
 		}
 	}
 
-	w.Write([]byte("]"))
+	// w.Write([]byte("]"))
 	return nil
 }
