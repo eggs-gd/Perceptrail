@@ -1,7 +1,12 @@
 <script lang="ts">
     import Gallery from "$lib/gallery/Gallery.svelte";
     import {goto} from "$app/navigation";
-    import {currentIndex, currentItem, items} from "./stores";
+    import {currentIndex, currentItem, db} from "./stores";
+    import {liveQuery} from "dexie";
+
+    let items = liveQuery(
+        () => db.items.toArray()
+    );
 
     function selectItem(index:number) {
         $currentIndex = index;

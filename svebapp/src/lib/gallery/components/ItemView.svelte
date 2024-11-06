@@ -11,4 +11,4 @@
 
 </script>
 
-<Img item={item}/>
+<Img item={item} />

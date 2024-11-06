@@ -3,9 +3,11 @@ package client
 import (
 	"context"
 	"gontroller/pkg/app"
+	"gontroller/pkg/client/routes"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 type webService struct {
@@ -20,42 +22,16 @@ func (s *webService) Start(parentCtx context.Context) {
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
 
-	// https://echo.labstack.com/docs/quick-start
-	// https://habr.com/en/companies/ozonbank/articles/817381/
-	// https://github.com/go-chi/chi
-	/*
-		e.POST("/users", saveUser)
-		e.GET("/users/:id", getUser)
-		e.PUT("/users/:id", updateUser)
-		e.DELETE("/users/:id", deleteUser)
-
-		// e.GET("/users/:id", getUser)
-		func getUser(c echo.Context) error {
-		  	// User ID from path `users/:id`
-		  	id := c.Param("id")
-			return c.String(http.StatusOK, id)
-		}
-
-		/show?team=x-men&member=wolverine
-		//e.GET("/show", show)
-		func show(c echo.Context) error {
-			// Get team and member from the query string
-			team := c.QueryParam("team")
-			member := c.QueryParam("member")
-			return c.String(http.StatusOK, "team:" + team + ", member:" + member)
-		}
-	*/
-
-	// http.HandleFunc("/scan", scanFolder)
-
-	// port := "8080"
-	// fmt.Printf("Starting server on port %s...\n", port)
-	// log.Fatal(http.ListenAndServe(":"+port, nil))
-
 	e := echo.New()
+	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
+
 	e.GET("/", func(c echo.Context) error {
 		return c.String(http.StatusOK, "Hello, World!")
 	})
+
+	routes.RegisterItemsRoutes("/items", e)
+
 	e.Logger.Fatal(e.Start(":1323"))
 
 	<-ctx.Done()

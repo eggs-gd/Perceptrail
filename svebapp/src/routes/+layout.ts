@@ -1,16 +1,7 @@
+import {initializeStore} from "./stores";
+import type {SvItem} from "$lib/server/server.api";
 
-import type {Item} from "$lib/gallery";
-import {items} from "./stores";
 
-function prepareItems(input: {}[]): Item[] {
-    const out: Item[] = []
-    input.map((itm) => {
-        out.push(itm as Item);
-    })
-    return out;
-}
-
-export function load({ data }: {data:{items: {}[]}}) {
-    items.set(prepareItems(data.items as {}[]));
-    return {};
+export async function load({data}: { data: { items: SvItem[] } }) {
+    await initializeStore(data.items)
 }

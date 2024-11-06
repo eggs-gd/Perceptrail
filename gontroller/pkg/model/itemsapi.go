@@ -5,6 +5,7 @@ import (
 )
 
 type ItemsApi interface {
+	GetAllItems() ([]*dto.ItemDto, error)
 	GetItemByGuid(guid string) (*dto.ItemDto, error)
 	GetItemByPath(path string) (*dto.ItemDto, error)
 	GetItemByHash(hash string) (*dto.ItemDto, error)
@@ -14,6 +15,11 @@ type ItemsApi interface {
 
 	UpdateItem(item *dto.ItemDto) (*dto.ItemDto, error)
 	UpdateItems(items []*dto.ItemDto) ([]*dto.ItemDto, error)
+}
+
+func (p *Proxy) GetAllItems() ([]*dto.ItemDto, error) {
+	var items []*dto.ItemDto
+	return items, p.db.Find(&items).Error
 }
 
 func (p *Proxy) GetItemByGuid(guid string) (*dto.ItemDto, error) {

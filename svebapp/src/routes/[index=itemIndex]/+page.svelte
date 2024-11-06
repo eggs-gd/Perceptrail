@@ -1,9 +1,15 @@
 <script lang="ts">
     import ItemView from "$lib/gallery/components/ItemView.svelte";
-    import {items} from "../stores.js";
+    import {db} from '../stores';
     import {page} from '$app/stores';
+    import {liveQuery} from "dexie";
 
     const id: number = Number($page.params.index);
+
+    let items = liveQuery(
+        () => db.items.toArray()
+    );
+
 </script>
 
 <style>
