@@ -19,9 +19,14 @@
         openItem
     }: Props = $props();
 
-    let scaledImages: ItemScaled[] = $state([]);
     let width = $state(0);
-
+    let scaledImages: ItemScaled[] = $derived.by(() => layoutRaw({
+                images,
+                containerWidth: width || 1280,
+                targetHeight: rowHeight,
+                gutter
+            })
+    );
 
     function imgStyle(scaledWidth: number, scaledHeight: number, isLastInRow: boolean, isLastRow: boolean) {
         let marginRight = gutter + 'px',
@@ -36,17 +41,23 @@
         return `height: ${scaledHeight}px; flex: ${flex}; margin-right: ${marginRight}; margin-bottom: ${marginBottom};`;
     }
 
-    $effect(() => {
-        scaledImages = layoutRaw({
-                images,
-                containerWidth: width || 1280,
-                targetHeight: rowHeight,
-                gutter
-            }
-        );
-    });
-
 </script>
+
+<div class="masonry" bind:clientWidth={width}>
+    <div class="container" style="width: {width}px" class:hidden={!width}>
+        {#each scaledImages as itm, index}
+            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+            <div class="image"
+                 style={imgStyle(itm.scaledWidth, itm.scaledHeight, itm.isLastInRow, itm.isLastRow )}
+                 onclick={() => {
+                     selectItem(index);
+                     openItem(index);
+                 }}>
+                <ItemView item={itm} index={index}/>
+            </div>
+        {/each}
+    </div>
+</div>
 
 <style>
     .masonry {
@@ -73,19 +84,3 @@
     }
 
 </style>
-
-<div class="masonry" bind:clientWidth={width}>
-    <div class="container" style="width: {width}px" class:hidden={!width}>
-        {#each scaledImages as itm, index}
-            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-            <div class="image"
-                 style={imgStyle(itm.scaledWidth, itm.scaledHeight, itm.isLastInRow, itm.isLastRow )}
-                 onclick={() => {
-                     selectItem(index);
-                     openItem(index);
-                 }}>
-                <ItemView item={itm} index={index}/>
-            </div>
-        {/each}
-    </div>
-</div>

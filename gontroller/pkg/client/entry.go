@@ -35,6 +35,7 @@ func (s *webService) Start(parentCtx context.Context) {
 	})
 
 	routes.RegisterItemsRoutes("/items", e)
+	routes.RegisterAssetsRoutes("/assets", e)
 
 	e.Logger.Fatal(e.Start(":1323"))
 

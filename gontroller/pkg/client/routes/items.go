@@ -41,7 +41,6 @@ type clientItem struct {
 	Guid     string    `json:"guid"`
 	Date     time.Time `json:"date"`
 	MimeType string    `json:"mimeType"`
-	Path     string    `json:"path"`
 	Width    int16     `json:"width"`
 	Height   int16     `json:"height"`
 }
@@ -74,7 +73,6 @@ func streamClientItems(dbItems []*dto.ItemDto, w http.ResponseWriter) error {
 				Guid:     dbItem.Guid,
 				Date:     dbItem.Date,
 				MimeType: dbItem.MimeType,
-				Path:     dbItem.Path,
 				Width:    16, //int16(dbItem.Ratio.W),
 				Height:   9,  //int16(dbItem.Ratio.H),
 			}

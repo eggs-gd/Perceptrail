@@ -5,9 +5,9 @@
     import {liveQuery} from "dexie";
     import {db} from "./idb";
 
-    let items = liveQuery(
+    let items = $derived.by(() => liveQuery(
         () => db.items.toArray()
-    );
+    ));
 
     function selectItem(index:number) {
         $currentIndex = index;
@@ -15,8 +15,8 @@
     }
 
     function openItem(index : number) {
-        goto("/" + index)
+        goto("/" + index,  { replaceState: true })
     }
 </script>
 
-<Gallery images={$items} rowHeight={950} selectItem={selectItem} openItem={openItem}/>
+<Gallery images={$items} rowHeight={200} selectItem={selectItem} openItem={openItem}/>

@@ -1,16 +1,20 @@
 <script lang="ts">
     import ItemView from "$lib/gallery/components/ItemView.svelte";
+    import {goto} from "$app/navigation";
     import {page} from '$app/stores';
-    import {liveQuery} from "dexie";
-    import {db} from "../idb";
+    import {currentIndex, currentItem} from "../stores";
 
     const id: number = Number($page.params.index);
 
-    let items = liveQuery(
-        () => db.items.toArray()
-    );
-
 </script>
+
+<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+<div class="image"
+onclick={() => goto("/")}>
+
+    <ItemView item={$currentItem} index={$currentIndex}/>
+
+</div>
 
 <style>
 
@@ -24,12 +28,4 @@
         height: 100%;
     }
 
-
 </style>
-
-<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-<div class="image">
-
-    <ItemView item={$items[id]} index={id}/>
-
-</div>

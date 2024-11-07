@@ -1,17 +1,14 @@
 import type { PageLoad } from './$types';
 import {db, type SvItem} from "./idb";
 import {browser} from "$app/environment";
+import {PUBLIC_API_PATH} from '$env/static/public'
 
 
-export const load: PageLoad = async ({data}: { data: { streamUrl: string } | null }) => {
+export const load: PageLoad = async ({data}) => {
     if(!browser){
         return {}
     }
-    if (!data) {
-        console.error('Streaming url not found');
-        return {};
-    }
-    const response = await fetch(data?.streamUrl)
+    const response = await fetch(`${PUBLIC_API_PATH}/items`)
 
     if (!response.body) {
         console.error('Streaming data is not supported');

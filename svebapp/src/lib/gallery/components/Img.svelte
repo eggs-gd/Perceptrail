@@ -1,5 +1,6 @@
 <script lang="ts">
     import type {Item} from "$lib/gallery";
+    import {PUBLIC_API_PATH} from '$env/static/public'
 
     interface Props {
         item: Item;
@@ -27,7 +28,7 @@
 <!--        /assets/${item.guid}/${item.guid}-800p.webp 800w,-->
 <!--        /assets/${item.guid}/${item.guid}-1920p.webp 1920w`}-->
 
-<img src={`/assets${item.path}`}
+<img src={`${PUBLIC_API_PATH}/assets/${item.guid}`}
      sizes="
         (max-width: 600px) 250px,
         (max-width: 1200px) 800px,
