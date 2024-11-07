@@ -1,12 +1,24 @@
-import type { LayoutLoad } from './$types';
-import { onMount } from 'svelte';
+import type {LayoutLoad} from './$types';
+import {onMount} from 'svelte';
 import {db, type SvItem} from "./idb";
 import {browser} from "$app/environment";
 import {PUBLIC_API_PATH} from '$env/static/public'
 
 
 export const load: LayoutLoad = async ({fetch}) => {
-    if(!browser){
+    startStream({fetch}).then(r => {
+        console.log("Loading done");
+    })
+    return {}
+}
+
+async function startStream({fetch}: {
+    fetch: {
+        (input: (RequestInfo | URL), init?: RequestInit): Promise<Response>
+        (input: (string | URL | globalThis.Request), init?: RequestInit): Promise<Response>
+    }
+}) {
+    if (!browser) {
         return {}
     }
     const response = await fetch(`${PUBLIC_API_PATH}/items`)
@@ -39,6 +51,7 @@ export const load: LayoutLoad = async ({fetch}) => {
             try {
                 const data: SvItem = JSON.parse(jsonString);
                 await db.items.put(data);
+                //await delay(1000)
                 console.log("Saved to IndexedDB:", data);
             } catch (error) {
                 console.error("Error parsing JSON:", error);
@@ -64,6 +77,8 @@ export const load: LayoutLoad = async ({fetch}) => {
             console.error("Error saving rest data:", error);
         }
     }
+}
 
-    return {}
+function delay(ms: number) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }

@@ -2,6 +2,7 @@ package routes
 
 import (
 	"encoding/json"
+	"fmt"
 	"gontroller/pkg/model"
 	"gontroller/pkg/model/dto"
 	"net/http"
@@ -77,18 +78,27 @@ func streamClientItems(dbItems []*dto.ItemDto, w http.ResponseWriter) error {
 				Width:    16, //int16(dbItem.Ratio.W),
 				Height:   9,  //int16(dbItem.Ratio.H),
 			}
+
 			itemsChannel <- clientItem
 		}
 		close(itemsChannel)
 	}()
 
 	w.Header().Set("Content-Type", "application/json")
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return fmt.Errorf("streaming not supported")
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	encoder := json.NewEncoder(w)
 
 	for clientItem := range itemsChannel {
+		//time.Sleep(200 * time.Millisecond)
 		if err := encoder.Encode(clientItem); err != nil {
 			return err
 		}
+		flusher.Flush()
 	}
 	return nil
 }

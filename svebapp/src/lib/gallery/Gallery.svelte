@@ -19,10 +19,10 @@
         openItem
     }: Props = $props();
 
-    let width = $state(0);
-    let scaledImages: ItemScaled[] = $derived.by(() => layoutRaw({
+    let width = $state(1280);
+    let scaledImages = $derived(layoutRaw({
                 images,
-                containerWidth: width || 1280,
+                containerWidth: width,
                 targetHeight: rowHeight,
                 gutter
             })

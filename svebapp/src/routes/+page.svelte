@@ -2,12 +2,11 @@
     import Gallery from "$lib/gallery/Gallery.svelte";
     import {goto} from "$app/navigation";
     import {currentIndex, currentItem} from "./stores";
+    import {db, dexieStore} from "./idb";
     import {liveQuery} from "dexie";
-    import {db} from "./idb";
 
-    let items = $derived.by(() => liveQuery(
-        () => db.items.toArray()
-    ));
+    //let items = dexieStore(async () => await db.items.toArray());
+    let items = $derived(liveQuery(async () => await db.items.toArray()));
 
     function selectItem(index:number) {
         $currentIndex = index;
