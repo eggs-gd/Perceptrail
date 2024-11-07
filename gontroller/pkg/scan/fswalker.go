@@ -58,7 +58,7 @@ func (m *fsMonitor) Start(chin chan<- inType, ctx context.Context) {
 
 	m.currentRun = time.Now()
 	err := filepath.WalkDir(m.path, func(path string, info os.DirEntry, err error) error {
-		m.logger.Info("fs.WalkDirFunc", zap.String("file", path), zap.Error(err))
+		m.logger.Info("walkDirFunc", zap.String("file", path), zap.Error(err))
 		select {
 		case <-m.ctx.Done():
 			return m.ctx.Err()
@@ -100,7 +100,7 @@ func (m *fsMonitor) Decorate(in inType) ([]*dto.FileDto, error) {
 	} else { // start new group
 		group := m.currentGroup
 		m.currentGroup = []t.ItemEntry{item}
-		res := m.getAndSaveResult(group)
+		res := m.entryToFile(group)
 		if res == nil {
 			return nil, chain.ErrSkippedItem
 
@@ -151,8 +151,8 @@ func (m *fsMonitor) tryPutInGroup(entry t.ItemEntry) bool {
 	return false
 }
 
-func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []*dto.FileDto {
-	m.logger.Info("getAndSaveResult", zap.Any("group", group))
+func (m *fsMonitor) entryToFile(group []t.ItemEntry) []*dto.FileDto {
+	m.logger.Info("entryToFile", zap.Any("group", group))
 	var dbitems []*dto.FileDto
 	var changedFiles []*dto.FileDto
 
@@ -161,7 +161,7 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []*dto.FileDto {
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				dbitem, err = filesProxy.CreateFile(item)
-				m.logger.Info("getAndSaveResult", zap.Any("changedFiles add new", dbitem))
+				m.logger.Info("entryToFile", zap.Any("changedFiles add new", dbitem))
 				changedFiles = utils.AppendUniq(changedFiles, dbitem)
 
 				if err != nil {
@@ -186,7 +186,7 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []*dto.FileDto {
 		}
 
 		if dbitems[i].LinkTo(dbitems[0]) && !dbitem.IsIgnored() {
-			m.logger.Info("getAndSaveResult", zap.Any("changedFiles add linked", dbitems))
+			m.logger.Info("entryToFile", zap.Any("changedFiles add linked", dbitems))
 			changedFiles = utils.AppendUniq(changedFiles, dbitems[i])
 		}
 
@@ -194,7 +194,7 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []*dto.FileDto {
 			item.Size == dbitems[i].Size {
 			continue // do nothing, skip
 		} else if !dbitems[i].IsIgnored() {
-			m.logger.Info("getAndSaveResult -> changedFiles ad changed", zap.Any("item", item.ModTime), zap.Any("dbItem", dbitems[i].ModTime))
+			m.logger.Info("entryToFile -> changedFiles ad changed", zap.Any("item", item.ModTime), zap.Any("dbItem", dbitems[i].ModTime))
 			changedFiles = utils.AppendUniq(changedFiles, dbitem)
 		}
 	}
@@ -210,7 +210,7 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []*dto.FileDto {
 	}
 
 	if _, err := filesProxy.UpdateFiles(dbitems); err != nil {
-		panic("can't update files")
+		m.logger.Panic("can't update files")
 	}
 
 	if len(changedFiles) > 0 {

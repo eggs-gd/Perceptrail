@@ -103,7 +103,7 @@ func NewMetaProcessor(count int, chin <-chan []*dto.FileDto, chout chan<- *dto.I
 	freeCh := make(chan *exiftool.Server, count)
 	for i := 0; i < count; i++ {
 		var et, err = exiftool.NewServer(commonArgs...)
-		logger.Info("NewWorker", zap.Any("file", et), zap.Any("et", et), zap.Error(err))
+		logger.Info("NewWorker", zap.Any("et", et), zap.Error(err))
 		if err != nil {
 			logger.Panic("NewWorker", zap.Any("et", et), zap.Error(err))
 		}

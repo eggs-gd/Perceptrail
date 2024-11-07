@@ -1,10 +1,11 @@
-import type { PageLoad } from './$types';
+import type { LayoutLoad } from './$types';
+import { onMount } from 'svelte';
 import {db, type SvItem} from "./idb";
 import {browser} from "$app/environment";
 import {PUBLIC_API_PATH} from '$env/static/public'
 
 
-export const load: PageLoad = async ({data}) => {
+export const load: LayoutLoad = async ({fetch}) => {
     if(!browser){
         return {}
     }

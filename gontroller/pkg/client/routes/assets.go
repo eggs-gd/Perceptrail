@@ -4,11 +4,12 @@ import (
 	"gontroller/pkg/model"
 
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 )
 
-func RegisterAssetsRoutes(segment string, e *echo.Echo) {
+func RegisterAssetsRoutes(segment string, e *echo.Echo, logger *zap.Logger) {
 	if itemsProxy == nil {
-		itemsProxy = model.NewProxy()
+		itemsProxy = model.NewProxy(logger)
 	}
 
 	userGroup := e.Group(segment)

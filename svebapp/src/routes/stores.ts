@@ -1,5 +1,3 @@
-//import "fake-indexeddb/auto";
-
 import {writable} from "svelte/store";
 import type {Item} from "$lib/gallery";
 
