@@ -21,6 +21,8 @@ func main() {
 	ctx := app.NewAppContext()
 	svc := app.NewSvcContext()
 
+	ctx.SetLogLevel(app.InfoLevel)
+
 	svc.AddService(scan.NewImporterService(ctx))
 	svc.AddService(client.NewWebService(ctx))
 	//svc.AddService(importer.NewMaintenanceService(ctx)) // later

@@ -1,15 +1,12 @@
 package app
 
 import (
-	"fmt"
-	"log"
 	"os"
 
 	"github.com/joho/godotenv"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
-
-var appConfig Config
 
 /*
 app_name: "MyApp"
@@ -48,31 +45,31 @@ type Config struct {
 	APIKeys      map[string]string `yaml:"api_keys"`
 }
 
-func init() {
+func initConfig(config *Config, logger *zap.Logger) {
 
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatalf("Error loading .env file")
+		logger.Fatal("Error loading .env file")
 	}
 
 	configPath := os.Getenv("GONTROLLER_CONFIG")
 	if configPath == "" {
-		log.Fatal("GONTROLLER_CONFIG not set in .env file")
+		logger.Fatal("GONTROLLER_CONFIG not set in .env file")
 	}
 
 	file, err := os.Open(configPath)
 	if err != nil {
-		fmt.Printf("Error opening config file: %v\n", err)
+		logger.Fatal("Error opening config file", zap.Error(err))
 		return
 	}
 	defer file.Close()
 
 	decoder := yaml.NewDecoder(file)
-	err = decoder.Decode(&appConfig)
+	err = decoder.Decode(&config)
 	if err != nil {
-		fmt.Printf("Error parsing config file: %v\n", err)
+		logger.Fatal("Error parsing config file", zap.Error(err))
 		return
 	}
 
-	fmt.Println("Configuration loaded successfully")
+	logger.Info("Configuration loaded successfully")
 }

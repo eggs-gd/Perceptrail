@@ -6,7 +6,8 @@ import (
 	t "gontroller/pkg/_t"
 	"gontroller/pkg/model"
 	"gontroller/pkg/model/dto"
-	"log"
+
+	"go.uber.org/zap"
 )
 
 var commonArgs []string = []string{ // all sidecars
@@ -46,6 +47,7 @@ var metaTags []string = []string{ // Generic tags needed for db.Item
 var validationProxy model.ValidationApi
 
 type exifExtractor struct {
+	logger  *zap.Logger
 	workers []*exiftool.Server
 	freeCh  chan *exiftool.Server
 }
@@ -61,14 +63,14 @@ func (cd *exifExtractor) Decorate(in []*dto.FileDto) (*dto.ItemDto, error) {
 			args = append(metaTags, item.Path)
 		}
 
-		log.Printf("ETM.Process.Command -> args: %v", args)
+		cd.logger.Info("Command", zap.Any("args", args))
 
 		et := cd.getWorker()
 		defer cd.releaseWorker(et)
 
 		out, err := et.Command(args...)
 		if err != nil {
-			log.Printf("ETM.Process.Command -> Stdout err: %v\n", err)
+			cd.logger.Error("Command", zap.Any("out", out), zap.Error(err))
 		}
 
 		res := map[string][]byte{}
@@ -92,25 +94,24 @@ func (cd *exifExtractor) Stop() {
 	}
 }
 
-func NewMetaProcessor(count int, chin <-chan []*dto.FileDto, chout chan<- *dto.ItemDto) chain.Processor {
+func NewMetaProcessor(count int, chin <-chan []*dto.FileDto, chout chan<- *dto.ItemDto, logger *zap.Logger) chain.Processor {
 	if validationProxy == nil {
-		validationProxy = model.NewProxy()
+		validationProxy = model.NewProxy(logger.Named("DB"))
 	}
 
 	workers := make([]*exiftool.Server, count)
 	freeCh := make(chan *exiftool.Server, count)
 	for i := 0; i < count; i++ {
 		var et, err = exiftool.NewServer(commonArgs...)
-		log.Printf("ETM.NewWorker -> file: %v, et: %v", et, err)
+		logger.Info("NewWorker", zap.Any("file", et), zap.Any("et", et), zap.Error(err))
 		if err != nil {
-			log.Printf("ETM.NewWorker.panic -> et: %v, err: %v", et, err)
-			panic(err)
+			logger.Panic("NewWorker", zap.Any("et", et), zap.Error(err))
 		}
 		workers[i] = et
 		freeCh <- et
 	}
 
-	processor := &exifExtractor{workers, freeCh}
+	processor := &exifExtractor{logger, workers, freeCh}
 
 	return chain.NewDecorator(chin, chout, processor)
 }

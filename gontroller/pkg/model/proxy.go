@@ -2,8 +2,8 @@ package model
 
 import (
 	"gontroller/pkg/model/dto"
-	"log"
 
+	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -13,21 +13,22 @@ var config gorm.Config = gorm.Config{}
 var db *gorm.DB
 
 type Proxy struct {
-	db *gorm.DB
+	logger *zap.Logger
+	db     *gorm.DB
 }
 
-func NewProxy() *Proxy {
+func NewProxy(logger *zap.Logger) *Proxy {
 	if db == nil {
-		db = initDB()
+		db = initDB(logger)
 	}
 
-	return &Proxy{db}
+	return &Proxy{logger, db}
 }
 
-func initDB() *gorm.DB {
+func initDB(logger *zap.Logger) *gorm.DB {
 	db, err := gorm.Open(sqlite.Open("media_library.db"), &config)
 	if err != nil {
-		log.Fatalln("Can't connect to database:", err)
+		logger.Fatal("Can't connect to database", zap.Error(err))
 	}
 
 	err = db.AutoMigrate(
@@ -37,9 +38,9 @@ func initDB() *gorm.DB {
 		// &Album{},
 	)
 	if err != nil {
-		log.Fatalln("Can't do migration:", err)
+		logger.Fatal("Can't do migration", zap.Error(err))
 	}
 
-	log.Println("Database migration done!")
+	logger.Info("Database migration done!")
 	return db
 }

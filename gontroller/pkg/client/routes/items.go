@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"go.uber.org/zap"
 )
 
 // https://echo.labstack.com/docs/quick-start
@@ -45,9 +46,9 @@ type clientItem struct {
 	Height   int16     `json:"height"`
 }
 
-func RegisterItemsRoutes(segment string, e *echo.Echo) {
+func RegisterItemsRoutes(segment string, e *echo.Echo, logger *zap.Logger) {
 	if itemsProxy == nil {
-		itemsProxy = model.NewProxy()
+		itemsProxy = model.NewProxy(logger)
 	}
 
 	userGroup := e.Group(segment)

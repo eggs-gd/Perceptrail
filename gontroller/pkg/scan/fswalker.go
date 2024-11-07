@@ -8,7 +8,6 @@ import (
 	t "gontroller/pkg/_t"
 	"gontroller/pkg/model"
 	"gontroller/pkg/model/dto"
-	"log"
 	"mime"
 	"net/http"
 	"os"
@@ -18,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -29,6 +29,7 @@ type inType struct {
 }
 
 type fsMonitor struct {
+	logger *zap.Logger
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -37,12 +38,13 @@ type fsMonitor struct {
 	currentRun   time.Time     // timestamp for current walker run
 }
 
-func NewFsWalker(path string, chout chan<- []*dto.FileDto) chain.Processor {
+func NewFsWalker(path string, chout chan<- []*dto.FileDto, logger *zap.Logger) chain.Processor {
 	if filesProxy == nil {
-		filesProxy = model.NewProxy()
+		filesProxy = model.NewProxy(logger.Named("DB"))
 	}
 
 	m := &fsMonitor{
+		logger:       logger,
 		path:         path,
 		currentGroup: []t.ItemEntry{},
 	}
@@ -56,7 +58,7 @@ func (m *fsMonitor) Start(chin chan<- inType, ctx context.Context) {
 
 	m.currentRun = time.Now()
 	err := filepath.WalkDir(m.path, func(path string, info os.DirEntry, err error) error {
-		log.Printf("FSM.Walk -> file: %v, err: %v", path, err)
+		m.logger.Info("fs.WalkDirFunc", zap.String("file", path), zap.Error(err))
 		select {
 		case <-m.ctx.Done():
 			return m.ctx.Err()
@@ -73,7 +75,7 @@ func (m *fsMonitor) Start(chin chan<- inType, ctx context.Context) {
 	})
 
 	if err != nil && !errors.Is(err, context.Canceled) {
-		log.Printf("Error in fsMonitor: %v", err)
+		m.logger.Error("FsMonitor Error", zap.Error(err))
 	}
 }
 
@@ -88,10 +90,10 @@ func (m *fsMonitor) Stop() {
 }
 
 func (m *fsMonitor) Decorate(in inType) ([]*dto.FileDto, error) {
-	log.Printf("FSM.processFile -> path: %v", in.path)
+	m.logger.Info("processFile", zap.String("path", in.path))
 
 	item := newItemEntryFromDirEntry(in.path, in.info)
-	updateMimeType(&item)
+	updateMimeType(&item, m.logger)
 
 	if m.tryPutInGroup(item) {
 		return nil, chain.ErrSkippedItem
@@ -108,7 +110,7 @@ func (m *fsMonitor) Decorate(in inType) ([]*dto.FileDto, error) {
 }
 
 func (m *fsMonitor) tryPutInGroup(entry t.ItemEntry) bool {
-	log.Printf("FSM.tryPutInGroup -> entry: %v", entry)
+	m.logger.Info("tryPutInGroup", zap.Any("entry", entry))
 	if len(m.currentGroup) == 0 {
 		m.currentGroup = append(m.currentGroup, entry)
 		return true
@@ -150,7 +152,7 @@ func (m *fsMonitor) tryPutInGroup(entry t.ItemEntry) bool {
 }
 
 func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []*dto.FileDto {
-	log.Printf("FSM.getAndSaveResult -> group: %v", group)
+	m.logger.Info("getAndSaveResult", zap.Any("group", group))
 	var dbitems []*dto.FileDto
 	var changedFiles []*dto.FileDto
 
@@ -159,17 +161,17 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []*dto.FileDto {
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				dbitem, err = filesProxy.CreateFile(item)
-				log.Printf("FSM.getAndSaveResult -> changedFiles add new: %v", dbitem)
+				m.logger.Info("getAndSaveResult", zap.Any("changedFiles add new", dbitem))
 				changedFiles = utils.AppendUniq(changedFiles, dbitem)
 
 				if err != nil {
 					// cant create file
-					log.Printf("Error creating file: %v", err)
+					m.logger.Error("Error creating file", zap.Error(err))
 					continue
 				}
 			} else {
 				// Something went wrong with db acess, probably should be panic
-				log.Printf("Error retrieving file: %v", err)
+				m.logger.Error("Error retrieving file", zap.Error(err))
 				continue
 			}
 		}
@@ -179,12 +181,12 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []*dto.FileDto {
 			dbitems = utils.AppendUniq(dbitems, dbitem)
 		} else {
 			// something went wrong but should be catched above on creating phase
-			log.Printf("Error got empty file: %v", err)
+			m.logger.Error("Error got empty file", zap.Error(err))
 			continue
 		}
 
 		if dbitems[i].LinkTo(dbitems[0]) && !dbitem.IsIgnored() {
-			log.Printf("FSM.getAndSaveResult -> changedFiles add linked: %v", dbitems)
+			m.logger.Info("getAndSaveResult", zap.Any("changedFiles add linked", dbitems))
 			changedFiles = utils.AppendUniq(changedFiles, dbitems[i])
 		}
 
@@ -192,7 +194,7 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []*dto.FileDto {
 			item.Size == dbitems[i].Size {
 			continue // do nothing, skip
 		} else if !dbitems[i].IsIgnored() {
-			log.Printf("FSM.getAndSaveResult -> changedFiles ad changed: item: %v, dbitem: %v", item.ModTime, dbitems[i].ModTime)
+			m.logger.Info("getAndSaveResult -> changedFiles ad changed", zap.Any("item", item.ModTime), zap.Any("dbItem", dbitems[i].ModTime))
 			changedFiles = utils.AppendUniq(changedFiles, dbitem)
 		}
 	}
@@ -222,9 +224,9 @@ func (m *fsMonitor) getAndSaveResult(group []t.ItemEntry) []*dto.FileDto {
 	return nil
 }
 
-func updateMimeType(entry *t.ItemEntry) {
+func updateMimeType(entry *t.ItemEntry, logger *zap.Logger) {
 	updateMimeTypeGeneric(entry)
-	updateMimeTypeFromMeta(entry)
+	updateMimeTypeFromMeta(entry, logger)
 }
 
 func updateMimeTypeGeneric(entry *t.ItemEntry) {
@@ -236,21 +238,21 @@ func updateMimeTypeGeneric(entry *t.ItemEntry) {
 	entry.MimeType = mime.TypeByExtension(ext)
 }
 
-func updateMimeTypeFromMeta(entry *t.ItemEntry) {
+func updateMimeTypeFromMeta(entry *t.ItemEntry, logger *zap.Logger) {
 	if entry.MimeType != "" {
 		return
 	}
 
 	file, err := os.Open(entry.Path)
 	if err != nil {
-		log.Println("Error:", err)
+		logger.Error("updateMimeTypeFromMeta", zap.Error(err))
 	}
 	defer file.Close()
 
 	buffer := make([]byte, 512)
 	_, err = file.Read(buffer)
 	if err != nil {
-		log.Println("Error:", err)
+		logger.Error("updateMimeTypeFromMeta", zap.Error(err))
 	}
 
 	entry.MimeType = http.DetectContentType(buffer)

@@ -2,10 +2,12 @@ package scan
 
 import (
 	"context"
+	"errors"
 	"gontroller/ext/chain"
 	"gontroller/pkg/app"
 	"gontroller/pkg/model/dto"
-	"log"
+
+	"go.uber.org/zap"
 )
 
 // Enter: Path ->
@@ -36,6 +38,8 @@ type importerService struct {
 }
 
 func NewImporterService(ctx app.AppContext) *importerService {
+	logger := ctx.Logger("Importer")
+
 	var errch chan error = make(chan error)
 
 	var files chan []*dto.FileDto = make(chan []*dto.FileDto)
@@ -46,13 +50,18 @@ func NewImporterService(ctx app.AppContext) *importerService {
 
 	go func() {
 		for err := range errch {
-			log.Printf("Error from Import Chain: %v", err)
+			if errors.Is(err, chain.ErrSkippedItem) {
+				logger.Info("Import Error", zap.Error(err))
+			} else {
+				logger.Error("Import Error", zap.Error(err))
+			}
+
 		}
 	}()
 
 	importChain := chain.NewChainProcessor(errch)
-	importChain.AddStep(NewFsWalker(ctx.Config().Path, files))
-	importChain.AddStep(NewMetaProcessor(5, files, items))
+	importChain.AddStep(NewFsWalker(ctx.Config().Path, files, logger))
+	importChain.AddStep(NewMetaProcessor(5, files, items, logger))
 	//importChain.AddStep(NewTranscoder(5, items, items))
 
 	return &importerService{
