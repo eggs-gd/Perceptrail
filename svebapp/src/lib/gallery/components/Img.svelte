@@ -21,6 +21,12 @@
 
     let {item}: Props = $props();
 
+    function handleImageLoad(event) {
+        const img = event.target;
+        item.width = img.naturalWidth;
+        item.height = img.naturalHeight;
+    }
+
 </script>
 
 <!--     srcset={`-->
@@ -35,4 +41,5 @@
         (min-width: 1200px) 1200px,
         1920px"
      width={item.width} height={item.height}
-     alt={item.guid}/>
+     alt={item.guid}
+onload={handleImageLoad}/>

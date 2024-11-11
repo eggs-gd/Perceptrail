@@ -1,8 +1,9 @@
 <script lang="ts">
-            import { flip } from 'svelte/animate';
+    import {flip} from 'svelte/animate';
+    import { fade } from 'svelte/transition';
     import ItemView from "./components/ItemView.svelte";
     import {layoutRaw} from "./layout";
-    import {type Item, type ItemScaled} from "./types";
+    import {type Item} from "./types";
 
     interface Props {
         images?: Item[];
@@ -22,11 +23,11 @@
 
     let width = $state(1280);
     let scaledImages = $derived(layoutRaw({
-                images,
-                containerWidth: width,
-                targetHeight: rowHeight,
-                gutter
-            })
+            images,
+            containerWidth: width,
+            targetHeight: rowHeight,
+            gutter
+        })
     );
 
     function imgStyle(scaledWidth: number, scaledHeight: number, isLastInRow: boolean, isLastRow: boolean) {
@@ -49,7 +50,8 @@
         {#each scaledImages as itm, index (itm.guid)}
             <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
             <div class="image"
-                animate:flip="{{ duration: 500 }}"
+                 transition:fade={{ duration: 2000 }}
+                 animate:flip="{{ duration: 2000 }}"
                  style={imgStyle(itm.scaledWidth, itm.scaledHeight, itm.isLastInRow, itm.isLastRow )}
                  onclick={() => {
                      selectItem(index);

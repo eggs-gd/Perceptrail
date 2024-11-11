@@ -75,8 +75,14 @@ func streamClientItems(dbItems []*dto.ItemDto, w http.ResponseWriter) error {
 				Guid:     dbItem.Guid,
 				Date:     dbItem.Date,
 				MimeType: dbItem.MimeType,
-				Width:    16, //int16(dbItem.Ratio.W),
-				Height:   9,  //int16(dbItem.Ratio.H),
+			}
+
+			if dbItem.Ratio.H == 0 || dbItem.Ratio.W == 0 {
+				clientItem.Height = 1
+				clientItem.Width = 1
+			} else {
+				clientItem.Width = int16(dbItem.Ratio.W)
+				clientItem.Height = int16(dbItem.Ratio.H)
 			}
 
 			itemsChannel <- clientItem

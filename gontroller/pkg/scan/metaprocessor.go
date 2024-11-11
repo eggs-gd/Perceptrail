@@ -3,9 +3,11 @@ package scan
 import (
 	"gontroller/ext/chain"
 	"gontroller/ext/exiftool"
+	"gontroller/ext/utils"
 	t "gontroller/pkg/_t"
 	"gontroller/pkg/model"
 	"gontroller/pkg/model/dto"
+	"strconv"
 
 	"go.uber.org/zap"
 )
@@ -44,7 +46,7 @@ var metaTags []string = []string{ // Generic tags needed for db.Item
 	"-AudioCodec",
 }
 
-var validationProxy model.ValidationApi
+var itemsProxy model.ItemsApi
 
 type exifExtractor struct {
 	logger  *zap.Logger
@@ -95,8 +97,8 @@ func (cd *exifExtractor) Stop() {
 }
 
 func NewMetaProcessor(count int, chin <-chan []*dto.FileDto, chout chan<- *dto.ItemDto, logger *zap.Logger) chain.Processor {
-	if validationProxy == nil {
-		validationProxy = model.NewProxy(logger.Named("DB"))
+	if itemsProxy == nil {
+		itemsProxy = model.NewProxy(logger.Named("DB"))
 	}
 
 	workers := make([]*exiftool.Server, count)
@@ -125,7 +127,22 @@ func (cd *exifExtractor) releaseWorker(worker *exiftool.Server) {
 }
 
 func (cd *exifExtractor) processMeta(in []*dto.FileDto, exifs []t.RawExif) (*dto.ItemDto, error) {
-	res, err := validationProxy.ValidateFile(in[0], exifs[0])
+	res, err := itemsProxy.ValidateFile(in[0], exifs[0])
+
+	if res.State < dto.Ready {
+		w, _ := strconv.Atoi(string(exifs[0]["ImageWidth"]))
+		h, _ := strconv.Atoi(string(exifs[0]["ImageHeight"]))
+		if res.Size.W != w || res.Size.H != h {
+			res.Size = t.Size{
+				W: w,
+				H: h,
+			}
+			res.Ratio = utils.GetRatio(res.Size)
+			res.State = dto.Dirty
+		}
+
+		itemsProxy.UpdateItem(res)
+	}
 
 	// todo fill available meta
 	// todo check itemState
