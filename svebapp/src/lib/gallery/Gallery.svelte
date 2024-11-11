@@ -74,7 +74,7 @@
     }
 
     .image {
-        transition: transform 0.5s ease;
+        /*transition: transform 0.5s ease;*/
         position: relative;
         height: 100%;
     }
