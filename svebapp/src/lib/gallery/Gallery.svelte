@@ -1,4 +1,5 @@
 <script lang="ts">
+            import { flip } from 'svelte/animate';
     import ItemView from "./components/ItemView.svelte";
     import {layoutRaw} from "./layout";
     import {type Item, type ItemScaled} from "./types";
@@ -45,9 +46,10 @@
 
 <div class="masonry" bind:clientWidth={width}>
     <div class="container" style="width: {width}px" class:hidden={!width}>
-        {#each scaledImages as itm, index}
+        {#each scaledImages as itm, index (itm.guid)}
             <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
             <div class="image"
+                animate:flip="{{ duration: 500 }}"
                  style={imgStyle(itm.scaledWidth, itm.scaledHeight, itm.isLastInRow, itm.isLastRow )}
                  onclick={() => {
                      selectItem(index);
@@ -70,6 +72,7 @@
     }
 
     .image {
+        transition: transform 0.5s ease;
         position: relative;
         height: 100%;
     }

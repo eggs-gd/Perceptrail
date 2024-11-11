@@ -1,5 +1,6 @@
 <script lang="ts">
     import type {Item} from "$lib/gallery";
+        import {PUBLIC_API_PATH} from '$env/static/public'
     interface Props {
         item: Item;
     }
@@ -8,6 +9,6 @@
 
 </script>
 
-<video src={item.src} width={item.width} height={item.height}>
-    <track src={item.src} kind="captions">
+<video src={`${PUBLIC_API_PATH}/assets/${item.guid}`} width={item.width} height={item.height}>
+    <track src={`${PUBLIC_API_PATH}/assets/${item.guid}`} kind="captions">
 </video>

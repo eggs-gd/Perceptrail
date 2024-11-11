@@ -1,4 +1,5 @@
 <script lang="ts">
+
     import Img from "./Img.svelte";
     import {type Item} from '../types'
     import Video from "$lib/gallery/components/Video.svelte";
@@ -11,6 +12,7 @@
     let {item, index}: Props = $props();
 
 </script>
+
 
 {#if item.mimeType.startsWith("image")}
     <Img item={item}/>

@@ -19,6 +19,7 @@ if (browser) {
     db.version(2).stores({
         items: '&guid, width, height, mimeType, date, path'
     });
+    db.table("items").clear()
 } else {
     db = new Dexie('myDatabase', {indexedDB: fakeIdb, IDBKeyRange: fakeIdbK}) as Dexie & {
         items: EntityTable<SvItem, 'guid'>;
