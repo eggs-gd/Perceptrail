@@ -1,6 +1,6 @@
 <script lang="ts">
     import {flip} from 'svelte/animate';
-    import { fade } from 'svelte/transition';
+    import {fade} from 'svelte/transition';
     import ItemView from "./components/ItemView.svelte";
     import {layoutRaw} from "./layout";
     import {type Item} from "./types";
@@ -40,7 +40,7 @@
             flex = `1 1 ${scaledWidth - 4}px`;
         }
 
-        return `height: ${scaledHeight}px; flex: ${flex}; margin-right: ${marginRight}; margin-bottom: ${marginBottom};`;
+        return `height: ${scaledHeight}px; flex: ${flex}; margin-right: ${marginRight}; margin-bottom: ${marginBottom}; border: 1px solid green;`;
     }
 
 </script>
@@ -50,6 +50,7 @@
         {#each scaledImages as itm, index (itm.guid)}
             <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
             <div class="image"
+
                  transition:fade={{ duration: 2000 }}
                  animate:flip="{{ duration: 2000 }}"
                  style={imgStyle(itm.scaledWidth, itm.scaledHeight, itm.isLastInRow, itm.isLastRow )}

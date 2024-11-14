@@ -1,8 +1,8 @@
 <script lang="ts">
+    import {type Item} from '../types'
 
     import Img from "./Img.svelte";
-    import {type Item} from '../types'
-    import Video from "$lib/gallery/components/Video.svelte";
+    import Video from "./Video.svelte";
 
     interface Props {
         item: Item;

@@ -1,11 +1,12 @@
 <script lang="ts">
-    import type {Item} from "$lib/gallery";
-        import {PUBLIC_API_PATH} from '$env/static/public'
+    import type {Item} from "../types";
+    import {PUBLIC_API_PATH} from '$env/static/public'
+
     interface Props {
         item: Item;
     }
 
-    let { item }: Props = $props();
+    let {item}: Props = $props();
 
 </script>
 

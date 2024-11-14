@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type {Item} from "$lib/gallery";
+    import type {Item} from "../types";
     import {PUBLIC_API_PATH} from '$env/static/public'
 
     interface Props {
@@ -42,4 +42,4 @@
         1920px"
      width={item.width} height={item.height}
      alt={item.guid}
-onload={handleImageLoad}/>
+     onload={handleImageLoad}/>
