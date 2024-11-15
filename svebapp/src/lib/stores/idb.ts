@@ -6,17 +6,35 @@ interface SvItem extends Item {
     date: Date;
 }
 
-let db: Dexie & {
+interface LayoutItem extends Item {
+    order: number;
+    scale: number;
+    row: number;
+}
+
+let itemsDb: Dexie & {
     items: EntityTable<SvItem, 'guid'>;
 };
 
-db = new Dexie('myDatabase') as Dexie & {
+itemsDb = new Dexie('items') as Dexie & {
     items: EntityTable<SvItem, 'guid'>;
 };
-db.version(2).stores({
-    items: '&guid, width, height, mimeType, date, path'
+itemsDb.version(1).stores({
+    items: '&guid, width, height, mimeType, date'
 });
-db.table("items").clear()
+itemsDb.table("items").clear()
+
+let layoutDb: Dexie & {
+    items: EntityTable<LayoutItem, 'guid'>;
+};
+
+layoutDb = new Dexie('items') as Dexie & {
+    items: EntityTable<LayoutItem, 'guid'>;
+};
+layoutDb.version(1).stores({
+    items: '&guid, width, height, mimeType, date, order, scale, row'
+});
+layoutDb.table("items").clear()
 
 export function dexieStore<T>(querier: () => T | Promise<T>): Readable<T> {
     const dexieObservable = liveQuery(querier)
@@ -28,4 +46,4 @@ export function dexieStore<T>(querier: () => T | Promise<T>): Readable<T> {
     }
 }
 
-export {type SvItem, db}
+export {type SvItem, itemsDb, type LayoutItem, layoutDb}
