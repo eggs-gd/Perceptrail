@@ -1,7 +1,11 @@
 <script lang="ts">
     import Gallery from "$lib/gallery/Gallery.svelte";
     import {goto} from "$app/navigation";
-    import {currentIndex, currentItem, items} from "$lib/stores/stores";
+    import {currentIndex, currentItem, rowHeight} from "$lib/stores/stores";
+    import {liveQuery} from "dexie";
+    import {layoutDb} from "$lib/stores/idb";
+
+
 
     function selectItem(index: number) {
         $currentIndex = index;
@@ -11,6 +15,9 @@
     function openItem(index: number) {
         goto("/" + index, {replaceState: true})
     }
+
+
+    // todo manipulations with $rowHeight
 
 
     /*
@@ -37,6 +44,8 @@
         return () => window.removeEventListener('scroll', handleScroll);
     }); */
 
+    let items = liveQuery(() => layoutDb.items.orderBy('order').toArray());
+
 </script>
 
-<Gallery images={$items} rowHeight={200} selectItem={selectItem} openItem={openItem}/>
+<Gallery images={$items} selectItem={selectItem} openItem={openItem}/>

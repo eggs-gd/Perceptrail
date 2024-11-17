@@ -1,4 +1,4 @@
-type WorkerTask<TData, TResult = void> = (
+export type WorkerTask<TData, TResult = void> = (
     signal: AbortSignal,
     data: TData
 ) => Promise<TResult>;
@@ -6,7 +6,7 @@ type WorkerTask<TData, TResult = void> = (
 /**
  * List of available worker tasks
  */
-enum WorkerTaskType {
+export enum WorkerTaskType {
     UpdateDb,
-    UpdateLayout
+    UpdateLayout,
 }

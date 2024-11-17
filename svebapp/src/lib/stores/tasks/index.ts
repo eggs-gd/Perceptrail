@@ -1,5 +1,5 @@
-import updateDbStreamed from './updateDB'
-import updateLayoutStreamed from "./updateLayout";
+import {updateDbStreamed} from './updateDB'
+import {updateLayoutStreamed, params as layoutParams} from "./updateLayout";
 
 
-export {updateDbStreamed, updateLayoutStreamed}
+export {updateDbStreamed, updateLayoutStreamed, layoutParams}

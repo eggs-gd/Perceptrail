@@ -19,7 +19,7 @@ let itemsDb: Dexie & {
 itemsDb = new Dexie('items') as Dexie & {
     items: EntityTable<SvItem, 'guid'>;
 };
-itemsDb.version(1).stores({
+itemsDb.version(2).stores({
     items: '&guid, width, height, mimeType, date'
 });
 itemsDb.table("items").clear()
@@ -28,7 +28,7 @@ let layoutDb: Dexie & {
     items: EntityTable<LayoutItem, 'guid'>;
 };
 
-layoutDb = new Dexie('items') as Dexie & {
+layoutDb = new Dexie('layout') as Dexie & {
     items: EntityTable<LayoutItem, 'guid'>;
 };
 layoutDb.version(1).stores({

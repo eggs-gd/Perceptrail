@@ -19,6 +19,7 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
 	ctx := app.NewAppContext()
+	ctx.SetLogLevel(app.WarnLevel)
 	svc := app.NewSvcContext()
 
 	ctx.SetLogLevel(app.InfoLevel)

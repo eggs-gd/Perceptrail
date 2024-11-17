@@ -2,12 +2,15 @@
     import {flip} from 'svelte/animate';
     import {fade} from 'svelte/transition';
     import ItemView from "./components/ItemView.svelte";
-    import {layoutRaw} from "./layout";
-    import {type Item} from "./types";
+    //import {layoutRaw} from "./layout";
+    //import {type Item} from "./types";
+    import {screenWidth} from "$lib/stores/stores";
+    import type {LayoutItem} from "$lib/stores/idb";
+
 
     interface Props {
-        images?: Item[];
-        rowHeight?: number;
+        images: LayoutItem[];
+        //rowHeight?: number;
         gutter?: number;
         selectItem: (item: number) => void,
         openItem: (item: number) => void,
@@ -15,45 +18,30 @@
 
     let {
         images = [],
-        rowHeight = 220,
         gutter = 8,
         selectItem,
         openItem
     }: Props = $props();
 
-    let width = $state(1280);
-    let scaledImages = $derived(layoutRaw({
-            images,
-            containerWidth: width,
-            targetHeight: rowHeight,
-            gutter
-        })
-    );
+    function imgStyle(width: number, height: number, scale: number) {
+        let margin = gutter * 0.5 + 'px';
+        let flex = `0 0 ${width * scale - gutter * 0.5}px`;
 
-    function imgStyle(scaledWidth: number, scaledHeight: number, isLastInRow: boolean, isLastRow: boolean) {
-        let marginRight = gutter + 'px',
-            flex = `0 0 ${scaledWidth}px`,
-            marginBottom = isLastRow ? '0' : marginRight;
-
-        if (isLastInRow) {
-            marginRight = '0';
-            flex = `1 1 ${scaledWidth - 4}px`;
-        }
-
-        return `height: ${scaledHeight}px; flex: ${flex}; margin-right: ${marginRight}; margin-bottom: ${marginBottom}; border: 1px solid green;`;
+        return `height: ${height * scale - gutter * 0.5}px; flex: ${flex}; margin: ${margin}; border: 1px solid green;`;
     }
+
 
 </script>
 
-<div class="masonry" bind:clientWidth={width}>
-    <div class="container" style="width: {width}px" class:hidden={!width}>
-        {#each scaledImages as itm, index (itm.guid)}
+<div class="masonry" bind:clientWidth={$screenWidth}>
+    <div class="container" style="width: {$screenWidth}px" class:hidden={!$screenWidth}>
+        {#each images as itm, index (itm.guid)}
             <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
             <div class="image"
 
                  transition:fade={{ duration: 2000 }}
                  animate:flip="{{ duration: 2000 }}"
-                 style={imgStyle(itm.scaledWidth, itm.scaledHeight, itm.isLastInRow, itm.isLastRow )}
+                 style={imgStyle(itm.width, itm.height, itm.scale)}
                  onclick={() => {
                      selectItem(index);
                      openItem(index);

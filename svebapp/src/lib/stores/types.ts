@@ -1,12 +1,11 @@
+import type {WorkerTaskType} from "./tasks/types";
+import type {SvItem} from "$lib/stores/idb";
+
 export class AbortError extends Error {
     constructor(message = "The operation was aborted") {
         super(message);
         this.name = "AbortError";
     }
-}
-
-export function throwIfAborted(signal: AbortSignal): void {
-    if (signal.aborted) throw new AbortError();
 }
 
 export function isAbortError(error: unknown): error is AbortError {
@@ -16,8 +15,8 @@ export function isAbortError(error: unknown): error is AbortError {
 // Abstract worker message (requests)
 
 export interface WorkerMessageData<T, TaskType = WorkerTaskType> {
+    aborted: boolean;
     task: TaskType;
-    signal: AbortSignal;
     payload?: T;
 }
 
@@ -34,12 +33,21 @@ export interface UpdateDbPayload {
 export type UpdateDbMessageData = WorkerMessageData<UpdateDbPayload, WorkerTaskType.UpdateDb>;
 
 export interface UpdateLayoutPayload {
-    width: number;
+    screenWidth: number;
+    rowHeight: number;
+    item?:SvItem,
+    added?:boolean,
 }
 
 export type UpdateLayoutMessageData = WorkerMessageData<UpdateLayoutPayload, WorkerTaskType.UpdateLayout>;
 
 // Concrete events
+
+export interface WorkerEventData {
+    task:WorkerTaskType,
+    status:string,
+    payload?:any,
+}
 
 export interface IdleEventData {
     idle: boolean

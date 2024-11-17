@@ -1,11 +1,12 @@
-import {Logger} from "$lib/logger";
 import {itemsDb, type SvItem} from "../idb";
-import {throwIfAborted} from "../types";
+import {type UpdateDbPayload} from "../types";
+import type {WorkerTask} from "./types";
+import {getLogger} from "$lib/logger/logger";
 
-const logger = new Logger()
+const logger = getLogger()
 
-const startStream: WorkerTask<string> = async (signal: AbortSignal, api: string) => {
-    const response = await fetch(api)
+export const updateDbStreamed: WorkerTask<UpdateDbPayload> = async (signal: AbortSignal, payload: UpdateDbPayload) => {
+    const response = await fetch(payload.api)
 
     if (!response.body) {
         logger.error('Streaming data is not supported');
@@ -22,21 +23,21 @@ const startStream: WorkerTask<string> = async (signal: AbortSignal, api: string)
     const decoder = new TextDecoder("utf-8");
     let buffer = "";
 
-    throwIfAborted(signal)
+    signal.throwIfAborted()
 
     const processJSONChunk = async (chunk: string) => {
         buffer += chunk;
 
         let boundary;
         while ((boundary = buffer.indexOf("}\n")) !== -1) {
-            throwIfAborted(signal)
+            signal.throwIfAborted()
             const jsonString = buffer.slice(0, boundary + 1);
             buffer = buffer.slice(boundary + 2);
 
             try {
                 const data: SvItem = JSON.parse(jsonString);
                 await itemsDb.items.put(data);
-                logger.info("Saved to Dexie:", data);
+                //logger.debug("Saved to Dexie:", data);
             } catch (error) {
                 logger.error("Error saving to Dexie:", error);
             }
@@ -44,7 +45,7 @@ const startStream: WorkerTask<string> = async (signal: AbortSignal, api: string)
     };
 
     while (reader) {
-        throwIfAborted(signal)
+        signal.throwIfAborted()
 
         let {done, value} = await reader.read();
 
@@ -55,7 +56,7 @@ const startStream: WorkerTask<string> = async (signal: AbortSignal, api: string)
     }
 
     if (buffer.trim()) {
-        throwIfAborted(signal)
+        signal.throwIfAborted()
         try {
             const data = JSON.parse(buffer);
             await itemsDb.items.put(data);
@@ -65,5 +66,3 @@ const startStream: WorkerTask<string> = async (signal: AbortSignal, api: string)
         }
     }
 }
-
-export default startStream
