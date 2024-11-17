@@ -1,0 +1,30 @@
+{
+  "name": "@perceptrail/svebapp",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+  },
+  "devDependencies": {
+    "@fontsource/fira-mono": "^5.0.0",
+    "@neoconfetti/svelte": "^2.0.0",
+    "@sveltejs/adapter-node": "^5.2.9",
+    "@sveltejs/kit": "^2.7.7",
+    "@sveltejs/vite-plugin-svelte": "^4.0.0",
+    "eslint": "^9.12.0",
+    "fake-indexeddb": "^6.0.0",
+    "svelte": "^5.1.12",
+    "svelte-check": "^4.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.10"
+  },
+  "type": "module",
+  "dependencies": {
+    "dexie": "^4.0.9",
+    "dexie-observable": "^4.0.1-beta.13"
+  }
+}
