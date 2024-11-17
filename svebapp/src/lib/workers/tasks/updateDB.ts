@@ -1,4 +1,4 @@
-import {itemsDb, type SvItem} from "../idb";
+import {itemsDb, type SvItem} from "$lib/stores";
 import {type UpdateDbPayload} from "../types";
 import type {WorkerTask} from "./types";
 import {getLogger} from "$lib/logger/logger";

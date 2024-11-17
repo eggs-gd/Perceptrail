@@ -1,5 +1,5 @@
 import type {WorkerTaskType} from "./tasks/types";
-import type {SvItem} from "$lib/stores/idb";
+import type {SvItem} from "$lib/stores";
 
 export class AbortError extends Error {
     constructor(message = "The operation was aborted") {

@@ -2,7 +2,7 @@
     import ItemView from "$lib/gallery/components/ItemView.svelte";
     import {goto} from "$app/navigation";
     import {page} from '$app/stores';
-    import {items, currentIndex, currentItem} from "$lib/stores/stores";
+    import {currentIndex, currentItem, items} from "$lib/stores";
 
     $currentIndex = Number($page.params.index);
 

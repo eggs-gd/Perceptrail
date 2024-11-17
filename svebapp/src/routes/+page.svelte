@@ -1,10 +1,9 @@
 <script lang="ts">
     import Gallery from "$lib/gallery/Gallery.svelte";
     import {goto} from "$app/navigation";
-    import {currentIndex, currentItem, rowHeight} from "$lib/stores/stores";
-    import {liveQuery} from "dexie";
-    import {layoutDb} from "$lib/stores/idb";
+    import {currentIndex, currentItem, items} from "$lib/stores";
 
+    //import layoutDb from "$lib/stores";
 
 
     function selectItem(index: number) {
@@ -44,7 +43,7 @@
         return () => window.removeEventListener('scroll', handleScroll);
     }); */
 
-    let items = liveQuery(() => layoutDb.items.orderBy('order').toArray());
+    //let items = liveQuery(() => layoutDb.items.orderBy('order').toArray());
 
 </script>
 

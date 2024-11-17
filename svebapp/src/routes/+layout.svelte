@@ -1,6 +1,6 @@
 <script lang="ts">
-    import {updateLayout} from "$lib/stores/proxy";
-    import {rowHeight, screenWidth} from "$lib/stores/stores";
+    import {updateLayout} from "$lib/workers";
+    import {rowHeight, screenWidth} from "$lib/stores";
 
     let {data, children} = $props();
 

@@ -4,7 +4,7 @@ import {browser} from "$app/environment";
 import {PUBLIC_API_PATH} from "$env/static/public";
 import {getLogger} from "$lib/logger";
 import {WorkerTaskType} from "./tasks/types";
-import type {SvItem} from "$lib/stores/idb";
+import type {SvItem} from "$lib/stores";
 
 
 const logger = getLogger()

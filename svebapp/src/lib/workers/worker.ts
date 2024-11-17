@@ -7,7 +7,7 @@ import {
 } from "./types";
 import {layoutParams, updateDbStreamed, updateLayoutStreamed} from "./tasks";
 import {WorkerTaskType} from "./tasks/types";
-import {itemsDb, type SvItem} from "$lib/stores/idb";
+import {itemsDb, type SvItem} from "$lib/stores";
 import type {Transaction} from "dexie";
 import {getLogger} from "$lib/logger";
 
@@ -59,7 +59,7 @@ async function findItemIndex(item: SvItem): Promise<number> {
 
     // todo find all with the same `row` field and return first of them
     // Means: "first from the same row"
-    await itemsDb.items.orderBy('guid').each((dbItem) => {
+    await itemsDb.items.orderBy('guid').each((dbItem: SvItem) => {
         if (dbItem.guid === item.guid) {
             found = true;
             return;
