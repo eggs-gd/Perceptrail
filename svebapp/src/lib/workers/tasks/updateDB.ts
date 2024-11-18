@@ -1,7 +1,7 @@
-import {itemsDb, type Item} from "$lib/stores";
+import {type Item, itemsDb} from "$lib/stores";
 import {type UpdateDbPayload} from "../types";
-import type {WorkerTask} from "./types";
-import {getLogger} from "$lib/logger/logger";
+import {type WorkerTask} from "./types";
+import {getLogger} from "$lib/logger";
 
 const logger = getLogger()
 
