@@ -5,9 +5,10 @@ import {
     type WorkerMessage,
     type WorkerMessageData
 } from "./types";
-import {layoutParams, updateDbStreamed, updateLayoutStreamed} from "./tasks";
+import {params as layoutParams, updateLayoutStreamed} from "./tasks/updateLayout";
+import {updateDbStreamed} from "./tasks/updateDB";
 import {WorkerTaskType} from "./tasks/types";
-import {itemsDb, type SvItem} from "$lib/stores";
+import {itemsDb, type Item} from "$lib/stores";
 import type {Transaction} from "dexie";
 import {getLogger} from "$lib/logger";
 
@@ -31,12 +32,12 @@ self.onmessage = async function (msg: WorkerMessage<WorkerMessageData<any>>) {
     }
 };
 
-function hookCreate(key: string, item: SvItem, transaction: Transaction) {
+function hookCreate(key: string, item: Item, transaction: Transaction) {
     logger.debug('Hook create', key, item)
     postMessage({task: WorkerTaskType.UpdateDb, status: "add_item", payload: item})
 }
 
-function hookUpdate(mods: Object, key: string, item: SvItem, transaction: Transaction) {
+function hookUpdate(mods: Object, key: string, item: Item, transaction: Transaction) {
     logger.debug('Hook update', key, item)
 
     if (mods.hasOwnProperty('width') || mods.hasOwnProperty('height')) {
@@ -44,7 +45,7 @@ function hookUpdate(mods: Object, key: string, item: SvItem, transaction: Transa
     }
 }
 
-function restartLayoutFromPosition(item: SvItem) {
+function restartLayoutFromPosition(item: Item) {
     layoutParams.restart = true;
     findItemIndex(item).then(index => {
         if (index < layoutParams.current) {
@@ -53,13 +54,13 @@ function restartLayoutFromPosition(item: SvItem) {
     });
 }
 
-async function findItemIndex(item: SvItem): Promise<number> {
+async function findItemIndex(item: Item): Promise<number> {
     let index = 0;
     let found = false;
 
     // todo find all with the same `row` field and return first of them
     // Means: "first from the same row"
-    await itemsDb.items.orderBy('guid').each((dbItem: SvItem) => {
+    await itemsDb.items.orderBy('guid').each((dbItem: Item) => {
         if (dbItem.guid === item.guid) {
             found = true;
             return;

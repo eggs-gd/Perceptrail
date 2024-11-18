@@ -1,5 +1,5 @@
 import {dijkstra} from './dijkstra';
-import type {ItemOrig, ItemScaled, LayoutParams} from "../types";
+import type {ItemOrig, ItemScaled, LayoutParams} from "./types";
 
 export function round(n: number) {
     return Math.round(n * 100 + Number.EPSILON) / 100;

@@ -1,7 +1,7 @@
 import {writable} from "svelte/store";
-import type {Item} from "$lib/gallery";
+import type {Item} from "./types";
 import {liveQuery} from "dexie";
-import {layoutDb} from "$lib/stores/layoutDb";
+import {layoutDb} from "./layoutDb";
 
 export const items = liveQuery(() => layoutDb.items.orderBy('order').toArray());
 

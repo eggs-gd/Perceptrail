@@ -1,5 +1,5 @@
 import type {WorkerTaskType} from "./tasks/types";
-import type {SvItem} from "$lib/stores";
+import type {Item} from "$lib/stores";
 
 export class AbortError extends Error {
     constructor(message = "The operation was aborted") {
@@ -35,7 +35,7 @@ export type UpdateDbMessageData = WorkerMessageData<UpdateDbPayload, WorkerTaskT
 export interface UpdateLayoutPayload {
     screenWidth: number;
     rowHeight: number;
-    item?:SvItem,
+    item?:Item,
     added?:boolean,
 }
 

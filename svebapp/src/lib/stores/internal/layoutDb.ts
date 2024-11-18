@@ -1,11 +1,7 @@
 import Dexie, {type EntityTable} from "dexie";
-import type {Item} from "$lib/gallery";
+import type {LayoutItem} from "./types";
 
-export interface LayoutItem extends Item {
-    order: number;
-    scale: number;
-    row: number;
-}
+
 
 export const layoutDb: Dexie & {
     items: EntityTable<LayoutItem, 'guid'>;

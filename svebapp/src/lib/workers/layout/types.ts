@@ -1,9 +1,5 @@
-export interface Item {
-    guid: string;
-    mimeType: string;
-    width: number;
-    height: number;
-}
+import type {Item} from "$lib/gallery";
+
 
 export interface ItemOrig extends Item {
     index: number;

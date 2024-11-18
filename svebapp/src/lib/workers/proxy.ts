@@ -4,7 +4,7 @@ import {browser} from "$app/environment";
 import {PUBLIC_API_PATH} from "$env/static/public";
 import {getLogger} from "$lib/logger";
 import {WorkerTaskType} from "./tasks/types";
-import type {SvItem} from "$lib/stores";
+import type {Item} from "$lib/stores";
 
 
 const logger = getLogger()
@@ -52,7 +52,7 @@ function processFreeWorker(worker: Worker) {
     }
 }
 
-function processUpdateDbMessage(data: { task: WorkerTaskType.UpdateDb, status: string, payload: SvItem }) {
+function processUpdateDbMessage(data: { task: WorkerTaskType.UpdateDb, status: string, payload: Item }) {
     if (activeTasks.has(WorkerTaskType.UpdateLayout)) {
         const worker = activeTasks.get(data.task) as Worker
         logger.debug('got update from hook', data);

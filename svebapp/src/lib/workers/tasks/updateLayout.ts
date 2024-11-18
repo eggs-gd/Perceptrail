@@ -1,5 +1,5 @@
 import {type UpdateLayoutPayload} from "../types";
-import {itemsDb, layoutDb, type LayoutItem, type SvItem} from "../idb";
+import {itemsDb, layoutDb, type LayoutItem, type Item} from "$lib/stores";
 import {getLogger} from "$lib/logger/logger";
 import type {WorkerTask} from "./types";
 
@@ -79,7 +79,7 @@ async function runMagic(signal: AbortSignal, payload: UpdateLayoutPayload) {
 }
 
 
-function placeInLayout(item: SvItem, payload: UpdateLayoutPayload, order: number): LayoutItem[] {
+function placeInLayout(item: Item, payload: UpdateLayoutPayload, order: number): LayoutItem[] {
     let rowLength = 0;
     const scale = payload.rowHeight / item.height;
     let lItem: LayoutItem = {

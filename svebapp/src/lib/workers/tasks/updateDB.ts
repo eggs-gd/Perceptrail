@@ -1,4 +1,4 @@
-import {itemsDb, type SvItem} from "$lib/stores";
+import {itemsDb, type Item} from "$lib/stores";
 import {type UpdateDbPayload} from "../types";
 import type {WorkerTask} from "./types";
 import {getLogger} from "$lib/logger/logger";
@@ -35,7 +35,7 @@ export const updateDbStreamed: WorkerTask<UpdateDbPayload> = async (signal: Abor
             buffer = buffer.slice(boundary + 2);
 
             try {
-                const data: SvItem = JSON.parse(jsonString);
+                const data: Item = JSON.parse(jsonString);
                 await itemsDb.items.put(data);
                 //logger.debug("Saved to Dexie:", data);
             } catch (error) {

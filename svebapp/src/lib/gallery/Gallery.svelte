@@ -2,15 +2,12 @@
     import {flip} from 'svelte/animate';
     import {fade} from 'svelte/transition';
     import ItemView from "./components/ItemView.svelte";
-    //import {layoutRaw} from "./layout";
-    //import {type Item} from "./types";
-    import {screenWidth} from "$lib/stores/stores";
-    import type {LayoutItem} from "$lib/stores/idb";
+    import type {LayoutItem} from "$lib/stores";
+    import {screenWidth} from "$lib/stores";
 
 
     interface Props {
         images: LayoutItem[];
-        //rowHeight?: number;
         gutter?: number;
         selectItem: (item: number) => void,
         openItem: (item: number) => void,

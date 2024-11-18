@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type {Item} from "../types";
+    import type {Item} from "$lib/stores";
     import {PUBLIC_API_PATH} from '$env/static/public'
 
     interface Props {
@@ -21,12 +21,6 @@
 
     let {item}: Props = $props();
 
-    function handleImageLoad(event) {
-        const img = event.target;
-        item.width = img.naturalWidth;
-        item.height = img.naturalHeight;
-    }
-
 </script>
 
 <!--     srcset={`-->
@@ -41,5 +35,4 @@
         (min-width: 1200px) 1200px,
         1920px"
      width={item.width} height={item.height}
-     alt={item.guid}
-     onload={handleImageLoad}/>
+     alt={item.guid}/>

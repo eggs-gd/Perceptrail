@@ -1,5 +1,5 @@
 <script lang="ts">
-    import {type Item} from '../types'
+    import {type Item} from '$lib/stores'
 
     import Img from "./Img.svelte";
     import Video from "./Video.svelte";
