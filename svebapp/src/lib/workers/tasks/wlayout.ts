@@ -1,7 +1,14 @@
-import {type UpdateLayoutPayload} from "../types";
+import {
+    type CurrentWorkerTask,
+    type MessageFromSync,
+    RestartError,
+    throwIfNeedRestart,
+    type UpdateLayoutPayload,
+    type WorkerMessage,
+    type WorkerTask
+} from "./types";
 import {type Item, itemsDb, layoutDb, type LayoutItem} from "$lib/stores";
 import {getLogger} from "$lib/logger";
-import {type WorkerTask} from "./types";
 
 const logger = getLogger()
 
@@ -12,32 +19,91 @@ interface Parameters {
     restart: boolean,
 }
 
-export const params: Parameters = {
+const params: Parameters = {
     currentRowNum: 0,
     currentRow: [],
     current: 0,
     restart: false,
 }
 
+let currentTask: CurrentWorkerTask = null;
+let msgPrt: MessagePort;
+let currentRowHeight: number;
+let currentScreenWidth: number;
 
-class RestartError extends Error {
-    constructor(message = "The query should be restarted") {
-        super(message);
-        this.name = "RestartError";
+self.onmessage = async function (msg: { data: WorkerMessage<any, any> }) {
+    const {task, payload} = msg.data;
+
+    const p: UpdateLayoutPayload = payload;
+
+    if (task === 'init') {
+        msgPrt = payload;
+        msgPrt.onmessage = restartLayoutFromPosition;
+        logger.debug('Inited')
+    } else if (task === 'start') {
+        logger.debug('Trying to start')
+    } else if (task === 'update' && !currentTask) {
+        currentScreenWidth = p.screenWidth;
+        currentRowHeight = p.rowHeight;
+        currentTask = startNewTask(payload)
+        logger.debug('Started')
+    } else if (task === 'update' && currentTask) {
+        if (currentScreenWidth === p.screenWidth
+            && currentRowHeight === p.rowHeight) {
+            postMessage({task, status: "cant_update"});
+        } else {
+            currentTask.controller.abort()
+            currentTask = startNewTask(payload)
+            logger.debug('Restarted')
+        }
     }
+};
+
+function startNewTask(payload: UpdateLayoutPayload) {
+    const controller = new AbortController();
+    return {
+        controller,
+        promise: (async () => {
+            try {
+                await updateLayoutStreamed(controller.signal, payload);
+                postMessage({status: "completed"});
+            } catch (error) {
+                postMessage({status: "error"});
+                logger.error("Error in UpdateLayout task:", error);
+            } finally {
+                currentTask = null;
+            }
+        })(),
+    };
 }
 
-function throwIfNeedRestart(): void {
-    if (params.restart) {
-        throw new RestartError();
-    }
+function restartLayoutFromPosition(event: { data: MessageFromSync }) {
+    params.restart = true;
+    findItemIndex(event.data.item).then(index => {
+        if (index < params.current) {
+            params.current = index;
+        }
+    });
 }
 
-export function isRestartError(error: unknown): error is RestartError {
-    return error instanceof RestartError;
+async function findItemIndex(item: Item): Promise<number> {
+    let index = 0;
+    let found = false;
+
+    // todo find all with the same `row` field and return first of them
+    // Means: "first from the same row"
+    await itemsDb.items.orderBy('guid').each((dbItem: Item) => {
+        if (dbItem.guid === item.guid) {
+            found = true;
+            return;
+        }
+        index++;
+    });
+
+    return found ? index : -1;
 }
 
-export const updateLayoutStreamed: WorkerTask<UpdateLayoutPayload> = async (signal: AbortSignal, payload: UpdateLayoutPayload) => {
+const updateLayoutStreamed: WorkerTask<UpdateLayoutPayload> = async (signal: AbortSignal, payload: UpdateLayoutPayload) => {
     signal.throwIfAborted();
 
     params.current = 0;
@@ -56,12 +122,12 @@ async function runMagic(signal: AbortSignal, payload: UpdateLayoutPayload) {
 
         await cursor.each((item) => {
             signal.throwIfAborted()
-            throwIfNeedRestart()
+            throwIfNeedRestart(params.restart)
 
             const nextRow = placeInLayout(item, payload, params.current);
 
             signal.throwIfAborted()
-            throwIfNeedRestart()
+            throwIfNeedRestart(params.restart)
 
             if (nextRow.length > 0) {
                 logger.info('add next row', params.currentRowNum, nextRow)
