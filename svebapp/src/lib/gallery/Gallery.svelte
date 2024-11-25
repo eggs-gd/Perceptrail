@@ -21,12 +21,18 @@
     }: Props = $props();
 
     function imgStyle(width: number, height: number, scale: number) {
-        let margin = gutter * 0.5 + 'px';
-        let flex = `0 0 ${width * scale - gutter * 0.5}px`;
+        const margin = `${gutter * 0.5}px`;
+        const flexBasis = `${width * scale}px`;
+        const adjustedHeight = `${height * scale}px`;
 
-        return `height: ${height * scale - gutter * 0.5}px; flex: ${flex}; margin: ${margin}; border: 1px solid green;`;
+        return `
+        height: ${adjustedHeight};
+        flex: 0 0 ${flexBasis};
+        margin: ${margin};
+        border: 1px solid green;
+    `;
     }
-    
+
 </script>
 
 <div class="masonry" bind:clientWidth={$screenWidth}>

@@ -1,8 +1,10 @@
 import type {Item, LayoutItem} from "./types";
 import {liveQuery} from "dexie";
 import {layoutDb} from "./layoutDb";
-import {writable, derived, fromStore} from "svelte/store";
-import {QueryRune} from "$lib/stores/internal/queryrune.svelte";
+import {derived, writable} from "svelte/store";
+import type {MessageFromSync} from "$lib/workers/tasks/types";
+
+let layoutUpdatesPort: MessagePort;
 
 export const screenWidth = writable<number>(1280);
 export const rowHeight = writable<number>(220);
@@ -12,27 +14,34 @@ export const currentItem = writable<Item>();
 export const currentPage = writable<number>(0);
 export const pageSize = writable<number>(20);
 
-export const items = liveQuery(() => layoutDb.items.orderBy('order').toArray());
 
-export function liveRune<T>(
-    querier: () => T | Promise<T>,
-    ...dependencies: any[]
-): QueryRune<T> | { current: undefined } {
-    if (!dependencies.every((x) => x)) {
-        return { current: undefined }
-    }
+// export const items = liveQuery(async () =>
+//     await layoutDb.items.orderBy('order').toArray()
+// );
 
-    return new QueryRune(liveQuery(querier))
+export const layoutItems = writable<Map<string, LayoutItem>>(new Map());
+
+
+export const items = derived(layoutItems, ($layoutItems) => {
+    return Array.from($layoutItems.values()).sort((a, b) => a.order - b.order);
+});
+
+export const updateLayoutPort = (port: MessagePort) => {
+    layoutUpdatesPort = port;
+    layoutUpdatesPort.onmessage = (event: MessageEvent<MessageFromSync>) => onUpdateLayout(event.data);
 }
 
-// export const paginatedItems = derived(
-//     [currentPage, pageSize],
-//     ([$currentPage, $pageSize]) =>
-//         liveQuery(() =>
-//             layoutDb.items
-//                 .orderBy("order")
-//                 .offset($currentPage * $pageSize)
-//                 .limit($pageSize)
-//                 .toArray()
-//         )
-// );
+function onUpdateLayout(message: MessageFromSync) {
+    layoutItems.update((items) => {
+        switch (message.action) {
+            case 'create':
+            case 'update':
+                items.set(message.item.guid, message.item as LayoutItem);
+                break;
+            case 'delete':
+                items.delete(message.item.guid);
+                break;
+        }
+        return items;
+    });
+}

@@ -27,7 +27,8 @@ const params: Parameters = {
 }
 
 let currentTask: CurrentWorkerTask = null;
-let msgPrt: MessagePort;
+let itemsDbPort: MessagePort;
+let updatesPort: MessagePort;
 let currentRowHeight: number;
 let currentScreenWidth: number;
 
@@ -37,8 +38,9 @@ self.onmessage = async function (msg: { data: WorkerMessage<any, any> }) {
     const p: UpdateLayoutPayload = payload;
 
     if (task === 'init') {
-        msgPrt = payload;
-        msgPrt.onmessage = restartLayoutFromPosition;
+        itemsDbPort = payload[0];
+        itemsDbPort.onmessage = restartLayoutFromPosition;
+        updatesPort = payload[1];
         logger.debug('Inited')
     } else if (task === 'start') {
         logger.debug('Trying to start')
@@ -64,6 +66,9 @@ function startNewTask(payload: UpdateLayoutPayload) {
     return {
         controller,
         promise: (async () => {
+            layoutDb.items.hook.creating.subscribe(hookCreate);
+            layoutDb.items.hook.updating.subscribe(hookUpdate);
+            layoutDb.items.hook.deleting.subscribe(hookDelete);
             try {
                 await updateLayoutStreamed(controller.signal, payload);
                 postMessage({status: "completed"});
@@ -71,27 +76,54 @@ function startNewTask(payload: UpdateLayoutPayload) {
                 postMessage({status: "error"});
                 logger.error("Error in UpdateLayout task:", error);
             } finally {
+                layoutDb.items.hook.creating.unsubscribe(hookCreate);
+                layoutDb.items.hook.updating.unsubscribe(hookUpdate);
+                layoutDb.items.hook.deleting.unsubscribe(hookDelete);
                 currentTask = null;
             }
         })(),
     };
 }
 
-function restartLayoutFromPosition(event: { data: MessageFromSync }) {
-    params.restart = true;
-    findItemIndex(event.data.item).then(index => {
-        if (index < params.current) {
-            params.current = index;
+function hookCreate(key: string, item: LayoutItem) {
+    const msg: MessageFromSync = {action: "create", item: item};
+    updatesPort.postMessage(msg);
+}
+
+function hookUpdate(mods: Object, key: string, item: LayoutItem) {
+    const msg: MessageFromSync = {action: "update", item: item};
+    updatesPort.postMessage(msg);
+}
+
+function hookDelete(key: string, item: Item) {
+    const msg: MessageFromSync = {action: "delete", item: item};
+    updatesPort.postMessage(msg);
+}
+
+function restartLayoutFromPosition(event: MessageEvent<MessageFromSync>) {
+    if (!currentTask) {
+        currentTask = startNewTask({screenWidth: currentScreenWidth, rowHeight: currentRowHeight})
+        return;
+    }
+
+    findItemIndex(event.data.item).then(item => {
+        if (!item) {
+            params.current = 0; //???
+            params.currentRowNum = 0;
+        } else if (item.order < params.current) {
+            params.current = item.order;
+            params.currentRowNum = item.row;
         }
+
+        params.restart = true;
+        params.currentRow = [];
     });
 }
 
-async function findItemIndex(item: Item): Promise<number> {
+async function findItemIndex(item: Item): Promise<LayoutItem | undefined> {
     let index = 0;
     let found = false;
 
-    // todo find all with the same `row` field and return first of them
-    // Means: "first from the same row"
     await itemsDb.items.orderBy('guid').each((dbItem: Item) => {
         if (dbItem.guid === item.guid) {
             found = true;
@@ -100,7 +132,25 @@ async function findItemIndex(item: Item): Promise<number> {
         index++;
     });
 
-    return found ? index : -1;
+    if (!found) return undefined;
+
+    const layoutItem = await layoutDb.items
+        .where('order')
+        .equals(index - 1)
+        .first();
+
+    if (!layoutItem) return undefined;
+
+    const row = layoutItem.row;
+
+    const smallestOrderItem = await layoutDb.items
+        .where('row')
+        .equals(row)
+        .sortBy('order');
+
+    if (!smallestOrderItem.length) return undefined;
+
+    return smallestOrderItem[0];
 }
 
 const updateLayoutStreamed: WorkerTask<UpdateLayoutPayload> = async (signal: AbortSignal, payload: UpdateLayoutPayload) => {
@@ -146,51 +196,99 @@ async function runMagic(signal: AbortSignal, payload: UpdateLayoutPayload) {
 
 
 function placeInLayout(item: Item, payload: UpdateLayoutPayload, order: number): LayoutItem[] {
-    let rowLength = 0;
+    let rowLength = params.currentRow.reduce((sum, itm) => sum + itm.width * itm.scale, 0);
     const scale = payload.rowHeight / item.height;
     let lItem: LayoutItem = {
         ...item,
         order,
         scale,
-        row: params.currentRowNum
-    }
-
-    params.currentRow.forEach((itm) => {
-        rowLength += itm.width * itm.scale;
-    })
+        row: params.currentRowNum,
+    };
 
     const approxWidth = rowLength + lItem.width * lItem.scale;
     const deltaWidth = payload.screenWidth - approxWidth;
 
     if (deltaWidth >= 0) {
-        // can add to current row and proceed
+        // Can fit in the current row
         params.currentRow.push(lItem);
         return [];
-    } else if (-deltaWidth < (lItem.width * lItem.scale) * 0.5) {
-        // new item not match the total width more than half it's size
-        // scale up current row. Start new row with this one item
+    }
+
+    const newItemWidth = lItem.width * lItem.scale;
+    if (-deltaWidth < newItemWidth * 0.5) {
+        // Scale up current row
         const res = params.currentRow;
-        const finalScale = payload.screenWidth / approxWidth;
+        const finalScale = payload.screenWidth / (rowLength + newItemWidth); // Only include actual row length
         res.forEach(itm => {
             itm.scale *= finalScale;
-        })
+        });
 
         params.currentRowNum++;
         lItem.row = params.currentRowNum;
         params.currentRow = [lItem];
         return res;
-    } else {
-        // new item not match the total with less than half it's size
-        // add to row and scale down whole row
-        params.currentRow.push(lItem);
-        const res = params.currentRow;
-        const finalScale = payload.screenWidth / approxWidth;
-        res.forEach(itm => {
-            itm.scale *= finalScale;
-        })
-
-        params.currentRowNum++;
-        params.currentRow = [];
-        return res;
     }
+
+    // Add to row and scale down the entire row
+    params.currentRow.push(lItem);
+    const res = params.currentRow;
+    const finalScale = payload.screenWidth / approxWidth; // Adjust for the final width
+    res.forEach(itm => {
+        itm.scale *= finalScale;
+    });
+
+    params.currentRowNum++;
+    params.currentRow = [];
+    return res;
 }
+
+//
+// function placeInLayout(item: Item, payload: UpdateLayoutPayload, order: number): LayoutItem[] {
+//     let rowLength = 0;
+//     const scale = payload.rowHeight / item.height;
+//     let lItem: LayoutItem = {
+//         ...item,
+//         order,
+//         scale,
+//         row: params.currentRowNum
+//     }
+//
+//     params.currentRow.forEach((itm) => {
+//         rowLength += itm.width * itm.scale;
+//     })
+//
+//     const approxWidth = rowLength + lItem.width * lItem.scale;
+//     const deltaWidth = payload.screenWidth - approxWidth;
+//
+//     if (deltaWidth >= 0) {
+//         // can add to current row and proceed
+//         params.currentRow.push(lItem);
+//         return [];
+//     } else if (-deltaWidth < (lItem.width * lItem.scale) * 0.5) {
+//         // new item not match the total width more than half it's size
+//         // scale up current row. Start new row with this one item
+//         const res = params.currentRow;
+//         const finalScale = payload.screenWidth / approxWidth;
+//         res.forEach(itm => {
+//             itm.scale *= finalScale;
+//         })
+//
+//         params.currentRowNum++;
+//         lItem.row = params.currentRowNum;
+//         params.currentRow = [lItem];
+//         return res;
+//     } else {
+//         // new item not match the total with less than half it's size
+//         // add to row and scale down whole row
+//         params.currentRow.push(lItem);
+//         const res = params.currentRow;
+//         const finalScale = payload.screenWidth / approxWidth;
+//         res.forEach(itm => {
+//             itm.scale *= finalScale;
+//         })
+//
+//         params.currentRowNum++;
+//         params.currentRow = [];
+//         return res;
+//     }
+// }

@@ -1,7 +1,7 @@
 <script lang="ts">
     import Gallery from "$lib/gallery/Gallery.svelte";
     import {goto} from "$app/navigation";
-    import {currentIndex, currentItem, items} from "$lib/stores";
+    import {currentIndex, items, currentItem} from "$lib/stores";
     import {currentPage} from "$lib/stores";
     import {onMount} from "svelte";
 
@@ -32,14 +32,17 @@
         return () => window.removeEventListener('scroll', handleScroll);
     });
 
+    //let items = $derived(Array.from($layoutItems.values()));
+
+    //
     // let paginatedItems = $derived(liveRune(
     //         () => layoutDb.items
     //             .orderBy("order")
-    //             .offset($currentPage * $pageSize)
-    //             .limit($pageSize)
+    //             // .offset($currentPage * $pageSize)
+    //             // .limit($pageSize)
     //             .toArray(),
     //         currentPage,
-    //         pageSize
+    //         // pageSize
     //     )
     // );
 

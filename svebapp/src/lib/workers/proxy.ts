@@ -4,6 +4,7 @@ import UpdateLayoutWorker from './tasks/wlayout?worker';
 import {browser} from "$app/environment";
 import {PUBLIC_API_PATH} from "$env/static/public";
 import {getLogger} from "$lib/logger";
+import {updateLayoutPort} from "$lib/stores";
 
 const logger = getLogger();
 
@@ -13,9 +14,12 @@ let workers: {
 }
 
 let workersChannel: MessageChannel;
+let viewChannel: MessageChannel;
 
 if (browser) {
     workersChannel = new MessageChannel();
+    viewChannel = new MessageChannel();
+    updateLayoutPort(viewChannel.port2);
 
     workers = {
         workerSync: new UpdateDbWorker(),
@@ -24,16 +28,16 @@ if (browser) {
 
     const msg1: InitMessage = {
         task: "init",
-        payload: workersChannel.port1
+        payload: [workersChannel.port1]
     }
 
     const msg2: InitMessage = {
         task: "init",
-        payload: workersChannel.port2
+        payload: [workersChannel.port2, viewChannel.port1]
     }
 
     workers.workerSync.postMessage(msg1, [workersChannel.port1]);
-    workers.workerLayout.postMessage(msg2, [workersChannel.port2]);
+    workers.workerLayout.postMessage(msg2, [workersChannel.port2, viewChannel.port1]);
 
     workers.workerSync.onmessage = handleWorkerMessage;
     workers.workerLayout.onmessage = handleWorkerMessage;

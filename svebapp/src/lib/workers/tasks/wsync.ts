@@ -5,13 +5,13 @@ import {getLogger} from "$lib/logger";
 const logger = getLogger();
 let currentTask: CurrentWorkerTask = null;
 
-let msgPrt: MessagePort;
+let updatesPort: MessagePort;
 
 self.onmessage = async function (msg: { data: WorkerMessage<any, any> }) {
     const {task, payload} = msg.data;
 
     if (task === 'init') {
-        msgPrt = payload;
+        updatesPort = payload[0];
         logger.debug('Inited');
     } else if (task === 'start' && !currentTask) {
         currentTask = startNewTask(payload);
@@ -31,6 +31,7 @@ function startNewTask(apiPath: string) {
         promise: (async () => {
             itemsDb.items.hook.creating.subscribe(hookCreate);
             itemsDb.items.hook.updating.subscribe(hookUpdate);
+            itemsDb.items.hook.deleting.subscribe(hookDelete);
             try {
                 await updateDbStreamed(controller.signal, apiPath);
                 postMessage({status: "completed"});
@@ -40,6 +41,7 @@ function startNewTask(apiPath: string) {
             } finally {
                 itemsDb.items.hook.creating.unsubscribe(hookCreate);
                 itemsDb.items.hook.updating.unsubscribe(hookUpdate);
+                itemsDb.items.hook.deleting.unsubscribe(hookDelete);
                 currentTask = null;
             }
         })(),
@@ -47,15 +49,20 @@ function startNewTask(apiPath: string) {
 }
 
 function hookCreate(key: string, item: Item) {
-    const msg: MessageFromSync = {added: true, item: item};
-    msgPrt.postMessage(msg);
+    const msg: MessageFromSync = {action: "create", item: item};
+    updatesPort.postMessage(msg);
 }
 
 function hookUpdate(mods: Object, key: string, item: Item) {
     if (mods.hasOwnProperty("width") || mods.hasOwnProperty("height")) {
-        const msg: MessageFromSync = {added: false, item: item};
-        msgPrt.postMessage(msg);
+        const msg: MessageFromSync = {action: "update", item: item};
+        updatesPort.postMessage(msg);
     }
+}
+
+function hookDelete(key: string, item: Item) {
+    const msg: MessageFromSync = {action: "delete", item: item};
+    updatesPort.postMessage(msg);
 }
 
 const updateDbStreamed: WorkerTask<string> = async (signal: AbortSignal, payload: string) => {

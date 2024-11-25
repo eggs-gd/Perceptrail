@@ -1,4 +1,4 @@
-import type {Item} from "$lib/stores";
+import type {Item, LayoutItem} from "$lib/stores";
 
 export type WorkerTask<TData, TResult = void> = (
     signal: AbortSignal,
@@ -45,7 +45,7 @@ export interface UpdateLayoutPayload {
     rowHeight: number;
 }
 
-export type InitMessage = WorkerMessage<'init', MessagePort>;
+export type InitMessage = WorkerMessage<'init', MessagePort[]>;
 export type UpdateLayoutMessage = WorkerMessage<'update', UpdateLayoutPayload>
 export type StartSyncMessage = WorkerMessage<'start', string>
 
@@ -54,8 +54,8 @@ export interface WorkerEventData {
 }
 
 export interface MessageFromSync {
-    item: Item,
-    added: boolean,
+    item: Item | LayoutItem,
+    action: 'create' | 'update' | 'delete',
 }
 
 export type CurrentWorkerTask = { controller: AbortController; promise: Promise<void> } | null;

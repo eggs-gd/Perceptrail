@@ -1,8 +1,6 @@
 import Dexie, {type EntityTable} from "dexie";
 import type {Item} from "./types";
 
-
-
 export const itemsDb: Dexie & {
     items: EntityTable<Item, 'guid'>;
 } = new Dexie('items') as Dexie & {
