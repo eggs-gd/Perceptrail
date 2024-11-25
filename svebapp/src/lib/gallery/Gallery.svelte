@@ -7,7 +7,7 @@
 
 
     interface Props {
-        images: LayoutItem[];
+        images: LayoutItem[] | undefined;
         gutter?: number;
         selectItem: (item: number) => void,
         openItem: (item: number) => void,
@@ -26,8 +26,7 @@
 
         return `height: ${height * scale - gutter * 0.5}px; flex: ${flex}; margin: ${margin}; border: 1px solid green;`;
     }
-
-
+    
 </script>
 
 <div class="masonry" bind:clientWidth={$screenWidth}>

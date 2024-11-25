@@ -24,6 +24,7 @@
   },
   "type": "module",
   "dependencies": {
+    "@sveltejs/svelte-virtual-list": "^3.0.1",
     "dexie": "^4.0.9",
     "dexie-observable": "^4.0.1-beta.13"
   }

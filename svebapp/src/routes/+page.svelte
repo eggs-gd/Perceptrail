@@ -2,8 +2,8 @@
     import Gallery from "$lib/gallery/Gallery.svelte";
     import {goto} from "$app/navigation";
     import {currentIndex, currentItem, items} from "$lib/stores";
-
-    //import layoutDb from "$lib/stores";
+    import {currentPage} from "$lib/stores";
+    import {onMount} from "svelte";
 
 
     function selectItem(index: number) {
@@ -15,35 +15,33 @@
         goto("/" + index, {replaceState: true})
     }
 
-
     // todo manipulations with $rowHeight
 
-
-    /*
-    async function loadPage() {
-        const offset = currentPage * PAGE_SIZE;
-        const newItems = await db.items
-            .orderBy('createdAt')
-            .offset(offset)
-            .limit(PAGE_SIZE * 2) // Завантаження поточної та наступної сторінки
-            .toArray();
-        items = [...items, ...newItems];
-        currentPage++;
-    }
-
     function handleScroll() {
-        if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 200) {
-            loadPage();
+        const scrollHeight = document.documentElement.scrollHeight;
+        const scrollTop = window.scrollY;
+        const clientHeight = window.innerHeight;
+
+        if (scrollTop + clientHeight >= scrollHeight - 200) {
+            currentPage.update(n => n + 1);
         }
     }
 
     onMount(() => {
-        loadPage();
         window.addEventListener('scroll', handleScroll);
         return () => window.removeEventListener('scroll', handleScroll);
-    }); */
+    });
 
-    //let items = liveQuery(() => layoutDb.items.orderBy('order').toArray());
+    // let paginatedItems = $derived(liveRune(
+    //         () => layoutDb.items
+    //             .orderBy("order")
+    //             .offset($currentPage * $pageSize)
+    //             .limit($pageSize)
+    //             .toArray(),
+    //         currentPage,
+    //         pageSize
+    //     )
+    // );
 
 </script>
 
