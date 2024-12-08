@@ -1,12 +1,12 @@
 package scan
 
 import (
-	"gontroller/ext/chain"
-	"gontroller/ext/exiftool"
-	"gontroller/ext/utils"
-	t "gontroller/pkg/_t"
-	"gontroller/pkg/model"
-	"gontroller/pkg/model/dto"
+	"perceptrail/gontroller/ext/chain"
+	"perceptrail/gontroller/ext/exiftool"
+	"perceptrail/gontroller/ext/utils"
+	t "perceptrail/gontroller/pkg/_t"
+	"perceptrail/gontroller/pkg/model"
+	"perceptrail/gontroller/pkg/model/dto"
 	"strconv"
 
 	"go.uber.org/zap"

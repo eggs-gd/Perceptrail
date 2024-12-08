@@ -3,9 +3,9 @@ package scan
 import (
 	"context"
 	"errors"
-	"gontroller/ext/chain"
-	"gontroller/pkg/app"
-	"gontroller/pkg/model/dto"
+	"perceptrail/gontroller/ext/chain"
+	"perceptrail/gontroller/pkg/app"
+	"perceptrail/gontroller/pkg/model/dto"
 
 	"go.uber.org/zap"
 )

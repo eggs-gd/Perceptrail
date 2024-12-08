@@ -2,16 +2,19 @@ package main
 
 import (
 	"context"
-	"gontroller/pkg/app"
-	"gontroller/pkg/client"
-	"gontroller/pkg/scan"
 	"log"
 	"os"
 	"os/signal"
+	"perceptrail/gontroller/pkg/app"
+	"perceptrail/gontroller/pkg/client"
+	"perceptrail/gontroller/pkg/scan"
+	"perceptrail/perceptors/lib/metadata"
 	"syscall"
 )
 
 func main() {
+	meta := metadata.NewMetadata("Example", "Example plugin", "1.0.0")
+
 	mainCtx, cancel := context.WithCancelCause(context.Background())
 	defer cancel(nil)
 

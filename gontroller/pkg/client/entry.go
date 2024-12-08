@@ -2,9 +2,9 @@ package client
 
 import (
 	"context"
-	"gontroller/pkg/app"
-	"gontroller/pkg/client/routes"
 	"net/http"
+	"perceptrail/gontroller/pkg/app"
+	"perceptrail/gontroller/pkg/client/routes"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"

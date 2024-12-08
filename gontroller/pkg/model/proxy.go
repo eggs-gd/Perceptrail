@@ -1,7 +1,7 @@
 package model
 
 import (
-	"gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/model/dto"
 
 	"go.uber.org/zap"
 	"gorm.io/driver/sqlite"

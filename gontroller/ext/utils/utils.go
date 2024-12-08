@@ -1,7 +1,7 @@
 package utils
 
 import (
-	t "gontroller/pkg/_t"
+	t "perceptrail/gontroller/pkg/_t"
 	"slices"
 )
 

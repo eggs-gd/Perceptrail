@@ -4,8 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	t "gontroller/pkg/_t"
-	"gontroller/pkg/model/dto"
+	t "perceptrail/gontroller/pkg/_t"
+	"perceptrail/gontroller/pkg/model/dto"
 	"sort"
 )
 

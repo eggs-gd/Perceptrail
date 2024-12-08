@@ -1,8 +1,8 @@
 package model
 
 import (
-	t "gontroller/pkg/_t"
-	"gontroller/pkg/model/dto"
+	t "perceptrail/gontroller/pkg/_t"
+	"perceptrail/gontroller/pkg/model/dto"
 )
 
 type ItemsApi interface {

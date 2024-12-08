@@ -3,7 +3,7 @@ package dto
 import (
 	"time"
 
-	t "gontroller/pkg/_t"
+	t "perceptrail/gontroller/pkg/_t"
 )
 
 type FileDto struct {

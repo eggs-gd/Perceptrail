@@ -2,9 +2,9 @@ package routes
 
 import (
 	"encoding/json"
-	"gontroller/pkg/model"
-	"gontroller/pkg/model/dto"
 	"net/http"
+	"perceptrail/gontroller/pkg/model"
+	"perceptrail/gontroller/pkg/model/dto"
 	"time"
 
 	"github.com/labstack/echo/v4"

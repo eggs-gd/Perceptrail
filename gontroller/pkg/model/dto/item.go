@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm"
 
-	t "gontroller/pkg/_t"
+	t "perceptrail/gontroller/pkg/_t"
 )
 
 type ItemState int
