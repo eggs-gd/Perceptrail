@@ -1,4 +1,4 @@
-package app
+package logger
 
 import (
 	"fmt"
@@ -6,6 +6,22 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+)
+
+type Logger = zap.Logger
+
+type LogLevel = zapcore.Level
+
+type Option = zap.Option
+
+const (
+	DebugLevel  LogLevel = LogLevel(zapcore.DebugLevel)
+	InfoLevel   LogLevel = LogLevel(zapcore.InfoLevel)
+	WarnLevel   LogLevel = LogLevel(zapcore.WarnLevel)
+	ErrorLevel  LogLevel = LogLevel(zapcore.ErrorLevel)
+	DPanicLevel LogLevel = LogLevel(zapcore.DPanicLevel)
+	PanicLevel  LogLevel = LogLevel(zapcore.PanicLevel)
+	FatalLevel  LogLevel = LogLevel(zapcore.FatalLevel)
 )
 
 const (
@@ -38,6 +54,23 @@ const (
 
 	ColorReset = "\033[0m"
 )
+
+func NewProduction() (*Logger, error) {
+	return zap.NewProduction()
+}
+
+func NewDevelopment() (*Logger, error) {
+	l, err := zap.NewDevelopment()
+	return l, err
+}
+
+func Level(level LogLevel) LogLevel {
+	return LogLevel(zapcore.Level(level))
+}
+
+func IncreaseLevel(level LogLevel) Option {
+	return Option(zap.IncreaseLevel(level))
+}
 
 func getColorForService(service string) string {
 	switch service {
@@ -73,4 +106,8 @@ func newColoredLogger(service string) *zap.Logger {
 	logger := zap.New(core).With(zap.String("service", fmt.Sprintf("%s%s%s", color, service, ColorReset)))
 
 	return logger
+}
+
+func Error(err error) zapcore.Field {
+	return zap.Error(err)
 }

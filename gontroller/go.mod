@@ -2,6 +2,10 @@ module perceptrail/gontroller
 
 go 1.23.2
 
+require (
+	perceptrail/logger v0.0.0
+	perceptrail/perceptors v0.0.0
+)
 
 require (
 	github.com/google/uuid v1.6.0
@@ -32,4 +36,7 @@ require (
 	golang.org/x/time v0.5.0 // indirect
 )
 
-replace perceptrail/perceptors/lib => ../perceptors/lib
+replace (
+	perceptrail/logger => ../perceplib/logger
+	perceptrail/perceptors => ../perceplib/perceptors
+)

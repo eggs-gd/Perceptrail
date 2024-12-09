@@ -3,8 +3,9 @@ package app
 import (
 	"os"
 
+	l "perceptrail/logger"
+
 	"github.com/joho/godotenv"
-	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -45,7 +46,7 @@ type Config struct {
 	APIKeys      map[string]string `yaml:"api_keys"`
 }
 
-func initConfig(config *Config, logger *zap.Logger) {
+func initConfig(config *Config, logger *l.Logger) {
 
 	err := godotenv.Load()
 	if err != nil {
@@ -59,7 +60,7 @@ func initConfig(config *Config, logger *zap.Logger) {
 
 	file, err := os.Open(configPath)
 	if err != nil {
-		logger.Fatal("Error opening config file", zap.Error(err))
+		logger.Fatal("Error opening config file", l.Error(err))
 		return
 	}
 	defer file.Close()
@@ -67,7 +68,7 @@ func initConfig(config *Config, logger *zap.Logger) {
 	decoder := yaml.NewDecoder(file)
 	err = decoder.Decode(&config)
 	if err != nil {
-		logger.Fatal("Error parsing config file", zap.Error(err))
+		logger.Fatal("Error parsing config file", l.Error(err))
 		return
 	}
 

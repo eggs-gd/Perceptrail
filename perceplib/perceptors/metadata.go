@@ -1,4 +1,4 @@
-package metadata
+package perceptors
 
 type PluginMetadata struct {
 	Name        string

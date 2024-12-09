@@ -1,20 +1,43 @@
-build:
-    # Build the gontroller binary
-    go build -o gontroller/bin/gontroller gontroller/main.go
-    # Build plugins and copy to gontroller/bin/plugins
-    mkdir -p gontroller/bin/plugins
-    for plugin in perceptors/src/*; do \
-        go build -buildmode=plugin -o perceptors/bin/$$(basename $$plugin).so $$plugin; \
-        cp perceptors/bin/$$(basename $$plugin).so gontroller/bin/plugins/; \
-    done
-    # Build the web app
-    cd svebapp && npm run build
 
-run: build
-    ./gontroller/bin/gontroller & cd svebapp && npm run dev
+GOMODULES = \
+	gontroller \
+	perceplib/logger \
+	perceplib/perceptors \
+	perceptors/color \
+	perceptors/geo \
+	perceptors/faces \
+	perceptors/objects
+
+
+all: build-gontroller build-plugins
+
+
+build-gontroller:
+	@echo "Building gontroller..."
+	@$(MAKE) -C gontroller
+
+
+build-plugins: $(addprefix build-plugin-,$(notdir $(filter perceptors/%,$(GOMODULES))))
+
+build-plugin-%:
+	@echo "Building plugin: $*..."
+	@cd perceptors/$* && go build -buildmode=plugin -o ../../gontroller/build/plugins/$*.so
+
+
+update-deps:
+	@for module in $(GOMODULES); do \
+		echo "Updating dependencies for $$module..."; \
+		(cd $$module && go mod tidy); \
+	done
+
 
 clean:
-    rm -rf gontroller/bin gontroller/bin/plugins perceptors/bin/*.so svebapp/public/build
+	@echo "Cleaning all build artifacts..."
+	@rm -rf gontroller/build/plugins/*.so
+	@for module in $(GOMODULES); do \
+		echo "Cleaning $$module..."; \
+		(cd $$module && go clean); \
+	done
 
-test:
-    go test ./gontroller/... ./perceptors/lib/... && cd svebapp && npm test
+.PHONY: all build-gontroller build-plugins build-plugin-% update-deps clean
+
