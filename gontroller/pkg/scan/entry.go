@@ -3,7 +3,7 @@ package scan
 import (
 	"context"
 	"errors"
-	"perceptrail/gontroller/ext/chain"
+	"perceptrail/chain"
 	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/model/dto"
 

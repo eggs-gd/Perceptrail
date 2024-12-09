@@ -1,6 +1,8 @@
 package chain
 
-import "context"
+import (
+	"context"
+)
 
 type EntryPoint[Ti any, To any] interface {
 	worker

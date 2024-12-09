@@ -1,8 +1,8 @@
 package scan
 
 import (
-	"perceptrail/gontroller/ext/chain"
-	"perceptrail/gontroller/ext/exiftool"
+	"perceptrail/chain"
+	"perceptrail/exiftool"
 	"perceptrail/gontroller/ext/utils"
 	t "perceptrail/gontroller/pkg/_t"
 	"perceptrail/gontroller/pkg/model"

@@ -1,6 +1,8 @@
 package chain
 
-import "context"
+import (
+	"context"
+)
 
 type Switcher[Ti any, To any] interface {
 	worker

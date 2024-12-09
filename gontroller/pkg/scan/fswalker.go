@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"perceptrail/gontroller/ext/chain"
+	"perceptrail/chain"
 	"perceptrail/gontroller/ext/utils"
 	t "perceptrail/gontroller/pkg/_t"
 	"perceptrail/gontroller/pkg/model"
@@ -171,7 +171,7 @@ func (m *fsMonitor) entryToFile(group []t.ItemEntry) []*dto.FileDto {
 					continue
 				}
 			} else {
-				// Something went wrong with db acess, probably should be panic
+				// Something went wrong with db access, probably should be panic
 				m.logger.Error("Error retrieving file", l.Error(err))
 				continue
 			}

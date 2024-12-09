@@ -1,4 +1,3 @@
-// Threadind sug(a/O)r
 package chain
 
 import "sync"
