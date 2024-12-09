@@ -7,7 +7,7 @@ import (
 	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/model/dto"
 
-	"go.uber.org/zap"
+	l "perceptrail/logger"
 )
 
 // Enter: Path ->
@@ -51,9 +51,9 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	go func() {
 		for err := range errch {
 			if errors.Is(err, chain.ErrSkippedItem) {
-				logger.Info("Import Error", zap.Error(err))
+				logger.Info("Import Error", l.Error(err))
 			} else {
-				logger.Error("Import Error", zap.Error(err))
+				logger.Error("Import Error", l.Error(err))
 			}
 
 		}

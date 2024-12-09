@@ -3,11 +3,12 @@ package routes
 import (
 	"perceptrail/gontroller/pkg/model"
 
+	l "perceptrail/logger"
+
 	"github.com/labstack/echo/v4"
-	"go.uber.org/zap"
 )
 
-func RegisterAssetsRoutes(segment string, e *echo.Echo, logger *zap.Logger) {
+func RegisterAssetsRoutes(segment string, e *echo.Echo, logger *l.Logger) {
 	if itemsProxy == nil {
 		itemsProxy = model.NewProxy(logger)
 	}

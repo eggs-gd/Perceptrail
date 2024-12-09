@@ -6,13 +6,14 @@ import (
 	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/client/routes"
 
+	l "perceptrail/logger"
+
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"go.uber.org/zap"
 )
 
 type webService struct {
-	logger *zap.Logger
+	logger *l.Logger
 	appCtx app.AppContext
 }
 

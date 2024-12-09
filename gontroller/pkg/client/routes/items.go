@@ -7,8 +7,9 @@ import (
 	"perceptrail/gontroller/pkg/model/dto"
 	"time"
 
+	l "perceptrail/logger"
+
 	"github.com/labstack/echo/v4"
-	"go.uber.org/zap"
 )
 
 // https://echo.labstack.com/docs/quick-start
@@ -46,7 +47,7 @@ type clientItem struct {
 	Height   int16     `json:"height"`
 }
 
-func RegisterItemsRoutes(segment string, e *echo.Echo, logger *zap.Logger) {
+func RegisterItemsRoutes(segment string, e *echo.Echo, logger *l.Logger) {
 	if itemsProxy == nil {
 		itemsProxy = model.NewProxy(logger)
 	}

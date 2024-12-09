@@ -9,7 +9,7 @@ import (
 	"perceptrail/gontroller/pkg/model/dto"
 	"strconv"
 
-	"go.uber.org/zap"
+	l "perceptrail/logger"
 )
 
 var commonArgs []string = []string{ // all sidecars
@@ -49,7 +49,7 @@ var metaTags []string = []string{ // Generic tags needed for db.Item
 var itemsProxy model.ItemsApi
 
 type exifExtractor struct {
-	logger  *zap.Logger
+	logger  *l.Logger
 	workers []*exiftool.Server
 	freeCh  chan *exiftool.Server
 }
@@ -65,14 +65,14 @@ func (cd *exifExtractor) Decorate(in []*dto.FileDto) (*dto.ItemDto, error) {
 			args = append(metaTags, item.Path)
 		}
 
-		cd.logger.Info("Command", zap.Any("args", args))
+		cd.logger.Info("Command", l.Any("args", args))
 
 		et := cd.getWorker()
 		defer cd.releaseWorker(et)
 
 		out, err := et.Command(args...)
 		if err != nil {
-			cd.logger.Error("Command", zap.Any("out", out), zap.Error(err))
+			cd.logger.Error("Command", l.Any("out", out), l.Error(err))
 		}
 
 		res := map[string][]byte{}
@@ -96,7 +96,7 @@ func (cd *exifExtractor) Stop() {
 	}
 }
 
-func NewMetaProcessor(count int, chin <-chan []*dto.FileDto, chout chan<- *dto.ItemDto, logger *zap.Logger) chain.Processor {
+func NewMetaProcessor(count int, chin <-chan []*dto.FileDto, chout chan<- *dto.ItemDto, logger *l.Logger) chain.Processor {
 	if itemsProxy == nil {
 		itemsProxy = model.NewProxy(logger.Named("DB"))
 	}
@@ -105,9 +105,9 @@ func NewMetaProcessor(count int, chin <-chan []*dto.FileDto, chout chan<- *dto.I
 	freeCh := make(chan *exiftool.Server, count)
 	for i := 0; i < count; i++ {
 		var et, err = exiftool.NewServer(commonArgs...)
-		logger.Info("NewWorker", zap.Any("et", et), zap.Error(err))
+		logger.Info("NewWorker", l.Any("et", et), l.Error(err))
 		if err != nil {
-			logger.Panic("NewWorker", zap.Any("et", et), zap.Error(err))
+			logger.Panic("NewWorker", l.Any("et", et), l.Error(err))
 		}
 		workers[i] = et
 		freeCh <- et

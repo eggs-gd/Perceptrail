@@ -26,7 +26,7 @@ func LoadPlugins() []perceptors.Perceptor {
 
 		symPlugin, err := plug.Lookup("Perceptor")
 		if err != nil {
-			log.Printf("Failed to find 'Plugin' symbol in %s: %v", file, err)
+			log.Printf("Failed to find 'Perceptor' symbol in %s: %v", file, err)
 			continue
 		}
 
