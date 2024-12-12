@@ -2,7 +2,6 @@ package plugins
 
 import (
 	"fmt"
-	"log"
 	"path/filepath"
 	"plugin"
 	"sync"
@@ -10,6 +9,7 @@ import (
 	"perceptrail/api"
 	"perceptrail/gontroller/pkg/plugins/exif_core/date"
 	"perceptrail/gontroller/pkg/plugins/exif_core/size"
+	l "perceptrail/logger"
 )
 
 var (
@@ -29,7 +29,7 @@ func GetPlugins() []api.Perceptor {
 }
 
 // LoadPlugins loads all plugins once at startup
-func LoadPlugins(logger *log.Logger) error {
+func LoadPlugins(logger *l.Logger) error {
 	pluginsMu.Lock()
 	defer pluginsMu.Unlock()
 
@@ -46,21 +46,23 @@ func LoadPlugins(logger *log.Logger) error {
 	// Load external plugins
 	externalPlugins, err := loadExternalPlugins(logger)
 	if err != nil {
-		return fmt.Errorf("failed to load external plugins: %w", err)
+		logger.Error("failed to load external plugins:", l.Error(err))
+		return err
 	}
 
 	// Combine all plugins
 	plugins = append(corePlugins, externalPlugins...)
 	loaded = true
 
-	logger.Printf("Loaded plugins: %d core, %d external, total %d",
-		len(corePlugins), len(externalPlugins), len(plugins))
+	logger.Info("Loaded plugins", l.Any("core", len(corePlugins)), l.Any("external", len(externalPlugins)), l.Any("total", len(plugins)))
 
 	return nil
 }
 
-func loadExternalPlugins(logger *log.Logger) ([]api.Perceptor, error) {
+func loadExternalPlugins(logger *l.Logger) ([]api.Perceptor, error) {
 	var result []api.Perceptor
+
+	return result, nil
 
 	files, err := filepath.Glob("plugins/*.so")
 	if err != nil {
@@ -70,11 +72,11 @@ func loadExternalPlugins(logger *log.Logger) ([]api.Perceptor, error) {
 	for _, file := range files {
 		p, err := loadPlugin(file)
 		if err != nil {
-			logger.Printf("Failed to load plugin %s: %v", file, err)
+			logger.Error("Failed to load plugin", l.Any("file", file), l.Error(err))
 			continue
 		}
 		result = append(result, p)
-		logger.Printf("Loaded external plugin %s of type %T", p.Name(), p)
+		logger.Info("Loaded external plugin", l.Any("name", p.Name()), l.Any("type", p))
 	}
 
 	return result, nil

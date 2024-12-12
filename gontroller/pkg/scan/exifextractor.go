@@ -68,7 +68,7 @@ func (cd *exifExtractor) Decorate(in []*dto.FileDto) (*RawItem, error) {
 
 		out, err := et.Command(args...)
 		if err != nil {
-			cd.logger.Error("Command", l.Any("out", out), l.Error(err))
+			cd.logger.Error("Command", l.Any("out", out), l.String("file", item.Path), l.Error(err))
 		}
 
 		res := map[string][]byte{}

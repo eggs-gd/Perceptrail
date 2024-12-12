@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/client"
+	"perceptrail/gontroller/pkg/plugins"
 	"perceptrail/gontroller/pkg/scan"
 	l "perceptrail/logger"
 	"syscall"
@@ -25,6 +26,8 @@ func main() {
 	svc := app.NewSvcContext()
 
 	ctx.SetLogLevel(l.InfoLevel)
+
+	plugins.LoadPlugins(ctx.Logger("plugins"))
 
 	svc.AddService(scan.NewImporterService(ctx))
 	svc.AddService(client.NewWebService(ctx))
