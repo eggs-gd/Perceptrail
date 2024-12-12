@@ -5,10 +5,14 @@ import (
 	"errors"
 	"perceptrail/chain"
 	"perceptrail/gontroller/pkg/app"
+	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 
 	l "perceptrail/logger"
 )
+
+var filesProxy model.FilesApi
+var itemsProxy model.ItemsApi
 
 // Enter: Path ->
 // - WalkDir: Path -> ItemEntry - just dummy scan without filtering and logic
@@ -43,6 +47,7 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	var errch chan error = make(chan error)
 
 	var files chan []*dto.FileDto = make(chan []*dto.FileDto)
+	var rawItems chan *RawItem = make(chan *RawItem)
 	var items chan *dto.ItemDto = make(chan *dto.ItemDto, 1000)
 
 	// var photos chan model.ItemDto = make(chan model.ItemDto)
@@ -61,7 +66,9 @@ func NewImporterService(ctx app.AppContext) *importerService {
 
 	importChain := chain.NewChainProcessor(errch)
 	importChain.AddStep(NewFsWalker(ctx.Config().Path, files, logger))
-	importChain.AddStep(NewMetaProcessor(5, files, items, logger))
+	importChain.AddStep(NewExifExtractor(5, files, rawItems, logger))
+	importChain.AddStep(NewExifPluginProcessor(rawItems, items, errch, logger))
+
 	//importChain.AddStep(NewTranscoder(5, items, items))
 
 	return &importerService{

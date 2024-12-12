@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm"
 
-	t "perceptrail/gontroller/pkg/_t"
+	"perceptrail/api"
 )
 
 type ItemState int
@@ -35,8 +35,8 @@ type ItemDto struct {
 	Date time.Time // CreationDate of asset
 	Path string    // Source path
 
-	Size  t.Size `gorm:"embedded;embeddedPrefix:size_"`
-	Ratio t.Size `gorm:"embedded;embeddedPrefix:ratio_"`
+	Size  api.Size `gorm:"embedded;embeddedPrefix:size_"`
+	Ratio api.Size `gorm:"embedded;embeddedPrefix:ratio_"`
 
 	// Tags   []Tag   `gorm:"many2many:item_tags;"`
 	// Albums []Album `gorm:"many2many:item_albums;"`

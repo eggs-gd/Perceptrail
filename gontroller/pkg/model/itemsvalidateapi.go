@@ -4,12 +4,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	t "perceptrail/gontroller/pkg/_t"
+	"perceptrail/api"
 	"perceptrail/gontroller/pkg/model/dto"
 	"sort"
 )
 
-func (p *Proxy) getShortHash(item *dto.FileDto, meta t.RawExif) string {
+func (p *proxy) getShortHash(item *dto.FileDto, meta api.RawExif) string {
 	h := sha256.New()
 
 	// Write the file size to the hash
@@ -30,7 +30,7 @@ func (p *Proxy) getShortHash(item *dto.FileDto, meta t.RawExif) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func (p *Proxy) ValidateFile(item *dto.FileDto, meta t.RawExif) (*dto.ItemDto, error) {
+func (p *proxy) ValidateFile(item *dto.FileDto, meta api.RawExif) (*dto.ItemDto, error) {
 	var hashShort = p.getShortHash(item, meta)
 	var err error
 
@@ -97,7 +97,7 @@ func (p *Proxy) ValidateFile(item *dto.FileDto, meta t.RawExif) (*dto.ItemDto, e
 	return &dto.ItemDto{}, fmt.Errorf("something unknown went wrong in validator")
 }
 
-func (p *Proxy) getItemsForValidation(file *dto.FileDto, hashShort string) (byGuid *dto.ItemDto, byPath *dto.ItemDto, byHash *dto.ItemDto) {
+func (p *proxy) getItemsForValidation(file *dto.FileDto, hashShort string) (byGuid *dto.ItemDto, byPath *dto.ItemDto, byHash *dto.ItemDto) {
 	var itemByGUID, itemByPath *dto.ItemDto
 	var itemsByHash []*dto.ItemDto
 	var err error

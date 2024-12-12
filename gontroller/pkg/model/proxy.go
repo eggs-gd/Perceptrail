@@ -13,17 +13,17 @@ var config gorm.Config = gorm.Config{}
 
 var db *gorm.DB
 
-type Proxy struct {
+type proxy struct {
 	logger *l.Logger
 	db     *gorm.DB
 }
 
-func NewProxy(logger *l.Logger) *Proxy {
+func NewProxy(logger *l.Logger) *proxy {
 	if db == nil {
 		db = initDB(logger)
 	}
 
-	return &Proxy{logger, db}
+	return &proxy{logger, db}
 }
 
 func initDB(logger *l.Logger) *gorm.DB {

@@ -1,7 +1,7 @@
 package model
 
 import (
-	t "perceptrail/gontroller/pkg/_t"
+	"perceptrail/api"
 	"perceptrail/gontroller/pkg/model/dto"
 )
 
@@ -14,7 +14,7 @@ type ItemsApi interface {
 	// - short hash gate,
 	// - full hash gate
 	//GetShortHash(rawExif t.RawExif, fileSizeBytes uint64) string
-	ValidateFile(item *dto.FileDto, meta t.RawExif) (*dto.ItemDto, error)
+	ValidateFile(item *dto.FileDto, meta api.RawExif) (*dto.ItemDto, error)
 
 	GetAllItems() ([]*dto.ItemDto, error)
 	GetItemByGuid(guid string) (*dto.ItemDto, error)
@@ -28,32 +28,32 @@ type ItemsApi interface {
 	UpdateItems(items []*dto.ItemDto) ([]*dto.ItemDto, error)
 }
 
-func (p *Proxy) GetAllItems() ([]*dto.ItemDto, error) {
+func (p *proxy) GetAllItems() ([]*dto.ItemDto, error) {
 	var items []*dto.ItemDto
 	return items, p.db.Find(&items).Error
 }
 
-func (p *Proxy) GetItemByGuid(guid string) (*dto.ItemDto, error) {
+func (p *proxy) GetItemByGuid(guid string) (*dto.ItemDto, error) {
 	var item dto.ItemDto
 	return &item, p.db.Where("guid = ?", guid).First(&item).Error
 }
 
-func (p *Proxy) GetItemByPath(path string) (*dto.ItemDto, error) {
+func (p *proxy) GetItemByPath(path string) (*dto.ItemDto, error) {
 	var item dto.ItemDto
 	return &item, p.db.Where("path = ?", path).First(&item).Error
 }
 
-func (p *Proxy) GetItemByHash(hash string) (*dto.ItemDto, error) {
+func (p *proxy) GetItemByHash(hash string) (*dto.ItemDto, error) {
 	var item dto.ItemDto
 	return &item, p.db.Where("hash_short = ?", hash).First(&item).Error
 }
 
-func (p *Proxy) GetItemsByHash(hash string) ([]*dto.ItemDto, error) {
+func (p *proxy) GetItemsByHash(hash string) ([]*dto.ItemDto, error) {
 	var items []*dto.ItemDto
 	return items, p.db.Where("hash_short = ?", hash).Find(&items).Error
 }
 
-func (p *Proxy) CreateItem(file *dto.FileDto) (*dto.ItemDto, error) {
+func (p *proxy) CreateItem(file *dto.FileDto) (*dto.ItemDto, error) {
 	item := dto.ItemDto{
 		State:    dto.New,
 		Path:     file.Path,
@@ -64,10 +64,10 @@ func (p *Proxy) CreateItem(file *dto.FileDto) (*dto.ItemDto, error) {
 	return p.UpdateItem(&item)
 }
 
-func (p *Proxy) UpdateItem(item *dto.ItemDto) (*dto.ItemDto, error) {
+func (p *proxy) UpdateItem(item *dto.ItemDto) (*dto.ItemDto, error) {
 	return item, p.db.Save(&item).Error
 }
 
-func (p *Proxy) UpdateItems(items []*dto.ItemDto) ([]*dto.ItemDto, error) {
+func (p *proxy) UpdateItems(items []*dto.ItemDto) ([]*dto.ItemDto, error) {
 	return items, p.db.Save(&items).Error
 }

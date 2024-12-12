@@ -2,9 +2,15 @@ package dto
 
 import (
 	"time"
-
-	t "perceptrail/gontroller/pkg/_t"
 )
+
+type ItemEntry struct {
+	Path     string
+	Name     string
+	Size     int64
+	MimeType string
+	ModTime  time.Time
+}
 
 type FileDto struct {
 	ID   uint   `gorm:"primaryKey"`
@@ -18,14 +24,7 @@ type FileDto struct {
 	// It means that in previous runs this files was present but now deleted
 	CheckTime time.Time `gorm:"index"`
 
-	t.ItemEntry
-	/* ItemEntry:
-	Path     string
-	Name     string
-	Size     int64
-	MimeType string
-	ModTime  time.Time
-	*/
+	ItemEntry
 }
 
 func (FileDto) TableName() string {

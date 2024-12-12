@@ -6,6 +6,14 @@ import "sync"
 type Decorate[Ti any, To any] func(Ti) (To, error)
 
 func decorate[Ti any, To any](count int, chin <-chan Ti, chout chan<- To, fn Decorate[Ti, To], extWg *sync.WaitGroup) {
+	if count <= 0 || fn == nil {
+		close(chout)
+		if extWg != nil {
+			extWg.Done()
+		}
+		return
+	}
+
 	var intWg = sync.WaitGroup{}
 
 	if extWg != nil {

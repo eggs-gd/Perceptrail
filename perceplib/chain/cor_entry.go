@@ -33,7 +33,11 @@ func (d *entryRunner[Ti, To]) Process(parentCtx context.Context) {
 			d.processor.Stop()
 			return
 
-		case input := <-d.chin:
+		case input, ok := <-d.chin:
+			if !ok {
+				d.processor.Stop()
+				return
+			}
 			res, err := d.processor.Decorate(input)
 			if err != nil {
 				d.cherr <- err

@@ -1,7 +1,6 @@
-package utils
+package api
 
 import (
-	t "perceptrail/gontroller/pkg/_t"
 	"slices"
 )
 
@@ -12,9 +11,9 @@ func gcd(a, b int) int {
 	return a
 }
 
-func GetRatio(size t.Size) t.Size {
+func GetRatio(size Size) Size {
 	gcd := gcd(size.W, size.H)
-	return t.Size{
+	return Size{
 		W: size.W / gcd,
 		H: size.H / gcd,
 	}

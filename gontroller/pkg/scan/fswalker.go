@@ -7,9 +7,8 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"perceptrail/api"
 	"perceptrail/chain"
-	"perceptrail/gontroller/ext/utils"
-	t "perceptrail/gontroller/pkg/_t"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"slices"
@@ -22,8 +21,6 @@ import (
 	"gorm.io/gorm"
 )
 
-var filesProxy model.FilesApi
-
 type inType struct {
 	path string
 	info os.DirEntry
@@ -35,8 +32,8 @@ type fsMonitor struct {
 	cancel context.CancelFunc
 
 	path         string
-	currentGroup []t.ItemEntry // current group of files
-	currentRun   time.Time     // timestamp for current walker run
+	currentGroup []dto.ItemEntry // current group of files
+	currentRun   time.Time       // timestamp for current walker run
 }
 
 func NewFsWalker(path string, chout chan<- []*dto.FileDto, logger *l.Logger) chain.Processor {
@@ -47,7 +44,7 @@ func NewFsWalker(path string, chout chan<- []*dto.FileDto, logger *l.Logger) cha
 	m := &fsMonitor{
 		logger:       logger,
 		path:         path,
-		currentGroup: []t.ItemEntry{},
+		currentGroup: []dto.ItemEntry{},
 	}
 
 	return chain.NewEntryPoint(chout, m)
@@ -100,7 +97,7 @@ func (m *fsMonitor) Decorate(in inType) ([]*dto.FileDto, error) {
 		return nil, chain.ErrSkippedItem
 	} else { // start new group
 		group := m.currentGroup
-		m.currentGroup = []t.ItemEntry{item}
+		m.currentGroup = []dto.ItemEntry{item}
 		res := m.entryToFile(group)
 		if res == nil {
 			return nil, chain.ErrSkippedItem
@@ -110,7 +107,7 @@ func (m *fsMonitor) Decorate(in inType) ([]*dto.FileDto, error) {
 	}
 }
 
-func (m *fsMonitor) tryPutInGroup(entry t.ItemEntry) bool {
+func (m *fsMonitor) tryPutInGroup(entry dto.ItemEntry) bool {
 	m.logger.Info("tryPutInGroup", l.Any("entry", entry))
 	if len(m.currentGroup) == 0 {
 		m.currentGroup = append(m.currentGroup, entry)
@@ -152,7 +149,7 @@ func (m *fsMonitor) tryPutInGroup(entry t.ItemEntry) bool {
 	return false
 }
 
-func (m *fsMonitor) entryToFile(group []t.ItemEntry) []*dto.FileDto {
+func (m *fsMonitor) entryToFile(group []dto.ItemEntry) []*dto.FileDto {
 	m.logger.Info("entryToFile", l.Any("group", group))
 	var dbitems []*dto.FileDto
 	var changedFiles []*dto.FileDto
@@ -163,7 +160,7 @@ func (m *fsMonitor) entryToFile(group []t.ItemEntry) []*dto.FileDto {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				dbitem, err = filesProxy.CreateFile(item)
 				m.logger.Info("entryToFile", l.Any("changedFiles add new", dbitem))
-				changedFiles = utils.AppendUniq(changedFiles, dbitem)
+				changedFiles = api.AppendUniq(changedFiles, dbitem)
 
 				if err != nil {
 					// cant create file
@@ -179,7 +176,7 @@ func (m *fsMonitor) entryToFile(group []t.ItemEntry) []*dto.FileDto {
 
 		if dbitem.ID != 0 {
 			dbitem.CheckTime = m.currentRun
-			dbitems = utils.AppendUniq(dbitems, dbitem)
+			dbitems = api.AppendUniq(dbitems, dbitem)
 		} else {
 			// something went wrong but should be catched above on creating phase
 			m.logger.Error("Error got empty file", l.Error(err))
@@ -188,7 +185,7 @@ func (m *fsMonitor) entryToFile(group []t.ItemEntry) []*dto.FileDto {
 
 		if dbitems[i].LinkTo(dbitems[0]) && !dbitem.IsIgnored() {
 			m.logger.Info("entryToFile", l.Any("changedFiles add linked", dbitems))
-			changedFiles = utils.AppendUniq(changedFiles, dbitems[i])
+			changedFiles = api.AppendUniq(changedFiles, dbitems[i])
 		}
 
 		if item.ModTime.UTC() == dbitems[i].ModTime.UTC() &&
@@ -196,7 +193,7 @@ func (m *fsMonitor) entryToFile(group []t.ItemEntry) []*dto.FileDto {
 			continue // do nothing, skip
 		} else if !dbitems[i].IsIgnored() {
 			m.logger.Info("entryToFile -> changedFiles ad changed", l.Any("item", item.ModTime), l.Any("dbItem", dbitems[i].ModTime))
-			changedFiles = utils.AppendUniq(changedFiles, dbitem)
+			changedFiles = api.AppendUniq(changedFiles, dbitem)
 		}
 	}
 
@@ -225,12 +222,12 @@ func (m *fsMonitor) entryToFile(group []t.ItemEntry) []*dto.FileDto {
 	return nil
 }
 
-func updateMimeType(entry *t.ItemEntry, logger *l.Logger) {
+func updateMimeType(entry *dto.ItemEntry, logger *l.Logger) {
 	updateMimeTypeGeneric(entry)
 	updateMimeTypeFromMeta(entry, logger)
 }
 
-func updateMimeTypeGeneric(entry *t.ItemEntry) {
+func updateMimeTypeGeneric(entry *dto.ItemEntry) {
 	if entry.MimeType != "" {
 		return
 	}
@@ -239,7 +236,7 @@ func updateMimeTypeGeneric(entry *t.ItemEntry) {
 	entry.MimeType = mime.TypeByExtension(ext)
 }
 
-func updateMimeTypeFromMeta(entry *t.ItemEntry, logger *l.Logger) {
+func updateMimeTypeFromMeta(entry *dto.ItemEntry, logger *l.Logger) {
 	if entry.MimeType != "" {
 		return
 	}
@@ -259,8 +256,8 @@ func updateMimeTypeFromMeta(entry *t.ItemEntry, logger *l.Logger) {
 	entry.MimeType = http.DetectContentType(buffer)
 }
 
-func newItemEntryFromDirEntry(path string, dirEntry os.DirEntry) t.ItemEntry {
-	i := t.ItemEntry{
+func newItemEntryFromDirEntry(path string, dirEntry os.DirEntry) dto.ItemEntry {
+	i := dto.ItemEntry{
 		Path: path,
 		Name: dirEntry.Name(),
 	}

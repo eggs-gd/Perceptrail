@@ -1,16 +1,17 @@
 GOMODULES = \
 	gontroller \
-	perceplib/logger \
+	perceplib/api \
 	perceplib/chain \
-	perceplib/perceptors \
-	perceptors/color \
-	perceptors/geo \
-	perceptors/faces \
-	perceptors/objects
+	perceplib/exiftool \
+	perceplib/logger \
+	perceptors/exif_geo \
+	perceptors/ml_color \
+	perceptors/ml_faces \
+	perceptors/ml_objects
 
 .PHONY: all build-gontroller build-plugins build-plugin-% update-deps clean
 
-all: update-deps build-gontroller build-plugins
+all: clean update-deps build-gontroller build-plugins
 
 build-gontroller:
 	@echo "Building gontroller..."

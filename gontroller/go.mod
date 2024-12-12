@@ -3,10 +3,10 @@ module perceptrail/gontroller
 go 1.23.2
 
 require (
+	perceptrail/api v0.0.0
 	perceptrail/chain v0.0.0
 	perceptrail/exiftool v0.0.0
 	perceptrail/logger v0.0.0
-	perceptrail/perceptors v0.0.0
 )
 
 require (
@@ -39,8 +39,8 @@ require (
 )
 
 replace (
+	perceptrail/api => ../perceplib/api
 	perceptrail/chain => ../perceplib/chain
 	perceptrail/exiftool => ../perceplib/exiftool
 	perceptrail/logger => ../perceplib/logger
-	perceptrail/perceptors => ../perceplib/perceptors
 )

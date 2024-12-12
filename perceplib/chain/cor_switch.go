@@ -35,7 +35,11 @@ func (s *switchRunner[Ti, To]) Process(ctx context.Context) {
 			s.processor.Stop()
 			return
 
-		case input := <-s.chin:
+		case input, ok := <-s.chin:
+			if !ok {
+				s.processor.Stop()
+				return
+			}
 			res, err := s.processor.Switch(input)
 			if err != nil {
 				s.cherr <- err
