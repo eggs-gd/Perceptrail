@@ -9,7 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-var config gorm.Config = gorm.Config{}
+//var config gorm.Config = gorm.Config{}
 
 var db *gorm.DB
 
@@ -27,7 +27,10 @@ func NewProxy(logger *l.Logger) *proxy {
 }
 
 func initDB(logger *l.Logger) *gorm.DB {
-	db, err := gorm.Open(sqlite.Open("media_library.db"), &config)
+	logger.Info("Database Initiating...")
+	db, err := gorm.Open(sqlite.Open("media_library.db"), &gorm.Config{
+		Logger: newLogger(logger),
+	})
 	if err != nil {
 		logger.Fatal("Can't connect to database", l.Error(err))
 	}

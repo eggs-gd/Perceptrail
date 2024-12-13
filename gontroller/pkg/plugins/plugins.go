@@ -36,7 +36,7 @@ func (pm *pluginManager) GetPlugins() []api.Perceptor {
 // LoadPlugins loads all plugins once at startup
 func (pm *pluginManager) LoadPlugins(ctx app.AppContext) error {
 	pm.ctx = ctx
-	pm.logger = ctx.Logger("plugins")
+	pm.logger = ctx.Logger(string(app.LogPlugins))
 
 	pm.pluginsMu.Lock()
 	defer pm.pluginsMu.Unlock()

@@ -1,7 +1,6 @@
 package scan
 
 import (
-	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 
 	"github.com/dukobpa3/perceplib/api"
@@ -93,10 +92,6 @@ func (cd *exifExtractor) Stop() {
 }
 
 func NewExifExtractor(count int, chin <-chan []*dto.FileDto, chout chan<- *RawItem, logger *l.Logger) chain.Processor {
-	if itemsProxy == nil {
-		itemsProxy = model.NewProxy(logger.Named("DB"))
-	}
-
 	workers := make([]*exiftool.Server, count)
 	freeCh := make(chan *exiftool.Server, count)
 	for i := 0; i < count; i++ {

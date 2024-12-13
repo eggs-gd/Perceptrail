@@ -3,8 +3,9 @@ package plugins
 
 import (
 	"perceptrail/gontroller/pkg/app"
-	l "perceptrail/logger"
 	"testing"
+
+	l "github.com/dukobpa3/perceplib/logger"
 )
 
 type mockAppContext struct{}

@@ -18,7 +18,7 @@ type webService struct {
 }
 
 func NewWebService(ctx app.AppContext) *webService {
-	logger := ctx.Logger("ImporterService")
+	logger := ctx.Logger(string(app.LogHTTP))
 	return &webService{logger, ctx}
 }
 

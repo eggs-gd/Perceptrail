@@ -20,8 +20,8 @@ type AppContext interface {
 
 func NewAppContext() *appContext {
 	//logger, _ := zap.NewProduction()
-	logger, _ := l.NewDevelopment()
-	initConfig(&appConfig, logger.Named("App.Config"))
+	logger := l.NewLogger(l.DebugLevel, &GontrollerDecorator{})
+	initConfig(&appConfig, logger.Named(string(LogConfig)))
 
 	return &appContext{
 		config:   &appConfig,

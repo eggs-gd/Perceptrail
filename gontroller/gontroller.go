@@ -10,8 +10,6 @@ import (
 	"perceptrail/gontroller/pkg/plugins"
 	"perceptrail/gontroller/pkg/scan"
 	"syscall"
-
-	l "github.com/dukobpa3/perceplib/logger"
 )
 
 func main() {
@@ -23,7 +21,7 @@ func main() {
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
 
 	ctx := app.NewAppContext()
-	ctx.SetLogLevel(l.WarnLevel)
+	//ctx.SetLogLevel(l.WarnLevel)
 	//ctx.SetLogLevel(l.InfoLevel)
 	svc := app.NewSvcContext()
 

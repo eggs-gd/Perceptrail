@@ -43,7 +43,10 @@ type importerService struct {
 }
 
 func NewImporterService(ctx app.AppContext) *importerService {
-	logger := ctx.Logger("Importer")
+	logger := ctx.Logger(string(app.LogImporter))
+
+	itemsProxy = model.NewProxy(ctx.Logger(string(app.LogDB)))
+	filesProxy = model.NewProxy(ctx.Logger(string(app.LogDB)))
 
 	var errch chan error = make(chan error)
 

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"slices"
 	"sort"
@@ -38,9 +37,6 @@ type fsMonitor struct {
 }
 
 func NewFsWalker(path string, chout chan<- []*dto.FileDto, logger *l.Logger) chain.Processor {
-	if filesProxy == nil {
-		filesProxy = model.NewProxy(logger.Named("DB"))
-	}
 
 	m := &fsMonitor{
 		logger:       logger,

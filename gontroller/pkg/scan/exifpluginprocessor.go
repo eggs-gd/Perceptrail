@@ -2,7 +2,7 @@ package scan
 
 import (
 	"fmt"
-	"perceptrail/gontroller/pkg/model"
+	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/plugins"
 	"perceptrail/gontroller/pkg/plugins/exif_core"
@@ -62,10 +62,6 @@ func newCloser(chin <-chan exif_core.RawItemRW, chout chan<- *dto.ItemDto, logge
 
 // Chain implementation
 func NewExifPluginProcessor(chin <-chan *RawItem, chout chan<- *dto.ItemDto, errch chan error, logger *l.Logger) chain.Processor {
-	if itemsProxy == nil {
-		itemsProxy = model.NewProxy(logger.Named("DB"))
-	}
-
 	exifChain := chain.NewChainProcessor(errch)
 
 	exifPlugins := make([]api.Perceptor, 0)
@@ -80,7 +76,7 @@ func NewExifPluginProcessor(chin <-chan *RawItem, chout chan<- *dto.ItemDto, err
 		channels[i] = make(chan exif_core.RawItemRW, 1)
 	}
 
-	exifChain.AddStep(newOpener(chin, channels[0], logger.Named("opener")))
+	exifChain.AddStep(newOpener(chin, channels[0], logger.Named(string(app.LogPluginExifOpener))))
 
 	processors := make([]chain.Processor, len(exifPlugins))
 	for i, plugin := range exifPlugins {
@@ -90,7 +86,7 @@ func NewExifPluginProcessor(chin <-chan *RawItem, chout chan<- *dto.ItemDto, err
 		}
 	}
 
-	exifChain.AddStep(newCloser(channels[len(channels)-1], chout, logger.Named("closer")))
+	exifChain.AddStep(newCloser(channels[len(channels)-1], chout, logger.Named(string(app.LogPluginExifCloser))))
 
 	return exifChain
 }
