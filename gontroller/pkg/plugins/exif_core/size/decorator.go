@@ -1,12 +1,13 @@
 package size
 
 import (
-	"perceptrail/api"
-	"perceptrail/chain"
 	"perceptrail/gontroller/pkg/plugins/exif_core"
 	"strconv"
 
-	l "perceptrail/logger"
+	"github.com/dukobpa3/perceplib/api"
+	"github.com/dukobpa3/perceplib/chain"
+
+	l "github.com/dukobpa3/perceplib/logger"
 )
 
 type sizesExtractor struct {

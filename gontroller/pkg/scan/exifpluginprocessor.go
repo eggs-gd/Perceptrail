@@ -2,13 +2,14 @@ package scan
 
 import (
 	"fmt"
-	"perceptrail/api"
-	"perceptrail/chain"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/plugins"
 	"perceptrail/gontroller/pkg/plugins/exif_core"
-	l "perceptrail/logger"
+
+	"github.com/dukobpa3/perceplib/api"
+	"github.com/dukobpa3/perceplib/chain"
+	l "github.com/dukobpa3/perceplib/logger"
 )
 
 // Opner implementation
@@ -68,7 +69,7 @@ func NewExifPluginProcessor(chin <-chan *RawItem, chout chan<- *dto.ItemDto, err
 	exifChain := chain.NewChainProcessor(errch)
 
 	exifPlugins := make([]api.Perceptor, 0)
-	for _, p := range plugins.GetPlugins() {
+	for _, p := range plugins.Pm.GetPlugins() {
 		if p.DataProvider() == api.ExifDataProvider {
 			exifPlugins = append(exifPlugins, p)
 		}

@@ -3,7 +3,7 @@ package app
 import (
 	"os"
 
-	l "perceptrail/logger"
+	l "github.com/dukobpa3/perceplib/logger"
 
 	"github.com/joho/godotenv"
 	"gopkg.in/yaml.v3"
@@ -30,8 +30,9 @@ api_keys:
 */
 
 type Config struct {
-	Path    string `yaml:"path"`
-	AppName string `yaml:"app_name"`
+	Path    string   `yaml:"path"`
+	Plugins []string `yaml:"plugins"`
+	AppName string   `yaml:"app_name"`
 	Server  struct {
 		Host string `yaml:"host"`
 		Port int    `yaml:"port"`

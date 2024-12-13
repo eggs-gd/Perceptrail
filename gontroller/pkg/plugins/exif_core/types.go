@@ -1,9 +1,9 @@
 package exif_core
 
 import (
-	"perceptrail/api"
-	"perceptrail/chain"
-	l "perceptrail/logger"
+	"github.com/dukobpa3/perceplib/api"
+	"github.com/dukobpa3/perceplib/chain"
+	l "github.com/dukobpa3/perceplib/logger"
 )
 
 type RawItemRW interface {

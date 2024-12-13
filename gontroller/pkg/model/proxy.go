@@ -3,7 +3,7 @@ package model
 import (
 	"perceptrail/gontroller/pkg/model/dto"
 
-	l "perceptrail/logger"
+	l "github.com/dukobpa3/perceplib/logger"
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"

@@ -1,9 +1,9 @@
 package main
 
 import (
-	"perceptrail/api"
-	"perceptrail/chain"
-	l "perceptrail/logger"
+	"github.com/dukobpa3/perceplib/api"
+	"github.com/dukobpa3/perceplib/chain"
+	l "github.com/dukobpa3/perceplib/logger"
 )
 
 type geoPerceptor struct{}
@@ -15,9 +15,6 @@ func (p *geoPerceptor) NewProcessor(chin <-chan api.RawItemR, chout chan<- api.R
 	return NewGeotagsProcessor(chin, chout, logger)
 }
 
-//export NewPerceptor
-func NewPerceptor() api.Perceptor {
-	return &geoPerceptor{}
-}
+var Perceptor api.Perceptor = &geoPerceptor{}
 
 func main() {}

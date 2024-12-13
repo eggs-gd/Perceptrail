@@ -1,13 +1,14 @@
 package scan
 
 import (
-	"perceptrail/api"
-	"perceptrail/chain"
-	"perceptrail/exiftool"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 
-	l "perceptrail/logger"
+	"github.com/dukobpa3/perceplib/api"
+	"github.com/dukobpa3/perceplib/chain"
+	"github.com/dukobpa3/perceplib/exiftool"
+
+	l "github.com/dukobpa3/perceplib/logger"
 )
 
 var commonArgs []string = []string{ // all sidecars
@@ -64,9 +65,8 @@ func (cd *exifExtractor) Decorate(in []*dto.FileDto) (*RawItem, error) {
 		cd.logger.Info("Command", l.Any("args", args))
 
 		et := cd.getWorker()
-		defer cd.releaseWorker(et)
-
 		out, err := et.Command(args...)
+		cd.releaseWorker(et)
 		if err != nil {
 			cd.logger.Error("Command", l.Any("out", out), l.String("file", item.Path), l.Error(err))
 		}

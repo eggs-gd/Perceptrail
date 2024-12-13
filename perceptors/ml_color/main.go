@@ -1,9 +1,9 @@
 package main
 
 import (
-	"perceptrail/api"
-	"perceptrail/chain"
-	l "perceptrail/logger"
+	"github.com/dukobpa3/perceplib/api"
+	"github.com/dukobpa3/perceplib/chain"
+	l "github.com/dukobpa3/perceplib/logger"
 )
 
 type colorPerceptor struct{}
@@ -16,9 +16,7 @@ func (p *colorPerceptor) NewProcessor(chin <-chan api.RawItemR, chout chan<- api
 	return nil
 }
 
-//export NewPerceptor
-func NewPerceptor() api.Perceptor {
-	return &colorPerceptor{}
-}
+//export Perceptor
+var Perceptor api.Perceptor = &colorPerceptor{}
 
 func main() {}

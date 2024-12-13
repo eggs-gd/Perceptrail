@@ -6,7 +6,7 @@ import (
 	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/client/routes"
 
-	l "perceptrail/logger"
+	l "github.com/dukobpa3/perceplib/logger"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"

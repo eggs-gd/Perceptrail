@@ -3,12 +3,13 @@ package scan
 import (
 	"context"
 	"errors"
-	"perceptrail/chain"
 	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 
-	l "perceptrail/logger"
+	"github.com/dukobpa3/perceplib/chain"
+
+	l "github.com/dukobpa3/perceplib/logger"
 )
 
 var filesProxy model.FilesApi

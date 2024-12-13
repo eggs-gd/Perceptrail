@@ -3,9 +3,10 @@ package scan
 import (
 	"time"
 
-	"perceptrail/api"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/plugins/exif_core"
+
+	"github.com/dukobpa3/perceplib/api"
 )
 
 type RawItem struct {

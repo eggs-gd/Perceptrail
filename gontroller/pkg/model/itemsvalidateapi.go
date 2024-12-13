@@ -4,9 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"perceptrail/api"
 	"perceptrail/gontroller/pkg/model/dto"
 	"sort"
+
+	"github.com/dukobpa3/perceplib/api"
 )
 
 func (p *proxy) getShortHash(item *dto.FileDto, meta api.RawExif) string {

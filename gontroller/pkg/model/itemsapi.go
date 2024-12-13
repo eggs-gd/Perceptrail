@@ -1,8 +1,9 @@
 package model
 
 import (
-	"perceptrail/api"
 	"perceptrail/gontroller/pkg/model/dto"
+
+	"github.com/dukobpa3/perceplib/api"
 )
 
 type ItemsApi interface {

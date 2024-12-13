@@ -1,7 +1,7 @@
 package app
 
 import (
-	l "perceptrail/logger"
+	l "github.com/dukobpa3/perceplib/logger"
 )
 
 var appConfig Config

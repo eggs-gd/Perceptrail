@@ -7,7 +7,7 @@ import (
 	"perceptrail/gontroller/pkg/model/dto"
 	"time"
 
-	l "perceptrail/logger"
+	l "github.com/dukobpa3/perceplib/logger"
 
 	"github.com/labstack/echo/v4"
 )

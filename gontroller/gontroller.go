@@ -9,8 +9,9 @@ import (
 	"perceptrail/gontroller/pkg/client"
 	"perceptrail/gontroller/pkg/plugins"
 	"perceptrail/gontroller/pkg/scan"
-	l "perceptrail/logger"
 	"syscall"
+
+	l "github.com/dukobpa3/perceplib/logger"
 )
 
 func main() {
@@ -23,11 +24,13 @@ func main() {
 
 	ctx := app.NewAppContext()
 	ctx.SetLogLevel(l.WarnLevel)
+	//ctx.SetLogLevel(l.InfoLevel)
 	svc := app.NewSvcContext()
 
-	ctx.SetLogLevel(l.InfoLevel)
-
-	plugins.LoadPlugins(ctx.Logger("plugins"))
+	err := plugins.Pm.LoadPlugins(ctx)
+	if err != nil {
+		log.Fatalf("Failed to load plugins: %v", err)
+	}
 
 	svc.AddService(scan.NewImporterService(ctx))
 	svc.AddService(client.NewWebService(ctx))

@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"perceptrail/api"
-	"perceptrail/chain"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"slices"
@@ -16,7 +14,10 @@ import (
 	"strings"
 	"time"
 
-	l "perceptrail/logger"
+	"github.com/dukobpa3/perceplib/api"
+	"github.com/dukobpa3/perceplib/chain"
+
+	l "github.com/dukobpa3/perceplib/logger"
 
 	"gorm.io/gorm"
 )

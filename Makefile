@@ -1,9 +1,6 @@
 GOMODULES = \
+	perceplib \
 	gontroller \
-	perceplib/api \
-	perceplib/chain \
-	perceplib/exiftool \
-	perceplib/logger \
 	perceptors/exif_geo \
 	perceptors/ml_color \
 	perceptors/ml_faces \
@@ -36,4 +33,11 @@ clean:
 	@$(foreach module, $(GOMODULES), \
 		echo "Cleaning $(module)..."; \
 		(cd $(module) && go clean); \
+	)
+
+test:
+	@echo "Running tests..."
+	@$(foreach module, $(GOMODULES), \
+		echo "Testing $(module)..."; \
+		(cd $(module) && go test ./...); \
 	)

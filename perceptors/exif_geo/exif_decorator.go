@@ -1,10 +1,10 @@
 package main
 
 import (
-	"perceptrail/api"
-	"perceptrail/chain"
+	"github.com/dukobpa3/perceplib/api"
+	"github.com/dukobpa3/perceplib/chain"
 
-	l "perceptrail/logger"
+	l "github.com/dukobpa3/perceplib/logger"
 )
 
 type geotagsExtractor struct {

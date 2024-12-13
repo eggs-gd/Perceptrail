@@ -1,10 +1,11 @@
 package size
 
 import (
-	"perceptrail/api"
-	"perceptrail/chain"
 	"perceptrail/gontroller/pkg/plugins/exif_core"
-	l "perceptrail/logger"
+
+	"github.com/dukobpa3/perceplib/api"
+	"github.com/dukobpa3/perceplib/chain"
+	l "github.com/dukobpa3/perceplib/logger"
 )
 
 type sizePerceptor struct{}
@@ -16,6 +17,4 @@ func (p *sizePerceptor) NewProcessor(chin <-chan exif_core.RawItemRW, chout chan
 	return NewSizesProcessor(chin, chout, logger)
 }
 
-func NewPerceptor() api.Perceptor {
-	return &sizePerceptor{}
-}
+var Perceptor api.Perceptor = &sizePerceptor{}

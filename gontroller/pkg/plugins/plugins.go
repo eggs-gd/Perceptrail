@@ -2,81 +2,82 @@ package plugins
 
 import (
 	"fmt"
-	"path/filepath"
 	"plugin"
 	"sync"
 
-	"perceptrail/api"
+	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/plugins/exif_core/date"
 	"perceptrail/gontroller/pkg/plugins/exif_core/size"
-	l "perceptrail/logger"
+
+	"github.com/dukobpa3/perceplib/api"
+	l "github.com/dukobpa3/perceplib/logger"
 )
 
-var (
+type pluginManager struct {
+	ctx       app.AppContext
+	logger    *l.Logger
 	pluginsMu sync.RWMutex
 	plugins   []api.Perceptor
 	loaded    bool
-)
+}
+
+var Pm *pluginManager = &pluginManager{}
 
 // GetPlugins returns loaded plugins list. Thread-safe.
-func GetPlugins() []api.Perceptor {
-	pluginsMu.RLock()
-	defer pluginsMu.RUnlock()
+func (pm *pluginManager) GetPlugins() []api.Perceptor {
+	pm.pluginsMu.RLock()
+	defer pm.pluginsMu.RUnlock()
 
-	result := make([]api.Perceptor, len(plugins))
-	copy(result, plugins)
+	result := make([]api.Perceptor, len(pm.plugins))
+	copy(result, pm.plugins)
 	return result
 }
 
 // LoadPlugins loads all plugins once at startup
-func LoadPlugins(logger *l.Logger) error {
-	pluginsMu.Lock()
-	defer pluginsMu.Unlock()
+func (pm *pluginManager) LoadPlugins(ctx app.AppContext) error {
+	pm.ctx = ctx
+	pm.logger = ctx.Logger("plugins")
 
-	if loaded {
+	pm.pluginsMu.Lock()
+	defer pm.pluginsMu.Unlock()
+
+	if pm.loaded {
 		return nil
 	}
 
 	// Load core plugins first
 	corePlugins := []api.Perceptor{
-		date.NewPerceptor(),
-		size.NewPerceptor(),
+		date.Perceptor,
+		size.Perceptor,
 	}
 
 	// Load external plugins
-	externalPlugins, err := loadExternalPlugins(logger)
+	externalPlugins, err := pm.loadExternalPlugins()
 	if err != nil {
-		logger.Error("failed to load external plugins:", l.Error(err))
+		pm.logger.Error("failed to load external plugins:", l.Error(err))
 		return err
 	}
 
 	// Combine all plugins
-	plugins = append(corePlugins, externalPlugins...)
-	loaded = true
+	pm.plugins = append(corePlugins, externalPlugins...)
+	pm.loaded = true
 
-	logger.Info("Loaded plugins", l.Any("core", len(corePlugins)), l.Any("external", len(externalPlugins)), l.Any("total", len(plugins)))
+	pm.logger.Info("Loaded plugins", l.Any("core", len(corePlugins)), l.Any("external", len(externalPlugins)), l.Any("total", len(pm.plugins)))
 
 	return nil
 }
 
-func loadExternalPlugins(logger *l.Logger) ([]api.Perceptor, error) {
+func (pm *pluginManager) loadExternalPlugins() ([]api.Perceptor, error) {
 	var result []api.Perceptor
 
-	return result, nil
-
-	files, err := filepath.Glob("plugins/*.so")
-	if err != nil {
-		return nil, fmt.Errorf("failed to read plugins directory: %w", err)
-	}
-
-	for _, file := range files {
+	for _, file := range pm.ctx.Config().Plugins {
 		p, err := loadPlugin(file)
 		if err != nil {
-			logger.Error("Failed to load plugin", l.Any("file", file), l.Error(err))
+			pm.logger.Error("Failed to load plugin", l.Any("file", file), l.Error(err))
 			continue
 		}
 		result = append(result, p)
-		logger.Info("Loaded external plugin", l.Any("name", p.Name()), l.Any("type", p))
+		pm.logger.Info("Loaded external plugin", l.Any("name", p.Name()), l.Any("type", p))
 	}
 
 	return result, nil
@@ -93,10 +94,11 @@ func loadPlugin(path string) (api.Perceptor, error) {
 		return nil, fmt.Errorf("failed to find 'Perceptor' symbol: %w", err)
 	}
 
-	perceptor, ok := symPlugin.(api.Perceptor)
+	var perceptor *api.Perceptor
+	perceptor, ok := symPlugin.(*api.Perceptor)
 	if !ok {
-		return nil, fmt.Errorf("invalid plugin type: %T", symPlugin)
+		return nil, fmt.Errorf("invalid plugin type: want %T, got %T", perceptor, symPlugin)
 	}
 
-	return perceptor, nil
+	return *perceptor, nil
 }
