@@ -12,6 +12,9 @@ func gcd(a, b int) int {
 }
 
 func GetRatio(size Size) Size {
+	if size.W <= 0 || size.H <= 0 {
+		return Size{}
+	}
 	gcd := gcd(size.W, size.H)
 	return Size{
 		W: size.W / gcd,

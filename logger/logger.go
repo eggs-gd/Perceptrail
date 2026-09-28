@@ -37,13 +37,8 @@ func newCustomConsoleEncoder(decorator CustomEncoderDecorator) *customConsoleEnc
 	encoderConfig.EncodeTime = func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
 		enc.AppendString(t.Format("15:04:05.000"))
 	}
-	//encoderConfig.EncodeTime = zapcore.RFC3339TimeEncoder
 	encoderConfig.EncodeDuration = func(d time.Duration, enc zapcore.PrimitiveArrayEncoder) {
 		enc.AppendString(ColorCyan + d.String() + ColorReset)
-	}
-	encoderConfig.EncodeDuration = zapcore.StringDurationEncoder
-	encoderConfig.NewReflectedEncoder = func(w io.Writer) zapcore.ReflectedEncoder {
-		return &consoleEncoder{w: w}
 	}
 	encoderConfig.EncodeDuration = zapcore.StringDurationEncoder
 	encoderConfig.NewReflectedEncoder = func(w io.Writer) zapcore.ReflectedEncoder {
