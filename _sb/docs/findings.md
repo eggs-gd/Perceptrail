@@ -141,9 +141,13 @@ compose with `derived`. The current message protocol is a deviation from this de
   builds, runs `prove` and publishes a GitHub Release (`exiftool_unix.tgz`,
   `exiftool_windows.zip`, `SHA256SUMS`). `dist-*` is not semver → no clash with `v*`
   module tags. The Perceptrail Docker image pulls exactly this release.
-- Known weak spots of the wrapper (not fixed yet): no per-command timeout (a broken
-  file hangs a worker forever); `Kill` without `Wait` → zombie processes; the error
-  of `start()` in `restart` is ignored.
+- Wrapper weak spots fixed in v0.5.1 (2026-09-29): per-command timeout (`SetTimeout`,
+  gontroller uses 2 min) with restart; `Wait` after `Kill` (no zombies); the `start()`
+  error of a restart is returned; `Command` returns stdout together with a stderr
+  error (it used to drop it — gontroller then stored an empty `RawExif`).
+- Extractor rule: no usable EXIF for the **main** file → the group is skipped (it
+  used to be validated against a sidecar's EXIF, or panic on an empty list); a
+  sidecar without EXIF is just dropped; data + warning → data is used.
 
 ### Data and import
 
