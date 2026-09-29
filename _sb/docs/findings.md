@@ -131,6 +131,34 @@ messages are gone. Details: [svebapp README](../../svebapp/README.md#visible-win
   - Not a bug: with the mock's repeating aspect ratios a 1008 px layout is taller per
     photo than a 700 px one (rows of 3 stretched to the full width), so the page gets
     shorter when narrowed mid-stream.
+- **Resize inside the gallery looked chaotic (2026-09-29):** correct end state, but tiles
+  animated in page coordinates while the anchor correction scrolled at once — on
+  screen everything jumped by Δ and flew back, from above and below. Fix: FLIP on the
+  container (shift by Δ, animate to 0 with the tiles). Measured: the pin point stayed
+  at exactly 384 px (screen centre) in all 60 samples during the animation while the
+  scroll jumped 60 000 → 83 924. Product decision: the anchor is hybrid — page top
+  pins the top, page bottom pins the end, otherwise the photo in the screen centre.
+- **Still restless in the middle: the wave direction (2026-09-29).** The wave ran top
+  to bottom by order, so mid-page and at the bottom tiles moved from above and below
+  the pinned photo at once. Now the wave starts at the anchor (centre: both ways by
+  order distance; bottom: upwards). This needed per-tile FLIP instead of CSS
+  transitions + a container shift: with the container shift a tile waiting for its
+  turn drifted with the container before its own animation. Measured: waiting tiles
+  moved 0 px; with a fixed 60 ms step and a 500 ms cap only ~9 tiles formed the wave
+  and the rest started together — the step is now adaptive (26 visible tiles →
+  26 distinct delays, 20 ms apart).
+- **Upward wave looked unnatural, widening flashed white (2026-09-29).** A wave by
+  photo order goes right-to-left, bottom-to-top when it runs upwards (page bottom, the
+  upper half around a centre anchor). Now the wave goes by rows (same distance above
+  and below together), left to right within a row. Widening makes the layout shorter,
+  so many photos that were not rendered come into view: they faded in from 0 while the
+  old tiles left at once → a nearly white screen for a moment. Tiles mounted by a
+  relayout now appear without the fade.
+- **Considered, not done:** window/size subscriptions as `LiveQuery` in `$derived`.
+  A new query per window step starts empty → tiles would disappear for a moment on
+  every step unless the previous value is kept; and the per-frame application plus
+  the scroll correction are side effects anyway. The subscriptions stay in `$effect`
+  as the integration boundary.
 - **Test environment:** the agent's browser pane often does not paint; then
   `requestAnimationFrame` runs at 0–1 fps and `ResizeObserver`/scroll events are not
   delivered. Mid-stream resize was verified by calling `updateLayout` directly
@@ -268,6 +296,15 @@ compose with `derived`. The current message protocol is a deviation from this de
 ---
 
 ## Infrastructure
+
+### `app.css` was never loaded (2026-09-29)
+
+- No module imported `src/app.css`, so none of its rules ever applied: the page was
+  always white and `scrollbar-gutter: stable` (added against the width jump when the
+  viewer opens) never worked. It surfaced when the viewer switched from a hard-coded
+  `#111` to `var(--color-bg)` from `app.css` and lost its background. Now the root
+  `+layout.svelte` imports it. Check that a global stylesheet is actually loaded
+  before relying on its variables.
 
 ### Safari: 500 on every page (2026-09-29)
 

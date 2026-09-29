@@ -26,35 +26,54 @@ Target architecture — the diagrams in [`../puml`](../puml).
 - Favicon, tab title.
 - `perceplib` moved to `eggs-gd` (module `github.com/eggs-gd/perceplib`, v0.0.6) and
   vendored into Perceptrail as a git subtree instead of a submodule.
+- Repo moved to `eggs-gd`, public; CI; git flow with rulesets; version derived from
+  history with CI tags on `develop`.
+- Safari: the logger no longer breaks the app (stack format).
+- svebapp on current Svelte 5 / Kit practices: `$app/state`, no `svelte/store`
+  (component state + `LiveQuery` on `createSubscriber`), `{@attach}`, `$derived`
+  instead of state writes in effects, clsx-style `class`, no side effects in `load`.
+
+## Releases
+
+- **0.2.0** — when the first perceptor works end to end (e.g. a primitive geo). Until
+  then everything stays in `develop`.
+- **First public release** — includes Docker.
 
 ## Next
 
-- [ ] Commit the current state of `feature/perceptors`.
-- [ ] Transfer the `Perceptrail` repo to `eggs-gd`, update local remotes.
-- [ ] Unreadable/broken files still become items (0×0): exiftool returns File tags
-      even for garbage. Decide how to mark them (ignored? error state?).
+- [ ] Thumbnails on the server: libvips via `bimg` (needs `brew install vips`), 400 px
+      for tiles, 1600 px for the viewer, WebP; `/assets/:guid?size=…` falls back to the
+      original. Fixes blank tiles (decoding originals) and HEIC in Chrome/Firefox.
+- [ ] First perceptor end to end (primitive geo) → release 0.2.0.
 
-## Core correctness (gontroller)
+## Core — product (gontroller)
 
-- [ ] `fswalker`: own media-type table (`MediaKind`: image/raw/video/animated/sidecar)
-      instead of system `mime`; an explicit role of each file in the group; the main
-      file of a Live Photo is the photo; deterministic main file for RAW+JPEG.
+- [ ] Own media-type table (`MediaKind`: image/raw/video/animated/sidecar) instead of
+      system `mime` (a minimal Docker image loses `.mov/.heic/RAW`); an explicit role
+      of each file in the group.
+- [ ] Main file of a group: the photo in a Live Photo, deterministic for RAW+JPEG;
+      Live Photo pairs by `ContentIdentifier`; one main item merged from all sidecars
+      ([`Item flow.puml`](../puml/Item%20flow.puml)).
+- [ ] `date`: time zones (`OffsetTimeOriginal`, GPS UTC), parse dates with a zone.
+- [ ] Embedded RAW preview (`PreviewImage`/`JpgFromRaw`) for the transcoder.
+
+## Core — service (gontroller)
+
 - [ ] Validator per [`Walker.puml`](../puml/Walker.puml): same / moved / duplicate /
       changed by `HashShort`; `finalizeWalk` for deleted files (`Deleted`), `Dirty`.
-- [ ] `date`: time zones (`OffsetTimeOriginal`, GPS UTC), parse dates with a zone.
-- [ ] Identity: Live Photo pairs by `ContentIdentifier`; one main item merged from all
-      sidecars ([`Item flow.puml`](../puml/Item%20flow.puml)).
-- [ ] Transcoder (photo/video processors from Item flow): thumbnails, embedded RAW
-      preview (`PreviewImage`/`JpgFromRaw`).
+- [ ] Unreadable/broken files still become items (0×0): exiftool returns File tags
+      even for garbage. Decide how to mark them (ignored? error state?).
 - [ ] HTTP port and exiftool path from config (`:1323` is hardcoded; the `database`
       section of the config is unused — SQLite).
-- [ ] Dockerfile: CGO (sqlite, libvips), exiftool from a `dist-*` release, fix `CMD`.
 - [ ] Fewer Info logs in `fswalker` (several per file).
 - [ ] `TestLoadExternalPlugins` should load real `.so` files.
 
+## Deployment (first release)
+
+- [ ] Dockerfile: CGO (sqlite, libvips), exiftool from a `dist-*` release, fix `CMD`.
+
 ## Frontend
 
-- [ ] `$app/stores` → `$app/state`.
 - [ ] Viewer: close without leaving the site on a direct `/N` open, Escape, arrow
       navigation.
 - [ ] Optimal (Dijkstra) layout for an already loaded gallery — optional.

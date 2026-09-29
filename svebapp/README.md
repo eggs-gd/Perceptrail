@@ -67,10 +67,25 @@ Gallery.svelte     renders the window: absolutely positioned tiles, keyed by gui
 - Tiles keep `loading="lazy"`: the gallery still loads **originals**, and lazy
   loading limits how many are decoded at once (without it blank tiles get more
   frequent). `overflow-anchor: none` — we anchor the view ourselves.
-- On a width change the gallery takes the first visible item as the **anchor**
-  (`guid`, offset from the viewport top as a fraction of its height) and sends it with
-  `updateLayout`. The anchor is kept across all following resizes until the user
-  scrolls (re-taking it per resize walks the view).
+- On a width change the gallery takes an **anchor** — what stays pinned on screen:
+  at the very top of the page the page stays at the top; at the very bottom the end
+  of the gallery stays at the bottom; anywhere else the photo under the middle of the
+  screen stays there (`guid` + offset as a fraction of its height). It is sent with
+  `updateLayout` and kept across all following resizes until the user scrolls
+  (a scroll that is not our own correction, detected in `onscroll`).
+- **FLIP per tile (Web Animations):** before a new layout is applied, every tile's
+  current box is measured (mid-animation included); after the DOM update and the
+  scroll correction (Δ) each tile animates from its current screen position
+  (shifted by Δ, so nothing jumps) to its new place. No CSS transitions on tiles.
+- **Wave from the anchor, by rows:** rows start by their distance from the anchor's
+  row (rows at the same distance above and below start together); within a row photos
+  go left to right, in the anchor's row from the anchor outwards. Page top: from the
+  first visible row down; page bottom: from the last visible row up. A tile waiting for
+  its turn stays exactly where it was (`fill: backwards`). The wave over the photos
+  visible before or after fits into `STAGGER_MAX_MS`. Off with `prefers-reduced-motion`.
+- Tiles mounted by a relayout appear in place at once (no fade): widening brings in
+  many photos that were not rendered, and fading them from 0 flashed the screen white.
+  Photos arriving with the stream still fade in.
   The worker writes the relayout and `meta.anchor` (the anchor's new `y`, `h`) in one
   transaction. The window query sees a new `meta.rev` with that anchor, takes the
   window around the new position and returns `scrollTo`; the gallery applies height
@@ -88,6 +103,24 @@ Gallery.svelte     renders the window: absolutely positioned tiles, keyed by gui
 |---|---|
 | `sync-start`, `sync-done` | — |
 | `create`, `update`, `delete` | `item` |
+
+## Conventions (Svelte 5 / Kit 2)
+
+Checked against the Svelte docs (Svelte MCP `get-documentation`: best practices).
+
+- `$app/state`, not `$app/stores`; no `svelte/store` — component state with runes,
+  external data via `LiveQuery` (`lib/stores/internal/liveQuery.ts`, a Dexie
+  `liveQuery` on `createSubscriber`; create it in `$derived` when it depends on state).
+  `LiveQuery` is not re-exported from `$lib/stores` (workers import that module).
+- `$derived` for anything computed; `$effect` only for real integrations (worker
+  messages, the window subscription with its per-frame scheduling and scroll
+  correction, `document.body` style).
+- `{@attach}` instead of actions / `onMount` + `bind:this` for element listeners.
+- `class={[...]}` / `class={{...}}` instead of `class:`; `style:` for single styles.
+- No side effects in `load` (it runs on the server and on every navigation): the sync
+  starts in `onMount` of the root layout.
+- Code that runs at module initialisation must never throw (Safari takes the whole app
+  down, see findings).
 
 ## Rules learned the hard way
 

@@ -1,12 +1,19 @@
 <script lang="ts">
+    import "../app.css";
     import Gallery from "$lib/gallery/Gallery.svelte";
-    import {currentIndex, currentItem, type LayoutItem} from "$lib/stores";
+    import type {LayoutItem} from "$lib/stores";
+    import {loadFromServer} from "$lib/workers";
     import {goto} from "$app/navigation";
-    import {page} from "$app/stores";
+    import {page} from "$app/state";
+    import {onMount} from "svelte";
 
     let {children} = $props();
 
-    let viewingItem = $derived($page.params.index != null);
+    let viewingItem = $derived(page.params.index != null);
+
+    // Start the sync once, in the browser. Not in a load function: load must stay free
+    // of side effects (it also runs on the server and on every navigation).
+    onMount(loadFromServer);
 
     $effect(() => {
         document.body.style.overflow = viewingItem ? 'hidden' : '';
@@ -15,19 +22,14 @@
         };
     });
 
-    function selectItem(item: LayoutItem) {
-        $currentIndex = item.order;
-        $currentItem = item;
-    }
-
     function openItem(item: LayoutItem) {
         goto("/" + item.order, {noScroll: true});
     }
 </script>
 
-<main class:viewing={viewingItem}>
+<main class={{viewing: viewingItem}}>
     <!-- Stays mounted under / and /[index] so gallery doesn't remount -->
-    <Gallery selectItem={selectItem} openItem={openItem}/>
+    <Gallery {openItem}/>
     {@render children()}
 </main>
 

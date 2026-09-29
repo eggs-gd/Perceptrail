@@ -1,24 +1,28 @@
 <script lang="ts">
     import {fade} from 'svelte/transition';
     import {tick, untrack} from 'svelte';
+    import {MediaQuery} from 'svelte/reactivity';
     import ItemView from "./components/ItemView.svelte";
     import type {LayoutItem} from "$lib/stores";
-    import {rowHeight, screenWidth} from "$lib/stores";
     import {updateLayout} from "$lib/workers";
     import type {LayoutSize} from "$lib/stores";
     import {type AnchorState, findAnchor, watchSize, watchWindow, type WindowSnapshot} from "./layoutWindow";
 
     interface Props {
         gutter?: number;
-        selectItem: (item: LayoutItem) => void,
+        /** Target row height, px */
+        rowHeight?: number;
         openItem: (item: LayoutItem) => void,
     }
 
     let {
         gutter = 8,
-        selectItem,
+        rowHeight = 220,
         openItem
     }: Props = $props();
+
+    /** Width available to the gallery (bound to the container) */
+    let screenWidth = $state(0);
 
     let containerEl: HTMLDivElement | undefined = $state();
     let scrollY = $state(0);
@@ -44,29 +48,36 @@
     // would walk the view (while a relayout is on its way the screen shows the old
     // layout; after a reflow the top-left photo is often an earlier one).
     $effect(() => {
-        const width = $screenWidth;
-        const targetRowHeight = $rowHeight;
+        const width = screenWidth;
+        const targetRowHeight = rowHeight;
         if (!width) return;
         untrack(() => {
             if (!anchorState.pending) {
-                if (containerEl) containerTop = containerEl.getBoundingClientRect().top + window.scrollY;
-                anchorState.pending = findAnchor(images, window.scrollY - containerTop);
+                // The parent, not the container: the container itself may be mid-animation
+                if (containerEl?.parentElement) {
+                    containerTop = containerEl.parentElement.getBoundingClientRect().top + window.scrollY;
+                }
+                const atTop = window.scrollY - containerTop <= 1;
+                const atBottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+                anchorState.pending = findAnchor(
+                    images,
+                    {top: window.scrollY - containerTop, height: window.innerHeight, width},
+                    atTop ? 'top' : atBottom ? 'bottom' : null,
+                );
             }
             updateLayout(width, targetRowHeight, anchorState.pending?.guid);
         });
     });
 
     // A scroll that is not ours (anchor correction) is the user's: drop the anchor,
-    // the next resize keeps whatever is at the top then
+    // the next resize anchors whatever is on screen then
     let programmaticScrollY: number | undefined;
-    $effect(() => {
-        const y = scrollY;
-        untrack(() => {
-            if (programmaticScrollY !== undefined && Math.abs(y - programmaticScrollY) <= 2) return;
-            programmaticScrollY = undefined;
-            anchorState.pending = undefined;
-        });
-    });
+
+    function onScroll() {
+        if (programmaticScrollY !== undefined && Math.abs(window.scrollY - programmaticScrollY) <= 2) return;
+        programmaticScrollY = undefined;
+        anchorState.pending = undefined;
+    }
 
     $effect(() => {
         const sub = watchWindow(range, anchorState).subscribe({
@@ -103,6 +114,14 @@
         scheduled = false;
         const snapshot = latestWindow;
         const meta = snapshot?.meta;
+        const relayout = meta !== undefined && meta.rev !== lastRev;
+        // Tiles mounted by a relayout appear in place at once: fading them in from 0
+        // left the screen nearly white when widening (the shorter layout brings in many
+        // photos that were not rendered). New photos from the stream still fade in.
+        fadeMs = relayout ? 0 : FADE_MS;
+
+        // FLIP "first": where every tile is right now, mid-animation included
+        const first = measureTiles();
         if (snapshot) images = snapshot.items;
 
         // Height: the size record grows with the stream; right after a relayout the
@@ -111,67 +130,173 @@
             ? latestSize.height
             : meta?.height ?? 0;
 
+        // New positions and height in the DOM before scrolling (the browser clamps
+        // scrollTo to the current document height) and before animating
+        await tick();
+
+        let delta = 0;
         if (snapshot?.scrollTo !== undefined && meta && meta.rev !== anchorState.appliedRev) {
             anchorState.appliedRev = meta.rev;
-            // Scroll only after the new height is in the DOM: the browser clamps
-            // scrollTo to the current document height (a narrower window = taller page)
-            await tick();
-            programmaticScrollY = containerTop + snapshot.scrollTo;
+            const before = window.scrollY;
+            programmaticScrollY = snapshot.toEnd
+                ? document.documentElement.scrollHeight - window.innerHeight
+                : containerTop + snapshot.scrollTo;
             window.scrollTo({top: programmaticScrollY, behavior: 'instant'});
+            delta = window.scrollY - before;
         }
+        if (meta) lastRev = meta.rev;
+
+        animateTiles(first, delta, relayout ? waveOrigin() : undefined);
     }
 
-    // Wave on relayout: tiles that stay in their row only rescale right away;
-    // tiles that move to another row start one after another (visible ones only).
-    // The cap keeps a window-edge drag responsive: a new layout arrives every ~33ms
-    // and restarts pending delays, so they must stay short.
+    // Tiles move to their new place with these durations (Web Animations, FLIP)
+    const MOVE_MS = 500;
+    const SIZE_MS = 200;
+    // Wave: the anchor starts first, the others one after another outwards. The whole
+    // wave over the visible photos fits into STAGGER_MAX_MS (a window-edge drag sends a
+    // relayout every ~33 ms, so it must stay short); STAGGER_STEP_MS is the step limit
+    // when only a few photos are visible.
     const STAGGER_STEP_MS = 60;
     const STAGGER_MAX_MS = 500;
 
-    // Row of each tile in the previous layout (plain variable: bookkeeping, not state)
-    let prevRows = new Map<string, number>();
+    const reducedMotion = new MediaQuery('prefers-reduced-motion: reduce');
+    let lastRev = -1;
+    const FADE_MS = 300;
+    let fadeMs = $state(FADE_MS);
 
-    let delays = $derived.by(() => {
-        const result = new Map<string, number>();
-        // One layout read per new layout (not per tile, not per scroll)
-        const top = containerEl?.getBoundingClientRect().top ?? 0;
-        const viewportHeight = typeof window === 'undefined' ? 0 : window.innerHeight;
+    interface Box { x: number, y: number, w: number, h: number }
 
-        let k = 0;
-        for (const itm of images) {
-            const prevRow = prevRows.get(itm.guid);
-            const visible = top + itm.y + itm.h > 0 && top + itm.y < viewportHeight;
-            if (prevRow !== undefined && prevRow !== itm.row && visible) {
-                result.set(itm.guid, Math.min(k * STAGGER_STEP_MS, STAGGER_MAX_MS));
-                k++;
-            }
+    /** Our running move/size animations per tile (not Svelte's fade-in) */
+    const moves = new WeakMap<Element, Animation[]>();
+
+    /** Current visual box of every rendered tile, mid-animation included */
+    function measureTiles(): Map<string, Box> {
+        const boxes = new Map<string, Box>();
+        if (!containerEl || reducedMotion.current) return boxes;
+        for (const el of containerEl.querySelectorAll<HTMLElement>('[data-guid]')) {
+            const style = getComputedStyle(el);
+            const m = new DOMMatrix(style.transform);
+            boxes.set(el.dataset.guid!, {x: m.m41, y: m.m42, w: parseFloat(style.width), h: parseFloat(style.height)});
+        }
+        return boxes;
+    }
+
+    /** Where the relayout wave starts: a row, and a point in it (x) */
+    interface WaveOrigin { row: number, x: number }
+
+    /**
+     * Pinned photo mid-page: its row, from the photo outwards. Page top: the first
+     * visible row, page bottom: the last visible row — both from the left edge.
+     */
+    function waveOrigin(): WaveOrigin | undefined {
+        const a = anchorState.pending;
+        if (a?.guid) {
+            const pinned = images.find((i) => i.guid === a.guid);
+            if (pinned) return {row: pinned.row, x: pinned.x + pinned.w / 2};
+        }
+        const top = window.scrollY - containerTop;
+        const visible = images.filter((i) => i.y + i.h > top && i.y < top + window.innerHeight);
+        if (visible.length === 0) return undefined;
+        const rows = visible.map((i) => i.row);
+        return {row: a?.mode === 'bottom' ? Math.max(...rows) : Math.min(...rows), x: 0};
+    }
+
+    /**
+     * The wave goes by rows: rows at the same distance above and below the origin start
+     * together, and within a row photos go left to right (in the origin row: from the
+     * origin outwards). Reverse photo order — right to left, bottom to top — looked
+     * unnatural going up. Returns delays for the photos visible before or after the
+     * relayout, the whole wave fitting into STAGGER_MAX_MS.
+     */
+    function waveDelays(origin: WaveOrigin, first: Map<string, Box>, delta: number): Map<string, number> {
+        const top = window.scrollY - containerTop;
+        const bottom = top + window.innerHeight;
+        const involved = images.filter((i) => {
+            const from = first.get(i.guid);
+            const seenNow = i.y + i.h > top && i.y < bottom;
+            const seenBefore = from !== undefined && from.y + delta + from.h > top && from.y + delta < bottom;
+            return seenNow || seenBefore;
+        });
+
+        const rows = new Map<number, LayoutItem[]>();
+        for (const i of involved) (rows.get(i.row) ?? rows.set(i.row, []).get(i.row)!).push(i);
+
+        // Position in the wave: whole rows by distance + the photo's place in its row
+        const position = new Map<string, number>();
+        let last = 0;
+        for (const [row, items] of rows) {
+            const distance = Math.abs(row - origin.row);
+            const ordered = distance === 0
+                ? [...items].sort((a, b) => Math.abs(a.x + a.w / 2 - origin.x) - Math.abs(b.x + b.w / 2 - origin.x))
+                : [...items].sort((a, b) => a.x - b.x);
+            ordered.forEach((itm, k) => {
+                const p = distance + k / ordered.length;
+                position.set(itm.guid, p);
+                last = Math.max(last, p);
+            });
         }
 
-        prevRows = new Map(images.map((itm) => [itm.guid, itm.row]));
-        return result;
-    });
+        const avgRow = involved.length / Math.max(1, rows.size);
+        const rowMs = Math.min(STAGGER_STEP_MS * avgRow, STAGGER_MAX_MS / Math.max(1, last));
+        const delays = new Map<string, number>();
+        for (const [guid, p] of position) delays.set(guid, Math.min(p * rowMs, STAGGER_MAX_MS));
+        return delays;
+    }
+
+    /**
+     * FLIP per tile: from where it is on screen now to its new place. `delta` is the
+     * scroll correction just applied — the start is shifted by it so nothing jumps on
+     * screen. A tile waiting for its turn in the wave stays exactly where it was
+     * (fill: backwards). New tiles have no start and just fade in.
+     */
+    function animateTiles(first: Map<string, Box>, delta: number, origin: WaveOrigin | undefined) {
+        if (!containerEl || first.size === 0) return;
+        const byGuid = new Map(images.map((i) => [i.guid, i]));
+        const delays = origin ? waveDelays(origin, first, delta) : undefined;
+
+        for (const el of containerEl.querySelectorAll<HTMLElement>('[data-guid]')) {
+            const from = first.get(el.dataset.guid!);
+            const to = byGuid.get(el.dataset.guid!);
+            if (!from || !to) continue;
+            const fromY = from.y + delta;
+            if (Math.abs(from.x - to.x) < 0.5 && Math.abs(fromY - to.y) < 0.5
+                && Math.abs(from.w - to.w) < 0.5 && Math.abs(from.h - to.h) < 0.5) continue;
+
+            moves.get(el)?.forEach((a) => a.cancel());
+            const delay = delays?.get(to.guid) ?? 0;
+            moves.set(el, [
+                el.animate(
+                    [{transform: `translate(${from.x}px, ${fromY}px)`}, {transform: `translate(${to.x}px, ${to.y}px)`}],
+                    {duration: MOVE_MS, delay, easing: 'ease', fill: 'backwards'},
+                ),
+                el.animate(
+                    [{width: `${from.w}px`, height: `${from.h}px`}, {width: `${to.w}px`, height: `${to.h}px`}],
+                    {duration: SIZE_MS, delay, easing: 'ease', fill: 'backwards'},
+                ),
+            ]);
+        }
+    }
 
     // Positions come from the layout worker. Tiles are absolutely positioned and
     // keyed by guid, so on relayout (resize) the same DOM node moves to its new
-    // place — also into another row — through the CSS transition below.
-    function tileStyle(itm: LayoutItem, delay: number) {
-        return `transform: translate(${itm.x}px, ${itm.y}px); width: ${itm.w}px; height: ${itm.h}px;`
-            + (delay ? ` transition-delay: ${delay}ms;` : '');
+    // place — also into another row — animated by animateTiles().
+    function tileStyle(itm: LayoutItem) {
+        return `transform: translate(${itm.x}px, ${itm.y}px); width: ${itm.w}px; height: ${itm.h}px;`;
     }
 
 </script>
 
-<svelte:window bind:scrollY bind:innerHeight/>
+<svelte:window bind:scrollY bind:innerHeight onscroll={onScroll}/>
 
-<div class="masonry" bind:clientWidth={$screenWidth}>
-    <div class="container" bind:this={containerEl} style="height: {height}px" class:hidden={!$screenWidth}>
+<div class="masonry" bind:clientWidth={screenWidth}>
+    <div class={['container', !screenWidth && 'hidden']} bind:this={containerEl} style:height="{height}px">
         {#each images as itm (itm.guid)}
             <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
             <div class="image"
-                 in:fade={{ duration: 300 }}
-                 style={tileStyle(itm, delays.get(itm.guid) ?? 0)}
+                 data-guid={itm.guid}
+                 in:fade={{ duration: fadeMs }}
+                 style={tileStyle(itm)}
                  onclick={() => {
-                     selectItem(itm);
                      openItem(itm);
                  }}>
                 <ItemView item={itm} index={itm.order}/>
@@ -198,16 +323,6 @@
         left: 0;
         box-sizing: border-box;
         border: 1px solid green;
-        transition:
-            transform 500ms ease,
-            width 200ms ease,
-            height 200ms ease;
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-        .image {
-            transition: none;
-        }
     }
 
     .image > :global(*) {
