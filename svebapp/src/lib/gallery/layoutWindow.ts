@@ -9,12 +9,25 @@ import {
 } from "$lib/stores";
 
 /**
- * The item kept in view across relayouts. `ratio` = (viewport top − item top) / item
- * height: relative, so several relayouts in a row do not accumulate pixel error.
+ * What stays pinned on screen across relayouts (resize):
+ * - top:    at the very top of the page — the first photo stays at the top;
+ * - bottom: at the very bottom — the end of the gallery stays at the bottom;
+ * - center: anywhere else — the photo in the middle of the screen stays there.
  */
+export type AnchorMode = 'top' | 'center' | 'bottom';
+
+/** Where on the screen the anchor is pinned: fraction of the viewport height */
+const PIN_POINT: Record<AnchorMode, number> = {top: 0, center: 0.5, bottom: 1};
+
 export interface Anchor {
-    guid: string;
-    ratio: number;
+    mode: AnchorMode;
+    /** Pinned item (top/center); bottom pins the end of the gallery instead */
+    guid?: string;
+    /**
+     * (pin point − item top) / item height: relative, so several relayouts in a row
+     * do not accumulate pixel error
+     */
+    ratio?: number;
 }
 
 /** Shared between the page (writes) and the querier (reads at run time) */
@@ -40,6 +53,8 @@ export interface WindowSnapshot {
     items: LayoutItem[];
     /** Set once per relayout of the pending anchor: scroll here (gallery coordinates) */
     scrollTo?: number;
+    /** Bottom anchor: scroll to the real end of the document (includes page padding) */
+    toEnd?: boolean;
 }
 
 /**
@@ -57,14 +72,22 @@ export function watchWindow(range: WindowRange, anchor: AnchorState) {
         let {top, bottom} = range;
         let scrollTo: number | undefined;
         const a = anchor.pending;
-        if (meta?.anchor && a && meta.rev !== anchor.appliedRev && meta.anchor.guid === a.guid) {
-            scrollTo = Math.max(0, meta.anchor.y + a.ratio * meta.anchor.h);
+        // top: the page stays at 0 — no correction needed at all
+        if (meta && a && a.mode !== 'top' && meta.rev !== anchor.appliedRev) {
+            if (a.mode === 'bottom') {
+                scrollTo = Math.max(0, meta.height - range.viewport);
+            } else if (meta.anchor && meta.anchor.guid === a.guid) {
+                const pinned = meta.anchor.y + a.ratio! * meta.anchor.h;
+                scrollTo = Math.max(0, pinned - PIN_POINT[a.mode] * range.viewport);
+            }
+        }
+        if (scrollTo !== undefined) {
             top = scrollTo - range.viewport;
             bottom = scrollTo + 2 * range.viewport;
         }
 
         const items = await itemsInRange(top, bottom);
-        return {meta, items, scrollTo};
+        return {meta, items, scrollTo, toEnd: a?.mode === 'bottom' && scrollTo !== undefined};
     }));
 }
 
@@ -91,8 +114,32 @@ export function watchSize() {
     return liveQuery(() => layoutDb.meta.get(LAYOUT_SIZE_KEY) as Promise<LayoutSize | undefined>);
 }
 
-/** First item whose bottom is below the viewport top (items sorted by order) */
-export function findAnchor(items: LayoutItem[], viewportTop: number): Anchor | undefined {
-    const itm = items.find((i) => i.y + i.h > viewportTop);
-    return itm && {guid: itm.guid, ratio: Math.max(0, viewportTop - itm.y) / itm.h};
+export interface View {
+    /** Viewport top in gallery coordinates */
+    top: number;
+    height: number;
+    width: number;
+}
+
+/**
+ * The anchor for a relayout: its mode depends on where the page is scrolled (the
+ * edges pin the edge, the middle pins the photo in the middle of the screen).
+ */
+export function findAnchor(items: LayoutItem[], view: View, edge: 'top' | 'bottom' | null): Anchor | undefined {
+    // Edges pin the edge of the page itself, no item needed
+    if (edge) return {mode: edge};
+    const mode: AnchorMode = 'center';
+    const point = view.top + PIN_POINT[mode] * view.height;
+
+    // The row at the pin point (or the next one, if the point falls into a gap)
+    const below = items.filter((i) => i.bottom > point);
+    if (below.length === 0) return undefined;
+    const rowY = Math.min(...below.map((i) => i.y));
+    const row = below.filter((i) => i.y === rowY);
+
+    // The photo under the middle of the screen
+    const x = view.width / 2;
+    const distance = (i: LayoutItem) => x < i.x ? i.x - x : x > i.x + i.w ? x - (i.x + i.w) : 0;
+    const itm = row.reduce((best, i) => distance(i) < distance(best) ? i : best);
+    return {mode, guid: itm.guid, ratio: (point - itm.y) / itm.h};
 }

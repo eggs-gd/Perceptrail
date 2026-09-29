@@ -131,6 +131,18 @@ messages are gone. Details: [svebapp README](../../svebapp/README.md#visible-win
   - Not a bug: with the mock's repeating aspect ratios a 1008 px layout is taller per
     photo than a 700 px one (rows of 3 stretched to the full width), so the page gets
     shorter when narrowed mid-stream.
+- **Resize inside the gallery looked chaotic (2026-09-29):** correct end state, but tiles
+  animated in page coordinates while the anchor correction scrolled at once — on
+  screen everything jumped by Δ and flew back, from above and below. Fix: FLIP on the
+  container (shift by Δ, animate to 0 with the tiles). Measured: the pin point stayed
+  at exactly 384 px (screen centre) in all 60 samples during the animation while the
+  scroll jumped 60 000 → 83 924. Product decision: the anchor is hybrid — page top
+  pins the top, page bottom pins the end, otherwise the photo in the screen centre.
+- **Considered, not done:** window/size subscriptions as `LiveQuery` in `$derived`.
+  A new query per window step starts empty → tiles would disappear for a moment on
+  every step unless the previous value is kept; and the per-frame application plus
+  the scroll correction are side effects anyway. The subscriptions stay in `$effect`
+  as the integration boundary.
 - **Test environment:** the agent's browser pane often does not paint; then
   `requestAnimationFrame` runs at 0–1 fps and `ResizeObserver`/scroll events are not
   delivered. Mid-stream resize was verified by calling `updateLayout` directly

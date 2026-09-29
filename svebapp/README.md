@@ -67,10 +67,18 @@ Gallery.svelte     renders the window: absolutely positioned tiles, keyed by gui
 - Tiles keep `loading="lazy"`: the gallery still loads **originals**, and lazy
   loading limits how many are decoded at once (without it blank tiles get more
   frequent). `overflow-anchor: none` — we anchor the view ourselves.
-- On a width change the gallery takes the first visible item as the **anchor**
-  (`guid`, offset from the viewport top as a fraction of its height) and sends it with
-  `updateLayout`. The anchor is kept across all following resizes until the user
-  scrolls (re-taking it per resize walks the view).
+- On a width change the gallery takes an **anchor** — what stays pinned on screen:
+  at the very top of the page the page stays at the top; at the very bottom the end
+  of the gallery stays at the bottom; anywhere else the photo under the middle of the
+  screen stays there (`guid` + offset as a fraction of its height). It is sent with
+  `updateLayout` and kept across all following resizes until the user scrolls
+  (a scroll that is not our own correction, detected in `onscroll`).
+- **FLIP for the scroll correction:** tiles animate in page coordinates, while the
+  correction scrolls the page by Δ at once — on screen everything would jump by Δ and
+  fly back. The container is shifted by Δ in the same frame and that shift is
+  animated to 0 with the tiles' duration (`MOVE_MS`, Web Animations), so the pinned
+  photo stays still during the whole animation. A new correction mid-animation starts
+  from the current shift. Off with `prefers-reduced-motion`.
   The worker writes the relayout and `meta.anchor` (the anchor's new `y`, `h`) in one
   transaction. The window query sees a new `meta.rev` with that anchor, takes the
   window around the new position and returns `scrollTo`; the gallery applies height

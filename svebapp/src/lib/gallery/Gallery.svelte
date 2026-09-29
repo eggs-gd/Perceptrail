@@ -1,6 +1,7 @@
 <script lang="ts">
     import {fade} from 'svelte/transition';
     import {tick, untrack} from 'svelte';
+    import {MediaQuery} from 'svelte/reactivity';
     import ItemView from "./components/ItemView.svelte";
     import type {LayoutItem} from "$lib/stores";
     import {updateLayout} from "$lib/workers";
@@ -52,24 +53,31 @@
         if (!width) return;
         untrack(() => {
             if (!anchorState.pending) {
-                if (containerEl) containerTop = containerEl.getBoundingClientRect().top + window.scrollY;
-                anchorState.pending = findAnchor(images, window.scrollY - containerTop);
+                // The parent, not the container: the container itself may be mid-animation
+                if (containerEl?.parentElement) {
+                    containerTop = containerEl.parentElement.getBoundingClientRect().top + window.scrollY;
+                }
+                const atTop = window.scrollY - containerTop <= 1;
+                const atBottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+                anchorState.pending = findAnchor(
+                    images,
+                    {top: window.scrollY - containerTop, height: window.innerHeight, width},
+                    atTop ? 'top' : atBottom ? 'bottom' : null,
+                );
             }
             updateLayout(width, targetRowHeight, anchorState.pending?.guid);
         });
     });
 
     // A scroll that is not ours (anchor correction) is the user's: drop the anchor,
-    // the next resize keeps whatever is at the top then
+    // the next resize anchors whatever is on screen then
     let programmaticScrollY: number | undefined;
-    $effect(() => {
-        const y = scrollY;
-        untrack(() => {
-            if (programmaticScrollY !== undefined && Math.abs(y - programmaticScrollY) <= 2) return;
-            programmaticScrollY = undefined;
-            anchorState.pending = undefined;
-        });
-    });
+
+    function onScroll() {
+        if (programmaticScrollY !== undefined && Math.abs(window.scrollY - programmaticScrollY) <= 2) return;
+        programmaticScrollY = undefined;
+        anchorState.pending = undefined;
+    }
 
     $effect(() => {
         const sub = watchWindow(range, anchorState).subscribe({
@@ -119,9 +127,38 @@
             // Scroll only after the new height is in the DOM: the browser clamps
             // scrollTo to the current document height (a narrower window = taller page)
             await tick();
-            programmaticScrollY = containerTop + snapshot.scrollTo;
+            const before = window.scrollY;
+            programmaticScrollY = snapshot.toEnd
+                ? document.documentElement.scrollHeight - window.innerHeight
+                : containerTop + snapshot.scrollTo;
             window.scrollTo({top: programmaticScrollY, behavior: 'instant'});
+            compensateScroll(window.scrollY - before);
         }
+    }
+
+    // Tiles move to their new place with this duration (CSS below uses --move-ms)
+    const MOVE_MS = 500;
+    const reducedMotion = new MediaQuery('prefers-reduced-motion: reduce');
+    let shift: Animation | undefined;
+
+    /**
+     * FLIP for the scroll correction. Tiles animate in page coordinates while the anchor
+     * correction scrolls the page by `delta` at once — on screen everything would jump
+     * by delta and fly back. Shifting the container by the same delta and animating that
+     * shift to 0 alongside the tiles keeps the pinned photo still for the whole
+     * animation; everything else moves relative to it. A new correction mid-animation
+     * starts from the current shift, so a window-edge drag stays continuous.
+     */
+    function compensateScroll(delta: number) {
+        if (!delta || !containerEl || reducedMotion.current) return;
+        const current = shift && shift.playState !== 'finished'
+            ? new DOMMatrix(getComputedStyle(containerEl).transform).m42
+            : 0;
+        shift?.cancel();
+        shift = containerEl.animate(
+            [{transform: `translateY(${current + delta}px)`}, {transform: 'translateY(0)'}],
+            {duration: MOVE_MS, easing: 'ease'},
+        );
     }
 
     // Wave on relayout: tiles that stay in their row only rescale right away;
@@ -164,10 +201,10 @@
 
 </script>
 
-<svelte:window bind:scrollY bind:innerHeight/>
+<svelte:window bind:scrollY bind:innerHeight onscroll={onScroll}/>
 
 <div class="masonry" bind:clientWidth={screenWidth}>
-    <div class={['container', !screenWidth && 'hidden']} bind:this={containerEl} style:height="{height}px">
+    <div class={['container', !screenWidth && 'hidden']} bind:this={containerEl} style:height="{height}px" style:--move-ms="{MOVE_MS}ms">
         {#each images as itm (itm.guid)}
             <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
             <div class="image"
@@ -201,7 +238,7 @@
         box-sizing: border-box;
         border: 1px solid green;
         transition:
-            transform 500ms ease,
+            transform var(--move-ms) ease,
             width 200ms ease,
             height 200ms ease;
     }
