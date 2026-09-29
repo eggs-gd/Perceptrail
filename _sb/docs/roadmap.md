@@ -52,7 +52,35 @@ Target architecture — the diagrams in [`../puml`](../puml).
 
 ## Next
 
-One PR per feature (its steps are commits). Order: dates D1–D3.
+One PR per feature (its steps are commits). Order: import chain C1–C7 (finishes
+the validator feature, PR #13), then dates D1–D3.
+
+### Import chain: one small step per node
+
+Graph: [`Import chain.puml`](../puml/Import%20chain.puml); gate and validator
+details: [`Walker.puml`](../puml/Walker.puml). Today `fswalker` does everything
+(walk, MIME, grouping, files table, change detection, deletions) and the validator
+hides inside the exif step, so groups and MIME are decided before EXIF is known.
+
+- [ ] **C1. fswalker = spam.** Every file found (path + stat), nothing else; walk
+      safety from V1 stays.
+- [ ] **C2. Groups: a switch by source.** `generic` = sidecars by name next to each
+      other (buffered per directory); Apple Photos and others are branches added
+      later (the Photos milestone). The end-of-walk marker is broadcast to every
+      branch; all branches write to one channel.
+- [ ] **C3. Files gate.** The files table: new / changed (size, mtime) / item not
+      Ready → pass, otherwise drop (no exiftool for unchanged files); `CheckTime`;
+      deletions (V2) after the marker from every branch.
+- [ ] **C4. exif** for the whole group (today's extractor without the validator).
+- [ ] **C5. mime.** Kind of every file: exif `FileType`/`MIMEType` → own extension
+      table (`MediaKind`: image/raw/video/animated/sidecar) → content sniff; rank the
+      group: main file (the photo in a Live Photo, deterministic RAW+JPEG, pairs by
+      `ContentIdentifier`). No system `mime` tables (Docker).
+- [ ] **C6. validator** as its own step (V3): same / changed / moved / duplicate; a
+      moved item whose outputs for the GUID are complete → `Ready`, no transcode.
+- [ ] **C7. transcode switch** by kind (photo / video / Live Photo; pass-through until
+      thumbnails exist), then plugins (after transcode: the client gets items with
+      thumbnails), closer → `Ready`. Tests reworked per step.
 
 ### Dates and time zones
 
@@ -123,11 +151,8 @@ reference); reading needs Full Disk Access for the process (TCC).
 
 ## Core — product (gontroller)
 
-- [ ] Own media-type table (`MediaKind`: image/raw/video/animated/sidecar) instead of
-      system `mime` (a minimal Docker image loses `.mov/.heic/RAW`); an explicit role
-      of each file in the group.
-- [ ] Main file of a group: the photo in a Live Photo, deterministic for RAW+JPEG;
-      Live Photo pairs by `ContentIdentifier`; one main item merged from all sidecars
+- Own media-type table and the main file of a group → **C5** (import chain).
+- [ ] One main item merged from all sidecars
       ([`Item flow.puml`](../puml/Item%20flow.puml)).
 - [ ] Embedded RAW preview (`PreviewImage`/`JpgFromRaw`) for the transcoder.
 

@@ -1,0 +1,101 @@
+@startuml Import chain
+
+!pragma teoz true
+
+title Import chain (gontroller): every participant is a chain step (own goroutine), every arrow is a channel
+
+control "fswalker\n(entry point)" as Walker
+
+box "groups (switch by source)" #LightCyan
+control "switch" as Groups
+control "generic" as Generic
+control "Apple Photos" as Photos
+end box
+
+control "files gate" as Gate #LightGreen
+database "DB" as DB
+control "exif\n(N workers)" as Exif
+control "mime" as Mime
+control "validator" as Validator #LightGreen
+
+box "transcode (switch by kind)" #LightYellow
+control "switch" as Transcode
+control "photo" as TPhoto
+control "video" as TVideo
+control "Live Photo" as TLive
+end box
+
+control "plugins\n(core, then external)" as Plugins
+control "closer" as Closer
+
+== files flow in; groups flow out one by one, steps run concurrently ==
+
+loop every file under the root
+    Walker -> Groups: file (path, stat)
+    note left of Walker
+    Unreadable directory:
+    skipped, recorded (V1)
+    end note
+end
+
+alt plain folder
+    Groups -> Generic: file
+    Generic -> Generic: sidecars by name\n(buffered per directory)
+    Generic -> Gate: group
+else inside *.photoslibrary
+    Groups -> Photos: file
+    Photos -> Photos: Photos.sqlite: assets\n(original, render, Live Photo video)\ncaches ignored
+    Photos -> Gate: group (asset UUID)
+else other formats (Takeout, ...)
+    Groups ->x Groups: later
+end
+
+Gate -> DB: stat vs files table,\nCheckTime of every file
+alt unchanged and the item is Ready
+    Gate ->x Gate: drop
+else new / changed / not Ready
+    Gate -> Exif: group
+end
+
+Exif -> Mime: group + exif
+Mime -> Mime: kind of every file\n(exif FileType/MIMEType, own extension table,\ncontent sniff), rank: main file
+Mime -> Validator: ranked group
+
+Validator -> DB: hash of the main file:\nsame / changed / moved / duplicate
+alt moved and outputs for the GUID complete
+    Validator -> DB: Ready
+    Validator ->x Validator: done, no transcode
+else
+    Validator -> Transcode: item (GUID)
+end
+
+alt photo
+    Transcode -> TPhoto: item
+    TPhoto -> Plugins: item + thumbnails
+else video
+    Transcode -> TVideo: item
+    TVideo -> Plugins: item + poster, preview
+else Live Photo
+    Transcode -> TLive: item
+    TLive -> Plugins: item + thumbnails, motion
+end
+
+Plugins -> Closer: item + metadata
+Closer -> DB: item Ready
+note right of Closer
+The client gets the item
+with its thumbnails: later,
+but it renders at once
+end note
+
+== end of walk ==
+
+Walker -> Groups: marker (walk result)
+Groups -> Generic: marker
+& Groups -> Photos: marker
+note right of Groups: broadcast to every branch
+Generic -> Gate: last groups, marker
+Photos -> Gate: last groups, marker
+Gate -> DB: after the marker from every branch:\ndeletions (V2), only after a complete walk,\nnot under unreadable directories
+
+@enduml
