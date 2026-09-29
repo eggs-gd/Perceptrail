@@ -268,6 +268,30 @@ compose with `derived`. The current message protocol is a deviation from this de
 
 ### Data and import
 
+### Validator per `Walker.puml` (2026-09-29)
+
+- **Walk safety first.** One unreadable directory aborted the whole walk (the
+  `WalkDir` callback returned the error). Now it is skipped and recorded; its files
+  are never taken as deleted. Deletions run only after a complete walk that found
+  files: a cancel, a missing root or an empty mount point would otherwise delete the
+  library. Real case: without Full Disk Access the Photos library is unreadable.
+- **Finalization runs in `Decorate` on the end-of-walk marker**, after the last group
+  is stored — `Start` (walk) and `Decorate` (DB writes) are different goroutines. It
+  was in `Stop()`, called by both goroutines and on cancel.
+- **Moves race with deletions.** Validation happens downstream (exiftool workers,
+  channels), so finalization may delete the vanished path's item before the moved
+  file is validated. Fix: move detection also looks at soft-deleted items with the
+  same hash whose path is gone, and restores them (as `Dirty`). Order-independent,
+  and a file that comes back later gets its old GUID.
+- **States are alive:** the closer sets `Ready`; the walker re-emits unchanged groups
+  whose item is not `Ready`. The first run after this change reprocesses everything
+  once (all items were `New`).
+- CheckTime is compared in Go: the driver stores times as text with the local
+  offset, which changes across DST — a SQL string comparison is not reliable.
+- Tests without exiftool: the file content stands in for metadata
+  (`pkg/scan/validator_test.go`), one sqlite per package (`TestMain`).
+
+
 - **fswalker (fixed 2026-09-29, found by Codex review):** the last group of a walk was
   never emitted (groups go out when the next group starts) — a library with a single
   group imported nothing; now an end-of-walk marker flushes it. For changed files the

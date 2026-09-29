@@ -29,6 +29,11 @@ Target architecture — the diagrams in [`../puml`](../puml).
 - Repo moved to `eggs-gd`, public; CI; git flow with rulesets; version derived from
   history with CI tags on `develop`.
 - Safari: the logger no longer breaks the app (stack format).
+- Validator per `Walker.puml` (V1–V5): walk safety (unreadable dirs skipped, no
+  deletions after an incomplete/empty walk), deleted files (items soft-deleted,
+  sidecars → `Dirty`), moves keep the GUID (also after a deletion), duplicates are new
+  items, `Dirty`/not-`Ready` items are reprocessed, closer sets `Ready`. Tests on a
+  temp library + sqlite.
 - svebapp on current Svelte 5 / Kit practices: `$app/state`, no `svelte/store`
   (component state + `LiveQuery` on `createSubscriber`), `{@attach}`, `$derived`
   instead of state writes in effects, clsx-style `class`, no side effects in `load`.
@@ -47,7 +52,7 @@ Target architecture — the diagrams in [`../puml`](../puml).
 
 ## Next
 
-Each step is one PR unless noted. Order: V1–V5, then D1–D3.
+One PR per feature (its steps are commits). Order: dates D1–D3.
 
 ### Dates and time zones
 
@@ -77,36 +82,6 @@ Time zones belong to the core (the date), not to the geo perceptor.
       Sorting/grouping the gallery by date is separate (it makes all of this visible).
 - Existing items are not re-read (unchanged files are skipped): in dev — delete
   `.var/media_library.db*` and rescan. Reprocessing on plugin change is "Later".
-
-### Validator per [`Walker.puml`](../puml/Walker.puml)
-
-Today: files are keyed by path, the item GUID = the main file's GUID. A moved file
-becomes a new item and the old one stays forever (`finalizeWalk` is a TODO);
-`Dirty` is set but nothing reads it; every item stays `New`.
-
-- [ ] **V1. Walk safety** (prerequisite for deletions). An unreadable directory skips
-      its subtree instead of aborting the whole walk; a missing/unmounted library
-      root never counts as "everything deleted"; finalization runs only after a
-      complete walk (today `Stop()` would also run it on cancel).
-- [ ] **V2. Deleted.** `finalizeWalk`: files with `CheckTime` older than the run are
-      gone. Main file gone → the item is `Deleted` (soft delete, excluded from
-      `/items`; the client resyncs fully on load, so no tombstones yet). A sidecar
-      gone → its group is re-emitted.
-- [ ] **V3. Moved.** New path, hash matches an item whose path no longer exists →
-      the file row and the item get the new path, the GUID stays (thumbnails keyed by
-      GUID survive). Same hash and the old path still exists → **duplicate**: a new
-      item (as now); reusing its thumbnails is a later optimisation.
-- [ ] **V4. Changed and states.** Same path, new hash → `Dirty` → re-run plugins,
-      later regenerate thumbnails. Define who moves `New → Processing → Ready`
-      (until the transcoder exists: the closer sets `Ready`).
-- [ ] **V5. Tests.** Walker + validator on a temp directory and a temp sqlite (now
-      possible via `model.Configure`): new, same, changed, moved, duplicate, deleted
-      main/sidecar, unreadable subdirectory, missing root. Update `Walker.puml`
-      where the code deviates (exif reading is merged into the validator step) and
-      findings.
-- Known limit: the short hash is size + non-volatile EXIF — two files without EXIF
-  and with the same byte size look identical. Acceptable for now; a full hash is an
-  option for CPU-rich setups (already noted in `ItemDto`).
 
 ### Photos library (`*.photoslibrary`) as its own source — separate milestone
 

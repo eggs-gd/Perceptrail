@@ -18,7 +18,9 @@ activate fp.Walk
 note over fp.Walk, fileCh #LightGreen
 Make group of files by name <b>[]FileEntry,
 First element is main file, others sidecars
-Sends only new/changed
+Sends new/changed groups and groups whose
+item is not Ready (new, Dirty, interrupted)
+An unreadable subdirectory is skipped and recorded
 end note
 fp.Walk -> fileCh: new group
 deactivate fp.Walk
@@ -31,6 +33,8 @@ note over fileCh, exifCh #LightCoral
 As soon as it takes list of files
 Better to merge exifreader with validator
 To be able to check whole group in a row
+<b>Code:</b> the validator runs inside the exif step
+(exifExtractor.processMeta)
 end note
 deactivate exifreader
 activate exifCh #LightCoral
@@ -50,9 +54,11 @@ else found moved
     note over validator, gorm
     same hash, different path,
     old path <b><font color=red>not exists
+    The item may be deleted already (finalize ran
+    first: the chain is async) → restored as Dirty
     end note
-    gorm <- gorm: update path
-    gorm ->x validator: <font color=red><b>nil
+    gorm <- gorm: update path, new file rows\ntake the item's GUID
+    gorm -> validator: <font color=blue><b>existing guid
 
 else don't found
     note over validator, gorm
@@ -83,5 +89,18 @@ deactivate validator
 activate decorator
 decorator -> itemCh: exif{} 
 deactivate decorator
+note over itemCh #LightGreen: closer: item <b>Ready</b> (Processing once the transcoder exists)
+
+== end of walk (after the last group is stored) ==
+
+note over fp.Walk, gorm #LightGreen
+Only after a <b>complete</b> walk with files found
+(not on cancel, missing root, empty root)
+Files with CheckTime older than this run, under the root,
+not under an unreadable directory, are gone:
+- main file gone → item <b>Deleted</b> (soft delete, hidden from /items)
+- sidecar gone → item <b>Dirty</b> (re-emitted by the next walk)
+- file rows deleted
+end note
 
 @enduml
