@@ -4,3 +4,6 @@
 # runtime data: config.yml, database, caches
 /.var
 __debug*
+# old locations, until moved to .var/
+/config.yml
+/media_library.db*
