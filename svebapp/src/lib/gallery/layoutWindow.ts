@@ -8,9 +8,6 @@ import {
     type LayoutSize,
 } from "$lib/stores";
 
-/** Items above the window whose bottom may still reach into it (taller than any row) */
-const ROW_OVERLAP = 1000;
-
 /**
  * The item kept in view across relayouts. `ratio` = (viewport top − item top) / item
  * height: relative, so several relayouts in a row do not accumulate pixel error.
@@ -66,11 +63,27 @@ export function watchWindow(range: WindowRange, anchor: AnchorState) {
             bottom = scrollTo + 2 * range.viewport;
         }
 
-        const items = await layoutDb.items
-            .where('y').between(top - ROW_OVERLAP, bottom, true, true)
-            .sortBy('order');
+        const items = await itemsInRange(top, bottom);
         return {meta, items, scrollTo};
     }));
+}
+
+/**
+ * Rows intersecting [top, bottom). Rows are stacked, so y and bottom grow with order:
+ * find the first row that reaches into the window, then take every row that starts
+ * before its end. No fixed overlap — a single row can be taller than the window
+ * (a portrait closed alone is stretched to the full width). Every range read is
+ * bounded, so streamed photos below the window do not re-run the query.
+ */
+async function itemsInRange(top: number, bottom: number): Promise<LayoutItem[]> {
+    let first = await layoutDb.items.where('bottom').between(top, bottom, false, true).first();
+    if (!first) {
+        // No row ends inside the window: maybe one row covers all of it
+        const above = await layoutDb.items.where('y').belowOrEqual(top).last();
+        if (above && above.bottom > top) first = above;
+    }
+    if (!first) return [];
+    return layoutDb.items.where('y').between(first.y, bottom, true, false).sortBy('order');
 }
 
 /** Gallery height/count; changes with every streamed batch, cheap to re-read */

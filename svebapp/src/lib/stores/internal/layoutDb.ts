@@ -14,9 +14,9 @@ export const layoutDb: Dexie & {
     items: EntityTable<LayoutItem, 'guid'>;
     meta: EntityTable<LayoutMeta | LayoutSize, 'key'>;
 };
-// v2: positions indexed by y (visible-window query) and order (viewer);
+// v3: positions indexed by y and bottom (visible-window query) and order (viewer);
 // meta holds two records: 'layout' (per relayout) and 'size' (per streamed batch)
-layoutDb.version(2).stores({
-    items: '&guid, order, y',
+layoutDb.version(3).stores({
+    items: '&guid, order, y, bottom',
     meta: '&key',
 });

@@ -1,7 +1,7 @@
 <script lang="ts">
     import ItemView from "$lib/gallery/components/ItemView.svelte";
     import {page} from '$app/stores';
-    import {currentIndex, currentItem, layoutDb} from "$lib/stores";
+    import {currentIndex, currentItem, layoutDb, type LayoutItem} from "$lib/stores";
     import {onMount} from "svelte";
     import {liveQuery} from "dexie";
 
@@ -13,7 +13,8 @@
         $currentIndex = index;
         const sub = liveQuery(() => layoutDb.items.where('order').equals(index).first())
             .subscribe((item) => {
-                if (item) $currentItem = item;
+                // undefined too: an absent /N must not keep showing the previous photo
+                $currentItem = item as LayoutItem;
             });
         return () => sub.unsubscribe();
     });

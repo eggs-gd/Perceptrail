@@ -112,6 +112,19 @@ messages are gone. Details: [svebapp README](../../svebapp/README.md#visible-win
     every time.
   - Snapshots are applied on the next animation frame **or** after 100 ms — frames
     stall in windows that are "visible" but not painting.
+  - *Blank tiles while scrolling* (the tile is there and clickable, the image appears
+    after opening the viewer): native `loading="lazy"` does not notice tiles moved by
+    `transform` inside a tall container; a layout change (the viewer hides the
+    scrollbar) makes it re-check. Removed — the gallery already renders only the
+    window.
+  - *Anchor still drifted a little:* the browser's own scroll anchoring adjusted
+    `scrollY` when content changed, which read as a user scroll and dropped our
+    anchor. `overflow-anchor: none` on the gallery.
+  - *Rows taller than the fixed 1000 px overlap* (Codex review): a portrait closed
+    alone is stretched to the full width, a row can be thousands of px tall and
+    vanished when scrolled past its top. Items now have an indexed `bottom`; the
+    window query finds the first row reaching into the window exactly (bounded
+    ranges only, so streamed photos below the window still do not re-run it).
   - Not a bug: with the mock's repeating aspect ratios a 1008 px layout is taller per
     photo than a 700 px one (rows of 3 stretched to the full width), so the page gets
     shorter when narrowed mid-stream.

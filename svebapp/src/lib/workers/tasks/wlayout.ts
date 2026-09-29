@@ -246,7 +246,7 @@ function place(item: Item, order: number, vp: UpdateLayoutPayload): LayoutItem[]
         ...item,
         order,
         row: state.rowNum,
-        scale: 1, x: 0, y: 0, w: 0, h: 0,
+        scale: 1, x: 0, y: 0, w: 0, h: 0, bottom: 0,
     };
 
     const row = state.openRow;
@@ -286,6 +286,7 @@ function closeRow(row: LayoutItem[], vp: UpdateLayoutPayload): LayoutItem[] {
         itm.w = itm.width * height / itm.height;
         itm.x = x;
         itm.y = state.y;
+        itm.bottom = itm.y + itm.h;
         itm.scale = height / itm.height;
         x += itm.w + GUTTER;
     }
@@ -306,6 +307,7 @@ function placeOpenRow(vp: UpdateLayoutPayload): LayoutItem[] {
         itm.w = naturalWidth(itm, vp.rowHeight);
         itm.x = x;
         itm.y = state.y;
+        itm.bottom = itm.y + itm.h;
         itm.row = state.rowNum;
         itm.scale = vp.rowHeight / itm.height;
         x += itm.w + GUTTER;

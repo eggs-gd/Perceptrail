@@ -35,6 +35,5 @@
         (min-width: 1200px) 1200px,
         1920px"
      width={item.width} height={item.height}
-     loading="lazy"
      decoding="async"
      alt={item.guid}/>

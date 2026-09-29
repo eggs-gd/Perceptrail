@@ -16,6 +16,8 @@ export interface LayoutItem extends Item {
     y: number;
     w: number;
     h: number;
+    /** y + h: the bottom of the item's row (indexed — finds the first row in the window) */
+    bottom: number;
 }
 
 /**

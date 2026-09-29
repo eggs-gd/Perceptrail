@@ -183,6 +183,9 @@
 <style>
     .masonry {
         max-width: 100%;
+        /* We anchor the view ourselves (resize). Browser scroll anchoring would adjust
+           scrollY on its own, which reads as a user scroll and drops our anchor. */
+        overflow-anchor: none;
     }
 
     .container {
