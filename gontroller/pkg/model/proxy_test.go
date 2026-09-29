@@ -29,3 +29,15 @@ func TestSqliteDSNEscapesPath(t *testing.T) {
 		t.Errorf("database not created at %q: %v", path, err)
 	}
 }
+
+func TestConfigureDrivers(t *testing.T) {
+	if err := Configure(DBConfig{Driver: DriverSQLite, Name: "x.db"}); err != nil {
+		t.Errorf("sqlite: %v", err)
+	}
+	if err := Configure(DBConfig{Driver: DriverPostgres}); err == nil {
+		t.Error("postgres: want a not-implemented error")
+	}
+	if err := Configure(DBConfig{Driver: "mysql"}); err == nil {
+		t.Error("mysql: want an unknown-driver error")
+	}
+}

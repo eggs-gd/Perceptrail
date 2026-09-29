@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"perceptrail/gontroller/pkg/model"
 	"strconv"
 
 	l "github.com/eggs-gd/perceplib/logger"
@@ -32,33 +33,15 @@ type Config struct {
 		// port). Default: any
 		AllowedOrigins []string `yaml:"allowed_origins"`
 	} `yaml:"server"`
-	// Behind GORM, so the driver can change later; only sqlite for now
-	Database struct {
-		Driver string `yaml:"driver"`
-		// sqlite: the database file, relative to DataDir; server drivers: database name
-		Name string `yaml:"name"`
-		// Server drivers only; sqlite ignores them
-		Host     string `yaml:"host"`
-		Port     int    `yaml:"port"`
-		Username string `yaml:"username"`
-		Password string `yaml:"password"`
-		Token    string `yaml:"token"`
-	} `yaml:"database"`
+	// Behind GORM: sqlite, postgres (not implemented yet)
+	Database model.DBConfig `yaml:"database"`
 }
 
 const (
 	defaultPort     = 1323
-	defaultDBDriver = "sqlite"
+	defaultDBDriver = model.DriverSQLite
 	defaultDBName   = "media_library.db"
 )
-
-// DatabasePath is the SQLite database file (Database.Name inside DataDir).
-func (c *Config) DatabasePath() string {
-	if filepath.IsAbs(c.Database.Name) {
-		return c.Database.Name
-	}
-	return filepath.Join(c.DataDir, c.Database.Name)
-}
 
 // CacheDir holds generated files (thumbnails, …) inside DataDir.
 func (c *Config) CacheDir() string {
@@ -107,9 +90,6 @@ func initConfig(config *Config, logger *l.Logger) {
 	}
 
 	config.resolve(filepath.Dir(path))
-	if config.Database.Driver != defaultDBDriver {
-		logger.Fatal("Unsupported database driver (only sqlite for now)", l.String("driver", config.Database.Driver))
-	}
 	if err := os.MkdirAll(config.DataDir, 0o755); err != nil {
 		logger.Fatal("Cannot create data_dir", l.String("data_dir", config.DataDir), l.Error(err))
 	}
@@ -137,8 +117,14 @@ func (c *Config) resolve(base string) {
 	if c.Database.Driver == "" {
 		c.Database.Driver = defaultDBDriver
 	}
-	if c.Database.Name == "" {
-		c.Database.Name = defaultDBName
+	if c.Database.Driver == model.DriverSQLite {
+		// sqlite: Name is a file inside DataDir
+		if c.Database.Name == "" {
+			c.Database.Name = defaultDBName
+		}
+		if !filepath.IsAbs(c.Database.Name) {
+			c.Database.Name = filepath.Join(c.DataDir, c.Database.Name)
+		}
 	}
 	if len(c.Server.AllowedOrigins) == 0 {
 		c.Server.AllowedOrigins = []string{"*"}

@@ -23,9 +23,9 @@ server:
   # allowed_origins:
   #   - http://localhost:5173
 
-# Behind GORM: another driver can be added later
+# Behind GORM (pkg/model: sqlite.go, postgres.go)
 database:
-  driver: sqlite            # the only one for now
+  driver: sqlite            # sqlite | postgres (not implemented yet)
   name: media_library.db    # sqlite: file, relative to data_dir; others: database name
   # Server drivers only (sqlite ignores them): username/password or token
   # host: localhost

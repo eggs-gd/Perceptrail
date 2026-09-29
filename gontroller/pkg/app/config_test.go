@@ -15,7 +15,7 @@ func TestConfigResolve(t *testing.T) {
 		"relative .so": {c.Plugins[0], "/srv/gontroller/.build/plugins/geo.so"},
 		"absolute .so": {c.Plugins[1], "/abs/other.so"},
 		"DataDir":      {c.DataDir, "/srv/gontroller/.var"},
-		"DatabasePath": {c.DatabasePath(), "/srv/gontroller/.var/media_library.db"},
+		"Database":     {c.Database.Name, "/srv/gontroller/.var/media_library.db"},
 		"Exiftool":     {c.Exiftool, "exiftool"}, // bare name: looked up in PATH
 		"Addr":         {c.Addr(), ":1323"},
 		"Driver":       {c.Database.Driver, "sqlite"},
@@ -32,8 +32,8 @@ func TestConfigResolve(t *testing.T) {
 	c.Server.Host, c.Server.Port = "127.0.0.1", 8080
 	c.resolve("/cfg")
 	if c.DataDir != "/cfg/data" || c.Exiftool != "/cfg/tools/exiftool" || c.Addr() != "127.0.0.1:8080" ||
-		c.DatabasePath() != "/db/photos.db" {
-		t.Errorf("got DataDir %q, Exiftool %q, Addr %q, DatabasePath %q", c.DataDir, c.Exiftool, c.Addr(), c.DatabasePath())
+		c.Database.Name != "/db/photos.db" {
+		t.Errorf("got DataDir %q, Exiftool %q, Addr %q, Database.Name %q", c.DataDir, c.Exiftool, c.Addr(), c.Database.Name)
 	}
 
 	c.Server.Host = "::1"

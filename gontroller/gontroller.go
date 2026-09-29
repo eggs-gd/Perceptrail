@@ -26,7 +26,9 @@ func main() {
 	log.Printf("gontroller %s", app.Version)
 
 	ctx := app.NewAppContext()
-	model.SetDatabasePath(ctx.Config().DatabasePath())
+	if err := model.Configure(ctx.Config().Database); err != nil {
+		log.Fatalf("Database: %v", err)
+	}
 	if ctx.Config().Exiftool != "" {
 		exiftool.Exec = ctx.Config().Exiftool
 	}
