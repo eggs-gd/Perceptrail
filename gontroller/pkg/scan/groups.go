@@ -27,6 +27,11 @@ const photosLibraryEnabled = false
 
 type sourceSwitch struct{}
 
+// NewSourceSwitch: every file to the grouper of its source
+func NewSourceSwitch(chin <-chan fileEvent, toGeneric, toPhotos chan<- fileEvent) chain.Processor {
+	return chain.NewSwitch(chin, []chan<- fileEvent{branchGeneric: toGeneric, branchPhotos: toPhotos}, sourceSwitch{})
+}
+
 // Switch sends a file to the grouper of its source; the end-of-walk marker goes
 // to every grouper, so each can flush what it holds.
 func (sourceSwitch) Switch(ev fileEvent) (map[int]fileEvent, error) {
@@ -60,6 +65,10 @@ func inPhotosLibrary(path string) bool {
 // keeps files away from it; it only passes the marker on.
 type photosGrouper struct{}
 
+func NewPhotosGrouper(chin <-chan fileEvent, chout chan<- fileGroup) chain.Processor {
+	return chain.NewDecorator(chin, chout, photosGrouper{})
+}
+
 var errPhotosNotImplemented = errors.New("apple photos grouper: not implemented yet")
 
 func (photosGrouper) Decorate(ev fileEvent) (fileGroup, error) {
@@ -77,6 +86,10 @@ func (photosGrouper) Stop() {}
 // group goes out) and opens the next. The marker goes out with the last group.
 type genericGrouper struct {
 	open []dto.ItemEntry
+}
+
+func NewGenericGrouper(chin <-chan fileEvent, chout chan<- fileGroup) chain.Processor {
+	return chain.NewDecorator(chin, chout, newGenericGrouper())
 }
 
 func newGenericGrouper() *genericGrouper {

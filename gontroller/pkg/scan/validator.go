@@ -22,6 +22,10 @@ type validator struct {
 // No transcoder yet: there is nothing to regenerate
 func noOutputs(string) bool { return true }
 
+func NewValidator(chin <-chan exifGroup, chout chan<- *RawItem, logger *l.Logger) chain.Processor {
+	return chain.NewDecorator(chin, chout, newValidator(logger))
+}
+
 func newValidator(logger *l.Logger) *validator {
 	return &validator{logger: logger, outputsComplete: noOutputs}
 }

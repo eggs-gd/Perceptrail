@@ -25,6 +25,11 @@ type filesGate struct {
 	markers  int
 }
 
+// NewFilesGate: branches is the number of groupers that send an end-of-walk marker
+func NewFilesGate(branches int, chin <-chan fileGroup, chout chan<- storedGroup, logger *l.Logger) chain.Processor {
+	return chain.NewDecorator(chin, chout, newFilesGate(branches, logger))
+}
+
 func newFilesGate(branches int, logger *l.Logger) *filesGate {
 	return &filesGate{logger: logger, branches: branches}
 }

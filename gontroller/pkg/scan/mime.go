@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/eggs-gd/perceplib/chain"
 )
 
 // mime: what every file of the group is, then which one is the main file. The
@@ -56,6 +58,11 @@ var extTable = map[string]extInfo{
 }
 
 type mimeStep struct{}
+
+// NewMimeRanker: the kind of every file, the main file first
+func NewMimeRanker(chin <-chan exifGroup, chout chan<- exifGroup) chain.Processor {
+	return chain.NewDecorator(chin, chout, mimeStep{})
+}
 
 func (mimeStep) Decorate(g exifGroup) (exifGroup, error) {
 	g.kinds = make([]MediaKind, len(g.files))

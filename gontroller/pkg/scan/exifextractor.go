@@ -39,9 +39,9 @@ type exifExtractor struct {
 	stopOnce sync.Once
 }
 
-// NewExifExtractor starts count exiftool processes and returns count chain steps
-// on the same channels: groups are independent, so they are read in parallel.
-func NewExifExtractor(count int, chin <-chan storedGroup, chout chan<- exifGroup, logger *l.Logger) []chain.Processor {
+// NewExifExtractor starts count exiftool processes and count steps on the same
+// channels: groups are independent, so they are read in parallel.
+func NewExifExtractor(count int, chin <-chan storedGroup, chout chan<- exifGroup, errch chan error, logger *l.Logger) chain.Processor {
 	e := &exifExtractor{logger: logger, freeCh: make(chan *exiftool.Server, count)}
 	for i := 0; i < count; i++ {
 		et, err := exiftool.NewServer(commonArgs...)
@@ -54,11 +54,11 @@ func NewExifExtractor(count int, chin <-chan storedGroup, chout chan<- exifGroup
 	}
 	e.extract = e.exiftool
 
-	steps := make([]chain.Processor, count)
-	for i := range steps {
-		steps[i] = chain.NewDecorator(chin, chout, e)
+	workers := chain.NewChainProcessor(errch)
+	for range count {
+		workers.AddStep(chain.NewDecorator(chin, chout, e))
 	}
-	return steps
+	return workers
 }
 
 func (e *exifExtractor) Decorate(in storedGroup) (exifGroup, error) {

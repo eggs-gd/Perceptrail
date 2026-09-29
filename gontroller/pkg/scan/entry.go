@@ -49,34 +49,32 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	}()
 
 	files := make(chan fileEvent)
-	toGroupers := []chan fileEvent{branchGeneric: make(chan fileEvent), branchPhotos: make(chan fileEvent)}
+	toGeneric, toPhotos := make(chan fileEvent), make(chan fileEvent)
 	groups := make(chan fileGroup)
 	stored := make(chan storedGroup)
 	exifed := make(chan exifGroup)
 	ranked := make(chan exifGroup)
 	validated := make(chan *RawItem)
-	toTranscoders := []chan *RawItem{branchPhoto: make(chan *RawItem), branchVideo: make(chan *RawItem), branchLivePhoto: make(chan *RawItem)}
+	toPhoto, toVideo, toLivePhoto := make(chan *RawItem), make(chan *RawItem), make(chan *RawItem)
 	transcoded := make(chan *RawItem)
 	items := make(chan *dto.ItemDto, 1000)
 
 	importChain := chain.NewChainProcessor(errch)
 	importChain.AddStep(NewFsWalker(ctx.Config().Path, files, logger))
 
-	importChain.AddStep(chain.NewSwitch(files, sendOnly(toGroupers), sourceSwitch{}))
-	importChain.AddStep(chain.NewDecorator(toGroupers[branchGeneric], groups, newGenericGrouper()))
-	importChain.AddStep(chain.NewDecorator(toGroupers[branchPhotos], groups, photosGrouper{}))
+	importChain.AddStep(NewSourceSwitch(files, toGeneric, toPhotos))
+	importChain.AddStep(NewGenericGrouper(toGeneric, groups))
+	importChain.AddStep(NewPhotosGrouper(toPhotos, groups))
 
-	importChain.AddStep(chain.NewDecorator(groups, stored, newFilesGate(groupBranches, logger)))
-	for _, step := range NewExifExtractor(exifWorkers, stored, exifed, logger) {
-		importChain.AddStep(step)
-	}
-	importChain.AddStep(chain.NewDecorator(exifed, ranked, mimeStep{}))
-	importChain.AddStep(chain.NewDecorator(ranked, validated, newValidator(logger)))
+	importChain.AddStep(NewFilesGate(groupBranches, groups, stored, logger))
+	importChain.AddStep(NewExifExtractor(exifWorkers, stored, exifed, errch, logger))
+	importChain.AddStep(NewMimeRanker(exifed, ranked))
+	importChain.AddStep(NewValidator(ranked, validated, logger))
 
-	importChain.AddStep(chain.NewSwitch(validated, sendOnly(toTranscoders), transcodeSwitch{}))
-	for _, in := range toTranscoders {
-		importChain.AddStep(chain.NewDecorator(in, transcoded, transcodeStub{}))
-	}
+	importChain.AddStep(NewTranscodeSwitch(validated, toPhoto, toVideo, toLivePhoto))
+	importChain.AddStep(NewPhotoTranscoder(toPhoto, transcoded))
+	importChain.AddStep(NewVideoTranscoder(toVideo, transcoded))
+	importChain.AddStep(NewLivePhotoTranscoder(toLivePhoto, transcoded))
 
 	importChain.AddStep(NewExifPluginProcessor(transcoded, items, errch, logger))
 
@@ -86,15 +84,6 @@ func NewImporterService(ctx app.AppContext) *importerService {
 		items:       items,
 		importChain: importChain,
 	}
-}
-
-// sendOnly: the switch takes its branches as send-only channels
-func sendOnly[T any](chs []chan T) []chan<- T {
-	out := make([]chan<- T, len(chs))
-	for i, ch := range chs {
-		out[i] = ch
-	}
-	return out
 }
 
 func (s *importerService) Start(parentCtx context.Context) {
