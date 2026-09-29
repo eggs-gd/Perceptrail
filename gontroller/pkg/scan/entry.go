@@ -111,22 +111,27 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	items := make(chan *dto.ItemDto, 1000)
 
 	importChain := chain.NewChainProcessor(errch)
+	// Find every file under the library root
 	importChain.AddStep(NewFsWalker(ctx.Config().Path, files, logger))
 
+	// Files -> whole assets, a grouper per source
 	importChain.AddStep(groups.NewSourceSwitch(files, toGeneric, toApple))
 	importChain.AddStep(generic.NewGrouper(toGeneric, grouped))
 	importChain.AddStep(apple.NewGrouper(toApple, grouped))
 
+	// Assets -> items: only what needs work, then metadata, kinds, identity
 	importChain.AddStep(NewFilesGate(groups.Branches, grouped, stored, logger))
 	importChain.AddStep(NewExifExtractor(exifWorkers, stored, exifed, errch, logger))
 	importChain.AddStep(NewMimeRanker(exifed, ranked))
 	importChain.AddStep(NewValidator(ranked, validated, logger))
 
+	// Outputs (thumbnails, previews) per kind of asset
 	importChain.AddStep(transcode.NewSwitch(validated, toPhoto, toVideo, toLivePhoto))
 	importChain.AddStep(photo.NewTranscoder(toPhoto, transcoded))
 	importChain.AddStep(video.NewTranscoder(toVideo, transcoded))
 	importChain.AddStep(livephoto.NewTranscoder(toLivePhoto, transcoded))
 
+	// Metadata plugins and perceptors, then the item is Ready
 	importChain.AddStep(NewExifPluginProcessor(transcoded, items, errch, logger))
 
 	return &importerService{
