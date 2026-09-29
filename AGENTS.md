@@ -38,6 +38,11 @@ No symlinks (Windows).
 - `develop` → `master`: a pull request, merged with **rebase** (no merge commit).
   Each merge into `master` is a minor increment `0.x.0`.
 - Open PRs against `develop` unless the task is the `develop` → `master` release.
+- Version: one for the whole monorepo, in the root [`VERSION`](VERSION), synced into
+  `svebapp/package.json` (+ lock) and `gontroller/pkg/app/version.go`. Bump it in the
+  PR itself: `scripts/version.sh patch` in every feature PR, `scripts/version.sh minor`
+  in the `develop` → `master` PR. CI fails if the files are out of sync
+  (`scripts/version.sh check`). `perceplib` is versioned separately by its own tags.
 - `develop` stays linear (squash merges only), which is what makes the rebase into
   `master` possible — GitHub cannot rebase a PR that contains merge commits.
   Operations that create merge commits (e.g. `git subtree pull` for `perceplib`)

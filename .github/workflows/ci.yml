@@ -15,6 +15,9 @@ jobs:
     steps:
     - uses: actions/checkout@v7
 
+    - name: Version in sync
+      run: scripts/version.sh check
+
     - name: Set up Go
       uses: actions/setup-go@v7
       with:
