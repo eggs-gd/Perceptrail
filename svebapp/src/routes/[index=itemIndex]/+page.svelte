@@ -57,7 +57,7 @@
         align-items: center;
         justify-content: center;
         overflow: hidden;
-        background: #111;
+        background: var(--color-bg);
     }
 
     .stage {
