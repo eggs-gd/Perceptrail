@@ -230,10 +230,12 @@ compose with `derived`. The current message protocol is a deviation from this de
   are read (until the Apple Photos grouper exists); the rest of the bundle is
   skipped, so the old items are soft-deleted by the next complete walk (not seen =
   gone).
-- For the Apple Photos grouper: roles come from `Photos.sqlite` (original = source;
-  render, derivatives, Live Photo video = linked to it). mime must rank by role
-  first (source before derivative), then by kind — an original HEIC and its render
-  JPEG are both images, the size would decide otherwise.
+- A derivative is simply a file linked to its source (`LinkedTo`) — no separate
+  "derivative" flag. For the Apple Photos grouper the links come from
+  `Photos.sqlite` (original = source; render, derivatives, Live Photo video =
+  linked to it): the grouper states the main file and mime does not re-rank such a
+  group — it ranks only groups nobody decided (generic). Otherwise an original HEIC
+  and its render JPEG, both images, would be decided by size.
 
 ### Import chain as small steps (2026-09-29)
 
