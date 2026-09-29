@@ -28,6 +28,21 @@ No symlinks (Windows).
 - When you learn something non-obvious (a root cause, a dead end, a decision),
   add a dated entry to `findings.md` and update the roadmap.
 
+## Git workflow (git flow)
+
+- Long-lived branches: `master` (releases) and `develop` (integration). Never
+  commit to them directly.
+- Work happens in `feature/<name>` branches created from `develop`.
+- `feature/*` → `develop`: a pull request, merged with **squash**. Each merge into
+  `develop` is a patch increment `0.0.x`. Several PRs accumulate in `develop`.
+- `develop` → `master`: a pull request, merged with **rebase** (no merge commit).
+  Each merge into `master` is a minor increment `0.x.0`.
+- Open PRs against `develop` unless the task is the `develop` → `master` release.
+- `develop` stays linear (squash merges only), which is what makes the rebase into
+  `master` possible — GitHub cannot rebase a PR that contains merge commits.
+  Operations that create merge commits (e.g. `git subtree pull` for `perceplib`)
+  are done in a feature branch and get squashed on the way into `develop`.
+
 
 ---
 
