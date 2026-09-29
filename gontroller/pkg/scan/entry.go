@@ -23,59 +23,35 @@ import (
 var filesProxy model.FilesApi
 var itemsProxy model.ItemsApi
 
-// The import chain: one small step per node, every step is its own goroutine,
-// every arrow is a channel. Diagrams: _sb/puml/Import chain.puml (the whole
-// chain), _sb/puml/Walker.puml (files gate and validator in detail).
-//
-//	fswalker -> groups switch (generic | Apple Photos) -> files gate -> exif (N) ->
-//	mime -> validator -> transcode switch (photo | video | Live Photo) -> plugins -> closer
+// The import chain: one step per node, steps talk over channels.
+// Diagrams: _sb/puml/Import chain.puml, _sb/puml/Walker.puml (gate, validator).
 //
 // Enter: library root ->
-// - fswalker (fswalker.go): root -> FileEvent - reports every file it finds (path +
-//   stat), nothing else. An unreadable subdirectory is skipped and recorded; the
-//   walk ends with a marker carrying the walk result (complete? unreadable dirs?).
-// - source switch (groups/sourceswitch.go): FileEvent -> FileEvent - routes a file to the grouper
-//   of its source; the marker goes to every grouper. Apple Photos is off
-//   (groups.appleEnabled): the library goes to generic for now, which reads only
-//   its originals/ — derivatives and Apple's own images must not become items.
-// - groupers (groups/generic, groups/apple): FileEvent -> FileGroup - a buffer of open groups inside;
-//   a group goes out when it is complete (not ranked yet: no main file). generic:
-//   sidecars by name, next to each other, so one open group; the last one goes out
-//   with the marker. Apple Photos (stub): will group by the library's DB.
-// Exit: -> FileGroup - one whole asset: the files that belong together
+// - fswalker: every file found (path + stat), then the end-of-walk marker
+// - source switch -> groupers (generic | apple): files -> whole assets (FileGroup)
+// Exit: -> FileGroup
 //
 // Enter: FileGroup ->
-// - files gate (filesgate.go): FileGroup -> FileGroup - the files table: finds/creates
-//   the rows, refreshes stat, stamps CheckTime. Lets through only groups that need
-//   work: new or changed files, never linked, the item missing or not Ready (New,
-//   Dirty, interrupted); the rest is dropped, so unchanged files never reach
-//   exiftool. After the marker from every grouper: deletions — files not stamped
-//   by this walk are gone (only after a complete walk that found files, never under
-//   an unreadable dir): main file -> item Deleted, sidecar -> item Dirty.
-// - exif (exifextractor.go): FileGroup -> RawItem - exiftool -all for every file of
-//   the group (the main file is unknown yet): RawItem.Files + Exif, no Item yet; N
-//   steps in parallel on the same channels, groups are independent from here on.
-// - mime (mimeranker.go): RawItem -> RawItem - Kinds: the kind of every file (exif MIMEType ->
-//   own extension table -> content sniff; no system MIME tables), then the rank:
-//   the main file is the source — RAW > video > image; the JPEG of RAW+JPEG and
-//   the photo of a Live Photo are derivatives (sidecars). Nothing to show -> not media.
-// - validator (validator.go): RawItem -> RawItem - sets Item. Not media: rows marked ignored,
-//   dropped. Otherwise links the files to the main file (a former main file that is
-//   a sidecar now loses its item), then by the short hash of the main file (size +
-//   non-volatile exif): same / changed (Dirty) / moved (the item keeps its GUID,
-//   also restored if deletions ran first) / new or duplicate (a new item). A moved
-//   item with complete outputs is Ready at once: no transcode, no plugins.
-// Exit: -> RawItem - the item (GUID) with its whole group, main file first
+// - files gate: only new / changed / not Ready groups go on; deletions after the walk
+// - exif: exiftool for every file of the group, in parallel
+// - mime: the kind of every file; the main file is the source (RAW > video > image)
+// - validator: the item — same / changed / moved (keeps its GUID) / new
+// Exit: -> RawItem (the item with its whole group)
 //
 // Enter: RawItem ->
-// - transcode switch (transcode/switch.go; transcoders transcode/photo, video,
-//   livephoto): by the kind of the asset: photo (image, RAW)
-//   / video / Live Photo (a video with its photo). Transcoders take the whole group,
-//   not a file. Stubs for now: they pass the item on.
-// - plugins (exifpluginprocessor.go): core (date with its zone, size), then
-//   external perceptors; after transcode, so the client gets items with thumbnails.
-// - closer: saves the item, State Ready.
-// Exit: -> ItemDto - finished items (drained for now; later: events to the client)
+// - transcode switch (photo | video | Live Photo): outputs for the whole asset
+// - plugins (date, size, perceptors), closer: the item is Ready
+// Exit: -> ItemDto
+//
+// Not obvious:
+// - The end-of-walk marker goes through the groupers (they flush their last
+//   group): deletions run only when every grouper's marker reached the gate.
+// - Deletions only after a complete walk that found files, never under an
+//   unreadable directory: an unmounted drive must not wipe the library.
+// - The chain is async: deletions may run before a moved file is validated, so the
+//   validator restores deleted items by hash.
+// - Apple Photos is off: its library goes to generic, which reads only originals/
+//   (a derivative must never become an item).
 
 // exiftool processes and parallel exif steps
 const exifWorkers = 5
