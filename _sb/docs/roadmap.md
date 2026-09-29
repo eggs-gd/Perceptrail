@@ -13,6 +13,9 @@ Target architecture — the diagrams in [`../puml`](../puml).
   `replace`/`upsert`, absolute tiles with transitions, a wave for tiles that change
   rows, applied once per frame).
 - svebapp: Vite 8, Svelte 5.57, Kit 2.70, TS 6; `svelte-check` — 0 errors.
+- Import pipeline: external EXIF plugins no longer stall it; the last walked group is
+  emitted; changed files store fresh metadata. Viewer `/N` is reactive.
+  `make build-plugins` works on a fresh clone.
 - Favicon, tab title.
 - `perceplib` moved to `eggs-gd` (module `github.com/eggs-gd/perceplib`, v0.0.6) and
   vendored into Perceptrail as a git subtree instead of a submodule.
@@ -26,8 +29,6 @@ Target architecture — the diagrams in [`../puml`](../puml).
       of [`Workers.puml`](../puml/Workers.puml): UI subscribes to the visible window
       of `LayoutDB` + virtualisation.
 - [ ] `Img.svelte`: `loading="lazy"` (the browser currently fetches every image).
-- [ ] Verify and fix the possible pipeline stall with external EXIF plugins
-      (`ExifPluginProcessor`, `ExifPerceptor` vs `ExifCorePerceptor`).
 - [ ] `exifextractor`: shadowed `err` → an empty `RawExif` is added to the group.
 - [ ] go-exiftool: per-command timeout with restart, `Wait` after `Kill`, handle the
       `start()` error in `restart`.
@@ -56,8 +57,8 @@ Target architecture — the diagrams in [`../puml`](../puml).
 - [ ] Drop `.clear()` on import of `itemsDb`/`layoutDb` (race between contexts).
 - [ ] Decide on `dexie-observable` (legacy add-on).
 - [ ] Virtualisation (render visible rows only).
-- [ ] Viewer: update on `/3 → /4`, direct open of `/N`, close without leaving the
-      site, Escape, arrow navigation.
+- [ ] Viewer: close without leaving the site on a direct `/N` open, Escape, arrow
+      navigation.
 - [ ] Optimal (Dijkstra) layout for an already loaded gallery — optional.
 
 ## Later: the perceptor platform

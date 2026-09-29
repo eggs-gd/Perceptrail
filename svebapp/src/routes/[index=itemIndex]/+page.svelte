@@ -4,8 +4,13 @@
     import {currentIndex, currentItem, items} from "$lib/stores";
     import {onMount} from "svelte";
 
-    $currentIndex = Number($page.params.index);
-    $currentItem = $items[$currentIndex];
+    // Reactive, not a one-off at init: /3 → /4 reuses this component, and on a
+    // direct /N load the items stream in after the first render
+    $effect.pre(() => {
+        const index = Number($page.params.index);
+        $currentIndex = index;
+        $currentItem = $items[index];
+    });
 
     const MIN_ZOOM = 0.25;
     const MAX_ZOOM = 8;

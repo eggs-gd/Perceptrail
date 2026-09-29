@@ -71,11 +71,17 @@ func (m *fsMonitor) Start(chin chan<- inType, ctx context.Context) {
 
 	if err != nil && !errors.Is(err, context.Canceled) {
 		m.logger.Error("FsMonitor Error", l.Error(err))
+		return
+	}
+
+	// Groups are emitted when the next group starts; the marker flushes the last one
+	select {
+	case chin <- inType{}:
+	case <-m.ctx.Done():
 	}
 }
 
 func (m *fsMonitor) finalizeWalk() {
-	// todo process last file
 	// todo process removed files
 }
 
@@ -85,6 +91,15 @@ func (m *fsMonitor) Stop() {
 }
 
 func (m *fsMonitor) Decorate(in inType) ([]*dto.FileDto, error) {
+	if in.info == nil { // end of walk: emit the last group
+		group := m.currentGroup
+		m.currentGroup = []dto.ItemEntry{}
+		if res := m.entryToFile(group); res != nil {
+			return res, nil
+		}
+		return nil, chain.ErrSkippedItem
+	}
+
 	m.logger.Info("processFile", l.String("path", in.path))
 
 	if shouldSkipPath(in.path) {
@@ -155,7 +170,11 @@ func (m *fsMonitor) entryToFile(group []dto.ItemEntry) []*dto.FileDto {
 	var dbitems []*dto.FileDto
 	var changedFiles []*dto.FileDto
 
-	for i, item := range group {
+	if len(group) == 0 {
+		return nil
+	}
+
+	for _, item := range group {
 		dbitem, err := filesProxy.GetFileByPath(item.Path)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -184,18 +203,29 @@ func (m *fsMonitor) entryToFile(group []dto.ItemEntry) []*dto.FileDto {
 			continue
 		}
 
-		if dbitems[i].LinkTo(dbitems[0]) && !dbitem.IsIgnored() {
+		if dbitem.LinkTo(dbitems[0]) && !dbitem.IsIgnored() {
 			m.logger.Info("entryToFile", l.Any("changedFiles add linked", dbitems))
-			changedFiles = api.AppendUniq(changedFiles, dbitems[i])
-		}
-
-		if item.ModTime.UTC() == dbitems[i].ModTime.UTC() &&
-			item.Size == dbitems[i].Size {
-			continue // do nothing, skip
-		} else if !dbitems[i].IsIgnored() {
-			m.logger.Info("entryToFile -> changedFiles ad changed", l.Any("item", item.ModTime), l.Any("dbItem", dbitems[i].ModTime))
 			changedFiles = api.AppendUniq(changedFiles, dbitem)
 		}
+
+		if item.ModTime.UTC() == dbitem.ModTime.UTC() &&
+			item.Size == dbitem.Size {
+			continue // do nothing, skip
+		}
+
+		// Changed on disk: store the fresh size/time, or every scan sees it as changed again
+		// (and HashShort is computed from the stale size)
+		m.logger.Info("entryToFile -> changedFiles ad changed", l.Any("item", item.ModTime), l.Any("dbItem", dbitem.ModTime))
+		dbitem.Size = item.Size
+		dbitem.ModTime = item.ModTime
+		dbitem.MimeType = item.MimeType
+		if !dbitem.IsIgnored() {
+			changedFiles = api.AppendUniq(changedFiles, dbitem)
+		}
+	}
+
+	if len(dbitems) == 0 {
+		return nil
 	}
 
 	// ignore whole group if main file is not media

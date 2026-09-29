@@ -56,7 +56,6 @@ Host and plugin must be built with **the same Go** and **the same versions** of
 | `ml_faces` | empty `main.go`, no `Perceptor` symbol |
 | `ml_objects` | empty `main.go`, no `Perceptor` symbol |
 
-**Note:** the server currently wires EXIF plugins only as
-`exif_core.ExifCorePerceptor` (`RawItemRW`), while `exif_geo` implements
-`api.ExifPerceptor` (`RawItemR`). Possible pipeline stall — see
-[findings](../_sb/docs/findings.md#go-plugins-2026-09-28).
+EXIF plugins may implement either `api.ExifPerceptor` (read-only `RawItemR`, e.g.
+`exif_geo`) or the core `exif_core.ExifCorePerceptor` (`RawItemRW`); the server wires
+both. A plugin whose `NewProcessor` returns `nil` is skipped.

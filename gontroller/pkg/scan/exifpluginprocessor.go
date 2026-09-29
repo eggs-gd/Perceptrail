@@ -60,33 +60,70 @@ func newCloser(chin <-chan exif_core.RawItemRW, chout chan<- *dto.ItemDto, logge
 	return chain.NewDecorator(chin, chout, processor)
 }
 
+// Adapters for external EXIF plugins: they work with the read-only api.RawItemR,
+// the core chain carries exif_core.RawItemRW
+type toReadOnly struct{}
+
+func (toReadOnly) Decorate(in exif_core.RawItemRW) (api.RawItemR, error) { return in, nil }
+func (toReadOnly) Stop()                                                 {}
+
+type toReadWrite struct{}
+
+func (toReadWrite) Decorate(in api.RawItemR) (exif_core.RawItemRW, error) {
+	rw, ok := in.(exif_core.RawItemRW)
+	if !ok {
+		return nil, fmt.Errorf("external EXIF plugin returned %T, want exif_core.RawItemRW", in)
+	}
+	return rw, nil
+}
+func (toReadWrite) Stop() {}
+
 // Chain implementation
 func NewExifPluginProcessor(chin <-chan *RawItem, chout chan<- *dto.ItemDto, errch chan error, logger *l.Logger) chain.Processor {
 	exifChain := chain.NewChainProcessor(errch)
 
-	exifPlugins := make([]api.Perceptor, 0)
-	for _, p := range plugins.Pm.GetPlugins() {
-		if p.DataProvider() == api.ExifDataProvider {
-			exifPlugins = append(exifPlugins, p)
+	prev := make(chan exif_core.RawItemRW, 1)
+	exifChain.AddStep(newOpener(chin, prev, logger.Named(string(app.LogPluginExifOpener))))
+
+	// Every step reads the previous step's channel: a plugin that gets no step must
+	// not get a channel either, otherwise the chain stalls on the unread one.
+	for _, plugin := range plugins.Pm.GetPlugins() {
+		if plugin.DataProvider() != api.ExifDataProvider {
+			continue
+		}
+		pluginLogger := logger.Named(plugin.Name())
+
+		switch p := plugin.(type) {
+		case exif_core.ExifCorePerceptor:
+			next := make(chan exif_core.RawItemRW, 1)
+			proc := p.NewProcessor(prev, next, pluginLogger)
+			if proc == nil {
+				logger.Error("EXIF plugin returned no processor, skipped", l.String("plugin", plugin.Name()))
+				continue
+			}
+			exifChain.AddStep(proc)
+			prev = next
+
+		case api.ExifPerceptor:
+			in := make(chan api.RawItemR, 1)
+			out := make(chan api.RawItemR, 1)
+			proc := p.NewProcessor(in, out, pluginLogger)
+			if proc == nil {
+				logger.Error("EXIF plugin returned no processor, skipped", l.String("plugin", plugin.Name()))
+				continue
+			}
+			next := make(chan exif_core.RawItemRW, 1)
+			exifChain.AddStep(chain.NewDecorator[exif_core.RawItemRW, api.RawItemR](prev, in, toReadOnly{}))
+			exifChain.AddStep(proc)
+			exifChain.AddStep(chain.NewDecorator[api.RawItemR, exif_core.RawItemRW](out, next, toReadWrite{}))
+			prev = next
+
+		default:
+			logger.Error("EXIF plugin has no NewProcessor, skipped", l.String("plugin", plugin.Name()))
 		}
 	}
 
-	channels := make([]chan exif_core.RawItemRW, len(exifPlugins)+1)
-	for i := range channels {
-		channels[i] = make(chan exif_core.RawItemRW, 1)
-	}
-
-	exifChain.AddStep(newOpener(chin, channels[0], logger.Named(string(app.LogPluginExifOpener))))
-
-	processors := make([]chain.Processor, len(exifPlugins))
-	for i, plugin := range exifPlugins {
-		if exifPlugin, ok := plugin.(exif_core.ExifCorePerceptor); ok {
-			processors[i] = exifPlugin.NewProcessor(channels[i], channels[i+1], logger.Named(plugin.Name()))
-			exifChain.AddStep(processors[i])
-		}
-	}
-
-	exifChain.AddStep(newCloser(channels[len(channels)-1], chout, logger.Named(string(app.LogPluginExifCloser))))
+	exifChain.AddStep(newCloser(prev, chout, logger.Named(string(app.LogPluginExifCloser))))
 
 	return exifChain
 }

@@ -112,11 +112,14 @@ compose with `derived`. The current message protocol is a deviation from this de
   `test_plugin.so`) — it passes with a warning. Real loading was checked with a
   temporary test via `loadPlugin("../../build/plugins/<name>.so")`: `exif_geo`,
   `ml_color` — ok; `ml_faces`, `ml_objects` — stubs without a `Perceptor` symbol.
-- **Suspected pipeline stall:** `ExifPluginProcessor` allocates channels for every
-  plugin with `ExifDataProvider`, but adds a step only for
-  `exif_core.ExifCorePerceptor` (`RawItemRW`). External `exif_geo` implements
-  `api.ExifPerceptor` (`RawItemR`) → nobody reads its channel → the previous step
-  blocks. Not verified on a live run.
+- **Pipeline stall with external EXIF plugins (fixed 2026-09-29):**
+  `ExifPluginProcessor` allocated a channel for every `ExifDataProvider` plugin but
+  added a step only for `exif_core.ExifCorePerceptor` (`RawItemRW`). External
+  `exif_geo` implements `api.ExifPerceptor` (`RawItemR`) → nobody read its channel →
+  no item reached the closer. Confirmed with an end-to-end test (0 of 2 items).
+  Now external plugins are wired through two adapter decorators
+  (`RawItemRW → RawItemR → RawItemRW`), and a channel is allocated only for a step
+  that exists.
 
 ### exiftool → own package (2026-09-28)
 
@@ -143,6 +146,13 @@ compose with `derived`. The current message protocol is a deviation from this de
   of `start()` in `restart` is ignored.
 
 ### Data and import
+
+- **fswalker (fixed 2026-09-29, found by Codex review):** the last group of a walk was
+  never emitted (groups go out when the next group starts) — a library with a single
+  group imported nothing; now an end-of-walk marker flushes it. For changed files the
+  stale DB row (old size/mtime) was saved back — every scan saw them as changed and
+  `HashShort` used the old size; now fresh values are stored. `dbitems[i]` indexing
+  drifted after a `continue` (possible out-of-range).
 
 - **`HashShort` was unstable:** it hashed a pointer address (`&item.Size`), and after
   `--File:all` was dropped also volatile File-group tags (`FileAccessDate`,
