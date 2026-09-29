@@ -14,6 +14,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0  # scripts/version.sh counts commits
+
+    - name: Version
+      run: scripts/version.sh
 
     - name: Set up Go
       uses: actions/setup-go@v7
@@ -50,6 +55,8 @@ jobs:
       PUBLIC_API_PATH: http://localhost:1323
     steps:
     - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0  # vite.config.ts derives the version from history
 
     - name: Set up Node
       uses: actions/setup-node@v7
@@ -61,3 +68,37 @@ jobs:
     - run: npm ci
     - run: npm run check
     - run: npm run build
+
+  # Every push to develop is one squash merge = one version. Tag it once checks pass.
+  # master only receives fast-forwards of develop, so its commits are already tagged.
+  tag:
+    if: github.event_name == 'push'
+    needs: [ go, svebapp ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: tag-${{ github.sha }}
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Tag the version
+      run: |
+        v="v$(scripts/version.sh)"
+        if tagged=$(git rev-parse -q --verify "refs/tags/$v^{commit}"); then
+          if [ "$tagged" = "$GITHUB_SHA" ]; then
+            echo "$v already on $GITHUB_SHA"
+            exit 0
+          fi
+          echo "::error::$v already points to $tagged, not $GITHUB_SHA"
+          exit 1
+        fi
+        if [ "$GITHUB_REF_NAME" = "master" ]; then
+          echo "::error::$GITHUB_SHA on master has no tag $v — release master only by fast-forwarding develop"
+          exit 1
+        fi
+        git tag "$v" "$GITHUB_SHA"
+        git push origin "$v"
+        echo "tagged $v"
