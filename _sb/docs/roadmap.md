@@ -144,7 +144,10 @@ reference); reading needs Full Disk Access for the process (TCC).
 - [ ] Thumbnails on the server: libvips via `bimg` (needs `brew install vips`), 400 px
       for tiles, 1600 px for the viewer, WebP; `/assets/:guid?size=…` falls back to the
       original; regenerated for `Dirty`, dropped for `Deleted`. Fixes blank tiles
-      (decoding originals) and HEIC in Chrome/Firefox.
+      (decoding originals) and HEIC in Chrome/Firefox. Transcoders take the whole
+      asset (group), not a file. Video: web previews are always downscaled (even a
+      browser-playable H.264 can be 4K); codecs (H.264 / HEVC / AV1 support) decided
+      then.
 - [ ] First perceptor end to end (primitive geo: map, markers) → release 0.2.0.
 
 ## Core — product (gontroller)
