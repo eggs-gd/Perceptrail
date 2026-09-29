@@ -73,6 +73,31 @@ was used.
   Possible use: relayout of an already loaded gallery. Code kept; `dijkstra.js` is
   third-party MIT code (2008) under `// @ts-nocheck`.
 
+### liveQuery across threads — spike (2026-09-29)
+
+Spike: [`svebapp/spikes/livequery`](../../svebapp/spikes/livequery) — a worker writes into
+IndexedDB with Dexie, the page subscribes with `liveQuery`.
+
+- **Works across threads.** Dexie 4.4.6 fires `storagemutated` on every committed
+  write transaction and forwards it to all same-origin contexts via
+  `BroadcastChannel` (`x-storagemutated-1`); a `liveQuery` elsewhere re-runs only if
+  the mutated key ranges intersect the ranges it read.
+
+  | Scenario | Arrived | Latency worker → page | Whole-table query re-runs | Window query re-runs |
+  |---|---|---|---|---|
+  | 50 tx × 100 items | 5000/5000 | p50 3 ms, max 4 ms | 34 | 2 (0 after filled) |
+  | 2000 tx × 1 item (stream) | 2000/2000 | p50 0 ms, max 2 ms | 1578 | 2–3 (0 after filled) |
+
+- **A window subscription is precise:** once its range is filled, writes outside it
+  do not re-run it. That is exactly what virtualisation needs.
+- **Whole-table queries are the trap:** in the per-item stream they re-run on almost
+  every transaction (1578 / 2000) → O(N²). The UI must subscribe to the visible
+  window only; totals (gallery height, count) come from a small separate record.
+- So the original failure was not Dexie. Remaining suspects: `.clear()` on import of
+  `itemsDb`/`layoutDb` in every context (it can wipe rows another worker just wrote),
+  the `derived` wiring. `dexie-observable` is not imported anywhere — a dead
+  dependency, not the cause.
+
 ### liveQuery instead of messages (original design, not implemented yet)
 
 The original design ([`Workers.puml`](../puml/Workers.puml)): workers work with

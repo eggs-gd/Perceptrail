@@ -27,10 +27,11 @@ Target architecture — the diagrams in [`../puml`](../puml).
 
 - [ ] Commit the current state of `feature/perceptors`.
 - [ ] Transfer the `Perceptrail` repo to `eggs-gd`, update local remotes.
-- [ ] Experiment: `liveQuery` between worker and UI on Dexie 4 (do events arrive,
-      latency, without `.clear()` on import). If yes — back to the original design
-      of [`Workers.puml`](../puml/Workers.puml): UI subscribes to the visible window
-      of `LayoutDB` + virtualisation.
+- [ ] Back to the original design of [`Workers.puml`](../puml/Workers.puml) — the
+      `liveQuery` spike confirmed it works across threads (see findings): `wlayout`
+      writes positions to `LayoutDB` (a relayout = one transaction), the gallery
+      subscribes to the **visible window** only (virtualisation), totals from a small
+      meta record; drop `.clear()` on import and the worker → UI messages.
 - [ ] Unreadable/broken files still become items (0×0): exiftool returns File tags
       even for garbage. Decide how to mark them (ignored? error state?).
 
