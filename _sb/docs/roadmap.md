@@ -147,7 +147,8 @@ reference); reading needs Full Disk Access for the process (TCC).
       (decoding originals) and HEIC in Chrome/Firefox. Transcoders take the whole
       asset (group), not a file. Video: web previews are always downscaled (even a
       browser-playable H.264 can be 4K); codecs (H.264 / HEVC / AV1 support) decided
-      then.
+      then. Motion previews for videos and Live Photos: a short muted clip (or GIF)
+      that plays on mouseover in the gallery, the poster otherwise.
 - [ ] First perceptor end to end (primitive geo: map, markers) → release 0.2.0.
 
 ## Core — product (gontroller)
