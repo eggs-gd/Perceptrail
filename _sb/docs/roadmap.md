@@ -34,7 +34,10 @@ Target architecture — the diagrams in [`../puml`](../puml).
   instead of state writes in effects, clsx-style `class`, no side effects in `load`.
 - Runtime paths: build artifacts in `gontroller/.build/`, runtime data (config,
   database, caches) in `gontroller/.var/`; config paths are relative to the config
-  file; `--config` flag instead of `.env`; HTTP address and exiftool path from config.
+  file; `--config` flag instead of `.env`; HTTP address, CORS origins and exiftool
+  path from config. Config sections are owned by their modules
+  (`client.ServerConfig`, `model.DBConfig` with a driver switch: sqlite; postgres is
+  a stub).
 
 ## Releases
 
@@ -71,7 +74,8 @@ Target architecture — the diagrams in [`../puml`](../puml).
 
 ## Deployment (first release)
 
-- [ ] Dockerfile: CGO (sqlite, libvips), exiftool from a `dist-*` release, fix `CMD`.
+- [ ] Dockerfile: CGO (sqlite, libvips), exiftool from a `dist-*` release, fix `CMD`
+      (`--config /data/config.yml`, `/data` as a volume = what `.var/` is in dev).
 
 ## Frontend
 
