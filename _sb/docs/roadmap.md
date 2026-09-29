@@ -19,6 +19,10 @@ Target architecture — the diagrams in [`../puml`](../puml).
 - exiftool hardening: go-exiftool v0.5.1 (command timeout, no zombie processes,
   output kept on stderr errors); the extractor skips a group whose main file cannot
   be read instead of mixing in a sidecar's EXIF. Lazy image loading.
+- Gallery on the original `Workers.puml` design: `wlayout` writes `layoutDb`, the page
+  renders only the visible window via `liveQuery` (virtualisation), resize keeps the
+  first visible photo in place (anchor). No `.clear()` on import; `dexie-observable`
+  removed.
 - Favicon, tab title.
 - `perceplib` moved to `eggs-gd` (module `github.com/eggs-gd/perceplib`, v0.0.6) and
   vendored into Perceptrail as a git subtree instead of a submodule.
@@ -27,11 +31,6 @@ Target architecture — the diagrams in [`../puml`](../puml).
 
 - [ ] Commit the current state of `feature/perceptors`.
 - [ ] Transfer the `Perceptrail` repo to `eggs-gd`, update local remotes.
-- [ ] Back to the original design of [`Workers.puml`](../puml/Workers.puml) — the
-      `liveQuery` spike confirmed it works across threads (see findings): `wlayout`
-      writes positions to `LayoutDB` (a relayout = one transaction), the gallery
-      subscribes to the **visible window** only (virtualisation), totals from a small
-      meta record; drop `.clear()` on import and the worker → UI messages.
 - [ ] Unreadable/broken files still become items (0×0): exiftool returns File tags
       even for garbage. Decide how to mark them (ignored? error state?).
 
@@ -56,9 +55,6 @@ Target architecture — the diagrams in [`../puml`](../puml).
 ## Frontend
 
 - [ ] `$app/stores` → `$app/state`.
-- [ ] Drop `.clear()` on import of `itemsDb`/`layoutDb` (race between contexts).
-- [ ] Decide on `dexie-observable` (legacy add-on).
-- [ ] Virtualisation (render visible rows only).
 - [ ] Viewer: close without leaving the site on a direct `/N` open, Escape, arrow
       navigation.
 - [ ] Optimal (Dijkstra) layout for an already loaded gallery — optional.

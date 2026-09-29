@@ -73,6 +73,33 @@ was used.
   Possible use: relayout of an already loaded gallery. Code kept; `dijkstra.js` is
   third-party MIT code (2008) under `// @ts-nocheck`.
 
+### Visible window over layoutDb + resize anchoring (2026-09-29)
+
+The gallery moved to the original design (`Workers.puml`): `wlayout` writes positions
+to `layoutDb`, the page subscribes to the visible window with `liveQuery`; worker → UI
+messages are gone. Details: [svebapp README](../../svebapp/README.md#visible-window-and-resize-anchoring).
+
+- Only the window is in the DOM (≈40 tiles for 2400 photos, container height from
+  `meta`). The window query itself takes 1–3 ms.
+- **Resize keeps the view:** without an anchor the same `scrollY` shows other photos
+  after a relayout (true for the previous message-based version too). The first
+  visible photo is sent as an anchor, the worker reports its new position in `meta` in
+  the same transaction, one `liveQuery` returns items + `scrollTo` together. Checked
+  at 700 / 1000 / 450 / 600 px and a 30-step drag: the anchor photo stays in the top
+  row.
+- **Bug found while testing:** scrolling before the new (taller) height was in the
+  DOM got clamped to the old document height (450 px case). Apply height/items,
+  `tick()`, then scroll.
+- **Streaming:** main-thread timer lag p50 0 ms, p95 8 ms, max 14 ms with 3000 photos
+  at 5 ms each (the old per-item messaging froze the tab for ~90 s). A relayout in
+  the middle of the stream (at 475 photos) → the final layout of 3000 is consistent
+  (full-width rows, no overlaps, height matches).
+- **Test environment:** the agent's browser pane often does not paint; then
+  `requestAnimationFrame` runs at 0–1 fps and `ResizeObserver`/scroll events are not
+  delivered. Mid-stream resize was verified by calling `updateLayout` directly
+  (`await import('/src/lib/workers/proxy.ts')` on the dev server returns the live
+  module).
+
 ### liveQuery across threads — spike (2026-09-29)
 
 Spike: [`svebapp/spikes/livequery`](../../svebapp/spikes/livequery) — a worker writes into
@@ -95,8 +122,8 @@ IndexedDB with Dexie, the page subscribes with `liveQuery`.
   window only; totals (gallery height, count) come from a small separate record.
 - So the original failure was not Dexie. Remaining suspects: `.clear()` on import of
   `itemsDb`/`layoutDb` in every context (it can wipe rows another worker just wrote),
-  the `derived` wiring. `dexie-observable` is not imported anywhere — a dead
-  dependency, not the cause.
+  the `derived` wiring. `dexie-observable` was never imported — a dead dependency,
+  removed.
 
 ### liveQuery instead of messages (original design, not implemented yet)
 
@@ -121,7 +148,7 @@ compose with `derived`. The current message protocol is a deviation from this de
   transaction → the same O(N²). It only pays off when the UI subscribes to the
   **visible window** (`where('order').between(from, to)`) — which is virtualisation
   for free.
-- `layoutDb` is unused right now but kept as the base for this design.
+- Implemented — see "Visible window over layoutDb" above.
 
 ---
 
