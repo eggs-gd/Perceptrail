@@ -47,6 +47,11 @@ No symlinks (Windows).
   `master` possible — GitHub cannot rebase a PR that contains merge commits.
   Operations that create merge commits (e.g. `git subtree pull` for `perceplib`)
   are done in a feature branch and get squashed on the way into `develop`.
+- Enforced by GitHub **rulesets** only (no classic branch protection): per branch —
+  PR with 1 approval and resolved threads, allowed merge method (`develop`: squash,
+  `master`: rebase), required checks `go` + `svebapp` (branch up to date), linear
+  history, no force-push, no deletion. Repository admins may bypass only when
+  merging a PR; direct pushes to `master`/`develop` are rejected for everyone.
 
 
 ---
