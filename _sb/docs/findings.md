@@ -297,6 +297,15 @@ compose with `derived`. The current message protocol is a deviation from this de
 
 ## Infrastructure
 
+### `app.css` was never loaded (2026-09-29)
+
+- No module imported `src/app.css`, so none of its rules ever applied: the page was
+  always white and `scrollbar-gutter: stable` (added against the width jump when the
+  viewer opens) never worked. It surfaced when the viewer switched from a hard-coded
+  `#111` to `var(--color-bg)` from `app.css` and lost its background. Now the root
+  `+layout.svelte` imports it. Check that a global stylesheet is actually loaded
+  before relying on its variables.
+
 ### Safari: 500 on every page (2026-09-29)
 
 - Safari showed SvelteKit's 500 page with `ReferenceError: Cannot access 'load' before

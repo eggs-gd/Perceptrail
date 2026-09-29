@@ -1,4 +1,5 @@
 <script lang="ts">
+    import "../app.css";
     import Gallery from "$lib/gallery/Gallery.svelte";
     import type {LayoutItem} from "$lib/stores";
     import {loadFromServer} from "$lib/workers";
