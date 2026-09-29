@@ -95,15 +95,33 @@ func NewImporterService(ctx app.AppContext) *importerService {
 		}
 	}()
 
+	// Channels between the steps: from -> to, what it carries. The message types
+	// are in events.go (fileEvent, fileGroup, walkResult) and types.go (RawItem).
+
+	// fswalker -> source switch: one file (path + stat), or the end-of-walk marker
 	files := make(chan fileEvent)
+	// source switch -> its grouper: the same, split by source; the marker goes to both
 	toGeneric, toPhotos := make(chan fileEvent), make(chan fileEvent)
+	// groupers -> files gate: a complete group (no main file yet), and/or the
+	// grouper's marker; both groupers write here
 	groups := make(chan fileGroup)
+	// files gate -> exif: the group's rows of the files table (GUIDs), only groups
+	// that need work
 	stored := make(chan []*dto.FileDto)
+	// exif -> mime: RawItem with Files + Exif
 	exifed := make(chan *RawItem)
+	// mime -> validator: + Kinds, the main file first
 	ranked := make(chan *RawItem)
+	// validator -> transcode switch: + Item (the GUID); not media and moved-and-done
+	// items do not get here
 	validated := make(chan *RawItem)
+	// transcode switch -> its transcoder: the same, split by the kind of the asset
 	toPhoto, toVideo, toLivePhoto := make(chan *RawItem), make(chan *RawItem), make(chan *RawItem)
+	// transcoders -> plugins: the item with its outputs (stubs: passed on as is);
+	// all transcoders write here
 	transcoded := make(chan *RawItem)
+	// closer -> nobody yet: finished items, drained in Start (later: events to the
+	// client); buffered so the closer does not wait for the drain
 	items := make(chan *dto.ItemDto, 1000)
 
 	importChain := chain.NewChainProcessor(errch)
