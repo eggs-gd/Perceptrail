@@ -7,9 +7,9 @@ import (
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 
-	"github.com/dukobpa3/perceplib/chain"
+	"github.com/eggs-gd/perceplib/chain"
 
-	l "github.com/dukobpa3/perceplib/logger"
+	l "github.com/eggs-gd/perceplib/logger"
 )
 
 var filesProxy model.FilesApi

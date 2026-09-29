@@ -3,7 +3,7 @@ package routes
 import (
 	"perceptrail/gontroller/pkg/model"
 
-	l "github.com/dukobpa3/perceplib/logger"
+	l "github.com/eggs-gd/perceplib/logger"
 
 	"github.com/labstack/echo/v4"
 )

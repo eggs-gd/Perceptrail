@@ -6,7 +6,7 @@ import (
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/plugins/exif_core"
 
-	"github.com/dukobpa3/perceplib/api"
+	"github.com/eggs-gd/perceplib/api"
 )
 
 type RawItem struct {

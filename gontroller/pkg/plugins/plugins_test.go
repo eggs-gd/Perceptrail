@@ -5,8 +5,8 @@ import (
 	"perceptrail/gontroller/pkg/app"
 	"testing"
 
-	l "github.com/dukobpa3/perceplib/logger"
-	"github.com/dukobpa3/perceplib/logger/decorators"
+	l "github.com/eggs-gd/perceplib/logger"
+	"github.com/eggs-gd/perceplib/logger/decorators"
 )
 
 type mockAppContext struct{}

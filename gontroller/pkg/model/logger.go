@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
-	l "github.com/dukobpa3/perceplib/logger"
+	l "github.com/eggs-gd/perceplib/logger"
 )
 
 type Logger struct {

@@ -7,7 +7,7 @@ import (
 	"perceptrail/gontroller/pkg/model/dto"
 	"sort"
 
-	"github.com/dukobpa3/perceplib/api"
+	"github.com/eggs-gd/perceplib/api"
 )
 
 // File-system tags (exiftool File group) that change on move/rename/read

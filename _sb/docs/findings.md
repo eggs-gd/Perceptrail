@@ -166,6 +166,20 @@ compose with `derived`. The current message protocol is a deviation from this de
 
 ## Infrastructure
 
+### perceplib: subtree instead of submodule (2026-09-29)
+
+- The submodule kept biting: detached HEAD in the checkout; `gontroller` depended on
+  uncommitted `perceplib` changes (a fresh clone would not build); every change was
+  two commits (library + pointer); clones need `--recurse-submodules`.
+- `perceplib` must stay a separate **public** repo with tags (third-party perceptors
+  `go get` it) while Perceptrail is private — so no monorepo yet.
+- Decision: `git subtree` under `perceplib/`. Everyday work is one commit in
+  Perceptrail; publishing is explicit: `git subtree push` + a `vX.Y.Z` tag in
+  `eggs-gd/perceplib` (procedure in `perceplib/README.md`).
+- Later, once Perceptrail is public: consider a monorepo with `perceplib` as a
+  subdirectory module (`github.com/eggs-gd/perceptrail/perceplib`, tags
+  `perceplib/vX.Y.Z`) and archive the separate repo.
+
 - **Versions (2026-09-29):** Go 1.27.1 in all modules; svebapp — Vite 8, Svelte 5.57,
   Kit 2.70, TypeScript 6 (TS 7 is not supported by Kit and svelte-check yet).
 - `npm` refused to upgrade because of a stale lock (`vite-plugin-svelte-inspector@3`

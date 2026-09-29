@@ -4,10 +4,10 @@ import (
 	"perceptrail/gontroller/pkg/plugins/exif_core"
 	"time"
 
-	"github.com/dukobpa3/perceplib/api"
-	"github.com/dukobpa3/perceplib/chain"
+	"github.com/eggs-gd/perceplib/api"
+	"github.com/eggs-gd/perceplib/chain"
 
-	l "github.com/dukobpa3/perceplib/logger"
+	l "github.com/eggs-gd/perceplib/logger"
 )
 
 type datesExtractor struct {

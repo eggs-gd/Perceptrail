@@ -9,8 +9,8 @@ import (
 	"perceptrail/gontroller/pkg/plugins/exif_core/date"
 	"perceptrail/gontroller/pkg/plugins/exif_core/size"
 
-	"github.com/dukobpa3/perceplib/api"
-	l "github.com/dukobpa3/perceplib/logger"
+	"github.com/eggs-gd/perceplib/api"
+	l "github.com/eggs-gd/perceplib/logger"
 )
 
 type pluginManager struct {

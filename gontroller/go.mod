@@ -3,8 +3,8 @@ module perceptrail/gontroller
 go 1.27.1
 
 require (
-	github.com/dukobpa3/perceplib v0.0.5
 	github.com/eggs-gd/go-exiftool v0.5.0
+	github.com/eggs-gd/perceplib v0.0.6
 	github.com/google/uuid v1.6.0
 	github.com/h2non/bimg v1.1.9
 	github.com/joho/godotenv v1.5.1
@@ -32,4 +32,4 @@ require (
 	golang.org/x/time v0.16.0 // indirect
 )
 
-replace github.com/dukobpa3/perceplib => ../perceplib
+replace github.com/eggs-gd/perceplib => ../perceplib

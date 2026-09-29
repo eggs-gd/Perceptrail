@@ -7,9 +7,9 @@ import (
 	"perceptrail/gontroller/pkg/plugins"
 	"perceptrail/gontroller/pkg/plugins/exif_core"
 
-	"github.com/dukobpa3/perceplib/api"
-	"github.com/dukobpa3/perceplib/chain"
-	l "github.com/dukobpa3/perceplib/logger"
+	"github.com/eggs-gd/perceplib/api"
+	"github.com/eggs-gd/perceplib/chain"
+	l "github.com/eggs-gd/perceplib/logger"
 )
 
 // Opner implementation

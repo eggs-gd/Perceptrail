@@ -14,12 +14,13 @@ Target architecture — the diagrams in [`../puml`](../puml).
   rows, applied once per frame).
 - svebapp: Vite 8, Svelte 5.57, Kit 2.70, TS 6; `svelte-check` — 0 errors.
 - Favicon, tab title.
+- `perceplib` moved to `eggs-gd` (module `github.com/eggs-gd/perceplib`, v0.0.6) and
+  vendored into Perceptrail as a git subtree instead of a submodule.
 
 ## Next
 
 - [ ] Commit the current state of `feature/perceptors`.
-- [ ] Move `Perceptrail` and `perceplib` to `eggs-gd`: module
-      `github.com/eggs-gd/perceplib`, `.gitmodules` → `../perceplib.git`, remotes.
+- [ ] Transfer the `Perceptrail` repo to `eggs-gd`, update local remotes.
 - [ ] Experiment: `liveQuery` between worker and UI on Dexie 4 (do events arrive,
       latency, without `.clear()` on import). If yes — back to the original design
       of [`Workers.puml`](../puml/Workers.puml): UI subscribes to the visible window

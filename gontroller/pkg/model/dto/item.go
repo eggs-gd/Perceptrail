@@ -5,7 +5,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/dukobpa3/perceplib/api"
+	"github.com/eggs-gd/perceplib/api"
 )
 
 type ItemState int
