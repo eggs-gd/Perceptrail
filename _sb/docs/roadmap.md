@@ -70,12 +70,15 @@ hid inside the exif step, so groups and MIME were decided before EXIF was known.
 
 - [x] **C1. fswalker = spam.** Every file found (path + stat), nothing else; walk
       safety from V1 stays.
-- [x] **C2. Groups: a switch by source.** `generic` = sidecars by name next to each
-      other, case-insensitive, buffered per directory until the walk leaves it.
-      Apple Photos: a stub branch; `photosLibraryEnabled = false` keeps the library
-      in `generic` until the Photos milestone. The marker is broadcast to every
-      branch; all branches write to one channel. Needs the new perceplib
-      `chain.Expander` (1 → N: a directory flushes many groups at once).
+- [x] **C2. Groups: a switch by source.** Groupers are plain decorators with their
+      own buffer of open groups: a group goes out when it is complete, so every file
+      closes at most one group. `generic`: sidecars by name, next to each other
+      (name order), case-insensitive — one open group. Apple Photos: a stub branch;
+      `photosLibraryEnabled = false` keeps the library in `generic` until the Photos
+      milestone (there: the first file of the library loads the asset links from its
+      DB, a group closes when all its files arrived; incomplete groups at the marker
+      — e.g. cloud-only originals — to decide). The marker is broadcast to every
+      branch and goes out with the grouper's last group.
 - [x] **C3. Files gate.** The files table: new / changed (size, mtime) / never
       linked / item not Ready → pass, otherwise drop (no exiftool for unchanged
       files); `CheckTime`; deletions (V2) after the marker from every branch.

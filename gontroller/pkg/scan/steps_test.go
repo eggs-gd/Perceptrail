@@ -27,49 +27,37 @@ func names(groups []fileGroup) [][]string {
 	return out
 }
 
-func TestGroupByName(t *testing.T) {
-	var entries []dto.ItemEntry
-	for _, n := range []string{"IMG_1.MOV", "a.jpg.xmp", "IMG_1.HEIC", "a.jpg", "a.xmp", "a.edited.jpg", "img_1.aae", "b"} {
-		entries = append(entries, entry("/lib/"+n))
-	}
-	var got [][]string
-	for _, g := range groupByName(entries) {
-		var n []string
-		for _, e := range g {
-			n = append(n, e.Name)
-		}
-		got = append(got, n)
-	}
-	want := [][]string{
-		{"IMG_1.HEIC", "IMG_1.MOV", "img_1.aae"}, // case-insensitive
-		{"a.edited.jpg"},
-		{"a.jpg", "a.xmp", "a.jpg.xmp"},
-		{"b"},
-	}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("got %v\nwant %v", got, want)
-	}
-}
-
-// WalkDir visits a subdirectory between the files of its parent ("x.jpg",
-// "x.jpg.d/…", "x.xmp"): the parent's files are grouped once the walk left it
-func TestGenericGrouperWaitsForDirectory(t *testing.T) {
+// Files come in name order; one group is open, the next name closes it
+func TestGenericGrouper(t *testing.T) {
 	g := newGenericGrouper()
 	var out []fileGroup
-	for _, p := range []string{"/lib/x.jpg", "/lib/x.jpg.d/inner.jpg", "/lib/x.xmp", "/other/y.jpg"} {
-		groups, _ := g.Expand(fileEvent{entry: entry(p)})
-		out = append(out, groups...)
+	for _, n := range []string{"IMG_1.HEIC", "IMG_1.MOV", "IMG_1.aae", "a.edited.jpg", "a.jpg", "a.jpg.xmp", "a.xmp", "b", "b.png"} {
+		if group, err := g.Decorate(fileEvent{entry: entry("/lib/" + n)}); err == nil {
+			out = append(out, group)
+		}
 	}
 	marker := &walkResult{}
-	groups, _ := g.Expand(fileEvent{done: marker})
-	out = append(out, groups...)
+	last, _ := g.Decorate(fileEvent{done: marker})
+	out = append(out, last)
 
-	want := [][]string{{"inner.jpg"}, {"x.jpg", "x.xmp"}, {"y.jpg"}, nil}
-	if got := names(out); !reflect.DeepEqual(got, want) {
-		t.Errorf("got %v, want %v", got, want)
+	want := [][]string{
+		{"IMG_1.HEIC", "IMG_1.MOV", "IMG_1.aae"}, // case-insensitive
+		{"a.edited.jpg"},
+		{"a.jpg", "a.jpg.xmp", "a.xmp"},
+		{"b", "b.png"}, // the last group goes out with the marker
 	}
-	if out[len(out)-1].done != marker {
-		t.Error("the marker must come last")
+	if got := names(out); !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v\nwant %v", got, want)
+	}
+	if last.done != marker {
+		t.Error("the marker must come with the last group")
+	}
+
+	// Another directory closes the group, even with the same name
+	g = newGenericGrouper()
+	g.Decorate(fileEvent{entry: entry("/lib/x.jpg")})
+	if group, err := g.Decorate(fileEvent{entry: entry("/lib/sub/x.xmp")}); err != nil || len(group.entries) != 1 {
+		t.Errorf("a file of another directory joined the group: %v %v", group, err)
 	}
 }
 

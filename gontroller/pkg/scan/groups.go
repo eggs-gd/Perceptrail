@@ -3,10 +3,11 @@ package scan
 import (
 	"errors"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"perceptrail/gontroller/pkg/model/dto"
+
+	"github.com/eggs-gd/perceplib/chain"
 )
 
 // groups: a switch by source, one grouper per source. Every grouper turns files
@@ -61,115 +62,67 @@ type photosGrouper struct{}
 
 var errPhotosNotImplemented = errors.New("apple photos grouper: not implemented yet")
 
-func (photosGrouper) Expand(ev fileEvent) ([]fileGroup, error) {
+func (photosGrouper) Decorate(ev fileEvent) (fileGroup, error) {
 	if ev.done != nil {
-		return []fileGroup{{done: ev.done}}, nil
+		return fileGroup{done: ev.done}, nil
 	}
-	return nil, errPhotosNotImplemented
+	return fileGroup{}, errPhotosNotImplemented
 }
 
 func (photosGrouper) Stop() {}
 
-// genericGrouper: sidecars have the main file's name and sit next to it. Files
-// are buffered per directory until the walk has left the directory (WalkDir visits
-// subdirectories in between its files), then grouped by name.
+// genericGrouper: sidecars have the main file's name and sit next to it, and the
+// walk lists a directory in name order — so a group's files come one after
+// another. One group is open; a file that does not belong to it closes it (the
+// group goes out) and opens the next. The marker goes out with the last group.
 type genericGrouper struct {
-	pending map[string][]dto.ItemEntry
-	dirs    []string // pending directories, outermost first (an ancestor chain)
+	open []dto.ItemEntry
 }
 
 func newGenericGrouper() *genericGrouper {
-	return &genericGrouper{pending: map[string][]dto.ItemEntry{}}
+	return &genericGrouper{}
 }
 
-func (g *genericGrouper) Expand(ev fileEvent) ([]fileGroup, error) {
+func (g *genericGrouper) Decorate(ev fileEvent) (fileGroup, error) {
 	if ev.done != nil {
-		var out []fileGroup
-		for len(g.dirs) > 0 {
-			out = append(out, g.flushLast()...)
-		}
-		return append(out, fileGroup{done: ev.done}), nil
+		last := g.open
+		g.open = nil
+		return fileGroup{entries: last, done: ev.done}, nil
 	}
 	if shouldSkipPath(ev.entry.Path) {
-		return nil, nil
+		return fileGroup{}, chain.ErrSkippedItem
 	}
-
-	dir := filepath.Dir(ev.entry.Path)
-	var out []fileGroup
-	// The walk left every pending directory that is not dir or one of its parents
-	for len(g.dirs) > 0 {
-		last := g.dirs[len(g.dirs)-1]
-		if last == dir || isUnder(dir, last) {
-			break
-		}
-		out = append(out, g.flushLast()...)
+	if len(g.open) == 0 || sameGroup(g.open, ev.entry) {
+		g.open = append(g.open, ev.entry)
+		return fileGroup{}, chain.ErrSkippedItem // not complete yet
 	}
-	if _, ok := g.pending[dir]; !ok {
-		g.dirs = append(g.dirs, dir)
-	}
-	g.pending[dir] = append(g.pending[dir], ev.entry)
-	return out, nil
-}
-
-func (g *genericGrouper) flushLast() []fileGroup {
-	dir := g.dirs[len(g.dirs)-1]
-	g.dirs = g.dirs[:len(g.dirs)-1]
-	entries := g.pending[dir]
-	delete(g.pending, dir)
-
-	var out []fileGroup
-	for _, group := range groupByName(entries) {
-		out = append(out, fileGroup{entries: group})
-	}
-	return out
+	closed := g.open
+	g.open = []dto.ItemEntry{ev.entry}
+	return fileGroup{entries: closed}, nil
 }
 
 func (g *genericGrouper) Stop() {}
 
-// groupByName groups the files of one directory: "a.jpg", "a.xmp", "a.JPG.xmp" and
-// "a.MOV" are one group ("a"); "a.edited.jpg" is another. Case-insensitive.
-// Groups come out in name order.
-func groupByName(entries []dto.ItemEntry) [][]dto.ItemEntry {
-	sorted := append([]dto.ItemEntry(nil), entries...)
-	// Fewer dots first: "a.jpg" must be known before "a.jpg.xmp" joins it
-	sort.SliceStable(sorted, func(i, j int) bool {
-		di, dj := strings.Count(sorted[i].Name, "."), strings.Count(sorted[j].Name, ".")
-		if di != dj {
-			return di < dj
-		}
-		return sorted[i].Name < sorted[j].Name
-	})
-
-	var groups [][]dto.ItemEntry
-	byName := map[string]int{} // full name -> group
-	byStem := map[string]int{} // name without its last extension -> group
-	for _, e := range sorted {
-		name := strings.ToLower(e.Name)
-		stem := strings.TrimSuffix(name, filepath.Ext(name))
-
-		gi, ok := byName[stem] // "a.jpg.xmp" joins "a.jpg"
-		if !ok {
-			gi, ok = byStem[stem] // "a.xmp" joins "a.jpg"
-		}
-		if !ok {
-			gi = len(groups)
-			groups = append(groups, nil)
-			byStem[stem] = gi
-		}
-		groups[gi] = append(groups[gi], e)
-		byName[name] = gi
+// sameGroup: the file sits in the group's directory and its name without the last
+// extension is the name or the stem of a group member: "a.jpg", "a.xmp",
+// "a.jpg.xmp", "a.MOV" are one group, "a.edited.jpg" is not. Case-insensitive.
+func sameGroup(group []dto.ItemEntry, e dto.ItemEntry) bool {
+	if filepath.Dir(group[0].Path) != filepath.Dir(e.Path) {
+		return false
 	}
-
-	sort.SliceStable(groups, func(i, j int) bool { return minName(groups[i]) < minName(groups[j]) })
-	return groups
+	stem := nameStem(e.Name)
+	for _, m := range group {
+		if stem == strings.ToLower(m.Name) || stem == nameStem(m.Name) {
+			return true
+		}
+	}
+	return false
 }
 
-func minName(group []dto.ItemEntry) string {
-	m := group[0].Name
-	for _, e := range group[1:] {
-		m = min(m, e.Name)
-	}
-	return m
+// nameStem: the lower-case name without its last extension
+func nameStem(name string) string {
+	name = strings.ToLower(name)
+	return strings.TrimSuffix(name, filepath.Ext(name))
 }
 
 // Not gallery sources: .THM posters; Apple Photos generated derivatives (until the

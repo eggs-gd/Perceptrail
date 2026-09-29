@@ -49,7 +49,7 @@ func scan(t *testing.T, root string) []string {
 	t.Helper()
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
 	m := newTestMonitor(t, root)
-	groupers := map[int]chain.Expander[fileEvent, fileGroup]{
+	groupers := map[int]chain.Decorator[fileEvent, fileGroup]{
 		branchGeneric: newGenericGrouper(),
 		branchPhotos:  photosGrouper{},
 	}
@@ -77,12 +77,12 @@ func scan(t *testing.T, root string) []string {
 			if !has {
 				continue
 			}
-			groups, err := groupers[b].Expand(in)
+			group, err := groupers[b].Decorate(in)
 			if !ok(err) {
 				continue
 			}
-			for _, g := range groups {
-				stored, err := gate.Decorate(g)
+			{
+				stored, err := gate.Decorate(group)
 				if !ok(err) {
 					continue
 				}

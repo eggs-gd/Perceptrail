@@ -30,16 +30,24 @@ func newFilesGate(branches int, logger *l.Logger) *filesGate {
 }
 
 func (g *filesGate) Decorate(in fileGroup) (storedGroup, error) {
+	// A grouper's last group comes with its end-of-walk marker: the group first
+	out, err := g.pass(in.entries)
 	if in.done != nil {
 		g.markers++
 		if g.markers == g.branches { // every grouper has flushed: all files are stamped
 			g.markers = 0
 			g.finalizeWalk(*in.done)
 		}
+	}
+	return out, err
+}
+
+// pass stores the group and lets it through if it needs work
+func (g *filesGate) pass(entries []dto.ItemEntry) (storedGroup, error) {
+	if len(entries) == 0 {
 		return storedGroup{}, chain.ErrSkippedItem
 	}
-
-	files, changed, err := g.store(in.entries)
+	files, changed, err := g.store(entries)
 	if err != nil {
 		return storedGroup{}, err
 	}

@@ -63,8 +63,8 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	importChain.AddStep(NewFsWalker(ctx.Config().Path, files, logger))
 
 	importChain.AddStep(chain.NewSwitch(files, sendOnly(toGroupers), sourceSwitch{}))
-	importChain.AddStep(chain.NewExpander(toGroupers[branchGeneric], groups, newGenericGrouper()))
-	importChain.AddStep(chain.NewExpander(toGroupers[branchPhotos], groups, photosGrouper{}))
+	importChain.AddStep(chain.NewDecorator(toGroupers[branchGeneric], groups, newGenericGrouper()))
+	importChain.AddStep(chain.NewDecorator(toGroupers[branchPhotos], groups, photosGrouper{}))
 
 	importChain.AddStep(chain.NewDecorator(groups, stored, newFilesGate(groupBranches, logger)))
 	for _, step := range NewExifExtractor(exifWorkers, stored, exifed, logger) {

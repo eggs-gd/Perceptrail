@@ -221,18 +221,18 @@ compose with `derived`. The current message protocol is a deviation from this de
 
 ### Import chain as small steps (2026-09-29)
 
-- **perceplib `chain` had no 1 → N step.** `Decorator` returns exactly one output,
-  `Switcher` at most one per branch; a grouper that holds a directory must release
-  many groups at once. Added `chain.Expander` (`Expand(Ti) ([]To, error)`); an empty
-  result sends nothing — no `ErrSkippedItem` noise for buffered files. Changing the
-  `chain` package means plugins must be rebuilt (`make run` does it).
+- **Groupers are plain decorators with a buffer of open groups** (decision): a group
+  goes out when it is complete, so each incoming file closes at most one group —
+  one output per call is enough. A first version buffered a whole directory
+  (`WalkDir` visits subdirectories between a directory's files) and released many
+  groups at once, which needed a 1 → N step in perceplib (`Expander`); dropped:
+  sidecars are next to their main file, one open group suffices for `generic`.
+  Known limit: a name sorting between members splits a group (`a.aae`,
+  `a.edited.jpg`, `a.jpg`; a subdirectory `a.jpg.d/` between `a.jpg` and `a.xmp`).
+  Skipped items (`ErrSkippedItem`) are not logged any more.
 - **exif was serial.** A decorator runner is one goroutine: the pool of 5 exiftool
   processes was used one at a time. Now N runners read the same channel (groups are
   independent after the gate); `Stop` is called by each, closing is `sync.Once`.
-- **Grouping needs the whole directory.** `WalkDir` visits subdirectories between a
-  directory's files (`x.jpg`, `x.jpg.d/…`, `x.xmp`), so adjacency is not enough: the
-  generic grouper buffers a directory until the walk leaves it (a stack of pending
-  ancestors) and groups by name, case-insensitive.
 - **The main file is known only after exif**, so every file of a group gets `-all`
   (same arguments as the main file had: short hashes stay stable) and the validator
   links the group. **The main file is always the source** (decision): RAW > video >
