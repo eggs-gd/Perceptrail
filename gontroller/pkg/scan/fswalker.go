@@ -3,6 +3,7 @@ package scan
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"mime"
 	"net/http"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/eggs-gd/perceplib/api"
@@ -24,12 +26,27 @@ import (
 type inType struct {
 	path string
 	info os.DirEntry
+	// Set only on the end-of-walk marker
+	done *walkResult
+}
+
+// walkResult describes a finished walk. Deletions may be derived from it only if
+// the walk was complete: a cancelled walk or an unreadable root says nothing about
+// which files are gone.
+type walkResult struct {
+	complete bool
+	// Files seen (before grouping and filtering)
+	files int
+	// Directories that could not be read: their files are not "deleted"
+	unreadable []string
 }
 
 type fsMonitor struct {
 	logger *l.Logger
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	mu sync.Mutex // guards cancel: Stop is called from two goroutines
 
 	path         string
 	currentGroup []dto.ItemEntry // current group of files
@@ -48,53 +65,101 @@ func NewFsWalker(path string, chout chan<- []*dto.FileDto, logger *l.Logger) cha
 }
 
 func (m *fsMonitor) Start(chin chan<- inType, ctx context.Context) {
+	m.mu.Lock()
 	m.ctx, m.cancel = context.WithCancel(ctx)
+	m.mu.Unlock()
 	defer m.Stop()
 
 	m.currentRun = time.Now()
-	err := filepath.WalkDir(m.path, func(path string, info os.DirEntry, err error) error {
-		m.logger.Info("walkDirFunc", l.String("file", path), l.Error(err))
-		select {
-		case <-m.ctx.Done():
-			return m.ctx.Err()
-
-		default:
-			if err != nil {
-				return err
-			}
-			if !info.IsDir() {
-				chin <- inType{path, info}
-			}
-			return nil
-		}
-	})
-
-	if err != nil && !errors.Is(err, context.Canceled) {
-		m.logger.Error("FsMonitor Error", l.Error(err))
-		return
-	}
+	result := m.walk(chin)
 
 	// Groups are emitted when the next group starts; the marker flushes the last one
+	// and carries the result to Decorate, which runs after every group is stored
 	select {
-	case chin <- inType{}:
+	case chin <- inType{done: &result}:
 	case <-m.ctx.Done():
 	}
 }
 
-func (m *fsMonitor) finalizeWalk() {
-	// todo process removed files
+// walk sends every file under the root to chin. An unreadable subdirectory is
+// skipped and recorded; an unreadable root or a cancel makes the walk incomplete.
+func (m *fsMonitor) walk(chin chan<- inType) walkResult {
+	var result walkResult
+
+	if info, err := os.Stat(m.path); err != nil || !info.IsDir() {
+		m.logger.Error("Library root is not a readable directory", l.String("path", m.path), l.Error(err))
+		return result
+	}
+
+	err := filepath.WalkDir(m.path, func(path string, entry fs.DirEntry, err error) error {
+		if ctxErr := m.ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		if err != nil {
+			if path == m.path {
+				return err
+			}
+			m.logger.Warn("Unreadable, skipped", l.String("path", path), l.Error(err))
+			result.unreadable = append(result.unreadable, path)
+			if entry != nil && entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if entry.IsDir() {
+			return nil
+		}
+
+		select {
+		case chin <- inType{path: path, info: entry}:
+			result.files++
+			return nil
+		case <-m.ctx.Done():
+			return m.ctx.Err()
+		}
+	})
+
+	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			m.logger.Error("Walk failed", l.String("path", m.path), l.Error(err))
+		}
+		return result
+	}
+	result.complete = true
+	return result
+}
+
+// finalizeWalk runs after the last group of a walk is stored.
+func (m *fsMonitor) finalizeWalk(result walkResult) {
+	if !result.complete {
+		m.logger.Warn("Walk incomplete: deletions are not checked")
+		return
+	}
+	if result.files == 0 {
+		// An empty root (e.g. an unmounted drive's mount point) must not delete the library
+		m.logger.Warn("Walk found no files: deletions are not checked", l.String("path", m.path))
+		return
+	}
+	m.logger.Info("Walk complete", l.Int("files", result.files), l.Int("unreadable", len(result.unreadable)))
+	// todo process removed files: CheckTime older than currentRun, except under result.unreadable
 }
 
 func (m *fsMonitor) Stop() {
-	m.finalizeWalk()
-	m.cancel()
+	// Called from both the walk goroutine and the chain runner
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.cancel != nil {
+		m.cancel()
+	}
 }
 
 func (m *fsMonitor) Decorate(in inType) ([]*dto.FileDto, error) {
-	if in.info == nil { // end of walk: emit the last group
+	if in.done != nil { // end of walk: emit the last group, then finalize
 		group := m.currentGroup
 		m.currentGroup = []dto.ItemEntry{}
-		if res := m.entryToFile(group); res != nil {
+		res := m.entryToFile(group)
+		m.finalizeWalk(*in.done)
+		if res != nil {
 			return res, nil
 		}
 		return nil, chain.ErrSkippedItem
