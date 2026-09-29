@@ -269,6 +269,18 @@ compose with `derived`. The current message protocol is a deviation from this de
 
 ## Infrastructure
 
+### Safari: 500 on every page (2026-09-29)
+
+- Safari showed SvelteKit's 500 page with `ReferenceError: Cannot access 'load' before
+  initialization`. Not a circular import: `getLogger()` read the caller from
+  `stack.split('\n')[2]` — Chrome's format (`Error` header + `at …` lines). Safari and
+  Firefox print `fn@url:line:col` without a header, so at module top level there was
+  no third line → `undefined.match` threw while `proxy.ts` initialised → `+layout.ts`
+  never finished → Kit's export validator (`for…in` over the module namespace, which
+  JavaScriptCore evaluates, V8 does not) hit the uninitialised `load`.
+- `callerContext()` now parses both formats and never throws. Rule: code that runs at
+  module initialisation must not throw — in Safari it takes the whole app down.
+
 ### perceplib: subtree instead of submodule (2026-09-29)
 
 - The submodule kept biting: detached HEAD in the checkout; `gontroller` depended on
