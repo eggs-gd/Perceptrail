@@ -7,7 +7,6 @@ require (
 	github.com/eggs-gd/perceplib v0.0.6
 	github.com/google/uuid v1.6.0
 	github.com/h2non/bimg v1.1.9
-	github.com/joho/godotenv v1.5.1
 	github.com/labstack/echo/v4 v4.16.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/sqlite v1.6.0

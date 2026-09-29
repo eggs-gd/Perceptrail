@@ -1,0 +1,35 @@
+# gontroller config. Copy to .var/config.yml for `make run`:
+#   mkdir -p .var && cp config.example.yml .var/config.yml
+# Or run with --config <file> (or GONTROLLER_CONFIG=<file>).
+# Relative paths are resolved against the directory of this file.
+
+# Library root: the photos to import
+path: "/Users/me/Pictures/"
+
+# External perceptors (`make build-plugins` from the repo root)
+plugins:
+  - ../.build/plugins/exif_geo.so
+
+# Database and caches (thumbnails). Default: the directory of this file
+# data_dir: .
+
+# ExifTool executable. Default: exiftool from PATH
+# exiftool: /opt/exiftool/exiftool
+
+server:
+  host: ""      # all interfaces
+  port: 1323
+  # CORS: origins allowed to call the API. Default: any ("*")
+  # allowed_origins:
+  #   - http://localhost:5173
+
+# Behind GORM (pkg/model: sqlite.go, postgres.go)
+database:
+  driver: sqlite            # sqlite | postgres (not implemented yet)
+  name: media_library.db    # sqlite: file, relative to data_dir; others: database name
+  # Server drivers only (sqlite ignores them): username/password or token
+  # host: localhost
+  # port: 5432
+  # username: user
+  # password: password
+  # token: ""

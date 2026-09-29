@@ -43,7 +43,7 @@ From the repo root:
 make build-plugins
 ```
 
-Output: `gontroller/build/plugins/<name>.so`, enabled in `config.yml` (`plugins:`).
+Output: `gontroller/.build/plugins/<name>.so`, enabled in `config.yml` (`plugins:`).
 Host and plugin must be built with **the same Go** and **the same versions** of
 `perceplib`, zap, multierr — update all modules together.
 

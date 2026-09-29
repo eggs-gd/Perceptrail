@@ -32,6 +32,12 @@ Target architecture — the diagrams in [`../puml`](../puml).
 - svebapp on current Svelte 5 / Kit practices: `$app/state`, no `svelte/store`
   (component state + `LiveQuery` on `createSubscriber`), `{@attach}`, `$derived`
   instead of state writes in effects, clsx-style `class`, no side effects in `load`.
+- Runtime paths: build artifacts in `gontroller/.build/`, runtime data (config,
+  database, caches) in `gontroller/.var/`; config paths are relative to the config
+  file; `--config` flag instead of `.env`; HTTP address, CORS origins and exiftool
+  path from config. Config sections are owned by their modules
+  (`client.ServerConfig`, `model.DBConfig` with a driver switch: sqlite; postgres is
+  a stub).
 
 ## Releases
 
@@ -41,10 +47,104 @@ Target architecture — the diagrams in [`../puml`](../puml).
 
 ## Next
 
+Each step is one PR unless noted. Order: V1–V5, then D1–D3.
+
+### Dates and time zones
+
+Time zones belong to the core (the date), not to the geo perceptor.
+
+- [ ] **D1. Date bugs.** `FileModifyDate` never parses (exiftool prints it with a
+      zone) — 1741 of 2413 items have a zero date (screenshots, messenger files).
+      Ignore invalid `0000:00:00 00:00:00`. Table tests on real tag sets (iPhone
+      HEIC with a zone, camera JPEG without one, QuickTime video, PNG without EXIF).
+- [ ] **D2. Offset in the model and the API.** `ItemDto`: instant (UTC) + offset in
+      minutes (NULL = unknown) + source tag / "assumed" flag. The offset is its own
+      column: sqlite and Postgres `timestamptz` return UTC on read. The perceplib
+      date API gets an explicit offset (+00:00 vs unknown) → perceplib v0.0.7,
+      plugins rebuilt.
+- [ ] **D3. Offset chain in `exif_core/date`.** Tags by group (exiftool `-G`; today
+      `-s2` without groups — `CreateDate` is EXIF for photos but already-UTC
+      QuickTime for videos). In order:
+      1. `OffsetTimeOriginal` (videos: `Keys:CreationDate` with a zone);
+      2. `DateTimeOriginal` − GPS UTC time, rounded to 15 min (sanity ±14 h);
+      3. GPS coordinates → IANA zone from an embedded dictionary
+         (`github.com/ringsaturn/tzf`), offset via `time.LoadLocation` (DST,
+         history). Not longitude/15: no DST, wrong at administrative borders;
+      4. the server's time zone, marked as assumed.
+      `SubSecTimeOriginal` for bursts.
+- [ ] **D4. API and client — to discuss after D1–D3.** Maybe not needed: if server
+      and client normalise dates the same way, the API needs no separate zone.
+      Sorting/grouping the gallery by date is separate (it makes all of this visible).
+- Existing items are not re-read (unchanged files are skipped): in dev — delete
+  `.var/media_library.db*` and rescan. Reprocessing on plugin change is "Later".
+
+### Validator per [`Walker.puml`](../puml/Walker.puml)
+
+Today: files are keyed by path, the item GUID = the main file's GUID. A moved file
+becomes a new item and the old one stays forever (`finalizeWalk` is a TODO);
+`Dirty` is set but nothing reads it; every item stays `New`.
+
+- [ ] **V1. Walk safety** (prerequisite for deletions). An unreadable directory skips
+      its subtree instead of aborting the whole walk; a missing/unmounted library
+      root never counts as "everything deleted"; finalization runs only after a
+      complete walk (today `Stop()` would also run it on cancel).
+- [ ] **V2. Deleted.** `finalizeWalk`: files with `CheckTime` older than the run are
+      gone. Main file gone → the item is `Deleted` (soft delete, excluded from
+      `/items`; the client resyncs fully on load, so no tombstones yet). A sidecar
+      gone → its group is re-emitted.
+- [ ] **V3. Moved.** New path, hash matches an item whose path no longer exists →
+      the file row and the item get the new path, the GUID stays (thumbnails keyed by
+      GUID survive). Same hash and the old path still exists → **duplicate**: a new
+      item (as now); reusing its thumbnails is a later optimisation.
+- [ ] **V4. Changed and states.** Same path, new hash → `Dirty` → re-run plugins,
+      later regenerate thumbnails. Define who moves `New → Processing → Ready`
+      (until the transcoder exists: the closer sets `Ready`).
+- [ ] **V5. Tests.** Walker + validator on a temp directory and a temp sqlite (now
+      possible via `model.Configure`): new, same, changed, moved, duplicate, deleted
+      main/sidecar, unreadable subdirectory, missing root. Update `Walker.puml`
+      where the code deviates (exif reading is merged into the validator step) and
+      findings.
+- Known limit: the short hash is size + non-volatile EXIF — two files without EXIF
+  and with the same byte size look identical. Acceptable for now; a full hash is an
+  option for CPU-rich setups (already noted in `ItemDto`).
+
+### Photos library (`*.photoslibrary`) as its own source — separate milestone
+
+The bundle is not a folder of photos: 30 311 files, of them 18 154 `database/search`,
+8 989 `resources/caches`, 1 780 `originals/<0-F>/<UUID>.<ext>` (no original names),
+1 143 `resources/derivatives`. Yet 1 844 of 2 413 gallery items come from it. The
+truth is in `database/Photos.sqlite`: original filename, date + time zone
+(`ZADDITIONALASSETATTRIBUTES.ZTIMEZONEOFFSET/ZTIMEZONENAME`), GPS, Live Photo pairs,
+edits, trashed/hidden, favourites, albums. Name-based grouping does not apply.
+Private Apple format: the schema changes between macOS versions (osxphotos is the
+reference); reading needs Full Disk Access for the process (TCC).
+
+- [ ] **P0. Spike.** Read-only `Photos.sqlite` (`mode=ro`, the library may be open in
+      Photos) on this macOS: map asset UUID → files (original, Live Photo video,
+      edited render, `.aae`), date/zone, GPS, kind, trashed/hidden, cloud-only
+      originals (Optimize Mac Storage: no local original). Findings entry; decide the
+      supported macOS range.
+- [ ] **P1. Source step.** The walker meets a `*.photoslibrary` directory →
+      `SkipDir` and hands it to a library reader that emits the same groups
+      (`[]FileDto`) into the chain: one group per asset — main original + Live Photo
+      video / edited render as sidecars; the GUID from the asset UUID (stable).
+      Everything else in the bundle is not scanned. Trashed assets are not emitted
+      (→ `Deleted` via V2). Cloud-only: skip (or a derivative as a fallback — decide
+      in P0).
+- [ ] **P2. Library metadata.** The asset's DB attributes join the group as a
+      virtual metadata record (e.g. `Photos:*` tags next to exiftool's), so the core
+      plugins use them: the zone from the library comes first in D3, the original
+      filename, favourite/hidden.
+- [ ] **P3. Tests** on a fixture library (minimal `Photos.sqlite` + files).
+- Later: albums, people (`ZPERSON`/faces) → perceptors.
+
+### Then
+
 - [ ] Thumbnails on the server: libvips via `bimg` (needs `brew install vips`), 400 px
       for tiles, 1600 px for the viewer, WebP; `/assets/:guid?size=…` falls back to the
-      original. Fixes blank tiles (decoding originals) and HEIC in Chrome/Firefox.
-- [ ] First perceptor end to end (primitive geo) → release 0.2.0.
+      original; regenerated for `Dirty`, dropped for `Deleted`. Fixes blank tiles
+      (decoding originals) and HEIC in Chrome/Firefox.
+- [ ] First perceptor end to end (primitive geo: map, markers) → release 0.2.0.
 
 ## Core — product (gontroller)
 
@@ -54,23 +154,19 @@ Target architecture — the diagrams in [`../puml`](../puml).
 - [ ] Main file of a group: the photo in a Live Photo, deterministic for RAW+JPEG;
       Live Photo pairs by `ContentIdentifier`; one main item merged from all sidecars
       ([`Item flow.puml`](../puml/Item%20flow.puml)).
-- [ ] `date`: time zones (`OffsetTimeOriginal`, GPS UTC), parse dates with a zone.
 - [ ] Embedded RAW preview (`PreviewImage`/`JpgFromRaw`) for the transcoder.
 
 ## Core — service (gontroller)
 
-- [ ] Validator per [`Walker.puml`](../puml/Walker.puml): same / moved / duplicate /
-      changed by `HashShort`; `finalizeWalk` for deleted files (`Deleted`), `Dirty`.
 - [ ] Unreadable/broken files still become items (0×0): exiftool returns File tags
       even for garbage. Decide how to mark them (ignored? error state?).
-- [ ] HTTP port and exiftool path from config (`:1323` is hardcoded; the `database`
-      section of the config is unused — SQLite).
 - [ ] Fewer Info logs in `fswalker` (several per file).
 - [ ] `TestLoadExternalPlugins` should load real `.so` files.
 
 ## Deployment (first release)
 
-- [ ] Dockerfile: CGO (sqlite, libvips), exiftool from a `dist-*` release, fix `CMD`.
+- [ ] Dockerfile: CGO (sqlite, libvips), exiftool from a `dist-*` release, fix `CMD`
+      (`--config /data/config.yml`, `/data` as a volume = what `.var/` is in dev).
 
 ## Frontend
 

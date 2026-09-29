@@ -5,7 +5,6 @@ import (
 
 	l "github.com/eggs-gd/perceplib/logger"
 
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
@@ -27,24 +26,26 @@ func NewProxy(logger *l.Logger) *proxy {
 }
 
 func initDB(logger *l.Logger) *gorm.DB {
-	logger.Info("Database Initiating...")
-	// WAL + busy_timeout: importer writes while /items stream reads
-	db, err := gorm.Open(sqlite.Open("file:media_library.db?_busy_timeout=5000&_journal_mode=WAL&_fk=1"), &gorm.Config{
+	if dbConfig == nil {
+		panic("model: Configure must be called before NewProxy")
+	}
+	cfg := *dbConfig
+	d := drivers[cfg.Driver]
+	logger.Info("Database Initiating...", l.String("driver", cfg.Driver), l.String("name", cfg.Name))
+
+	dialector, err := d.dialector(cfg)
+	if err != nil {
+		logger.Fatal("Can't open database", l.Error(err))
+	}
+	db, err := gorm.Open(dialector, &gorm.Config{
 		Logger: newLogger(logger),
 	})
 	if err != nil {
 		logger.Fatal("Can't connect to database", l.Error(err))
 	}
-
-	sqlDB, err := db.DB()
-	if err != nil {
-		logger.Fatal("Can't get sql.DB", l.Error(err))
+	if err := d.tune(db); err != nil {
+		logger.Fatal("Can't configure database", l.Error(err))
 	}
-	// One connection: avoids SQLite "database is locked" under concurrent GORM pools.
-	// StreamAllItems uses short keyset pages, so the conn is released while the client is written to.
-	// Never open a transaction and query db (not tx) inside it — that would deadlock on this single conn.
-	sqlDB.SetMaxOpenConns(1)
-	sqlDB.SetMaxIdleConns(1)
 
 	err = db.AutoMigrate(
 		&dto.ItemDto{},

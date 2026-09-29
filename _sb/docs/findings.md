@@ -227,7 +227,7 @@ compose with `derived`. The current message protocol is a deviation from this de
   `perceptors/*`, then `make build-plugins`.
 - `TestLoadExternalPlugins` does not actually load any `.so` (the mock points to
   `test_plugin.so`) — it passes with a warning. Real loading was checked with a
-  temporary test via `loadPlugin("../../build/plugins/<name>.so")`: `exif_geo`,
+  temporary test via `loadPlugin("../../.build/plugins/<name>.so")`: `exif_geo`,
   `ml_color` — ok; `ml_faces`, `ml_objects` — stubs without a `Perceptor` symbol.
 - **Pipeline stall with external EXIF plugins (fixed 2026-09-29):**
   `ExifPluginProcessor` allocated a channel for every `ExifDataProvider` plugin but
