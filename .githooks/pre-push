@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Runs the CI checks for the parts changed by the pushed refs, before they reach CI.
+# Enable once per clone: git config core.hooksPath .githooks
+# Skip: git push --no-verify
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+zero=0000000000000000000000000000000000000000
+head=$(git rev-parse HEAD)
+changed=""
+
+# stdin: <local ref> <local oid> <remote ref> <remote oid>, one line per pushed ref
+while read -r local_ref local_oid remote_ref remote_oid; do
+  [ "$local_oid" = "$zero" ] && continue # deleting a remote branch
+
+  if [ "$remote_oid" = "$zero" ] || ! git cat-file -e "$remote_oid^{commit}" 2>/dev/null; then
+    # new remote branch (or unknown remote state): compare with develop
+    base=$(git merge-base "$local_oid" origin/develop 2>/dev/null || true)
+  else
+    base=$remote_oid
+  fi
+  [ -z "$base" ] && continue
+
+  ref_changed=$(git diff --name-only "$base" "$local_oid")
+  if [ -n "$ref_changed" ] && [ "$local_oid" != "$head" ] \
+    && echo "$ref_changed" | grep -qE '^(perceplib|gontroller|perceptors|svebapp)/'; then
+    echo "pre-push: $local_ref has code changes but is not checked out;" >&2
+    echo "  the checks run on the working copy — check it out and push again, or use --no-verify" >&2
+    exit 1
+  fi
+  changed="$changed"$'\n'"$ref_changed"
+done
+
+touches() { echo "$changed" | grep -qE "$1"; }
+
+if touches '^(perceplib|gontroller|perceptors)/'; then
+  echo "pre-push: Go checks"
+  (cd perceplib && go vet ./... && go test ./...)
+  (cd gontroller && pkgs=$(go list ./... | grep -v transcoder/images) \
+    && go vet $pkgs && go test $pkgs)
+  make build-plugins > /dev/null
+fi
+
+if touches '^svebapp/'; then
+  echo "pre-push: svebapp checks"
+  (cd svebapp && npm run check --silent)
+fi
