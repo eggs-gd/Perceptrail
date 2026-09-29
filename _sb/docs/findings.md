@@ -219,6 +219,33 @@ compose with `derived`. The current message protocol is a deviation from this de
 
 ## Backend: gontroller, plugins, exiftool
 
+### Import chain as small steps (2026-09-29)
+
+- **perceplib `chain` had no 1 → N step.** `Decorator` returns exactly one output,
+  `Switcher` at most one per branch; a grouper that holds a directory must release
+  many groups at once. Added `chain.Expander` (`Expand(Ti) ([]To, error)`); an empty
+  result sends nothing — no `ErrSkippedItem` noise for buffered files. Changing the
+  `chain` package means plugins must be rebuilt (`make run` does it).
+- **exif was serial.** A decorator runner is one goroutine: the pool of 5 exiftool
+  processes was used one at a time. Now N runners read the same channel (groups are
+  independent after the gate); `Stop` is called by each, closing is `sync.Once`.
+- **Grouping needs the whole directory.** `WalkDir` visits subdirectories between a
+  directory's files (`x.jpg`, `x.jpg.d/…`, `x.xmp`), so adjacency is not enough: the
+  generic grouper buffers a directory until the walk leaves it (a stack of pending
+  ancestors) and groups by name, case-insensitive.
+- **The main file is known only after exif**, so every file of a group gets `-all`
+  (same arguments as the main file had: short hashes stay stable) and the validator
+  links the group. **The main file is always the source** (decision): RAW > video >
+  image. The JPEG of RAW+JPEG and the photo of a Live Photo are derivatives —
+  sidecars that can later serve as ready previews. A file that was a main file and
+  becomes a sidecar (a JPEG imported before its RAW) loses its item. Side effect:
+  tags missing in the main file can now come from a sidecar's full set (`GetExif`
+  looks through the group, main first).
+- **The closer blocked after 1000 items**: it wrote to a buffered channel nobody
+  read. Finished items are drained now (later: events to the client).
+- The gate stamps `CheckTime` with its own clock; the marker carries the walk start,
+  and "not stamped since the walk started" = gone.
+
 ### Go plugins (2026-09-28)
 
 - Host and `.so` must be built with **the same toolchain** and **identical versions

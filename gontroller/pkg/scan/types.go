@@ -9,9 +9,22 @@ import (
 	"github.com/eggs-gd/perceplib/api"
 )
 
+// RawItem is an item on its way through transcode and plugins: the group, main
+// file first. Exif, Files and Kinds are aligned; a nil Exif had no metadata.
 type RawItem struct {
-	Item *dto.ItemDto
-	Exif []api.RawExif
+	Item  *dto.ItemDto
+	Exif  []api.RawExif
+	Files []*dto.FileDto
+	Kinds []MediaKind
+}
+
+func (r *RawItem) hasKind(k MediaKind) bool {
+	for _, kind := range r.Kinds {
+		if kind == k {
+			return true
+		}
+	}
+	return false
 }
 
 // ExifProvider implementation

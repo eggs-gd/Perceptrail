@@ -51,77 +51,62 @@ func (p *proxy) getShortHash(item *dto.FileDto, meta api.RawExif) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func (p *proxy) ValidateFile(item *dto.FileDto, meta api.RawExif) (*dto.ItemDto, error) {
+// Outcome of ValidateFile, per Walker.puml
+type Outcome int
+
+const (
+	OutcomeSame    Outcome = iota // same path, same hash
+	OutcomeNew                    // not found, or a duplicate (same hash, the original still exists)
+	OutcomeChanged                // same path, new hash
+	OutcomeMoved                  // same hash, the old path is gone: the item keeps its GUID
+)
+
+func (p *proxy) ValidateFile(item *dto.FileDto, meta api.RawExif) (*dto.ItemDto, Outcome, error) {
 	var hashShort = p.getShortHash(item, meta)
-	var err error
 
 	itemByGUID, itemByPath, itemByHash := p.getItemsForValidation(item, hashShort)
 
 	if itemByGUID.Guid != itemByPath.Guid {
 		// probably panic(). Path/Guid should be stable pair on files layer
-		return &dto.ItemDto{}, fmt.Errorf("there is path/guid missmatch")
+		return &dto.ItemDto{}, OutcomeSame, fmt.Errorf("there is path/guid missmatch")
 	}
 
 	if itemByGUID.Guid == "" {
 		// Walker.puml "found moved": same hash, the old path no longer exists
 		if moved := p.findMovedItem(item, hashShort); moved != nil {
-			return moved, p.moveItem(moved, item)
+			return moved, OutcomeMoved, p.moveItem(moved, item)
 		}
 
 		// Not found, or a duplicate (same hash, the old path still exists): a new item.
-		// if this guid/path is not present in DB we don't care about duplicates and just create new one for now
-		// for future I kept commented out code for optimisation with available duplicates and their thumbs
-		// make sense only in CPU environments with a lot of transcoding work
-		itemByGUID, err = p.CreateItem(item)
-		itemByGUID.HashShort = hashShort
-		p.UpdateItem(itemByGUID)
-		return itemByGUID, err
-
-		/*
-			if itemByPath.GUID == "" && itemByHash.GUID == "" {
-				// all three items are empty, new file
-				// create item
-				return NewFile, nil
-			}
-
-			if itemByHash.GUID != "" {
-				// path not exiss, hash exists
-				// file moved. It is in list of Items but with different path
-				// new duplicate file
-				// todo for future -> provide some optimisation for thumbs/transcodes reusing between duplicates
-				return MovedFile, nil
-			}
-		*/
-
-	} else {
-		if itemByPath.Guid == itemByHash.Guid {
-			// all three items are the same, Known file
-			// do nothing
-			return itemByGUID, nil
+		// Reusing a duplicate's thumbnails is a later optimisation.
+		created, err := p.CreateItem(item)
+		if err != nil {
+			return created, OutcomeNew, err
 		}
+		created.HashShort = hashShort
+		_, err = p.UpdateItem(created)
+		return created, OutcomeNew, err
+	}
 
-		if itemByHash.Guid == "" {
-			// hash for known file changed and not exists
-			// modified, update short hash itemByGuid.HashShort = hashShort, regenerate thumbs
-			itemByGUID.State = dto.Dirty
-			itemByGUID.HashShort = hashShort
-			p.UpdateItem(itemByGUID)
-			return itemByGUID, nil
-		}
-
-		if itemByHash.Guid != itemByPath.Guid {
-			// path != hash but both exists
-			// ItemByGuid was modified but we have the same hash on another file
-			// threat as modified, ignore duplicate for now
-			// todo for future -> provide some optimisation for thumbs/transcodes reusing between duplicates
-			itemByGUID.State = dto.Dirty
-			itemByGUID.HashShort = hashShort
-			p.UpdateItem(itemByGUID)
-			return itemByGUID, nil
+	// The type may be known better now (mime step): keep the item's in sync
+	if item.MimeType != "" && itemByGUID.MimeType != item.MimeType {
+		itemByGUID.MimeType = item.MimeType
+		if _, err := p.UpdateItem(itemByGUID); err != nil {
+			return itemByGUID, OutcomeSame, err
 		}
 	}
 
-	return &dto.ItemDto{}, fmt.Errorf("something unknown went wrong in validator")
+	if itemByPath.Guid == itemByHash.Guid {
+		// all three items are the same, known file
+		return itemByGUID, OutcomeSame, nil
+	}
+
+	// Same path, new hash (a duplicate of another file with that hash or not):
+	// modified, regenerate thumbs
+	itemByGUID.State = dto.Dirty
+	itemByGUID.HashShort = hashShort
+	_, err := p.UpdateItem(itemByGUID)
+	return itemByGUID, OutcomeChanged, err
 }
 
 func (p *proxy) getItemsForValidation(file *dto.FileDto, hashShort string) (byGuid *dto.ItemDto, byPath *dto.ItemDto, byHash *dto.ItemDto) {

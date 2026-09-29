@@ -58,35 +58,45 @@ Target architecture — the diagrams in [`../puml`](../puml).
 
 ## Next
 
-One PR per feature (its steps are commits). Next: the import chain C1–C7 (its own
-PR). The validator (V1–V5) and dates (D1–D3) are in PR #13.
+One PR per feature (its steps are commits). The import chain C1–C7 is in its own
+PR (`feature/import-chain`).
 
 ### Import chain: one small step per node
 
 Graph: [`Import chain.puml`](../puml/Import%20chain.puml); gate and validator
-details: [`Walker.puml`](../puml/Walker.puml). Today `fswalker` does everything
+details: [`Walker.puml`](../puml/Walker.puml). Before, `fswalker` did everything
 (walk, MIME, grouping, files table, change detection, deletions) and the validator
-hides inside the exif step, so groups and MIME are decided before EXIF is known.
+hid inside the exif step, so groups and MIME were decided before EXIF was known.
 
-- [ ] **C1. fswalker = spam.** Every file found (path + stat), nothing else; walk
+- [x] **C1. fswalker = spam.** Every file found (path + stat), nothing else; walk
       safety from V1 stays.
-- [ ] **C2. Groups: a switch by source.** `generic` = sidecars by name next to each
-      other (buffered per directory); Apple Photos and others are branches added
-      later (the Photos milestone). The end-of-walk marker is broadcast to every
-      branch; all branches write to one channel.
-- [ ] **C3. Files gate.** The files table: new / changed (size, mtime) / item not
-      Ready → pass, otherwise drop (no exiftool for unchanged files); `CheckTime`;
-      deletions (V2) after the marker from every branch.
-- [ ] **C4. exif** for the whole group (today's extractor without the validator).
-- [ ] **C5. mime.** Kind of every file: exif `FileType`/`MIMEType` → own extension
-      table (`MediaKind`: image/raw/video/animated/sidecar) → content sniff; rank the
-      group: main file (the photo in a Live Photo, deterministic RAW+JPEG, pairs by
-      `ContentIdentifier`). No system `mime` tables (Docker).
-- [ ] **C6. validator** as its own step (V3): same / changed / moved / duplicate; a
-      moved item whose outputs for the GUID are complete → `Ready`, no transcode.
-- [ ] **C7. transcode switch** by kind (photo / video / Live Photo; pass-through until
-      thumbnails exist), then plugins (after transcode: the client gets items with
-      thumbnails), closer → `Ready`. Tests reworked per step.
+- [x] **C2. Groups: a switch by source.** `generic` = sidecars by name next to each
+      other, case-insensitive, buffered per directory until the walk leaves it.
+      Apple Photos: a stub branch; `photosLibraryEnabled = false` keeps the library
+      in `generic` until the Photos milestone. The marker is broadcast to every
+      branch; all branches write to one channel. Needs the new perceplib
+      `chain.Expander` (1 → N: a directory flushes many groups at once).
+- [x] **C3. Files gate.** The files table: new / changed (size, mtime) / never
+      linked / item not Ready → pass, otherwise drop (no exiftool for unchanged
+      files); `CheckTime`; deletions (V2) after the marker from every branch.
+- [x] **C4. exif** for every file of the group (`-all`: the main file is not known
+      yet), N steps in parallel on the same channels (it was one serial step with a
+      pool of 5 processes).
+- [x] **C5. mime.** Kind of every file: exif `MIMEType` → own extension table
+      (`MediaKind`: image/raw/video/sidecar/other) → content sniff; rank: the main
+      file is always the source — RAW > video > image; the JPEG of RAW+JPEG and the
+      photo of a Live Photo are derivatives (sidecars); ties by size, name. No system
+      `mime` tables (Docker).
+- [x] **C6. validator** as its own step: links the group to the main file, a former
+      main file that became a sidecar loses its item (a JPEG whose RAW appeared); same /
+      changed / moved / duplicate; a moved item with complete outputs → `Ready`, no
+      transcode (no outputs exist yet, so always).
+- [x] **C7. transcode switch** by kind (photo / video / Live Photo; stubs pass the
+      item on), then plugins, closer → `Ready`. Finished items are drained (the
+      closer used to block after 1000 items: nothing read the channel).
+- [ ] Later: derivatives in a group (the JPEG of a RAW, the photo of a Live Photo)
+      as ready previews — saves a transcode; Live Photo pairs checked by
+      `ContentIdentifier` (today by name); `animated` kind.
 
 ### Dates and time zones
 

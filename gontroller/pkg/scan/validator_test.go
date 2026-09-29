@@ -7,7 +7,6 @@ import (
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"testing"
-	"time"
 
 	"github.com/eggs-gd/perceplib/api"
 	"github.com/eggs-gd/perceplib/chain"
@@ -34,13 +33,76 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// scan runs the walker and the validator the way the import chain does, without
-// exiftool: the file content stands in for its metadata. Returns the paths of the
-// main files that were (re)processed.
+// fakeExif stands in for exiftool: the file content is its "metadata", so the
+// short hash follows the content; no MIMEType, so mime uses the extension table
+func fakeExif(path string) (api.RawExif, error) {
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return api.RawExif{"Content": content}, nil
+}
+
+// scan runs one walk through the steps of the import chain in order, the way the
+// chain wires them, with fakeExif. Returns the main files that reached the plugins.
 func scan(t *testing.T, root string) []string {
 	t.Helper()
+	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
 	m := newTestMonitor(t, root)
-	m.currentRun = time.Now()
+	groupers := map[int]chain.Expander[fileEvent, fileGroup]{
+		branchGeneric: newGenericGrouper(),
+		branchPhotos:  photosGrouper{},
+	}
+	gate := newFilesGate(groupBranches, logger)
+	exif := &exifExtractor{logger: logger, extract: fakeExif}
+	valid := newValidator(logger)
+
+	var processed []string
+	ok := func(err error) bool {
+		if errors.Is(err, chain.ErrSkippedItem) {
+			return false
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		return true
+	}
+	toGroupers := func(ev fileEvent) {
+		branches, err := sourceSwitch{}.Switch(ev)
+		if !ok(err) {
+			return
+		}
+		for b := range groupBranches { // marker: every branch, in branch order
+			in, has := branches[b]
+			if !has {
+				continue
+			}
+			groups, err := groupers[b].Expand(in)
+			if !ok(err) {
+				continue
+			}
+			for _, g := range groups {
+				stored, err := gate.Decorate(g)
+				if !ok(err) {
+					continue
+				}
+				exifed, err := exif.Decorate(stored)
+				if !ok(err) {
+					continue
+				}
+				ranked, _ := mimeStep{}.Decorate(exifed)
+				it, err := valid.Decorate(ranked)
+				if !ok(err) {
+					continue
+				}
+				it.Item.State = dto.Ready // the closer
+				if _, err := itemsProxy.UpdateItem(it.Item); err != nil {
+					t.Fatal(err)
+				}
+				processed = append(processed, it.Files[0].Path)
+			}
+		}
+	}
 
 	ch := make(chan inType)
 	res := make(chan walkResult)
@@ -49,35 +111,15 @@ func scan(t *testing.T, root string) []string {
 		close(ch)
 		res <- r
 	}()
-
-	var processed []string
-	process := func(group []*dto.FileDto, err error) {
-		if errors.Is(err, chain.ErrSkippedItem) {
-			return
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		content, err := os.ReadFile(group[0].Path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		item, err := itemsProxy.ValidateFile(group[0], api.RawExif{"Content": content})
-		if err != nil {
-			t.Fatal(err)
-		}
-		item.State = dto.Ready // the closer
-		if _, err := itemsProxy.UpdateItem(item); err != nil {
-			t.Fatal(err)
-		}
-		processed = append(processed, group[0].Path)
-	}
-
 	for in := range ch {
-		process(m.Decorate(in))
+		ev, err := m.Decorate(in)
+		if ok(err) {
+			toGroupers(ev)
+		}
 	}
 	result := <-res
-	process(m.Decorate(inType{done: &result}))
+	ev, _ := m.Decorate(inType{done: &result})
+	toGroupers(ev)
 	return processed
 }
 
