@@ -55,7 +55,7 @@ else found moved
     same hash, different path,
     old path <b><font color=red>not exists
     The item may be deleted already (finalize ran
-    first: the chain is async) → restored as Dirty
+    first: the chain is async) -> restored as Dirty
     end note
     gorm <- gorm: update path, new file rows\ntake the item's GUID
     gorm -> validator: <font color=blue><b>existing guid
@@ -98,8 +98,8 @@ Only after a <b>complete</b> walk with files found
 (not on cancel, missing root, empty root)
 Files with CheckTime older than this run, under the root,
 not under an unreadable directory, are gone:
-- main file gone → item <b>Deleted</b> (soft delete, hidden from /items)
-- sidecar gone → item <b>Dirty</b> (re-emitted by the next walk)
+- main file gone -> item <b>Deleted</b> (soft delete, hidden from /items)
+- sidecar gone -> item <b>Dirty</b> (re-emitted by the next walk)
 - file rows deleted
 end note
 
