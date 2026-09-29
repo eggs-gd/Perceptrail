@@ -60,7 +60,20 @@ Target architecture — the diagrams in [`../puml`](../puml).
 - [ ] Main file of a group: the photo in a Live Photo, deterministic for RAW+JPEG;
       Live Photo pairs by `ContentIdentifier`; one main item merged from all sidecars
       ([`Item flow.puml`](../puml/Item%20flow.puml)).
-- [ ] `date`: time zones (`OffsetTimeOriginal`, GPS UTC), parse dates with a zone.
+- [ ] `date`: the `FileModifyDate` fallback never parses (printed with a zone) — 1741
+      of 2413 items have a zero date (files without EXIF: screenshots, messengers).
+- [ ] `date`: time zones — in the core, not in the geo perceptor. Store the instant
+      (UTC) + offset (minutes, NULL = unknown) + source tag; the offset must be a
+      column: sqlite and Postgres `timestamptz` return UTC on read. Needs an explicit
+      offset in the perceplib date API (+00:00 vs unknown). Offset, in order:
+      1. `OffsetTimeOriginal` (videos: `Keys:CreationDate` with a zone);
+      2. `DateTimeOriginal` − GPS UTC time, rounded to 15 min;
+      3. GPS coordinates → IANA zone from an embedded dictionary
+         (`github.com/ringsaturn/tzf`), offset via `time.LoadLocation` (DST, history).
+         Not longitude/15: no DST, wrong at administrative borders;
+      4. the server's time zone, marked as assumed.
+      Tags by group (EXIF vs QuickTime: `QuickTime:CreateDate` is already UTC).
+      Visible only once the gallery sorts/groups by date — do together.
 - [ ] Embedded RAW preview (`PreviewImage`/`JpgFromRaw`) for the transcoder.
 
 ## Core — service (gontroller)
