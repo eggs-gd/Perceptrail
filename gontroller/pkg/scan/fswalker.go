@@ -87,6 +87,10 @@ func (m *fsMonitor) Stop() {
 func (m *fsMonitor) Decorate(in inType) ([]*dto.FileDto, error) {
 	m.logger.Info("processFile", l.String("path", in.path))
 
+	if shouldSkipPath(in.path) {
+		return nil, chain.ErrSkippedItem
+	}
+
 	item := newItemEntryFromDirEntry(in.path, in.info)
 	updateMimeType(&item, m.logger)
 
@@ -265,4 +269,16 @@ func newItemEntryFromDirEntry(path string, dirEntry os.DirEntry) dto.ItemEntry {
 		i.ModTime = info.ModTime()
 	}
 	return i
+}
+
+// Apple Photos internals: .THM posters and generated derivatives are not gallery sources.
+func shouldSkipPath(path string) bool {
+	lower := strings.ToLower(path)
+	if strings.HasSuffix(lower, ".thm") {
+		return true
+	}
+	if strings.Contains(lower, ".photoslibrary/resources/") {
+		return true
+	}
+	return false
 }

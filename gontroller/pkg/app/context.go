@@ -2,6 +2,7 @@ package app
 
 import (
 	l "github.com/dukobpa3/perceplib/logger"
+	"github.com/dukobpa3/perceplib/logger/decorators"
 )
 
 var appConfig Config
@@ -19,8 +20,7 @@ type AppContext interface {
 }
 
 func NewAppContext() *appContext {
-	//logger, _ := zap.NewProduction()
-	logger := l.NewLogger(l.DebugLevel, &GontrollerDecorator{})
+	logger := l.NewLogger(l.DebugLevel, &decorators.GontrollerDecorator{})
 	initConfig(&appConfig, logger.Named(string(LogConfig)))
 
 	return &appContext{

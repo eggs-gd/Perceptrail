@@ -10,15 +10,31 @@ import (
 	"github.com/dukobpa3/perceplib/api"
 )
 
+// File-system tags (exiftool File group) that change on move/rename/read
+// and must not affect content identity.
+var volatileHashTags = map[string]struct{}{
+	"FileName":            {},
+	"Directory":           {},
+	"FileModifyDate":      {},
+	"FileAccessDate":      {},
+	"FileInodeChangeDate": {},
+	"FileCreateDate":      {},
+	"FilePermissions":     {},
+	"FileAttributes":      {},
+}
+
 func (p *proxy) getShortHash(item *dto.FileDto, meta api.RawExif) string {
 	h := sha256.New()
 
 	// Write the file size to the hash
-	h.Write([]byte(fmt.Sprintf("%d", &item.Size)))
+	h.Write([]byte(fmt.Sprintf("%d", item.Size)))
 
 	// Process the EXIF data
 	var keys []string
 	for k := range meta {
+		if _, skip := volatileHashTags[k]; skip {
+			continue
+		}
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)

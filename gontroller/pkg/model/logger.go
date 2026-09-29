@@ -2,8 +2,10 @@ package model
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 
 	l "github.com/dukobpa3/perceplib/logger"
@@ -27,18 +29,20 @@ func (logger *Logger) Trace(ctx context.Context, begin time.Time, fc func() (sql
 	elapsed := time.Since(begin)
 	sql, rows := fc()
 
-	if err != nil {
-		logger.Logger.Error("SQL",
-			l.Duration("elapsed", elapsed),
-			l.Int64("rows", rows),
-			l.String("sql", sql),
-			l.Error(err))
-	} else {
+	if err == nil || errors.Is(err, gorm.ErrRecordNotFound) {
+		// First() miss is expected during scan validation ("is this file/item new?")
 		logger.Logger.Debug("SQL",
 			l.Duration("elapsed", elapsed),
 			l.Int64("rows", rows),
 			l.String("sql", sql))
+		return
 	}
+
+	logger.Logger.Error("SQL",
+		l.Duration("elapsed", elapsed),
+		l.Int64("rows", rows),
+		l.String("sql", sql),
+		l.Error(err))
 }
 
 func newLogger(logger *l.Logger) *Logger {

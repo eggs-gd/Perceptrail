@@ -3,9 +3,10 @@ package scan
 import (
 	"perceptrail/gontroller/pkg/model/dto"
 
+	"github.com/eggs-gd/go-exiftool"
+
 	"github.com/dukobpa3/perceplib/api"
 	"github.com/dukobpa3/perceplib/chain"
-	"github.com/dukobpa3/perceplib/exiftool"
 
 	l "github.com/dukobpa3/perceplib/logger"
 )
@@ -19,7 +20,7 @@ var mainTags []string = []string{
 	// todo: check with and without
 	// "-a",
 	"-all",
-	"--File:all",
+	//"--File:all",
 	"--ExifToolVersion",
 	"-s2",
 }

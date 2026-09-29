@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	l "github.com/dukobpa3/perceplib/logger"
+	"github.com/dukobpa3/perceplib/logger/decorators"
 )
 
 type mockAppContext struct{}
@@ -18,7 +19,7 @@ func (m *mockAppContext) Config() *app.Config {
 }
 
 func (m *mockAppContext) Logger(category string) *l.Logger {
-	logger, _ := l.NewDevelopment()
+	logger := l.NewLogger(l.DebugLevel, &decorators.GontrollerDecorator{})
 	return logger
 }
 

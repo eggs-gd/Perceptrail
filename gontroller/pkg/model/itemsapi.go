@@ -18,6 +18,8 @@ type ItemsApi interface {
 	ValidateFile(item *dto.FileDto, meta api.RawExif) (*dto.ItemDto, error)
 
 	GetAllItems() ([]*dto.ItemDto, error)
+	// StreamAllItems walks items via a DB cursor without loading the full table into memory.
+	StreamAllItems(fn func(*dto.ItemDto) error) error
 	GetItemByGuid(guid string) (*dto.ItemDto, error)
 	GetItemByPath(path string) (*dto.ItemDto, error)
 	GetItemByHash(hash string) (*dto.ItemDto, error)
@@ -32,6 +34,32 @@ type ItemsApi interface {
 func (p *proxy) GetAllItems() ([]*dto.ItemDto, error) {
 	var items []*dto.ItemDto
 	return items, p.db.Find(&items).Error
+}
+
+func (p *proxy) StreamAllItems(fn func(*dto.ItemDto) error) error {
+	const pageSize = 32
+	var lastID uint
+
+	for {
+		var batch []dto.ItemDto
+		q := p.db.Model(&dto.ItemDto{}).Order("id").Limit(pageSize)
+		if lastID > 0 {
+			q = q.Where("id > ?", lastID)
+		}
+		if err := q.Find(&batch).Error; err != nil {
+			return err
+		}
+		if len(batch) == 0 {
+			return nil
+		}
+
+		for i := range batch {
+			if err := fn(&batch[i]); err != nil {
+				return err
+			}
+			lastID = batch[i].ID
+		}
+	}
 }
 
 func (p *proxy) GetItemByGuid(guid string) (*dto.ItemDto, error) {

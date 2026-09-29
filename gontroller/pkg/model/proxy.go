@@ -28,12 +28,23 @@ func NewProxy(logger *l.Logger) *proxy {
 
 func initDB(logger *l.Logger) *gorm.DB {
 	logger.Info("Database Initiating...")
-	db, err := gorm.Open(sqlite.Open("media_library.db"), &gorm.Config{
+	// WAL + busy_timeout: importer writes while /items stream reads
+	db, err := gorm.Open(sqlite.Open("file:media_library.db?_busy_timeout=5000&_journal_mode=WAL&_fk=1"), &gorm.Config{
 		Logger: newLogger(logger),
 	})
 	if err != nil {
 		logger.Fatal("Can't connect to database", l.Error(err))
 	}
+
+	sqlDB, err := db.DB()
+	if err != nil {
+		logger.Fatal("Can't get sql.DB", l.Error(err))
+	}
+	// One connection: avoids SQLite "database is locked" under concurrent GORM pools.
+	// StreamAllItems uses short keyset pages, so the conn is released while the client is written to.
+	// Never open a transaction and query db (not tx) inside it — that would deadlock on this single conn.
+	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxIdleConns(1)
 
 	err = db.AutoMigrate(
 		&dto.ItemDto{},

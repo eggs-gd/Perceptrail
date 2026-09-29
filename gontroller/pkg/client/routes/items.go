@@ -2,6 +2,7 @@ package routes
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
@@ -12,34 +13,10 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// https://echo.labstack.com/docs/quick-start
-// https://habr.com/en/companies/ozonbank/articles/817381/
-/*
-	e.POST("/users", saveUser)
-	e.GET("/users/:id", getUser)
-	e.PUT("/users/:id", updateUser)
-	e.DELETE("/users/:id", deleteUser)
-
-	// e.GET("/users/:id", getUser)
-	func getUser(c echo.Context) error {
-	  	// User ID from path `users/:id`
-	  	id := c.Param("id")
-		return c.String(http.StatusOK, id)
-	}
-
-	/show?team=x-men&member=wolverine
-	//e.GET("/show", show)
-	func show(c echo.Context) error {
-		// Get team and member from the query string
-		team := c.QueryParam("team")
-		member := c.QueryParam("member")
-		return c.String(http.StatusOK, "team:" + team + ", member:" + member)
-	}
-*/
-
 var itemsProxy model.ItemsApi
 
 type clientItem struct {
+	Id       uint      `json:"id"`
 	Guid     string    `json:"guid"`
 	Date     time.Time `json:"date"`
 	MimeType string    `json:"mimeType"`
@@ -58,53 +35,45 @@ func RegisterItemsRoutes(segment string, e *echo.Echo, logger *l.Logger) {
 }
 
 func getItems(c echo.Context) error {
-	items, err := itemsProxy.GetAllItems()
-	if err != nil {
-		return err
-	}
-
-	return streamClientItems(items, c.Response().Writer)
+	return streamClientItems(c.Response().Writer)
 }
 
-func streamClientItems(dbItems []*dto.ItemDto, w http.ResponseWriter) error {
-	itemsChannel := make(chan clientItem)
+func toClientItem(dbItem *dto.ItemDto) clientItem {
+	item := clientItem{
+		Id:       dbItem.ID,
+		Guid:     dbItem.Guid,
+		Date:     dbItem.Date,
+		MimeType: dbItem.MimeType,
+	}
 
-	go func() {
-		for _, dbItem := range dbItems {
-			clientItem := clientItem{
-				Guid:     dbItem.Guid,
-				Date:     dbItem.Date,
-				MimeType: dbItem.MimeType,
-			}
+	if dbItem.Ratio.H == 0 || dbItem.Ratio.W == 0 {
+		item.Height = 1
+		item.Width = 1
+	} else {
+		item.Width = int16(dbItem.Ratio.W)
+		item.Height = int16(dbItem.Ratio.H)
+	}
+	return item
+}
 
-			if dbItem.Ratio.H == 0 || dbItem.Ratio.W == 0 {
-				clientItem.Height = 1
-				clientItem.Width = 1
-			} else {
-				clientItem.Width = int16(dbItem.Ratio.W)
-				clientItem.Height = int16(dbItem.Ratio.H)
-			}
+func streamClientItems(w http.ResponseWriter) error {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return fmt.Errorf("streaming not supported")
+	}
 
-			itemsChannel <- clientItem
-		}
-		close(itemsChannel)
-	}()
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	flusher.Flush()
 
-	w.Header().Set("Content-Type", "application/json")
-	// flusher, ok := w.(http.Flusher)
-	// if !ok {
-	// 	return fmt.Errorf("streaming not supported")
-	// }
-
-	w.Header().Set("Content-Type", "application/json")
 	encoder := json.NewEncoder(w)
 
-	for clientItem := range itemsChannel {
-		// time.Sleep(200 * time.Millisecond)
-		if err := encoder.Encode(clientItem); err != nil {
+	return itemsProxy.StreamAllItems(func(dbItem *dto.ItemDto) error {
+		if err := encoder.Encode(toClientItem(dbItem)); err != nil {
 			return err
 		}
-		// flusher.Flush()
-	}
-	return nil
+		flusher.Flush()
+		return nil
+	})
 }
