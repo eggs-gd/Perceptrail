@@ -39,8 +39,8 @@ No symlinks (Windows).
   1. a feature PR into `develop` that runs `scripts/version.sh minor` (changes only
      `VERSION`);
   2. a PR `develop` → `master` for CI and review;
-  3. merged as a **fast-forward**: `git push origin develop:master` (admin bypass on
-     `master`). Not with the GitHub rebase button — it rewrites every commit (new
+  3. once CI on `develop` has tagged the bump commit (`v0.x.0`), merged as a
+     **fast-forward**: `git push origin develop:master` (admin bypass on `master`). Not with the GitHub rebase button — it rewrites every commit (new
      hashes), `develop` stops being an ancestor of `master` and the branches diverge
      (this happened with PR #2).
 - Open PRs against `develop` unless the task is the `develop` → `master` release.
@@ -52,6 +52,9 @@ No symlinks (Windows).
   `__APP_VERSION__` via `vite.config.ts`). `package.json` `version` is a placeholder
   (`0.0.0`, private). Needs full history (CI uses `fetch-depth: 0`). `perceplib` is
   versioned separately by its own tags.
+- Tags: the CI job `tag` puts `vX.Y.Z` on every commit pushed to `develop` once
+  `go` and `svebapp` pass. `master` gets no tags of its own — it only fast-forwards
+  to already tagged `develop` commits; CI fails on an untagged `master` head.
 - `develop` stays linear (squash merges only), which is what makes the rebase into
   `master` possible — GitHub cannot rebase a PR that contains merge commits.
   Operations that create merge commits (e.g. `git subtree pull` for `perceplib`)
