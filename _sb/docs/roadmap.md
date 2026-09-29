@@ -34,6 +34,12 @@ Target architecture — the diagrams in [`../puml`](../puml).
   sidecars → `Dirty`), moves keep the GUID (also after a deletion), duplicates are new
   items, `Dirty`/not-`Ready` items are reprocessed, closer sets `Ready`. Tests on a
   temp library + sqlite.
+- Dates (D1–D3): `FileModifyDate` parsed (with its zone; zero dates were most of the
+  library), zero `0000:00:00` skipped, sub-seconds kept; the instant + offset
+  (`DateOffset`, minutes) + `DateSource` (tag) + `DateZone` (how the offset was found).
+  Zone chain: the tag's offset → local time − GPS UTC time (rounded to 15 min) →
+  GPS coordinates → IANA zone (`tzf`, embedded, DST-aware) → the server's zone
+  (assumed). Videos: zoned `CreationDate`, else QuickTime `CreateDate` = UTC.
 - svebapp on current Svelte 5 / Kit practices: `$app/state`, no `svelte/store`
   (component state + `LiveQuery` on `createSubscriber`), `{@attach}`, `$derived`
   instead of state writes in effects, clsx-style `class`, no side effects in `load`.
@@ -52,8 +58,8 @@ Target architecture — the diagrams in [`../puml`](../puml).
 
 ## Next
 
-One PR per feature (its steps are commits). Order: import chain C1–C7 (finishes
-the validator feature, PR #13), then dates D1–D3.
+One PR per feature (its steps are commits). Next: the import chain C1–C7 (its own
+PR). The validator (V1–V5) and dates (D1–D3) are in PR #13.
 
 ### Import chain: one small step per node
 
@@ -84,32 +90,11 @@ hides inside the exif step, so groups and MIME are decided before EXIF is known.
 
 ### Dates and time zones
 
-Time zones belong to the core (the date), not to the geo perceptor.
+D1–D3 done (PR #13), see Done.
 
-- [ ] **D1. Date bugs.** `FileModifyDate` never parses (exiftool prints it with a
-      zone) — 1741 of 2413 items have a zero date (screenshots, messenger files).
-      Ignore invalid `0000:00:00 00:00:00`. Table tests on real tag sets (iPhone
-      HEIC with a zone, camera JPEG without one, QuickTime video, PNG without EXIF).
-- [ ] **D2. Offset in the model and the API.** `ItemDto`: instant (UTC) + offset in
-      minutes (NULL = unknown) + source tag / "assumed" flag. The offset is its own
-      column: sqlite and Postgres `timestamptz` return UTC on read. The perceplib
-      date API gets an explicit offset (+00:00 vs unknown) → perceplib v0.0.7,
-      plugins rebuilt.
-- [ ] **D3. Offset chain in `exif_core/date`.** Tags by group (exiftool `-G`; today
-      `-s2` without groups — `CreateDate` is EXIF for photos but already-UTC
-      QuickTime for videos). In order:
-      1. `OffsetTimeOriginal` (videos: `Keys:CreationDate` with a zone);
-      2. `DateTimeOriginal` − GPS UTC time, rounded to 15 min (sanity ±14 h);
-      3. GPS coordinates → IANA zone from an embedded dictionary
-         (`github.com/ringsaturn/tzf`), offset via `time.LoadLocation` (DST,
-         history). Not longitude/15: no DST, wrong at administrative borders;
-      4. the server's time zone, marked as assumed.
-      `SubSecTimeOriginal` for bursts.
-- [ ] **D4. API and client — to discuss after D1–D3.** Maybe not needed: if server
-      and client normalise dates the same way, the API needs no separate zone.
-      Sorting/grouping the gallery by date is separate (it makes all of this visible).
-- Existing items are not re-read (unchanged files are skipped): in dev — delete
-  `.var/media_library.db*` and rescan. Reprocessing on plugin change is "Later".
+- [ ] **D4. API and client — to discuss.** Maybe not needed: if server and client
+      normalise dates the same way, the API needs no separate zone. Sorting/grouping
+      the gallery by date is separate (it makes all of this visible).
 
 ### Photos library (`*.photoslibrary`) as its own source — separate milestone
 

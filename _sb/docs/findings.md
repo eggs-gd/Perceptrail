@@ -268,6 +268,27 @@ compose with `derived`. The current message protocol is a deviation from this de
 
 ### Data and import
 
+### Dates and time zones (2026-09-29)
+
+- **Most items had no date:** the `FileModifyDate` fallback never parsed — exiftool
+  prints it with a zone (`…+03:00`). Files without EXIF (screenshots, messenger
+  images) are the majority of a real library. Fixed; on the dev library (outside the
+  Photos bundle) 0 zero dates, 545 of 570 dated by `FileModifyDate`.
+- **The zone is stored separately** (`DateOffset`, minutes): sqlite and Postgres
+  `timestamptz` return times in UTC, the zone of `Date` is lost on read.
+  `RawItem.GetDate()` returns the date in the zone of the shot, so external plugins
+  see it through the unchanged perceplib API; only the core `exif_core.RawItemRW`
+  got `SetDateInfo` — no perceplib release, no plugin rebuild.
+- **No `-G` in exiftool:** groups would rename every tag (plugins read `ImageWidth`,
+  the short hash hashes tag names). `CreateDate` is interpreted by file type instead:
+  EXIF local time for images, QuickTime UTC for videos (checked on a real `.MOV`:
+  `CreateDate 11:29:03` vs `CreationDate 14:29:03+03:00`).
+- **Zone chain:** the tag's offset → local time − GPS time rounded to 15 min (GPS
+  fixes lag seconds) → coordinates → IANA zone via `github.com/ringsaturn/tzf`
+  (boundaries embedded, ~12 MB of binary, 0.17 s to load, lazily) → the server's zone
+  (assumed). Not longitude/15: no DST, wrong at administrative borders. The time zone
+  is core (the date), not the geo perceptor. `time/tzdata` is embedded for Docker.
+
 ### Validator per `Walker.puml` (2026-09-29)
 
 - **Walk safety first.** One unreadable directory aborted the whole walk (the

@@ -32,8 +32,13 @@ type ItemDto struct {
 	MimeType string    `gorm:"index"` //
 	State    ItemState `gorm:"index"` // Current state of item
 
-	Date time.Time // CreationDate of asset
-	Path string    // Source path
+	Date time.Time // CreationDate of asset: the instant (the DB returns it in UTC)
+	// Local zone of the shot, minutes east of UTC: sqlite and Postgres timestamptz
+	// drop the zone of Date, so it is kept separately
+	DateOffset int
+	DateSource string // the tag Date came from; "" = no date
+	DateZone   string // how DateOffset was found: tag, gps, coords, file, server (assumed)
+	Path       string // Source path
 
 	Size  api.Size `gorm:"embedded;embeddedPrefix:size_"`
 	Ratio api.Size `gorm:"embedded;embeddedPrefix:ratio_"`
