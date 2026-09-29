@@ -54,8 +54,11 @@ export interface WorkerEventData {
 }
 
 export interface MessageFromSync {
-    item: Item | LayoutItem,
-    action: 'create' | 'update' | 'delete',
+    /** wsync → wlayout: one item per create/update/delete */
+    item?: Item | LayoutItem,
+    /** wlayout → view: laid out items (replace = the complete layout) */
+    items?: LayoutItem[],
+    action: 'create' | 'update' | 'delete' | 'reset' | 'replace' | 'upsert' | 'sync-start' | 'sync-done',
 }
 
 export type CurrentWorkerTask = { controller: AbortController; promise: Promise<void> } | null;

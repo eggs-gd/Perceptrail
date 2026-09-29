@@ -31,16 +31,54 @@ export const updateLayoutPort = (port: MessagePort) => {
     layoutUpdatesPort.onmessage = (event: MessageEvent<MessageFromSync>) => onUpdateLayout(event.data);
 }
 
+// The worker streams one message per item. Applying each one separately re-sorts
+// and re-renders the whole gallery per item and starves the main thread (clicks,
+// resize). Queue them and apply everything received so far once per frame.
+let pending: MessageFromSync[] = [];
+let frameRequested = false;
+
 function onUpdateLayout(message: MessageFromSync) {
+    pending.push(message);
+    if (!frameRequested) {
+        frameRequested = true;
+        requestAnimationFrame(flushLayoutUpdates);
+    }
+}
+
+function flushLayoutUpdates() {
+    frameRequested = false;
+    let batch = pending;
+    pending = [];
+
+    // A replace carries the complete layout: anything queued before it is obsolete
+    // (e.g. several resizes within one frame)
+    const lastReplace = batch.findLastIndex((m) => m.action === 'replace');
+    if (lastReplace > 0) {
+        batch = batch.slice(lastReplace);
+    }
+
     layoutItems.update((items) => {
-        switch (message.action) {
-            case 'create':
-            case 'update':
-                items.set(message.item.guid, message.item as LayoutItem);
-                break;
-            case 'delete':
-                items.delete(message.item.guid);
-                break;
+        for (const message of batch) {
+            switch (message.action) {
+                case 'reset':
+                    items = new Map();
+                    break;
+                case 'replace':
+                    items = new Map(message.items!.map((itm) => [itm.guid, itm]));
+                    break;
+                case 'upsert':
+                    for (const itm of message.items!) {
+                        items.set(itm.guid, itm);
+                    }
+                    break;
+                case 'create':
+                case 'update':
+                    items.set(message.item!.guid, message.item as LayoutItem);
+                    break;
+                case 'delete':
+                    items.delete(message.item!.guid);
+                    break;
+            }
         }
         return items;
     });

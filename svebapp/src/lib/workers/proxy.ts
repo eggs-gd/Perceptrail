@@ -15,6 +15,7 @@ let workers: {
 
 let workersChannel: MessageChannel;
 let viewChannel: MessageChannel;
+let syncStarted = false;
 
 if (browser) {
     workersChannel = new MessageChannel();
@@ -49,6 +50,9 @@ function handleWorkerMessage(event: MessageEvent<any>) {
 }
 
 export const loadFromServer = () => {
+    if (!browser || syncStarted) return;
+    syncStarted = true;
+
     const msg: StartSyncMessage = {
         task: 'start',
         payload: `${PUBLIC_API_PATH}/items`,

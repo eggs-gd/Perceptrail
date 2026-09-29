@@ -33,7 +33,9 @@ function startNewTask(apiPath: string) {
             itemsDb.items.hook.updating.subscribe(hookUpdate);
             itemsDb.items.hook.deleting.subscribe(hookDelete);
             try {
+                updatesPort.postMessage({action: 'sync-start'});
                 await updateDbStreamed(controller.signal, apiPath);
+                updatesPort.postMessage({action: 'sync-done'});
                 postMessage({status: "completed"});
             } catch (error) {
                 postMessage({status: "error"});
@@ -55,7 +57,8 @@ function hookCreate(key: string, item: Item) {
 
 function hookUpdate(mods: Object, key: string, item: Item) {
     if (mods.hasOwnProperty("width") || mods.hasOwnProperty("height")) {
-        const msg: MessageFromSync = {action: "update", item: item};
+        // Dexie passes the pre-update object: merge mods so the new size gets through
+        const msg: MessageFromSync = {action: "update", item: {...item, ...mods}};
         updatesPort.postMessage(msg);
     }
 }

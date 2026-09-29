@@ -1,3 +1,4 @@
+// @ts-nocheck — third-party MIT code (Wyatt Baldwin, 2008), kept verbatim
 /******************************************************************************
  * Created 2008-08-19.
  *

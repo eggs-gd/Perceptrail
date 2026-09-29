@@ -1,4 +1,4 @@
-import type {Item} from "$lib/gallery";
+import type {Item} from "$lib/stores";
 
 
 export interface ItemOrig extends Item {

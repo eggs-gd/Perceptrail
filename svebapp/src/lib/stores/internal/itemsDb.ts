@@ -6,7 +6,7 @@ export const itemsDb: Dexie & {
 } = new Dexie('items') as Dexie & {
     items: EntityTable<Item, 'guid'>;
 };
-itemsDb.version(2).stores({
-    items: '&guid, width, height, mimeType, date'
+itemsDb.version(3).stores({
+    items: '&guid, id, width, height, mimeType, date'
 });
 itemsDb.table("items").clear()

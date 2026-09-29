@@ -1,294 +1,217 @@
 import {
-    type CurrentWorkerTask,
     type MessageFromSync,
-    RestartError,
-    throwIfNeedRestart,
     type UpdateLayoutPayload,
     type WorkerMessage,
-    type WorkerTask
 } from "./types";
-import {type Item, itemsDb, layoutDb, type LayoutItem} from "$lib/stores";
+import {type Item, type LayoutItem} from "$lib/stores";
 import {getLogger} from "$lib/logger";
 
 const logger = getLogger()
 
-interface Parameters {
-    currentRowNum: number,
-    currentRow: LayoutItem[],
-    current: number,
-    restart: boolean,
-}
+// Must match Gallery.svelte gutter (gap between items and rows)
+const GUTTER = 8;
+// Window-edge drag sends a resize per frame; lay out at most this often (~30 fps)
+const RELAYOUT_THROTTLE_MS = 33;
 
-const params: Parameters = {
-    currentRowNum: 0,
-    currentRow: [],
-    current: 0,
-    restart: false,
-}
-
-let currentTask: CurrentWorkerTask = null;
-let itemsDbPort: MessagePort;
 let updatesPort: MessagePort;
-let currentRowHeight: number;
-let currentScreenWidth: number;
+let viewport: UpdateLayoutPayload | null = null;
+let relayoutTimer: ReturnType<typeof setTimeout> | null = null;
 
-self.onmessage = async function (msg: { data: WorkerMessage<any, any> }) {
+/**
+ * Every item streamed so far, in stream (id) order. Kept in memory so a resize
+ * is one synchronous pass: nothing to await, so nothing to abort and no races.
+ */
+let items: Item[] = [];
+
+/** Incremental layout state for the current viewport */
+interface LayoutState {
+    /** Items of the row that is still being filled (not stretched yet) */
+    openRow: LayoutItem[],
+    rowNum: number,
+    /** Top of the open row, px */
+    y: number,
+}
+
+let state: LayoutState = freshState();
+
+function freshState(): LayoutState {
+    return {openRow: [], rowNum: 0, y: 0};
+}
+
+self.onmessage = function (msg: { data: WorkerMessage<any, any> }) {
     const {task, payload} = msg.data;
 
-    const p: UpdateLayoutPayload = payload;
-
     if (task === 'init') {
-        itemsDbPort = payload[0];
-        itemsDbPort.onmessage = restartLayoutFromPosition;
+        const itemsDbPort: MessagePort = payload[0];
+        itemsDbPort.onmessage = onItemsDbMessage;
         updatesPort = payload[1];
         logger.debug('Inited')
-    } else if (task === 'start') {
-        logger.debug('Trying to start')
-    } else if (task === 'update' && !currentTask) {
-        currentScreenWidth = p.screenWidth;
-        currentRowHeight = p.rowHeight;
-        currentTask = startNewTask(payload)
-        logger.debug('Started')
-    } else if (task === 'update' && currentTask) {
-        if (currentScreenWidth === p.screenWidth
-            && currentRowHeight === p.rowHeight) {
-            postMessage({task, status: "cant_update"});
-        } else {
-            currentTask.controller.abort()
-            currentTask = startNewTask(payload)
-            logger.debug('Restarted')
+    } else if (task === 'update') {
+        const p: UpdateLayoutPayload = payload;
+        if (viewport?.screenWidth === p.screenWidth && viewport?.rowHeight === p.rowHeight) {
+            return;
         }
+        viewport = {screenWidth: p.screenWidth, rowHeight: p.rowHeight};
+        scheduleRelayout();
     }
 };
 
-function startNewTask(payload: UpdateLayoutPayload) {
-    const controller = new AbortController();
-    return {
-        controller,
-        promise: (async () => {
-            layoutDb.items.hook.creating.subscribe(hookCreate);
-            layoutDb.items.hook.updating.subscribe(hookUpdate);
-            layoutDb.items.hook.deleting.subscribe(hookDelete);
-            try {
-                await updateLayoutStreamed(controller.signal, payload);
-                postMessage({status: "completed"});
-            } catch (error) {
-                postMessage({status: "error"});
-                logger.error("Error in UpdateLayout task:", error);
-            } finally {
-                layoutDb.items.hook.creating.unsubscribe(hookCreate);
-                layoutDb.items.hook.updating.unsubscribe(hookUpdate);
-                layoutDb.items.hook.deleting.unsubscribe(hookDelete);
-                currentTask = null;
+function onItemsDbMessage(event: MessageEvent<MessageFromSync>) {
+    const {action, item} = event.data;
+
+    switch (action) {
+        case 'sync-start':
+            items = [];
+            relayout();
+            return;
+        case 'create': {
+            const last = items[items.length - 1];
+            if (!last || item!.id > last.id) {
+                items.push(item!);
+                append(item!);
+            } else {
+                // Out of stream order: put it in place and lay out everything again
+                insertSorted(item!);
+                scheduleRelayout();
             }
-        })(),
-    };
-}
-
-function hookCreate(key: string, item: LayoutItem) {
-    const msg: MessageFromSync = {action: "create", item: item};
-    updatesPort.postMessage(msg);
-}
-
-function hookUpdate(mods: Object, key: string, item: LayoutItem) {
-    const msg: MessageFromSync = {action: "update", item: item};
-    updatesPort.postMessage(msg);
-}
-
-function hookDelete(key: string, item: Item) {
-    const msg: MessageFromSync = {action: "delete", item: item};
-    updatesPort.postMessage(msg);
-}
-
-function restartLayoutFromPosition(event: MessageEvent<MessageFromSync>) {
-    if (!currentTask) {
-        currentTask = startNewTask({screenWidth: currentScreenWidth, rowHeight: currentRowHeight})
-        return;
-    }
-
-    findItemIndex(event.data.item).then(item => {
-        if (!item) {
-            params.current = 0; //???
-            params.currentRowNum = 0;
-        } else if (item.order < params.current) {
-            params.current = item.order;
-            params.currentRowNum = item.row;
-        }
-
-        params.restart = true;
-        params.currentRow = [];
-    });
-}
-
-async function findItemIndex(item: Item): Promise<LayoutItem | undefined> {
-    let index = 0;
-    let found = false;
-
-    await itemsDb.items.orderBy('guid').each((dbItem: Item) => {
-        if (dbItem.guid === item.guid) {
-            found = true;
             return;
         }
-        index++;
-    });
-
-    if (!found) return undefined;
-
-    const layoutItem = await layoutDb.items
-        .where('order')
-        .equals(index - 1)
-        .first();
-
-    if (!layoutItem) return undefined;
-
-    const row = layoutItem.row;
-
-    const smallestOrderItem = await layoutDb.items
-        .where('row')
-        .equals(row)
-        .sortBy('order');
-
-    if (!smallestOrderItem.length) return undefined;
-
-    return smallestOrderItem[0];
+        case 'update': {
+            // An already placed item changed size: everything after it moves
+            const i = items.findIndex((itm) => itm.guid === item!.guid);
+            if (i >= 0) items[i] = item!;
+            scheduleRelayout();
+            return;
+        }
+        case 'delete':
+            items = items.filter((itm) => itm.guid !== item!.guid);
+            scheduleRelayout();
+            return;
+    }
 }
 
-const updateLayoutStreamed: WorkerTask<UpdateLayoutPayload> = async (signal: AbortSignal, payload: UpdateLayoutPayload) => {
-    signal.throwIfAborted();
-
-    params.current = 0;
-    params.currentRowNum = 0;
-    params.currentRow = [];
-    params.restart = false
-
-    await runMagic(signal, payload);
+function insertSorted(item: Item) {
+    const i = items.findIndex((itm) => itm.id > item.id);
+    if (i < 0) items.push(item);
+    else items.splice(i, 0, item);
 }
 
-async function runMagic(signal: AbortSignal, payload: UpdateLayoutPayload) {
-    logger.info('runMagic');
-    do {
-        params.restart = false;
-        const cursor = itemsDb.items.orderBy('guid').offset(params.current);
-
-        await cursor.each((item) => {
-            signal.throwIfAborted()
-            throwIfNeedRestart(params.restart)
-
-            const nextRow = placeInLayout(item, payload, params.current);
-
-            signal.throwIfAborted()
-            throwIfNeedRestart(params.restart)
-
-            if (nextRow.length > 0) {
-                logger.info('add next row', params.currentRowNum, nextRow)
-                layoutDb.items.bulkPut(nextRow)
-            }
-
-            ++params.current;
-        }).catch(RestartError, (error) => {
-            logger.info('restarting layout from index', params.current, error)
-        }).catch(error => {
-            logger.error('got error', error)
-            throw error
-        });
-    } while (params.restart)
+function scheduleRelayout() {
+    if (relayoutTimer) return; // the pending run uses the latest viewport and items
+    relayoutTimer = setTimeout(() => {
+        relayoutTimer = null;
+        relayout();
+    }, RELAYOUT_THROTTLE_MS);
 }
 
+/** Lays out every item from scratch and replaces the whole view in one message */
+function relayout() {
+    state = freshState();
+    if (!viewport) return;
 
-function placeInLayout(item: Item, payload: UpdateLayoutPayload, order: number): LayoutItem[] {
-    let rowLength = params.currentRow.reduce((sum, itm) => sum + itm.width * itm.scale, 0);
-    const scale = payload.rowHeight / item.height;
-    let lItem: LayoutItem = {
+    const all: LayoutItem[] = [];
+    for (let i = 0; i < items.length; i++) {
+        all.push(...place(items[i], i, viewport));
+    }
+    all.push(...placeOpenRow(viewport));
+
+    logger.debug('relayout', {items: all.length, width: viewport.screenWidth});
+    const msg: MessageFromSync = {action: 'replace', items: all};
+    updatesPort.postMessage(msg);
+}
+
+/** Places one streamed item and sends only what changed */
+function append(item: Item) {
+    // No viewport yet or a full relayout is pending: that run will include this item
+    if (!viewport || relayoutTimer) return;
+
+    const changed = place(item, items.length - 1, viewport);
+    changed.push(...placeOpenRow(viewport));
+
+    const msg: MessageFromSync = {action: 'upsert', items: changed};
+    updatesPort.postMessage(msg);
+}
+
+function gapsForRow(itemCount: number): number {
+    return Math.max(0, itemCount - 1) * GUTTER;
+}
+
+function naturalWidth(itm: Item, rowHeight: number): number {
+    return itm.width * rowHeight / itm.height;
+}
+
+/**
+ * Adds an item to the open row. Returns the items of a row that got closed
+ * (stretched to the full width, final positions) — or nothing.
+ */
+function place(item: Item, order: number, vp: UpdateLayoutPayload): LayoutItem[] {
+    const lItem: LayoutItem = {
         ...item,
         order,
-        scale,
-        row: params.currentRowNum,
+        row: state.rowNum,
+        scale: 1, x: 0, y: 0, w: 0, h: 0,
     };
 
-    const approxWidth = rowLength + lItem.width * lItem.scale;
-    const deltaWidth = payload.screenWidth - approxWidth;
+    const row = state.openRow;
+    const rowWidth = row.reduce((sum, itm) => sum + naturalWidth(itm, vp.rowHeight), 0);
+    const newItemWidth = naturalWidth(lItem, vp.rowHeight);
+    const deltaWidth = vp.screenWidth - (rowWidth + newItemWidth + gapsForRow(row.length + 1));
 
     if (deltaWidth >= 0) {
-        // Can fit in the current row
-        params.currentRow.push(lItem);
+        // Fits into the current row
+        row.push(lItem);
         return [];
     }
 
-    const newItemWidth = lItem.width * lItem.scale;
-    if (-deltaWidth < newItemWidth * 0.5) {
-        // Scale up current row
-        const res = params.currentRow;
-        const finalScale = payload.screenWidth / (rowLength + newItemWidth); // Only include actual row length
-        res.forEach(itm => {
-            itm.scale *= finalScale;
-        });
-
-        params.currentRowNum++;
-        lItem.row = params.currentRowNum;
-        params.currentRow = [lItem];
-        return res;
+    if (row.length > 0 && -deltaWidth < newItemWidth * 0.5) {
+        // Overflows by less than half of itself: stretch the row without it, start a new one
+        const closed = closeRow(row, vp);
+        lItem.row = state.rowNum;
+        state.openRow = [lItem];
+        return closed;
     }
 
-    // Add to row and scale down the entire row
-    params.currentRow.push(lItem);
-    const res = params.currentRow;
-    const finalScale = payload.screenWidth / approxWidth; // Adjust for the final width
-    res.forEach(itm => {
-        itm.scale *= finalScale;
-    });
-
-    params.currentRowNum++;
-    params.currentRow = [];
-    return res;
+    // Overflows a lot: add it and shrink the row
+    row.push(lItem);
+    const closed = closeRow(row, vp);
+    state.openRow = [];
+    return closed;
 }
 
-//
-// function placeInLayout(item: Item, payload: UpdateLayoutPayload, order: number): LayoutItem[] {
-//     let rowLength = 0;
-//     const scale = payload.rowHeight / item.height;
-//     let lItem: LayoutItem = {
-//         ...item,
-//         order,
-//         scale,
-//         row: params.currentRowNum
-//     }
-//
-//     params.currentRow.forEach((itm) => {
-//         rowLength += itm.width * itm.scale;
-//     })
-//
-//     const approxWidth = rowLength + lItem.width * lItem.scale;
-//     const deltaWidth = payload.screenWidth - approxWidth;
-//
-//     if (deltaWidth >= 0) {
-//         // can add to current row and proceed
-//         params.currentRow.push(lItem);
-//         return [];
-//     } else if (-deltaWidth < (lItem.width * lItem.scale) * 0.5) {
-//         // new item not match the total width more than half it's size
-//         // scale up current row. Start new row with this one item
-//         const res = params.currentRow;
-//         const finalScale = payload.screenWidth / approxWidth;
-//         res.forEach(itm => {
-//             itm.scale *= finalScale;
-//         })
-//
-//         params.currentRowNum++;
-//         lItem.row = params.currentRowNum;
-//         params.currentRow = [lItem];
-//         return res;
-//     } else {
-//         // new item not match the total with less than half it's size
-//         // add to row and scale down whole row
-//         params.currentRow.push(lItem);
-//         const res = params.currentRow;
-//         const finalScale = payload.screenWidth / approxWidth;
-//         res.forEach(itm => {
-//             itm.scale *= finalScale;
-//         })
-//
-//         params.currentRowNum++;
-//         params.currentRow = [];
-//         return res;
-//     }
-// }
+/** Stretches the row to exactly screenWidth and moves layout to the next row */
+function closeRow(row: LayoutItem[], vp: UpdateLayoutPayload): LayoutItem[] {
+    const natural = row.reduce((sum, itm) => sum + naturalWidth(itm, vp.rowHeight), 0);
+    const height = vp.rowHeight * (vp.screenWidth - gapsForRow(row.length)) / natural;
+
+    let x = 0;
+    for (const itm of row) {
+        itm.h = height;
+        itm.w = itm.width * height / itm.height;
+        itm.x = x;
+        itm.y = state.y;
+        itm.scale = height / itm.height;
+        x += itm.w + GUTTER;
+    }
+    // Rounding: the last item absorbs the remainder so the row is exactly full
+    const last = row[row.length - 1];
+    last.w = vp.screenWidth - last.x;
+
+    state.y += height + GUTTER;
+    state.rowNum++;
+    return row;
+}
+
+/** The open (last, incomplete) row stays at the target height, left-aligned */
+function placeOpenRow(vp: UpdateLayoutPayload): LayoutItem[] {
+    let x = 0;
+    for (const itm of state.openRow) {
+        itm.h = vp.rowHeight;
+        itm.w = naturalWidth(itm, vp.rowHeight);
+        itm.x = x;
+        itm.y = state.y;
+        itm.row = state.rowNum;
+        itm.scale = vp.rowHeight / itm.height;
+        x += itm.w + GUTTER;
+    }
+    return [...state.openRow];
+}
