@@ -132,6 +132,8 @@ reference); reading needs Full Disk Access for the process (TCC).
       Everything else in the bundle is not scanned. Trashed assets are not emitted
       (→ `Deleted` via V2). Cloud-only: skip (or a derivative as a fallback — decide
       in P0).
+- [ ] Roles from the DB: a derivative is marked as such in the group (never an item
+      of its own); mime ranks by role (source first), then by kind.
 - [ ] **P2. Library metadata.** The asset's DB attributes join the group as a
       virtual metadata record (e.g. `Photos:*` tags next to exiftool's), so the core
       plugins use them: the zone from the library comes first in D3, the original

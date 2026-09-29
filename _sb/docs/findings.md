@@ -219,6 +219,22 @@ compose with `derived`. The current message protocol is a deviation from this de
 
 ## Backend: gontroller, plugins, exiftool
 
+### Item == asset (2026-09-29)
+
+- **Decision: one entity.** An item is the asset — one whole group of files (source
+  + sidecars + derivatives); no separate asset/item split. What must hold instead:
+  a derivative never becomes an item of its own, it is linked to its asset.
+- Found: 65 items from an Apple Photos library were not assets — images of Apple's
+  own in `internal/` (Messages backdrops) and `scopes/` (iCloud sharing); only the
+  `resources/` exclusion kept derivatives out. Now only `originals/` of a library
+  are read (until the Apple Photos grouper exists); the rest of the bundle is
+  skipped, so the old items are soft-deleted by the next complete walk (not seen =
+  gone).
+- For the Apple Photos grouper: roles come from `Photos.sqlite` (original = source;
+  render, derivatives, Live Photo video = linked to it). mime must rank by role
+  first (source before derivative), then by kind — an original HEIC and its render
+  JPEG are both images, the size would decide otherwise.
+
 ### Import chain as small steps (2026-09-29)
 
 - **Groupers are plain decorators with a buffer of open groups** (decision): a group

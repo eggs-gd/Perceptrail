@@ -25,7 +25,7 @@ fswalker -> source switch ─┬─ generic grouper ──┬─> files gate -> 
 | fswalker | `fswalker.go` | root -> `fileEvent` | Reports every file (path + stat), then the end-of-walk marker. Unreadable subdirectories are skipped and recorded. |
 | source switch | `groups.go` | `fileEvent` -> `fileEvent` | Routes a file to the grouper of its source; the marker goes to every grouper. |
 | generic grouper | `groups.go` | `fileEvent` -> `FileGroup` | Sidecars by name, next to each other: one open group; a complete group goes out, the last one with the marker. |
-| Apple Photos grouper | `groups.go` | `fileEvent` -> `FileGroup` | Stub: passes the marker on. `photosLibraryEnabled = false` sends the library to generic. |
+| Apple Photos grouper | `groups.go` | `fileEvent` -> `FileGroup` | Stub: passes the marker on. `photosLibraryEnabled = false` sends the library to generic, which reads only its `originals/`. |
 | files gate | `gate.go` | `FileGroup` -> `FileGroup` | The files table (rows, stat, `CheckTime`); drops groups that need no work; deletions after every grouper's marker. |
 | exif | `exifextractor.go` | `FileGroup` -> `*RawItem` | `exiftool -all` for every file; N steps in parallel on the same channels. |
 | mime | `mime.go` | `*RawItem` -> `*RawItem` | The kind of every file; the main file (the source) first. |
@@ -59,6 +59,9 @@ fswalker -> source switch ─┬─ generic grouper ──┬─> files gate -> 
   -> the item is soft-deleted; a sidecar gone -> the item is `Dirty`.
 - **Moves race with deletions** (the chain is asynchronous): the validator also finds
   soft-deleted items by hash and restores them, so a moved file keeps its GUID.
+- **Item == asset**: a derivative never becomes an item of its own. Inside an
+  Apple Photos library only `originals/` are read (`shouldSkipPath`) until its
+  grouper links derivatives from the library's DB.
 - **The main file is the source**: RAW > video > image. The JPEG of RAW+JPEG and
   the photo of a Live Photo are derivatives (sidecars), future ready previews.
 - **exiftool args are part of the short hash**: changing `allTags` changes every hash

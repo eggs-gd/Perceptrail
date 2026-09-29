@@ -28,7 +28,8 @@ var itemsProxy model.ItemsApi
 //   walk ends with a marker carrying the walk result (complete? unreadable dirs?).
 // - groups switch (groups.go): fileEvent -> fileEvent - routes a file to the grouper
 //   of its source; the marker goes to every grouper. Apple Photos is off
-//   (photosLibraryEnabled): the library goes to generic for now.
+//   (photosLibraryEnabled): the library goes to generic for now, which reads only
+//   its originals/ — derivatives and Apple's own images must not become items.
 // - groupers (groups.go): fileEvent -> FileGroup - a buffer of open groups inside;
 //   a group goes out when it is complete (not ranked yet: no main file). generic:
 //   sidecars by name, next to each other, so one open group; the last one goes out

@@ -187,3 +187,25 @@ func statEntry(t *testing.T, path string) dto.ItemEntry {
 	}
 	return dto.ItemEntry{Path: path, Name: filepath.Base(path), Size: info.Size(), ModTime: info.ModTime()}
 }
+
+// Inside an Apple Photos library only originals/ are assets; derivatives, renders
+// and Apple's own images must not become items
+func TestPhotosLibraryOnlyOriginals(t *testing.T) {
+	lib := "/Pictures/Photos Library.photoslibrary/"
+	cases := map[string]bool{
+		lib + "originals/A/0A1B.heic":                                   false,
+		lib + "originals/A/0A1B_3.mov":                                  false,
+		lib + "resources/derivatives/A/0A1B_1_105_c.jpeg":               true,
+		lib + "resources/renders/A/0A1B_1_201_a.jpeg":                   true,
+		lib + "internal/photosmessagesbackdropdescriptors/x/image.heic": true,
+		lib + "scopes/cloudsharing/data/y.jpg":                          true,
+		lib + "database/Photos.sqlite":                                  true,
+		"/Pictures/originals/a.jpg":                                     false,
+		"/Pictures/clip.THM":                                            true,
+	}
+	for path, skip := range cases {
+		if got := shouldSkipPath(path); got != skip {
+			t.Errorf("%s: skip %v, want %v", path, got, skip)
+		}
+	}
+}
