@@ -29,6 +29,17 @@ Target architecture — the diagrams in [`../puml`](../puml).
 - Repo moved to `eggs-gd`, public; CI; git flow with rulesets; version derived from
   history with CI tags on `develop`.
 - Safari: the logger no longer breaks the app (stack format).
+- Validator per `Walker.puml` (V1–V5): walk safety (unreadable dirs skipped, no
+  deletions after an incomplete/empty walk), deleted files (items soft-deleted,
+  sidecars → `Dirty`), moves keep the GUID (also after a deletion), duplicates are new
+  items, `Dirty`/not-`Ready` items are reprocessed, closer sets `Ready`. Tests on a
+  temp library + sqlite.
+- Dates (D1–D3): `FileModifyDate` parsed (with its zone; zero dates were most of the
+  library), zero `0000:00:00` skipped, sub-seconds kept; the instant + offset
+  (`DateOffset`, minutes) + `DateSource` (tag) + `DateZone` (how the offset was found).
+  Zone chain: the tag's offset → local time − GPS UTC time (rounded to 15 min) →
+  GPS coordinates → IANA zone (`tzf`, embedded, DST-aware) → the server's zone
+  (assumed). Videos: zoned `CreationDate`, else QuickTime `CreateDate` = UTC.
 - svebapp on current Svelte 5 / Kit practices: `$app/state`, no `svelte/store`
   (component state + `LiveQuery` on `createSubscriber`), `{@attach}`, `$derived`
   instead of state writes in effects, clsx-style `class`, no side effects in `load`.
@@ -47,66 +58,43 @@ Target architecture — the diagrams in [`../puml`](../puml).
 
 ## Next
 
-Each step is one PR unless noted. Order: V1–V5, then D1–D3.
+One PR per feature (its steps are commits). Next: the import chain C1–C7 (its own
+PR). The validator (V1–V5) and dates (D1–D3) are in PR #13.
+
+### Import chain: one small step per node
+
+Graph: [`Import chain.puml`](../puml/Import%20chain.puml); gate and validator
+details: [`Walker.puml`](../puml/Walker.puml). Today `fswalker` does everything
+(walk, MIME, grouping, files table, change detection, deletions) and the validator
+hides inside the exif step, so groups and MIME are decided before EXIF is known.
+
+- [ ] **C1. fswalker = spam.** Every file found (path + stat), nothing else; walk
+      safety from V1 stays.
+- [ ] **C2. Groups: a switch by source.** `generic` = sidecars by name next to each
+      other (buffered per directory); Apple Photos and others are branches added
+      later (the Photos milestone). The end-of-walk marker is broadcast to every
+      branch; all branches write to one channel.
+- [ ] **C3. Files gate.** The files table: new / changed (size, mtime) / item not
+      Ready → pass, otherwise drop (no exiftool for unchanged files); `CheckTime`;
+      deletions (V2) after the marker from every branch.
+- [ ] **C4. exif** for the whole group (today's extractor without the validator).
+- [ ] **C5. mime.** Kind of every file: exif `FileType`/`MIMEType` → own extension
+      table (`MediaKind`: image/raw/video/animated/sidecar) → content sniff; rank the
+      group: main file (the photo in a Live Photo, deterministic RAW+JPEG, pairs by
+      `ContentIdentifier`). No system `mime` tables (Docker).
+- [ ] **C6. validator** as its own step (V3): same / changed / moved / duplicate; a
+      moved item whose outputs for the GUID are complete → `Ready`, no transcode.
+- [ ] **C7. transcode switch** by kind (photo / video / Live Photo; pass-through until
+      thumbnails exist), then plugins (after transcode: the client gets items with
+      thumbnails), closer → `Ready`. Tests reworked per step.
 
 ### Dates and time zones
 
-Time zones belong to the core (the date), not to the geo perceptor.
+D1–D3 done (PR #13), see Done.
 
-- [ ] **D1. Date bugs.** `FileModifyDate` never parses (exiftool prints it with a
-      zone) — 1741 of 2413 items have a zero date (screenshots, messenger files).
-      Ignore invalid `0000:00:00 00:00:00`. Table tests on real tag sets (iPhone
-      HEIC with a zone, camera JPEG without one, QuickTime video, PNG without EXIF).
-- [ ] **D2. Offset in the model and the API.** `ItemDto`: instant (UTC) + offset in
-      minutes (NULL = unknown) + source tag / "assumed" flag. The offset is its own
-      column: sqlite and Postgres `timestamptz` return UTC on read. The perceplib
-      date API gets an explicit offset (+00:00 vs unknown) → perceplib v0.0.7,
-      plugins rebuilt.
-- [ ] **D3. Offset chain in `exif_core/date`.** Tags by group (exiftool `-G`; today
-      `-s2` without groups — `CreateDate` is EXIF for photos but already-UTC
-      QuickTime for videos). In order:
-      1. `OffsetTimeOriginal` (videos: `Keys:CreationDate` with a zone);
-      2. `DateTimeOriginal` − GPS UTC time, rounded to 15 min (sanity ±14 h);
-      3. GPS coordinates → IANA zone from an embedded dictionary
-         (`github.com/ringsaturn/tzf`), offset via `time.LoadLocation` (DST,
-         history). Not longitude/15: no DST, wrong at administrative borders;
-      4. the server's time zone, marked as assumed.
-      `SubSecTimeOriginal` for bursts.
-- [ ] **D4. API and client — to discuss after D1–D3.** Maybe not needed: if server
-      and client normalise dates the same way, the API needs no separate zone.
-      Sorting/grouping the gallery by date is separate (it makes all of this visible).
-- Existing items are not re-read (unchanged files are skipped): in dev — delete
-  `.var/media_library.db*` and rescan. Reprocessing on plugin change is "Later".
-
-### Validator per [`Walker.puml`](../puml/Walker.puml)
-
-Today: files are keyed by path, the item GUID = the main file's GUID. A moved file
-becomes a new item and the old one stays forever (`finalizeWalk` is a TODO);
-`Dirty` is set but nothing reads it; every item stays `New`.
-
-- [ ] **V1. Walk safety** (prerequisite for deletions). An unreadable directory skips
-      its subtree instead of aborting the whole walk; a missing/unmounted library
-      root never counts as "everything deleted"; finalization runs only after a
-      complete walk (today `Stop()` would also run it on cancel).
-- [ ] **V2. Deleted.** `finalizeWalk`: files with `CheckTime` older than the run are
-      gone. Main file gone → the item is `Deleted` (soft delete, excluded from
-      `/items`; the client resyncs fully on load, so no tombstones yet). A sidecar
-      gone → its group is re-emitted.
-- [ ] **V3. Moved.** New path, hash matches an item whose path no longer exists →
-      the file row and the item get the new path, the GUID stays (thumbnails keyed by
-      GUID survive). Same hash and the old path still exists → **duplicate**: a new
-      item (as now); reusing its thumbnails is a later optimisation.
-- [ ] **V4. Changed and states.** Same path, new hash → `Dirty` → re-run plugins,
-      later regenerate thumbnails. Define who moves `New → Processing → Ready`
-      (until the transcoder exists: the closer sets `Ready`).
-- [ ] **V5. Tests.** Walker + validator on a temp directory and a temp sqlite (now
-      possible via `model.Configure`): new, same, changed, moved, duplicate, deleted
-      main/sidecar, unreadable subdirectory, missing root. Update `Walker.puml`
-      where the code deviates (exif reading is merged into the validator step) and
-      findings.
-- Known limit: the short hash is size + non-volatile EXIF — two files without EXIF
-  and with the same byte size look identical. Acceptable for now; a full hash is an
-  option for CPU-rich setups (already noted in `ItemDto`).
+- [ ] **D4. API and client — to discuss.** Maybe not needed: if server and client
+      normalise dates the same way, the API needs no separate zone. Sorting/grouping
+      the gallery by date is separate (it makes all of this visible).
 
 ### Photos library (`*.photoslibrary`) as its own source — separate milestone
 
@@ -148,11 +136,8 @@ reference); reading needs Full Disk Access for the process (TCC).
 
 ## Core — product (gontroller)
 
-- [ ] Own media-type table (`MediaKind`: image/raw/video/animated/sidecar) instead of
-      system `mime` (a minimal Docker image loses `.mov/.heic/RAW`); an explicit role
-      of each file in the group.
-- [ ] Main file of a group: the photo in a Live Photo, deterministic for RAW+JPEG;
-      Live Photo pairs by `ContentIdentifier`; one main item merged from all sidecars
+- Own media-type table and the main file of a group → **C5** (import chain).
+- [ ] One main item merged from all sidecars
       ([`Item flow.puml`](../puml/Item%20flow.puml)).
 - [ ] Embedded RAW preview (`PreviewImage`/`JpgFromRaw`) for the transcoder.
 

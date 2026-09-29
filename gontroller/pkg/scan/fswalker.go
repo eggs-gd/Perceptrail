@@ -3,6 +3,7 @@ package scan
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"mime"
 	"net/http"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/eggs-gd/perceplib/api"
@@ -24,12 +26,27 @@ import (
 type inType struct {
 	path string
 	info os.DirEntry
+	// Set only on the end-of-walk marker
+	done *walkResult
+}
+
+// walkResult describes a finished walk. Deletions may be derived from it only if
+// the walk was complete: a cancelled walk or an unreadable root says nothing about
+// which files are gone.
+type walkResult struct {
+	complete bool
+	// Files seen (before grouping and filtering)
+	files int
+	// Directories that could not be read: their files are not "deleted"
+	unreadable []string
 }
 
 type fsMonitor struct {
 	logger *l.Logger
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	mu sync.Mutex // guards cancel: Stop is called from two goroutines
 
 	path         string
 	currentGroup []dto.ItemEntry // current group of files
@@ -48,53 +65,163 @@ func NewFsWalker(path string, chout chan<- []*dto.FileDto, logger *l.Logger) cha
 }
 
 func (m *fsMonitor) Start(chin chan<- inType, ctx context.Context) {
+	m.mu.Lock()
 	m.ctx, m.cancel = context.WithCancel(ctx)
+	m.mu.Unlock()
 	defer m.Stop()
 
 	m.currentRun = time.Now()
-	err := filepath.WalkDir(m.path, func(path string, info os.DirEntry, err error) error {
-		m.logger.Info("walkDirFunc", l.String("file", path), l.Error(err))
-		select {
-		case <-m.ctx.Done():
-			return m.ctx.Err()
-
-		default:
-			if err != nil {
-				return err
-			}
-			if !info.IsDir() {
-				chin <- inType{path, info}
-			}
-			return nil
-		}
-	})
-
-	if err != nil && !errors.Is(err, context.Canceled) {
-		m.logger.Error("FsMonitor Error", l.Error(err))
-		return
-	}
+	result := m.walk(chin)
 
 	// Groups are emitted when the next group starts; the marker flushes the last one
+	// and carries the result to Decorate, which runs after every group is stored
 	select {
-	case chin <- inType{}:
+	case chin <- inType{done: &result}:
 	case <-m.ctx.Done():
 	}
 }
 
-func (m *fsMonitor) finalizeWalk() {
-	// todo process removed files
+// walk sends every file under the root to chin. An unreadable subdirectory is
+// skipped and recorded; an unreadable root or a cancel makes the walk incomplete.
+func (m *fsMonitor) walk(chin chan<- inType) walkResult {
+	var result walkResult
+
+	if info, err := os.Stat(m.path); err != nil || !info.IsDir() {
+		m.logger.Error("Library root is not a readable directory", l.String("path", m.path), l.Error(err))
+		return result
+	}
+
+	err := filepath.WalkDir(m.path, func(path string, entry fs.DirEntry, err error) error {
+		if ctxErr := m.ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		if err != nil {
+			if path == m.path {
+				return err
+			}
+			m.logger.Warn("Unreadable, skipped", l.String("path", path), l.Error(err))
+			result.unreadable = append(result.unreadable, path)
+			if entry != nil && entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if entry.IsDir() {
+			return nil
+		}
+
+		select {
+		case chin <- inType{path: path, info: entry}:
+			result.files++
+			return nil
+		case <-m.ctx.Done():
+			return m.ctx.Err()
+		}
+	})
+
+	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			m.logger.Error("Walk failed", l.String("path", m.path), l.Error(err))
+		}
+		return result
+	}
+	result.complete = true
+	return result
+}
+
+// finalizeWalk runs after the last group of a walk is stored.
+func (m *fsMonitor) finalizeWalk(result walkResult) {
+	if !result.complete {
+		m.logger.Warn("Walk incomplete: deletions are not checked")
+		return
+	}
+	if result.files == 0 {
+		// An empty root (e.g. an unmounted drive's mount point) must not delete the library
+		m.logger.Warn("Walk found no files: deletions are not checked", l.String("path", m.path))
+		return
+	}
+	m.logger.Info("Walk complete", l.Int("files", result.files), l.Int("unreadable", len(result.unreadable)))
+
+	stale, err := filesProxy.GetFilesCheckedBefore(m.currentRun)
+	if err != nil {
+		m.logger.Error("Deletions: can't read files", l.Error(err))
+		return
+	}
+	gone := m.goneFiles(stale, result.unreadable)
+	deletedItems, dirtyItems := 0, 0
+
+	for _, f := range gone {
+		switch {
+		case f.IsIgnored():
+		case f.LinkedTo == f.GUID: // main file: the item is gone
+			item, err := itemsProxy.GetItemByGuid(f.GUID)
+			if err != nil {
+				continue // never became an item, or already deleted
+			}
+			if err := itemsProxy.DeleteItem(item); err != nil {
+				m.logger.Error("Deletions: can't delete item", l.String("guid", item.Guid), l.Error(err))
+				continue
+			}
+			deletedItems++
+		default: // sidecar: its item must be processed again
+			item, err := itemsProxy.GetItemByGuid(f.LinkedTo)
+			if err != nil {
+				continue
+			}
+			item.State = dto.Dirty
+			if _, err := itemsProxy.UpdateItem(item); err != nil {
+				m.logger.Error("Deletions: can't mark item dirty", l.String("guid", item.Guid), l.Error(err))
+				continue
+			}
+			dirtyItems++
+		}
+	}
+
+	if err := filesProxy.DeleteFiles(gone); err != nil {
+		m.logger.Error("Deletions: can't delete files", l.Error(err))
+		return
+	}
+	m.logger.Info("Deletions", l.Int("files", len(gone)), l.Int("items", deletedItems), l.Int("dirty", dirtyItems))
+}
+
+// goneFiles keeps the stale files that belong to this root and were not hidden by
+// an unreadable directory: only those are known to be deleted.
+func (m *fsMonitor) goneFiles(stale []*dto.FileDto, unreadable []string) []*dto.FileDto {
+	var gone []*dto.FileDto
+	for _, f := range stale {
+		if !isUnder(f.Path, m.path) {
+			continue // another library root (config changed): not ours to judge
+		}
+		if slices.ContainsFunc(unreadable, func(dir string) bool { return f.Path == dir || isUnder(f.Path, dir) }) {
+			continue
+		}
+		gone = append(gone, f)
+	}
+	return gone
+}
+
+// isUnder reports whether path is inside dir
+func isUnder(path, dir string) bool {
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func (m *fsMonitor) Stop() {
-	m.finalizeWalk()
-	m.cancel()
+	// Called from both the walk goroutine and the chain runner
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.cancel != nil {
+		m.cancel()
+	}
 }
 
 func (m *fsMonitor) Decorate(in inType) ([]*dto.FileDto, error) {
-	if in.info == nil { // end of walk: emit the last group
+	if in.done != nil { // end of walk: emit the last group, then finalize
 		group := m.currentGroup
 		m.currentGroup = []dto.ItemEntry{}
-		if res := m.entryToFile(group); res != nil {
+		res := m.entryToFile(group)
+		m.finalizeWalk(*in.done)
+		if res != nil {
 			return res, nil
 		}
 		return nil, chain.ErrSkippedItem
@@ -242,6 +369,16 @@ func (m *fsMonitor) entryToFile(group []dto.ItemEntry) []*dto.FileDto {
 		m.logger.Panic("can't update files")
 	}
 
+	// Unchanged files, but the item is not done (new, dirty, or processing was
+	// interrupted): process the whole group again
+	if len(changedFiles) == 0 && !dbitems[0].IsIgnored() && m.needsProcessing(dbitems[0]) {
+		for _, f := range dbitems {
+			if !f.IsIgnored() {
+				changedFiles = append(changedFiles, f)
+			}
+		}
+	}
+
 	if len(changedFiles) > 0 {
 		if !slices.Contains(changedFiles, dbitems[0]) {
 			changedFiles = append([]*dto.FileDto{dbitems[0]}, changedFiles...)
@@ -251,6 +388,15 @@ func (m *fsMonitor) entryToFile(group []dto.ItemEntry) []*dto.FileDto {
 	}
 
 	return nil
+}
+
+// needsProcessing: the main file has no item yet, or its item is not Ready
+func (m *fsMonitor) needsProcessing(main *dto.FileDto) bool {
+	item, err := itemsProxy.GetItemByGuid(main.GUID)
+	if err != nil {
+		return errors.Is(err, gorm.ErrRecordNotFound)
+	}
+	return item.State != dto.Ready
 }
 
 func updateMimeType(entry *dto.ItemEntry, logger *l.Logger) {
