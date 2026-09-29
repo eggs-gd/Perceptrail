@@ -1,7 +1,9 @@
 # perceplib
 
 Shared library for the Perceptrail server (`gontroller`) and plugins (`perceptors`).
-Module: `github.com/dukobpa3/perceplib` (a git submodule of Perceptrail).
+Module: `github.com/eggs-gd/perceplib`. Standalone public repo
+([eggs-gd/perceplib](https://github.com/eggs-gd/perceplib)), vendored into Perceptrail
+as a **git subtree** under `perceplib/`.
 
 ## Packages
 
@@ -19,6 +21,26 @@ writes to its output channel. `Decorator[Ti, To]` transforms an item; an error g
 to the chain's shared error channel (`ErrSkippedItem` is a regular skip, not a
 failure). A chain is itself a `Processor`, so chains nest (that is how EXIF plugins
 are run).
+
+## Working from Perceptrail (subtree)
+
+In Perceptrail `perceplib/` is plain files: edit and commit together with the code
+that needs the change — one commit, no submodule pointer. Consumers use
+`replace github.com/eggs-gd/perceplib => ../perceplib` locally.
+
+Publishing changes back to this repo (from the Perceptrail root):
+
+```bash
+git subtree push --prefix=perceplib git@github.com:eggs-gd/perceplib.git master
+# then tag in this repo (clone or `git ls-remote`), e.g.:
+git tag vX.Y.Z <pushed commit> && git push git@github.com:eggs-gd/perceplib.git vX.Y.Z
+```
+
+Pulling changes made directly in this repo:
+
+```bash
+git subtree pull --prefix=perceplib git@github.com:eggs-gd/perceplib.git master
+```
 
 ## Versioning
 

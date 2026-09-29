@@ -1,4 +1,4 @@
-module github.com/dukobpa3/perceplib
+module github.com/eggs-gd/perceplib
 
 go 1.27.1
 
