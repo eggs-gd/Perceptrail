@@ -61,6 +61,19 @@ type Switcher[Ti any, To any] interface {
 }
 ```
 
+#### Expander
+Turns one input into any number of outputs (none, one or many), sent in order. Used
+when a step buffers and releases several results at once (e.g. all groups of a
+directory):
+```go
+type Expander[Ti any, To any] interface {
+    // Expand returns the outputs for one input; nil/empty sends nothing
+    Expand(Ti) ([]To, error)
+    // Stop handles cleanup
+    Stop()
+}
+```
+
 ### Implementation Types
 
 #### ChainProcessor
@@ -83,6 +96,9 @@ Implementation for chain entry points:
 - Handles initial transformations
 - Controls processing flow
 - Provides cleanup mechanisms
+
+#### ExpanderRunner
+Runs an Expander: every output of `Expand` goes to the output channel in order.
 
 #### SwitchRunner
 Implementation for branching logic:
