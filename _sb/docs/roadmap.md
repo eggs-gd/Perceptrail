@@ -47,7 +47,7 @@ Target architecture — the diagrams in [`../puml`](../puml).
 
 ## Next
 
-Each step is one PR unless noted.
+Each step is one PR unless noted. Order: V1–V5, then D1–D3.
 
 ### Dates and time zones
 
@@ -72,8 +72,8 @@ Time zones belong to the core (the date), not to the geo perceptor.
          history). Not longitude/15: no DST, wrong at administrative borders;
       4. the server's time zone, marked as assumed.
       `SubSecTimeOriginal` for bursts.
-- [ ] **D4. API and client.** `/items` returns the date with its offset (RFC3339
-      `…+02:00`); the client keeps it (display in the local time of the shot).
+- [ ] **D4. API and client — to discuss after D1–D3.** Maybe not needed: if server
+      and client normalise dates the same way, the API needs no separate zone.
       Sorting/grouping the gallery by date is separate (it makes all of this visible).
 - Existing items are not re-read (unchanged files are skipped): in dev — delete
   `.var/media_library.db*` and rescan. Reprocessing on plugin change is "Later".
@@ -107,6 +107,36 @@ becomes a new item and the old one stays forever (`finalizeWalk` is a TODO);
 - Known limit: the short hash is size + non-volatile EXIF — two files without EXIF
   and with the same byte size look identical. Acceptable for now; a full hash is an
   option for CPU-rich setups (already noted in `ItemDto`).
+
+### Photos library (`*.photoslibrary`) as its own source — separate milestone
+
+The bundle is not a folder of photos: 30 311 files, of them 18 154 `database/search`,
+8 989 `resources/caches`, 1 780 `originals/<0-F>/<UUID>.<ext>` (no original names),
+1 143 `resources/derivatives`. Yet 1 844 of 2 413 gallery items come from it. The
+truth is in `database/Photos.sqlite`: original filename, date + time zone
+(`ZADDITIONALASSETATTRIBUTES.ZTIMEZONEOFFSET/ZTIMEZONENAME`), GPS, Live Photo pairs,
+edits, trashed/hidden, favourites, albums. Name-based grouping does not apply.
+Private Apple format: the schema changes between macOS versions (osxphotos is the
+reference); reading needs Full Disk Access for the process (TCC).
+
+- [ ] **P0. Spike.** Read-only `Photos.sqlite` (`mode=ro`, the library may be open in
+      Photos) on this macOS: map asset UUID → files (original, Live Photo video,
+      edited render, `.aae`), date/zone, GPS, kind, trashed/hidden, cloud-only
+      originals (Optimize Mac Storage: no local original). Findings entry; decide the
+      supported macOS range.
+- [ ] **P1. Source step.** The walker meets a `*.photoslibrary` directory →
+      `SkipDir` and hands it to a library reader that emits the same groups
+      (`[]FileDto`) into the chain: one group per asset — main original + Live Photo
+      video / edited render as sidecars; the GUID from the asset UUID (stable).
+      Everything else in the bundle is not scanned. Trashed assets are not emitted
+      (→ `Deleted` via V2). Cloud-only: skip (or a derivative as a fallback — decide
+      in P0).
+- [ ] **P2. Library metadata.** The asset's DB attributes join the group as a
+      virtual metadata record (e.g. `Photos:*` tags next to exiftool's), so the core
+      plugins use them: the zone from the library comes first in D3, the original
+      filename, favourite/hidden.
+- [ ] **P3. Tests** on a fixture library (minimal `Photos.sqlite` + files).
+- Later: albums, people (`ZPERSON`/faces) → perceptors.
 
 ### Then
 
