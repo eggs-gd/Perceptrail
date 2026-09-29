@@ -2,11 +2,10 @@ package app
 
 import (
 	"flag"
-	"net"
 	"os"
 	"path/filepath"
+	"perceptrail/gontroller/pkg/client"
 	"perceptrail/gontroller/pkg/model"
-	"strconv"
 
 	l "github.com/eggs-gd/perceplib/logger"
 
@@ -26,19 +25,13 @@ type Config struct {
 	DataDir string `yaml:"data_dir"`
 	// ExifTool executable. Default: "exiftool" from PATH
 	Exiftool string `yaml:"exiftool"`
-	Server   struct {
-		Host string `yaml:"host"`
-		Port int    `yaml:"port"`
-		// CORS: origins allowed to call the API (the client in dev runs on another
-		// port). Default: any
-		AllowedOrigins []string `yaml:"allowed_origins"`
-	} `yaml:"server"`
+	// HTTP: listen address, CORS
+	Server client.ServerConfig `yaml:"server"`
 	// Behind GORM: sqlite, postgres (not implemented yet)
 	Database model.DBConfig `yaml:"database"`
 }
 
 const (
-	defaultPort     = 1323
 	defaultDBDriver = model.DriverSQLite
 	defaultDBName   = "media_library.db"
 )
@@ -46,15 +39,6 @@ const (
 // CacheDir holds generated files (thumbnails, …) inside DataDir.
 func (c *Config) CacheDir() string {
 	return filepath.Join(c.DataDir, "cache")
-}
-
-// Addr is the HTTP listen address.
-func (c *Config) Addr() string {
-	port := c.Server.Port
-	if port == 0 {
-		port = defaultPort
-	}
-	return net.JoinHostPort(c.Server.Host, strconv.Itoa(port))
 }
 
 var configFlag = flag.String("config", "", "path to config.yml (default: $GONTROLLER_CONFIG, then ./config.yml)")
@@ -125,9 +109,6 @@ func (c *Config) resolve(base string) {
 		if !filepath.IsAbs(c.Database.Name) {
 			c.Database.Name = filepath.Join(c.DataDir, c.Database.Name)
 		}
-	}
-	if len(c.Server.AllowedOrigins) == 0 {
-		c.Server.AllowedOrigins = []string{"*"}
 	}
 	// A bare command name is looked up in PATH; only paths are resolved
 	if filepath.Base(c.Exiftool) != c.Exiftool {

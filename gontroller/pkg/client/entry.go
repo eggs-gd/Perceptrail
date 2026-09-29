@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"net/http"
-	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/client/routes"
 
 	l "github.com/eggs-gd/perceplib/logger"
@@ -14,12 +13,16 @@ import (
 
 type webService struct {
 	logger *l.Logger
-	appCtx app.AppContext
+	cfg    ServerConfig
 }
 
-func NewWebService(ctx app.AppContext) *webService {
-	logger := ctx.Logger(string(app.LogHTTP))
-	return &webService{logger, ctx}
+// NewWebService checks cfg (see ServerConfig) and fills its defaults.
+func NewWebService(cfg ServerConfig, logger *l.Logger) (*webService, error) {
+	cfg, err := cfg.withDefaults()
+	if err != nil {
+		return nil, err
+	}
+	return &webService{logger, cfg}, nil
 }
 
 func (s *webService) Start(parentCtx context.Context) {
@@ -28,7 +31,7 @@ func (s *webService) Start(parentCtx context.Context) {
 
 	e := echo.New()
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: s.appCtx.Config().Server.AllowedOrigins,
+		AllowOrigins: s.cfg.AllowedOrigins,
 		AllowMethods: []string{echo.GET, echo.POST, echo.PUT, echo.DELETE},
 	}))
 	e.Use(middleware.Logger())
@@ -41,7 +44,7 @@ func (s *webService) Start(parentCtx context.Context) {
 	routes.RegisterItemsRoutes("/items", e, s.logger)
 	routes.RegisterAssetsRoutes("/assets", e, s.logger)
 
-	e.Logger.Fatal(e.Start(s.appCtx.Config().Addr()))
+	e.Logger.Fatal(e.Start(s.cfg.Addr()))
 
 	<-ctx.Done()
 }

@@ -42,7 +42,11 @@ func main() {
 	}
 
 	svc.AddService(scan.NewImporterService(ctx))
-	svc.AddService(client.NewWebService(ctx))
+	web, err := client.NewWebService(ctx.Config().Server, ctx.Logger(string(app.LogHTTP)))
+	if err != nil {
+		log.Fatalf("Server: %v", err)
+	}
+	svc.AddService(web)
 	//svc.AddService(importer.NewMaintenanceService(ctx)) // later
 
 	go svc.RunApp(mainCtx)
