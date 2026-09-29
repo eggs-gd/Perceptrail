@@ -3,11 +3,15 @@ package model
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"perceptrail/gontroller/pkg/model/dto"
 	"sort"
 
 	"github.com/eggs-gd/perceplib/api"
+	"gorm.io/gorm"
 )
 
 // File-system tags (exiftool File group) that change on move/rename/read
@@ -59,6 +63,12 @@ func (p *proxy) ValidateFile(item *dto.FileDto, meta api.RawExif) (*dto.ItemDto,
 	}
 
 	if itemByGUID.Guid == "" {
+		// Walker.puml "found moved": same hash, the old path no longer exists
+		if moved := p.findMovedItem(item, hashShort); moved != nil {
+			return moved, p.moveItem(moved, item)
+		}
+
+		// Not found, or a duplicate (same hash, the old path still exists): a new item.
 		// if this guid/path is not present in DB we don't care about duplicates and just create new one for now
 		// for future I kept commented out code for optimisation with available duplicates and their thumbs
 		// make sense only in CPU environments with a lot of transcoding work
@@ -146,4 +156,74 @@ func (p *proxy) getItemsForValidation(file *dto.FileDto, hashShort string) (byGu
 	// will be threated as new item ig byGuid also empty
 	// or modified if byGuid not empty
 	return itemByGUID, itemByPath, &dto.ItemDto{}
+}
+
+// findMovedItem returns an item with the same content whose file is gone from its
+// old path: file is that item, moved. Deleted items count too: the walker may
+// finalize (delete the item of the vanished path) before the moved file reaches the
+// validator — the import chain is asynchronous — or the file may come back later.
+// Live items are preferred, then the most recently deleted.
+func (p *proxy) findMovedItem(file *dto.FileDto, hashShort string) *dto.ItemDto {
+	var candidates []*dto.ItemDto
+	err := p.db.Unscoped().Where("hash_short = ?", hashShort).
+		Order("deleted_at IS NOT NULL, deleted_at DESC").Find(&candidates).Error
+	if err != nil {
+		return nil
+	}
+	for _, item := range candidates {
+		if item.Path == file.Path {
+			continue
+		}
+		if _, err := os.Stat(item.Path); errors.Is(err, fs.ErrNotExist) {
+			return item
+		}
+	}
+	return nil
+}
+
+// moveItem gives the item the new main file: the item keeps its GUID (thumbnails
+// and client links are keyed by it), the new file rows take that GUID over. A
+// deleted item is restored.
+func (p *proxy) moveItem(item *dto.ItemDto, file *dto.FileDto) error {
+	oldGuid, newGuid := item.Guid, file.GUID
+
+	err := p.db.Transaction(func(tx *gorm.DB) error {
+		// The old main row first: GUID is unique
+		if err := tx.Where("guid = ?", oldGuid).Delete(&dto.FileDto{}).Error; err != nil {
+			return err
+		}
+		// Old sidecars that are gone as well; the ones still on disk stay linked
+		var oldSidecars []dto.FileDto
+		if err := tx.Where("linked_to = ?", oldGuid).Find(&oldSidecars).Error; err != nil {
+			return err
+		}
+		for _, f := range oldSidecars {
+			if _, err := os.Stat(f.Path); errors.Is(err, fs.ErrNotExist) {
+				if err := tx.Delete(&f).Error; err != nil {
+					return err
+				}
+			}
+		}
+		// The new group (main + sidecars) links to the item's GUID
+		if err := tx.Model(&dto.FileDto{}).Where("linked_to = ?", newGuid).Update("linked_to", oldGuid).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&dto.FileDto{}).Where("guid = ?", newGuid).Update("guid", oldGuid).Error; err != nil {
+			return err
+		}
+
+		item.Path = file.Path
+		item.MimeType = file.MimeType
+		if item.DeletedAt.Valid { // deleted meanwhile: it is back
+			item.DeletedAt = gorm.DeletedAt{}
+			item.State = dto.Dirty
+		}
+		return tx.Unscoped().Save(item).Error
+	})
+	if err != nil {
+		return fmt.Errorf("move %s → %s: %w", oldGuid, file.Path, err)
+	}
+
+	file.GUID, file.LinkedTo = oldGuid, oldGuid
+	return nil
 }

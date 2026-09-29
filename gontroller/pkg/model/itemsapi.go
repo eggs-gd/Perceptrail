@@ -29,6 +29,9 @@ type ItemsApi interface {
 
 	UpdateItem(item *dto.ItemDto) (*dto.ItemDto, error)
 	UpdateItems(items []*dto.ItemDto) ([]*dto.ItemDto, error)
+
+	// DeleteItem marks the item Deleted and soft-deletes it (hidden from queries)
+	DeleteItem(item *dto.ItemDto) error
 }
 
 func (p *proxy) GetAllItems() ([]*dto.ItemDto, error) {
@@ -99,4 +102,12 @@ func (p *proxy) UpdateItem(item *dto.ItemDto) (*dto.ItemDto, error) {
 
 func (p *proxy) UpdateItems(items []*dto.ItemDto) ([]*dto.ItemDto, error) {
 	return items, p.db.Save(&items).Error
+}
+
+func (p *proxy) DeleteItem(item *dto.ItemDto) error {
+	item.State = dto.Deleted
+	if err := p.db.Save(item).Error; err != nil {
+		return err
+	}
+	return p.db.Delete(item).Error
 }

@@ -50,6 +50,9 @@ func (fd *closer) Decorate(in exif_core.RawItemRW) (*dto.ItemDto, error) {
 		return nil, chain.ErrSkippedItem
 	}
 
+	// Metadata is the last processing step for now; once thumbnails exist this
+	// becomes Processing and the transcoder sets Ready
+	rawItem.Item.State = dto.Ready
 	return itemsProxy.UpdateItem(rawItem.Item)
 }
 

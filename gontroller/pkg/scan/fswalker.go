@@ -141,7 +141,69 @@ func (m *fsMonitor) finalizeWalk(result walkResult) {
 		return
 	}
 	m.logger.Info("Walk complete", l.Int("files", result.files), l.Int("unreadable", len(result.unreadable)))
-	// todo process removed files: CheckTime older than currentRun, except under result.unreadable
+
+	stale, err := filesProxy.GetFilesCheckedBefore(m.currentRun)
+	if err != nil {
+		m.logger.Error("Deletions: can't read files", l.Error(err))
+		return
+	}
+	gone := m.goneFiles(stale, result.unreadable)
+	deletedItems, dirtyItems := 0, 0
+
+	for _, f := range gone {
+		switch {
+		case f.IsIgnored():
+		case f.LinkedTo == f.GUID: // main file: the item is gone
+			item, err := itemsProxy.GetItemByGuid(f.GUID)
+			if err != nil {
+				continue // never became an item, or already deleted
+			}
+			if err := itemsProxy.DeleteItem(item); err != nil {
+				m.logger.Error("Deletions: can't delete item", l.String("guid", item.Guid), l.Error(err))
+				continue
+			}
+			deletedItems++
+		default: // sidecar: its item must be processed again
+			item, err := itemsProxy.GetItemByGuid(f.LinkedTo)
+			if err != nil {
+				continue
+			}
+			item.State = dto.Dirty
+			if _, err := itemsProxy.UpdateItem(item); err != nil {
+				m.logger.Error("Deletions: can't mark item dirty", l.String("guid", item.Guid), l.Error(err))
+				continue
+			}
+			dirtyItems++
+		}
+	}
+
+	if err := filesProxy.DeleteFiles(gone); err != nil {
+		m.logger.Error("Deletions: can't delete files", l.Error(err))
+		return
+	}
+	m.logger.Info("Deletions", l.Int("files", len(gone)), l.Int("items", deletedItems), l.Int("dirty", dirtyItems))
+}
+
+// goneFiles keeps the stale files that belong to this root and were not hidden by
+// an unreadable directory: only those are known to be deleted.
+func (m *fsMonitor) goneFiles(stale []*dto.FileDto, unreadable []string) []*dto.FileDto {
+	var gone []*dto.FileDto
+	for _, f := range stale {
+		if !isUnder(f.Path, m.path) {
+			continue // another library root (config changed): not ours to judge
+		}
+		if slices.ContainsFunc(unreadable, func(dir string) bool { return f.Path == dir || isUnder(f.Path, dir) }) {
+			continue
+		}
+		gone = append(gone, f)
+	}
+	return gone
+}
+
+// isUnder reports whether path is inside dir
+func isUnder(path, dir string) bool {
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func (m *fsMonitor) Stop() {
@@ -307,6 +369,16 @@ func (m *fsMonitor) entryToFile(group []dto.ItemEntry) []*dto.FileDto {
 		m.logger.Panic("can't update files")
 	}
 
+	// Unchanged files, but the item is not done (new, dirty, or processing was
+	// interrupted): process the whole group again
+	if len(changedFiles) == 0 && !dbitems[0].IsIgnored() && m.needsProcessing(dbitems[0]) {
+		for _, f := range dbitems {
+			if !f.IsIgnored() {
+				changedFiles = append(changedFiles, f)
+			}
+		}
+	}
+
 	if len(changedFiles) > 0 {
 		if !slices.Contains(changedFiles, dbitems[0]) {
 			changedFiles = append([]*dto.FileDto{dbitems[0]}, changedFiles...)
@@ -316,6 +388,15 @@ func (m *fsMonitor) entryToFile(group []dto.ItemEntry) []*dto.FileDto {
 	}
 
 	return nil
+}
+
+// needsProcessing: the main file has no item yet, or its item is not Ready
+func (m *fsMonitor) needsProcessing(main *dto.FileDto) bool {
+	item, err := itemsProxy.GetItemByGuid(main.GUID)
+	if err != nil {
+		return errors.Is(err, gorm.ErrRecordNotFound)
+	}
+	return item.State != dto.Ready
 }
 
 func updateMimeType(entry *dto.ItemEntry, logger *l.Logger) {

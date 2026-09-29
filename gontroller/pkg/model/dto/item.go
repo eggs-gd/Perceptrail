@@ -12,7 +12,7 @@ type ItemState int
 
 const (
 	New        ItemState = iota // Just have source path and not veryfied size/date from raw source (View can show preloaders)
-	Dirty                       // Something changed and have to be rechecked
+	Dirty                       // Something changed and have to be rechecked (the walker re-emits it)
 	Processing                  // transcoding in progress but real size is veryfied
 	Ready                       // all done
 	Deleted                     // Deleted
