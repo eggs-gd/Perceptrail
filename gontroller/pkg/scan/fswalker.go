@@ -34,11 +34,15 @@ type fsMonitor struct {
 
 	mu sync.Mutex // guards cancel: Stop is called from two goroutines
 
-	path string
+	path     string
+	interval time.Duration // pause after the work of a walk is done
+	progress *progress
 }
 
-func NewFsWalker(path string, chout chan<- flow.FileEvent, logger *l.Logger) chain.Processor {
-	return chain.NewEntryPoint(chout, &fsMonitor{logger: logger, path: path})
+// NewFsWalker walks the library again and again: interval after the chain has
+// processed the previous walk (progress), not after the walk itself
+func NewFsWalker(path string, interval time.Duration, progress *progress, chout chan<- flow.FileEvent, logger *l.Logger) chain.Processor {
+	return chain.NewEntryPoint(chout, &fsMonitor{logger: logger, path: path, interval: interval, progress: progress})
 }
 
 func (m *fsMonitor) Start(chin chan<- inType, ctx context.Context) {
@@ -47,11 +51,22 @@ func (m *fsMonitor) Start(chin chan<- inType, ctx context.Context) {
 	m.mu.Unlock()
 	defer m.Stop()
 
-	result := m.walk(chin)
-
-	select {
-	case chin <- inType{done: &result}:
-	case <-m.ctx.Done():
+	// Walk, wait until the chain has processed that walk, pause, walk again
+	for {
+		result := m.walk(chin)
+		select {
+		case chin <- inType{done: &result}:
+		case <-m.ctx.Done():
+			return
+		}
+		if !m.progress.waitIdle(m.ctx) {
+			return
+		}
+		select {
+		case <-time.After(m.interval):
+		case <-m.ctx.Done():
+			return
+		}
 	}
 }
 

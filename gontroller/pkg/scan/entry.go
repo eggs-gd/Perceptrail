@@ -14,6 +14,7 @@ import (
 	"perceptrail/gontroller/pkg/scan/transcode/livephoto"
 	"perceptrail/gontroller/pkg/scan/transcode/photo"
 	"perceptrail/gontroller/pkg/scan/transcode/video"
+	"time"
 
 	"github.com/eggs-gd/perceplib/chain"
 
@@ -52,15 +53,21 @@ var itemsProxy model.ItemsApi
 //   validator restores deleted items by hash.
 // - Apple Photos is off: its library goes to generic, which reads only originals/
 //   (a derivative must never become an item).
+// - The walk repeats: rescan after the last group of the previous walk is done
+//   (not after the walk — processing takes longer), so walks never overlap.
 
 // exiftool processes and parallel exif steps
 const exifWorkers = 5
 
+// Pause between the end of one walk's processing and the next walk (config: rescan)
+const defaultRescan = time.Minute
+
 type importerService struct {
 	appCtx app.AppContext
 
-	errch chan error
-	items chan *dto.ItemDto
+	errch    chan error
+	items    chan *dto.ItemDto
+	progress *progress
 
 	importChain chain.ChainProcessor
 }
@@ -71,15 +78,32 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	itemsProxy = model.NewProxy(ctx.Logger(string(app.LogDB)))
 	filesProxy = model.NewProxy(ctx.Logger(string(app.LogDB)))
 
+	logErr := func(err error) {
+		if !errors.Is(err, chain.ErrSkippedItem) { // skips are on purpose (buffered, unchanged, not media)
+			logger.Error("Import Error", l.Error(err))
+		}
+	}
+	progress := newProgress()
+
+	// Walk, groups, gate
 	errch := make(chan error)
 	go func() {
 		for err := range errch {
-			if errors.Is(err, chain.ErrSkippedItem) {
-				continue // dropped on purpose (unchanged, not media, marker consumed)
-			}
-			logger.Error("Import Error", l.Error(err))
+			logErr(err)
 		}
 	}()
+	// After the gate every group ends as an item (items) or here: both count as done
+	errProcessing := make(chan error)
+	go func() {
+		for err := range errProcessing {
+			progress.finished()
+			logErr(err)
+		}
+	}()
+	rescan := ctx.Config().Rescan
+	if rescan <= 0 {
+		rescan = defaultRescan
+	}
 
 	// Channels between the steps: from -> to, what it carries. The message types
 	// are in the flow package (FileEvent, FileGroup, WalkResult, RawItem).
@@ -112,7 +136,7 @@ func NewImporterService(ctx app.AppContext) *importerService {
 
 	importChain := chain.NewChainProcessor(errch)
 	// Find every file under the library root
-	importChain.AddStep(NewFsWalker(ctx.Config().Path, files, logger))
+	importChain.AddStep(NewFsWalker(ctx.Config().Path, rescan, progress, files, logger))
 
 	// Files -> whole assets, a grouper per source
 	importChain.AddStep(groups.NewSourceSwitch(files, toGeneric, toApple))
@@ -120,24 +144,32 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	importChain.AddStep(apple.NewGrouper(toApple, grouped))
 
 	// Assets -> items: only what needs work, then metadata, kinds, identity
-	importChain.AddStep(NewFilesGate(groups.Branches, grouped, stored, logger))
-	importChain.AddStep(NewExifExtractor(exifWorkers, stored, exifed, errch, logger))
-	importChain.AddStep(NewMimeRanker(exifed, ranked))
-	importChain.AddStep(NewValidator(ranked, validated, logger))
+	importChain.AddStep(NewFilesGate(groups.Branches, progress, grouped, stored, logger))
+
+	// The rest reports to errProcessing: progress counts the groups in flight
+	processing := chain.NewChainProcessor(errProcessing)
+	processing.AddStep(NewExifExtractor(exifWorkers, stored, exifed, errProcessing, logger))
+	processing.AddStep(NewMimeRanker(exifed, ranked))
+	processing.AddStep(NewValidator(ranked, validated, logger))
 
 	// Outputs (thumbnails, previews) per kind of asset
-	importChain.AddStep(transcode.NewSwitch(validated, toPhoto, toVideo, toLivePhoto))
-	importChain.AddStep(photo.NewTranscoder(toPhoto, transcoded))
-	importChain.AddStep(video.NewTranscoder(toVideo, transcoded))
-	importChain.AddStep(livephoto.NewTranscoder(toLivePhoto, transcoded))
+	processing.AddStep(transcode.NewSwitch(validated, toPhoto, toVideo, toLivePhoto))
+	processing.AddStep(photo.NewTranscoder(toPhoto, transcoded))
+	processing.AddStep(video.NewTranscoder(toVideo, transcoded))
+	processing.AddStep(livephoto.NewTranscoder(toLivePhoto, transcoded))
 
 	// Metadata plugins and perceptors, then the item is Ready
-	importChain.AddStep(NewExifPluginProcessor(transcoded, items, errch, logger))
+	processing.AddStep(NewExifPluginProcessor(transcoded, items, errProcessing, logger))
+
+	// After its steps: AddStep hands the sub-chain the outer error channel, its
+	// steps keep errProcessing
+	importChain.AddStep(processing)
 
 	return &importerService{
 		appCtx:      ctx,
 		errch:       errch,
 		items:       items,
+		progress:    progress,
 		importChain: importChain,
 	}
 }
@@ -152,6 +184,7 @@ func (s *importerService) Start(parentCtx context.Context) {
 		for {
 			select {
 			case <-s.items:
+				s.progress.finished()
 			case <-ctx.Done():
 				return
 			}

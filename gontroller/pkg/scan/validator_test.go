@@ -57,7 +57,7 @@ func scan(t *testing.T, root string) []string {
 		groups.BranchGeneric: &generic.Grouper{},
 		groups.BranchApple:   apple.Grouper{},
 	}
-	gate := newFilesGate(groups.Branches, logger)
+	gate := newFilesGate(groups.Branches, newProgress(), logger)
 	exif := &exifExtractor{logger: logger, extract: fakeExif}
 	valid := newValidator(logger)
 

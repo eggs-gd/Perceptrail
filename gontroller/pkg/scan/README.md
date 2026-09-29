@@ -77,6 +77,11 @@ fswalker -> source switch ─┬─ generic grouper ──┬─> files gate -> 
 - **Deletions are conservative**: only after a complete walk that found files, never
   under an unreadable directory, only under the configured root. A main file gone
   -> the item is soft-deleted; a sidecar gone -> the item is `Dirty`.
+- **The walk repeats** (`rescan`, default 1 min) — counted from the moment the last
+  group of the previous walk is done, not from the end of the walk: walks never
+  overlap, no group is in the chain twice. The steps after the gate report to their
+  own error channel; each passed group ends as an item or one error there
+  (`progress.go`).
 - **Moves race with deletions** (the chain is asynchronous): the validator also finds
   soft-deleted items by hash and restores them, so a moved file keeps its GUID.
 - **Item == asset**: a derivative never becomes an item of its own. Inside an

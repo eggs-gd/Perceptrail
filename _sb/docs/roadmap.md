@@ -97,6 +97,10 @@ hid inside the exif step, so groups and MIME were decided before EXIF was known.
 - [x] **C7. transcode switch** by kind (photo / video / Live Photo; stubs pass the
       item on), then plugins, closer → `Ready`. Finished items are drained (the
       closer used to block after 1000 items: nothing read the channel).
+- [x] **Repeated walks.** `rescan` (default 1 min) after the last group of the
+      previous walk is processed, not after the walk: walks never overlap.
+      Known cost: a group that fails (e.g. exiftool returns nothing) is retried on
+      every walk — see "broken files".
 - [ ] Later: derivatives in a group (the JPEG of a RAW, the photo of a Live Photo)
       as ready previews — saves a transcode; Live Photo pairs checked by
       `ContentIdentifier` (today by name); `animated` kind.
@@ -195,7 +199,7 @@ Don't rush — a stable core first.
   face management).
 - Perceptor routes (`/p/<name>/…`), a common query/filter API (set intersection).
 - `ItemGroup` processing mode (series, Live Photo, clusters, duplicates).
-- Reprocessing on plugin version change; fsnotify instead of a one-shot walk.
+- Reprocessing on plugin version change; fsnotify instead of the periodic walk.
 
 ### Core vs. perceptors
 

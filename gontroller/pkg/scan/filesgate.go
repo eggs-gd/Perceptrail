@@ -24,25 +24,30 @@ type filesGate struct {
 	logger   *l.Logger
 	branches int // markers to wait for
 	markers  int
+	progress *progress
 }
 
 // NewFilesGate: branches is the number of groupers that send an end-of-walk marker
-func NewFilesGate(branches int, chin <-chan flow.FileGroup, chout chan<- flow.FileGroup, logger *l.Logger) chain.Processor {
-	return chain.NewDecorator(chin, chout, newFilesGate(branches, logger))
+func NewFilesGate(branches int, progress *progress, chin <-chan flow.FileGroup, chout chan<- flow.FileGroup, logger *l.Logger) chain.Processor {
+	return chain.NewDecorator(chin, chout, newFilesGate(branches, progress, logger))
 }
 
-func newFilesGate(branches int, logger *l.Logger) *filesGate {
-	return &filesGate{logger: logger, branches: branches}
+func newFilesGate(branches int, progress *progress, logger *l.Logger) *filesGate {
+	return &filesGate{logger: logger, branches: branches, progress: progress}
 }
 
 func (g *filesGate) Decorate(in flow.FileGroup) (flow.FileGroup, error) {
 	// A grouper's last group comes with its end-of-walk marker: the group first
 	out, err := g.pass(in.Files)
+	if err == nil {
+		g.progress.passed()
+	}
 	if in.Done != nil {
 		g.markers++
 		if g.markers == g.branches { // every grouper has flushed: all files are stamped
 			g.markers = 0
 			g.finalizeWalk(*in.Done)
+			g.progress.walkGated()
 		}
 	}
 	return out, err

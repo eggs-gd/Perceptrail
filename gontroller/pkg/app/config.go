@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"perceptrail/gontroller/pkg/client"
 	"perceptrail/gontroller/pkg/model"
+	"time"
 
 	l "github.com/eggs-gd/perceplib/logger"
 
@@ -25,6 +26,9 @@ type Config struct {
 	DataDir string `yaml:"data_dir"`
 	// ExifTool executable. Default: "exiftool" from PATH
 	Exiftool string `yaml:"exiftool"`
+	// Pause between the end of one scan's processing and the next scan ("1m",
+	// "30s"). Default: 1 minute
+	Rescan time.Duration `yaml:"rescan"`
 	// HTTP: listen address, CORS
 	Server client.ServerConfig `yaml:"server"`
 	// Behind GORM: sqlite, postgres (not implemented yet)

@@ -97,5 +97,7 @@ note right of Groups: broadcast to every branch
 Generic -> Gate: last groups, marker
 Photos -> Gate: last groups, marker
 Gate -> DB: after the marker from every branch:\ndeletions (V2), only after a complete walk,\nnot under unreadable directories
+Closer --> Walker: the last group of the walk is done (items + errors counted)
+Walker -> Walker: rescan pause (1 min), then walk again
 
 @enduml
