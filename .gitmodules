@@ -1,4 +1,0 @@
-[submodule "perceplib"]
-	path = perceplib
-	url = ../../dukobpa3/perceplib.git
-	branch = master
