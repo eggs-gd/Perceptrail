@@ -5,7 +5,8 @@
     import type {LayoutItem} from "$lib/stores";
     import {rowHeight, screenWidth} from "$lib/stores";
     import {updateLayout} from "$lib/workers";
-    import {type AnchorState, findAnchor, watchWindow, type WindowSnapshot} from "./layoutWindow";
+    import type {LayoutSize} from "$lib/stores";
+    import {type AnchorState, findAnchor, watchSize, watchWindow, type WindowSnapshot} from "./layoutWindow";
 
     interface Props {
         gutter?: number;
@@ -37,55 +38,86 @@
     let bucket = $derived(Math.floor(Math.max(0, scrollY - containerTop) / step));
     let range = $derived({top: (bucket - 2) * step, bottom: (bucket + 4) * step, viewport: innerHeight});
 
-    // Width or row height changed: remember what is at the top of the viewport and
-    // ask for a relayout that reports where that item ends up.
+    // Width or row height changed: ask for a relayout that reports where the anchor
+    // (the item at the top of the viewport) ends up. The anchor is taken once and kept
+    // until the user scrolls — also across bursts of resizes: taken anew each time it
+    // would walk the view (while a relayout is on its way the screen shows the old
+    // layout; after a reflow the top-left photo is often an earlier one).
     $effect(() => {
         const width = $screenWidth;
         const targetRowHeight = $rowHeight;
         if (!width) return;
         untrack(() => {
-            if (containerEl) containerTop = containerEl.getBoundingClientRect().top + window.scrollY;
-            const anchor = findAnchor(images, window.scrollY - containerTop);
-            anchorState.pending = anchor;
-            updateLayout(width, targetRowHeight, anchor?.guid);
+            if (!anchorState.pending) {
+                if (containerEl) containerTop = containerEl.getBoundingClientRect().top + window.scrollY;
+                anchorState.pending = findAnchor(images, window.scrollY - containerTop);
+            }
+            updateLayout(width, targetRowHeight, anchorState.pending?.guid);
+        });
+    });
+
+    // A scroll that is not ours (anchor correction) is the user's: drop the anchor,
+    // the next resize keeps whatever is at the top then
+    let programmaticScrollY: number | undefined;
+    $effect(() => {
+        const y = scrollY;
+        untrack(() => {
+            if (programmaticScrollY !== undefined && Math.abs(y - programmaticScrollY) <= 2) return;
+            programmaticScrollY = undefined;
+            anchorState.pending = undefined;
         });
     });
 
     $effect(() => {
         const sub = watchWindow(range, anchorState).subscribe({
-            next: schedule,
+            next: (snapshot) => { latestWindow = snapshot; schedule(); },
             error: (error) => console.error('layout window', error),
         });
         return () => sub.unsubscribe();
     });
 
-    // Apply at most one snapshot per frame (the stream re-runs the query per item)
-    let latest: WindowSnapshot | undefined;
+    $effect(() => {
+        const sub = watchSize().subscribe({
+            next: (size) => { latestSize = size; schedule(); },
+            error: (error) => console.error('layout size', error),
+        });
+        return () => sub.unsubscribe();
+    });
+
+    // Apply at most once per frame: during the stream both subscriptions fire often
+    let latestWindow: WindowSnapshot | undefined;
+    let latestSize: LayoutSize | undefined;
     let scheduled = false;
 
-    function schedule(snapshot: WindowSnapshot) {
-        latest = snapshot;
+    function schedule() {
         if (scheduled) return;
         scheduled = true;
-        // Hidden tabs do not run animation frames; don't let the layout stall there
-        const later = document.visibilityState === 'visible'
-            ? requestAnimationFrame
-            : (cb: () => void) => setTimeout(cb, 16);
-        later(apply);
+        // Next frame; the timer covers windows that are "visible" but not painting
+        // (occluded, throttled), where animation frames stall
+        requestAnimationFrame(apply);
+        setTimeout(apply, 100);
     }
 
     async function apply() {
+        if (!scheduled) return; // the other trigger already ran
         scheduled = false;
-        const snapshot = latest!;
-        images = snapshot.items;
-        height = snapshot.meta?.height ?? 0;
+        const snapshot = latestWindow;
+        const meta = snapshot?.meta;
+        if (snapshot) images = snapshot.items;
 
-        if (snapshot.scrollTo !== undefined && snapshot.meta) {
-            anchorState.appliedRev = snapshot.meta.rev;
+        // Height: the size record grows with the stream; right after a relayout the
+        // layout record may be newer than it
+        height = latestSize && latestSize.rev >= (meta?.rev ?? 0)
+            ? latestSize.height
+            : meta?.height ?? 0;
+
+        if (snapshot?.scrollTo !== undefined && meta && meta.rev !== anchorState.appliedRev) {
+            anchorState.appliedRev = meta.rev;
             // Scroll only after the new height is in the DOM: the browser clamps
             // scrollTo to the current document height (a narrower window = taller page)
             await tick();
-            window.scrollTo({top: containerTop + snapshot.scrollTo, behavior: 'instant'});
+            programmaticScrollY = containerTop + snapshot.scrollTo;
+            window.scrollTo({top: programmaticScrollY, behavior: 'instant'});
         }
     }
 

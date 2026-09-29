@@ -3,7 +3,15 @@ import {
     type UpdateLayoutPayload,
     type WorkerMessage,
 } from "./types";
-import {type Item, LAYOUT_META_KEY, layoutDb, type LayoutItem, type LayoutMeta} from "$lib/stores";
+import {
+    type Item,
+    LAYOUT_META_KEY,
+    LAYOUT_SIZE_KEY,
+    layoutDb,
+    type LayoutItem,
+    type LayoutMeta,
+    type LayoutSize,
+} from "$lib/stores";
 import {getLogger} from "$lib/logger";
 
 const logger = getLogger()
@@ -12,6 +20,8 @@ const logger = getLogger()
 const GUTTER = 8;
 // Window-edge drag sends a resize per frame; lay out at most this often (~30 fps)
 const RELAYOUT_THROTTLE_MS = 33;
+// Streamed photos are written in batches: one transaction per frame, not per photo
+const APPEND_FLUSH_MS = 16;
 
 let viewport: UpdateLayoutPayload | null = null;
 let relayoutTimer: ReturnType<typeof setTimeout> | null = null;
@@ -33,7 +43,11 @@ interface LayoutState {
 }
 
 let state: LayoutState = freshState();
-let meta: LayoutMeta = {key: LAYOUT_META_KEY, rev: 0, width: 0, height: 0, count: 0};
+let meta: LayoutMeta = {key: LAYOUT_META_KEY, rev: 0, width: 0, height: 0};
+
+/** Streamed rows waiting for the next batch write (latest position per guid) */
+let pendingRows = new Map<string, LayoutItem>();
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
 function freshState(): LayoutState {
     return {openRow: [], rowNum: 0, y: 0};
@@ -119,6 +133,8 @@ function scheduleRelayout() {
 function queueRelayout() {
     if (relayoutQueued) return;
     relayoutQueued = true;
+    // Rows computed for the old layout must not land after the relayout
+    dropPendingRows();
     enqueue(() => {
         relayoutQueued = false;
         return writeRelayout();
@@ -147,22 +163,27 @@ function writeRelayout(): Promise<unknown> {
         rev: meta.rev + 1,
         width: vp.screenWidth,
         height: totalHeight(vp),
-        count: all.length,
         anchor: anchor && {guid: anchor.guid, y: anchor.y, h: anchor.h},
     };
     // Copies: the open row keeps changing after this, the write must not see that
     const rows = all.map((itm) => ({...itm}));
-    const snapshot = {...meta};
+    const layoutRecord = {...meta};
+    const sizeRecord = currentSize(vp);
 
     logger.debug('relayout', {items: rows.length, width: vp.screenWidth});
     return layoutDb.transaction('rw', layoutDb.items, layoutDb.meta, async () => {
         await layoutDb.items.clear();
         await layoutDb.items.bulkPut(rows);
-        await layoutDb.meta.put(snapshot);
+        await layoutDb.meta.bulkPut([layoutRecord, sizeRecord]);
     });
 }
 
-/** Places one streamed item and writes only what changed */
+/**
+ * Places one streamed item. The changed rows are collected and written once per
+ * APPEND_FLUSH_MS: photos still appear one by one (per frame), but IndexedDB gets one
+ * transaction per batch, and only the 'size' record changes — the window query
+ * (which reads 'layout') re-runs only if new photos land inside the window.
+ */
 function append(item: Item) {
     // No viewport yet or a full relayout is pending: that run will include this item
     if (!viewport || relayoutTimer || relayoutQueued) return;
@@ -170,14 +191,37 @@ function append(item: Item) {
 
     const changed = place(item, items.length - 1, vp);
     changed.push(...placeOpenRow(vp));
-    meta = {...meta, height: totalHeight(vp), count: items.length};
+    for (const itm of changed) {
+        pendingRows.set(itm.guid, {...itm}); // copy: the open row keeps changing
+    }
+    if (!flushTimer) {
+        flushTimer = setTimeout(flushAppends, APPEND_FLUSH_MS);
+    }
+}
 
-    const rows = changed.map((itm) => ({...itm}));
-    const snapshot = {...meta};
+function flushAppends() {
+    flushTimer = null;
+    if (!viewport || pendingRows.size === 0) return;
+
+    const rows = [...pendingRows.values()];
+    pendingRows = new Map();
+    const sizeRecord = currentSize(viewport);
     enqueue(() => layoutDb.transaction('rw', layoutDb.items, layoutDb.meta, async () => {
         await layoutDb.items.bulkPut(rows);
-        await layoutDb.meta.put(snapshot);
+        await layoutDb.meta.put(sizeRecord);
     }));
+}
+
+function dropPendingRows() {
+    pendingRows = new Map();
+    if (flushTimer) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+    }
+}
+
+function currentSize(vp: UpdateLayoutPayload): LayoutSize {
+    return {key: LAYOUT_SIZE_KEY, rev: meta.rev, height: totalHeight(vp), count: items.length};
 }
 
 /** Gallery height: closed rows (each followed by a gutter) plus the open row */

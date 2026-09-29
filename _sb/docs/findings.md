@@ -94,6 +94,27 @@ messages are gone. Details: [svebapp README](../../svebapp/README.md#visible-win
   at 5 ms each (the old per-item messaging froze the tab for ~90 s). A relayout in
   the middle of the stream (at 475 photos) → the final layout of 3000 is consistent
   (full-width rows, no overlaps, height matches).
+- **Fixes after a manual test (2026-09-29):**
+  - *Streaming felt worse than it should:* every streamed photo updated the total
+    height in the meta record that the window query reads → the window query re-ran
+    per photo (the "whole-table subscription" trap through `meta`). Now `meta` has two
+    records: `layout` (rev, width, anchor — changes only on a relayout; the window
+    query reads only this) and `size` (height, count — separate cheap subscription).
+    Streamed photos are written in batches (one transaction per 16 ms, not per photo).
+    Timer lag during a 3000-photo stream: p95 8 → 2 ms.
+  - *The view drifted after several resizes back and forth:* the anchor was re-taken
+    on every resize. While a relayout is on its way the screen shows the old layout at
+    an already corrected scroll; and after a reflow the top-left photo is often an
+    earlier one than the anchor — each burst walked the view back a little. Now the
+    anchor (with a relative offset: fraction of the tile height) is taken once and kept
+    across all resizes until the user scrolls. Six bursts of back-and-forth resizes:
+    the anchor stays in the top row, returning to 1000 px gives the same `scrollY`
+    every time.
+  - Snapshots are applied on the next animation frame **or** after 100 ms — frames
+    stall in windows that are "visible" but not painting.
+  - Not a bug: with the mock's repeating aspect ratios a 1008 px layout is taller per
+    photo than a 700 px one (rows of 3 stretched to the full width), so the page gets
+    shorter when narrowed mid-stream.
 - **Test environment:** the agent's browser pane often does not paint; then
   `requestAnimationFrame` runs at 0–1 fps and `ResizeObserver`/scroll events are not
   delivered. Mid-stream resize was verified by calling `updateLayout` directly

@@ -45,10 +45,11 @@ Gallery.svelte     renders the window: absolutely positioned tiles, keyed by gui
 - `lib/workers/tasks/wlayout.ts` — row layout (greedy: fits → into the row;
   overflow < ½ of the photo → close the row without it; otherwise add it and shrink
   the row; the last row stays at the target height). All layoutDb writes go through
-  one ordered queue; at most one full relayout waits in it.
-- `lib/gallery/layoutWindow.ts` — `watchWindow()`: one `liveQuery` that reads meta
-  and the window's items in one read transaction (a consistent snapshot);
-  `findAnchor()`.
+  one ordered queue; at most one full relayout waits in it; streamed photos are
+  batched per ~16 ms.
+- `lib/gallery/layoutWindow.ts` — `watchWindow()`: one `liveQuery` that reads the
+  `layout` record and the window's items in one read transaction (a consistent
+  snapshot); `watchSize()`; `findAnchor()`.
 - `lib/gallery/Gallery.svelte` — tracks scroll, subscribes to the window, applies at
   most one snapshot per frame, captures the anchor on resize, the "wave" animation.
 - `routes/[index=itemIndex]` — the viewer reads its item from `layoutDb` by `order`.
@@ -61,14 +62,19 @@ Gallery.svelte     renders the window: absolutely positioned tiles, keyed by gui
   coordinates), moving in steps of half a viewport — scrolling inside a step does not
   re-create the subscription. Writes outside the window do not re-run it.
 - On a width change the gallery takes the first visible item as the **anchor**
-  (`guid`, offset from the viewport top, height) and sends it with `updateLayout`.
+  (`guid`, offset from the viewport top as a fraction of its height) and sends it with
+  `updateLayout`. The anchor is kept across all following resizes until the user
+  scrolls (re-taking it per resize walks the view).
   The worker writes the relayout and `meta.anchor` (the anchor's new `y`, `h`) in one
   transaction. The window query sees a new `meta.rev` with that anchor, takes the
   window around the new position and returns `scrollTo`; the gallery applies height
   and items first, then scrolls (`tick()` — the browser clamps scrolling to the
   current document height).
-- Totals (height, count) live in `meta` — never subscribe to the whole table
-  (it re-runs on every streamed photo).
+- `meta` has two records: `layout` (rev, width, anchor — only relayouts write it; the
+  window query reads it) and `size` (height, count — every streamed batch; a separate
+  subscription). Never let the window query read something that changes per photo,
+  and never subscribe to the whole table.
+- Streamed photos are written in batches (one transaction per ~16 ms).
 
 ### Worker messages (`MessageFromSync`, wsync → wlayout)
 

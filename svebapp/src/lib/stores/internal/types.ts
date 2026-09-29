@@ -18,15 +18,26 @@ export interface LayoutItem extends Item {
     h: number;
 }
 
-/** Single record next to the layout: what the page needs besides the visible items */
+/**
+ * Written only by a full relayout. The visible-window query reads this record, so it
+ * must not change per streamed photo (that would re-run the query for every photo).
+ */
 export interface LayoutMeta {
     key: 'layout';
     /** Increases with every full relayout (resize) */
     rev: number;
     width: number;
-    /** Total gallery height, px */
+    /** Total gallery height right after this relayout, px */
     height: number;
-    count: number;
     /** Item to keep in view across the relayout of this rev: its new position */
     anchor?: {guid: string, y: number, h: number};
+}
+
+/** Gallery size, updated with every batch of streamed photos; separate subscription */
+export interface LayoutSize {
+    key: 'size';
+    /** The relayout this size belongs to */
+    rev: number;
+    height: number;
+    count: number;
 }
