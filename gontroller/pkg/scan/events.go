@@ -14,11 +14,14 @@ type fileEvent struct {
 	done  *walkResult
 }
 
-// fileGroup: groupers -> files gate. Files that belong together (a main file and
-// its sidecars, not ranked yet), or the end-of-walk marker of one grouper branch.
-type fileGroup struct {
-	entries []dto.ItemEntry
-	done    *walkResult
+// FileGroup is one whole asset: all its files (a main file and its sidecars,
+// derivatives), or the end-of-walk marker. Groupers build it (files not stored
+// yet: only the stat is set), the files gate stores it (rows of the files table,
+// with GUIDs), exif turns it into a RawItem. Done is set on a grouper's marker,
+// which may come together with its last group.
+type FileGroup struct {
+	Files []*dto.FileDto
+	Done  *walkResult
 }
 
 // walkResult describes a finished walk. Deletions may be derived from it only if

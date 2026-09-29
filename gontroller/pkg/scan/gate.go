@@ -26,7 +26,7 @@ type filesGate struct {
 }
 
 // NewFilesGate: branches is the number of groupers that send an end-of-walk marker
-func NewFilesGate(branches int, chin <-chan fileGroup, chout chan<- []*dto.FileDto, logger *l.Logger) chain.Processor {
+func NewFilesGate(branches int, chin <-chan FileGroup, chout chan<- FileGroup, logger *l.Logger) chain.Processor {
 	return chain.NewDecorator(chin, chout, newFilesGate(branches, logger))
 }
 
@@ -34,44 +34,45 @@ func newFilesGate(branches int, logger *l.Logger) *filesGate {
 	return &filesGate{logger: logger, branches: branches}
 }
 
-func (g *filesGate) Decorate(in fileGroup) ([]*dto.FileDto, error) {
+func (g *filesGate) Decorate(in FileGroup) (FileGroup, error) {
 	// A grouper's last group comes with its end-of-walk marker: the group first
-	out, err := g.pass(in.entries)
-	if in.done != nil {
+	out, err := g.pass(in.Files)
+	if in.Done != nil {
 		g.markers++
 		if g.markers == g.branches { // every grouper has flushed: all files are stamped
 			g.markers = 0
-			g.finalizeWalk(*in.done)
+			g.finalizeWalk(*in.Done)
 		}
 	}
 	return out, err
 }
 
 // pass stores the group and lets it through if it needs work
-func (g *filesGate) pass(entries []dto.ItemEntry) ([]*dto.FileDto, error) {
-	if len(entries) == 0 {
-		return nil, chain.ErrSkippedItem
+func (g *filesGate) pass(found []*dto.FileDto) (FileGroup, error) {
+	if len(found) == 0 {
+		return FileGroup{}, chain.ErrSkippedItem
 	}
-	files, changed, err := g.store(entries)
+	files, changed, err := g.store(found)
 	if err != nil {
-		return nil, err
+		return FileGroup{}, err
 	}
 	if changed || g.needsProcessing(files) {
-		return files, nil
+		return FileGroup{Files: files}, nil
 	}
-	return nil, chain.ErrSkippedItem
+	return FileGroup{}, chain.ErrSkippedItem
 }
 
 func (g *filesGate) Stop() {}
 
-// store finds or creates the rows of the group, refreshes their stat and stamps
-// them as seen. changed: a new file, or size/mtime differ.
-func (g *filesGate) store(entries []dto.ItemEntry) ([]*dto.FileDto, bool, error) {
+// store finds or creates the rows of the group (found: files with their stat only),
+// refreshes their stat and stamps them as seen. changed: a new file, or size/mtime differ.
+func (g *filesGate) store(found []*dto.FileDto) ([]*dto.FileDto, bool, error) {
 	now := time.Now()
 	changed := false
-	files := make([]*dto.FileDto, 0, len(entries))
+	files := make([]*dto.FileDto, 0, len(found))
 
-	for _, e := range entries {
+	for _, fe := range found {
+		e := fe.ItemEntry
 		f, err := filesProxy.GetFileByPath(e.Path)
 		switch {
 		case errors.Is(err, gorm.ErrRecordNotFound):

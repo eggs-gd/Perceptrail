@@ -6,8 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"perceptrail/gontroller/pkg/model/dto"
-
 	"github.com/eggs-gd/go-exiftool"
 
 	"github.com/eggs-gd/perceplib/api"
@@ -43,7 +41,7 @@ type exifExtractor struct {
 
 // NewExifExtractor starts count exiftool processes and count steps on the same
 // channels: groups are independent, so they are read in parallel.
-func NewExifExtractor(count int, chin <-chan []*dto.FileDto, chout chan<- *RawItem, errch chan error, logger *l.Logger) chain.Processor {
+func NewExifExtractor(count int, chin <-chan FileGroup, chout chan<- *RawItem, errch chan error, logger *l.Logger) chain.Processor {
 	e := &exifExtractor{logger: logger, freeCh: make(chan *exiftool.Server, count)}
 	for i := 0; i < count; i++ {
 		et, err := exiftool.NewServer(commonArgs...)
@@ -65,7 +63,8 @@ func NewExifExtractor(count int, chin <-chan []*dto.FileDto, chout chan<- *RawIt
 
 // Decorate starts the item of the group: its files and their metadata (a nil
 // Exif: exiftool returned nothing). The item itself comes from the validator.
-func (e *exifExtractor) Decorate(files []*dto.FileDto) (*RawItem, error) {
+func (e *exifExtractor) Decorate(g FileGroup) (*RawItem, error) {
+	files := g.Files
 	out := &RawItem{Files: files, Exif: make([]api.RawExif, len(files))}
 	found := false
 	for i, f := range files {

@@ -29,21 +29,21 @@ var itemsProxy model.ItemsApi
 // - groups switch (groups.go): fileEvent -> fileEvent - routes a file to the grouper
 //   of its source; the marker goes to every grouper. Apple Photos is off
 //   (photosLibraryEnabled): the library goes to generic for now.
-// - groupers (groups.go): fileEvent -> fileGroup - a buffer of open groups inside;
+// - groupers (groups.go): fileEvent -> FileGroup - a buffer of open groups inside;
 //   a group goes out when it is complete (not ranked yet: no main file). generic:
 //   sidecars by name, next to each other, so one open group; the last one goes out
 //   with the marker. Apple Photos (stub): will group by the library's DB.
-// Exit: -> fileGroup - files that belong together
+// Exit: -> FileGroup - one whole asset: the files that belong together
 //
-// Enter: fileGroup ->
-// - files gate (gate.go): fileGroup -> []FileDto - the files table: finds/creates
+// Enter: FileGroup ->
+// - files gate (gate.go): FileGroup -> FileGroup - the files table: finds/creates
 //   the rows, refreshes stat, stamps CheckTime. Lets through only groups that need
 //   work: new or changed files, never linked, the item missing or not Ready (New,
 //   Dirty, interrupted); the rest is dropped, so unchanged files never reach
 //   exiftool. After the marker from every grouper: deletions — files not stamped
 //   by this walk are gone (only after a complete walk that found files, never under
 //   an unreadable dir): main file -> item Deleted, sidecar -> item Dirty.
-// - exif (exifextractor.go): []FileDto -> RawItem - exiftool -all for every file of
+// - exif (exifextractor.go): FileGroup -> RawItem - exiftool -all for every file of
 //   the group (the main file is unknown yet): RawItem.Files + Exif, no Item yet; N
 //   steps in parallel on the same channels, groups are independent from here on.
 // - mime (mime.go): RawItem -> RawItem - Kinds: the kind of every file (exif MIMEType ->
@@ -96,7 +96,7 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	}()
 
 	// Channels between the steps: from -> to, what it carries. The message types
-	// are in events.go (fileEvent, fileGroup, walkResult) and types.go (RawItem).
+	// are in events.go (fileEvent, FileGroup, walkResult) and types.go (RawItem).
 
 	// fswalker -> source switch: one file (path + stat), or the end-of-walk marker
 	files := make(chan fileEvent)
@@ -104,10 +104,10 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	toGeneric, toPhotos := make(chan fileEvent), make(chan fileEvent)
 	// groupers -> files gate: a complete group (no main file yet), and/or the
 	// grouper's marker; both groupers write here
-	groups := make(chan fileGroup)
-	// files gate -> exif: the group's rows of the files table (GUIDs), only groups
-	// that need work
-	stored := make(chan []*dto.FileDto)
+	groups := make(chan FileGroup)
+	// files gate -> exif: the same group, stored: rows of the files table (GUIDs);
+	// only groups that need work
+	stored := make(chan FileGroup)
 	// exif -> mime: RawItem with Files + Exif
 	exifed := make(chan *RawItem)
 	// mime -> validator: + Kinds, the main file first

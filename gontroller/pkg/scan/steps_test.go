@@ -15,11 +15,11 @@ func entry(path string) dto.ItemEntry {
 	return dto.ItemEntry{Path: path, Name: filepath.Base(path)}
 }
 
-func names(groups []fileGroup) [][]string {
+func names(groups []FileGroup) [][]string {
 	var out [][]string
 	for _, g := range groups {
 		var n []string
-		for _, e := range g.entries {
+		for _, e := range g.Files {
 			n = append(n, e.Name)
 		}
 		out = append(out, n)
@@ -30,7 +30,7 @@ func names(groups []fileGroup) [][]string {
 // Files come in name order; one group is open, the next name closes it
 func TestGenericGrouper(t *testing.T) {
 	g := newGenericGrouper()
-	var out []fileGroup
+	var out []FileGroup
 	for _, n := range []string{"IMG_1.HEIC", "IMG_1.MOV", "IMG_1.aae", "a.edited.jpg", "a.jpg", "a.jpg.xmp", "a.xmp", "b", "b.png"} {
 		if group, err := g.Decorate(fileEvent{entry: entry("/lib/" + n)}); err == nil {
 			out = append(out, group)
@@ -49,14 +49,14 @@ func TestGenericGrouper(t *testing.T) {
 	if got := names(out); !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v\nwant %v", got, want)
 	}
-	if last.done != marker {
+	if last.Done != marker {
 		t.Error("the marker must come with the last group")
 	}
 
 	// Another directory closes the group, even with the same name
 	g = newGenericGrouper()
 	g.Decorate(fileEvent{entry: entry("/lib/x.jpg")})
-	if group, err := g.Decorate(fileEvent{entry: entry("/lib/sub/x.xmp")}); err != nil || len(group.entries) != 1 {
+	if group, err := g.Decorate(fileEvent{entry: entry("/lib/sub/x.xmp")}); err != nil || len(group.Files) != 1 {
 		t.Errorf("a file of another directory joined the group: %v %v", group, err)
 	}
 }
@@ -175,7 +175,7 @@ func TestNotMediaIgnored(t *testing.T) {
 		t.Fatalf("not ignored: %+v %v", f, err)
 	}
 	gate := newFilesGate(groupBranches, nil)
-	if _, err := gate.Decorate(fileGroup{entries: []dto.ItemEntry{statEntry(t, notes)}}); err == nil {
+	if _, err := gate.Decorate(FileGroup{Files: []*dto.FileDto{{ItemEntry: statEntry(t, notes)}}}); err == nil {
 		t.Error("the gate let an unchanged ignored group through")
 	}
 }

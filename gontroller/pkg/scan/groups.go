@@ -65,17 +65,17 @@ func inPhotosLibrary(path string) bool {
 // keeps files away from it; it only passes the marker on.
 type photosGrouper struct{}
 
-func NewPhotosGrouper(chin <-chan fileEvent, chout chan<- fileGroup) chain.Processor {
+func NewPhotosGrouper(chin <-chan fileEvent, chout chan<- FileGroup) chain.Processor {
 	return chain.NewDecorator(chin, chout, photosGrouper{})
 }
 
 var errPhotosNotImplemented = errors.New("apple photos grouper: not implemented yet")
 
-func (photosGrouper) Decorate(ev fileEvent) (fileGroup, error) {
+func (photosGrouper) Decorate(ev fileEvent) (FileGroup, error) {
 	if ev.done != nil {
-		return fileGroup{done: ev.done}, nil
+		return FileGroup{Done: ev.done}, nil
 	}
-	return fileGroup{}, errPhotosNotImplemented
+	return FileGroup{}, errPhotosNotImplemented
 }
 
 func (photosGrouper) Stop() {}
@@ -85,10 +85,10 @@ func (photosGrouper) Stop() {}
 // another. One group is open; a file that does not belong to it closes it (the
 // group goes out) and opens the next. The marker goes out with the last group.
 type genericGrouper struct {
-	open []dto.ItemEntry
+	open []*dto.FileDto
 }
 
-func NewGenericGrouper(chin <-chan fileEvent, chout chan<- fileGroup) chain.Processor {
+func NewGenericGrouper(chin <-chan fileEvent, chout chan<- FileGroup) chain.Processor {
 	return chain.NewDecorator(chin, chout, newGenericGrouper())
 }
 
@@ -96,22 +96,23 @@ func newGenericGrouper() *genericGrouper {
 	return &genericGrouper{}
 }
 
-func (g *genericGrouper) Decorate(ev fileEvent) (fileGroup, error) {
+func (g *genericGrouper) Decorate(ev fileEvent) (FileGroup, error) {
 	if ev.done != nil {
 		last := g.open
 		g.open = nil
-		return fileGroup{entries: last, done: ev.done}, nil
+		return FileGroup{Files: last, Done: ev.done}, nil
 	}
 	if shouldSkipPath(ev.entry.Path) {
-		return fileGroup{}, chain.ErrSkippedItem
+		return FileGroup{}, chain.ErrSkippedItem
 	}
-	if len(g.open) == 0 || sameGroup(g.open, ev.entry) {
-		g.open = append(g.open, ev.entry)
-		return fileGroup{}, chain.ErrSkippedItem // not complete yet
+	file := &dto.FileDto{ItemEntry: ev.entry}
+	if len(g.open) == 0 || sameGroup(g.open, file) {
+		g.open = append(g.open, file)
+		return FileGroup{}, chain.ErrSkippedItem // not complete yet
 	}
 	closed := g.open
-	g.open = []dto.ItemEntry{ev.entry}
-	return fileGroup{entries: closed}, nil
+	g.open = []*dto.FileDto{file}
+	return FileGroup{Files: closed}, nil
 }
 
 func (g *genericGrouper) Stop() {}
@@ -119,7 +120,7 @@ func (g *genericGrouper) Stop() {}
 // sameGroup: the file sits in the group's directory and its name without the last
 // extension is the name or the stem of a group member: "a.jpg", "a.xmp",
 // "a.jpg.xmp", "a.MOV" are one group, "a.edited.jpg" is not. Case-insensitive.
-func sameGroup(group []dto.ItemEntry, e dto.ItemEntry) bool {
+func sameGroup(group []*dto.FileDto, e *dto.FileDto) bool {
 	if filepath.Dir(group[0].Path) != filepath.Dir(e.Path) {
 		return false
 	}
