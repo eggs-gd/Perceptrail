@@ -73,12 +73,16 @@ Gallery.svelte     renders the window: absolutely positioned tiles, keyed by gui
   screen stays there (`guid` + offset as a fraction of its height). It is sent with
   `updateLayout` and kept across all following resizes until the user scrolls
   (a scroll that is not our own correction, detected in `onscroll`).
-- **FLIP for the scroll correction:** tiles animate in page coordinates, while the
-  correction scrolls the page by Δ at once — on screen everything would jump by Δ and
-  fly back. The container is shifted by Δ in the same frame and that shift is
-  animated to 0 with the tiles' duration (`MOVE_MS`, Web Animations), so the pinned
-  photo stays still during the whole animation. A new correction mid-animation starts
-  from the current shift. Off with `prefers-reduced-motion`.
+- **FLIP per tile (Web Animations):** before a new layout is applied, every tile's
+  current box is measured (mid-animation included); after the DOM update and the
+  scroll correction (Δ) each tile animates from its current screen position
+  (shifted by Δ, so nothing jumps) to its new place. No CSS transitions on tiles.
+- **Wave from the anchor:** on a relayout the anchor starts first, the others one
+  after another by order distance (above and below alternate — a "spiral"); page top:
+  from the first visible photo down, page bottom: from the last one up. A tile waiting
+  for its turn stays exactly where it was (`fill: backwards`). The whole wave over the
+  photos visible before or after fits into `STAGGER_MAX_MS` (step ≤ `STAGGER_STEP_MS`).
+  Off with `prefers-reduced-motion`.
   The worker writes the relayout and `meta.anchor` (the anchor's new `y`, `h`) in one
   transaction. The window query sees a new `meta.rev` with that anchor, takes the
   window around the new position and returns `scrollTo`; the gallery applies height
