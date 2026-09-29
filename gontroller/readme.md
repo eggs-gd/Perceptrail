@@ -16,27 +16,36 @@ Requirements:
 
 - Go 1.27.1 (`go` downloads the toolchain itself);
 - `exiftool` in `PATH` (or a distribution from the
-  [`eggs-gd/go-exiftool` `dist-*` releases](https://github.com/eggs-gd/go-exiftool/releases));
-- `.env` with `GONTROLLER_CONFIG=<path to config.yml>`.
+  [`eggs-gd/go-exiftool` `dist-*` releases](https://github.com/eggs-gd/go-exiftool/releases),
+  set with `exiftool:` in the config).
 
 ```bash
-go run .
+mkdir -p .var && cp config.example.yml .var/config.yml   # once, then edit path:
+make run
 ```
 
-Plugins are built from the repo root: `make build-plugins` → `build/plugins/*.so`.
+`make run` builds the binary and the plugins, then runs
+`./.build/gontroller --config .var/config.yml`. Everything is under `gontroller/`
+(both directories are git-ignored):
+
+```
+.build/           build artifacts
+  gontroller
+  plugins/*.so    make build-plugins (repo root)
+.var/             runtime data
+  config.yml
+  media_library.db*
+  cache/          generated files (thumbnails)
+```
+
+Config lookup: `--config <file>`, then `$GONTROLLER_CONFIG`, then `./config.yml`.
+Relative paths in the config are resolved against the config's directory, so the
+same config gives the same database and caches from any working directory. See
+[`config.example.yml`](config.example.yml) for the fields (`path`, `plugins`,
+`data_dir`, `exiftool`, `server`).
+
 Host and plugins must be built with the same Go and the same versions of shared
 packages — see [findings](../_sb/docs/findings.md#go-plugins-2026-09-28).
-
-`config.yml` (only these fields are used):
-
-```yaml
-path: "/Users/me/Pictures/"      # library root
-plugins:                          # external perceptors
-  - build/plugins/exif_geo.so
-```
-
-`server`, `database`, `allowed_hosts`, `api_keys` are not read yet: HTTP listens on
-`:1323`, the database is `media_library.db` in the working directory.
 
 ## HTTP API
 

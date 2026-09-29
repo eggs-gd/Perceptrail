@@ -32,6 +32,9 @@ Target architecture — the diagrams in [`../puml`](../puml).
 - svebapp on current Svelte 5 / Kit practices: `$app/state`, no `svelte/store`
   (component state + `LiveQuery` on `createSubscriber`), `{@attach}`, `$derived`
   instead of state writes in effects, clsx-style `class`, no side effects in `load`.
+- Runtime paths: build artifacts in `gontroller/.build/`, runtime data (config,
+  database, caches) in `gontroller/.var/`; config paths are relative to the config
+  file; `--config` flag instead of `.env`; HTTP address and exiftool path from config.
 
 ## Releases
 
@@ -63,8 +66,6 @@ Target architecture — the diagrams in [`../puml`](../puml).
       changed by `HashShort`; `finalizeWalk` for deleted files (`Deleted`), `Dirty`.
 - [ ] Unreadable/broken files still become items (0×0): exiftool returns File tags
       even for garbage. Decide how to mark them (ignored? error state?).
-- [ ] HTTP port and exiftool path from config (`:1323` is hardcoded; the `database`
-      section of the config is unused — SQLite).
 - [ ] Fewer Info logs in `fswalker` (several per file).
 - [ ] `TestLoadExternalPlugins` should load real `.so` files.
 

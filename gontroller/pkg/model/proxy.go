@@ -13,6 +13,15 @@ import (
 
 var db *gorm.DB
 
+// dbPath is set from the config before the first NewProxy
+var dbPath = "media_library.db"
+
+// SetDatabasePath points the database at path (app.Config.DatabasePath). Call it
+// before the first NewProxy.
+func SetDatabasePath(path string) {
+	dbPath = path
+}
+
 type proxy struct {
 	logger *l.Logger
 	db     *gorm.DB
@@ -29,7 +38,9 @@ func NewProxy(logger *l.Logger) *proxy {
 func initDB(logger *l.Logger) *gorm.DB {
 	logger.Info("Database Initiating...")
 	// WAL + busy_timeout: importer writes while /items stream reads
-	db, err := gorm.Open(sqlite.Open("file:media_library.db?_busy_timeout=5000&_journal_mode=WAL&_fk=1"), &gorm.Config{
+	logger.Info("Database", l.String("path", dbPath))
+	dsn := "file:" + dbPath + "?_busy_timeout=5000&_journal_mode=WAL&_fk=1"
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: newLogger(logger),
 	})
 	if err != nil {

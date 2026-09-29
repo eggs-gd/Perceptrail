@@ -7,9 +7,12 @@ import (
 	"os/signal"
 	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/client"
+	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/plugins"
 	"perceptrail/gontroller/pkg/scan"
 	"syscall"
+
+	"github.com/eggs-gd/go-exiftool"
 )
 
 func main() {
@@ -23,6 +26,10 @@ func main() {
 	log.Printf("gontroller %s", app.Version)
 
 	ctx := app.NewAppContext()
+	model.SetDatabasePath(ctx.Config().DatabasePath())
+	if ctx.Config().Exiftool != "" {
+		exiftool.Exec = ctx.Config().Exiftool
+	}
 	//ctx.SetLogLevel(l.WarnLevel)
 	//ctx.SetLogLevel(l.InfoLevel)
 	svc := app.NewSvcContext()

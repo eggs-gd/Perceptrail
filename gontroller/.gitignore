@@ -1,5 +1,6 @@
 .DS_Store
-/config.yml
-/media_library.db*
-/build
+# build artifacts: binary, plugins/*.so
+/.build
+# runtime data: config.yml, database, caches
+/.var
 __debug*

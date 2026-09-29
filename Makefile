@@ -18,8 +18,8 @@ build-plugins: $(addprefix build-plugin-, $(notdir $(filter perceptors/%,$(GOMOD
 
 build-plugin-%:
 	@echo "Building plugin: $*..."
-	@mkdir -p gontroller/build/plugins
-	@cd perceptors/$* && go build -buildmode=plugin -o ../../gontroller/build/plugins/$*.so
+	@mkdir -p gontroller/.build/plugins
+	@cd perceptors/$* && go build -buildmode=plugin -o ../../gontroller/.build/plugins/$*.so
 
 update-deps:
 	@$(foreach module, $(GOMODULES), \
@@ -29,7 +29,7 @@ update-deps:
 
 clean:
 	@echo "Cleaning all build artifacts..."
-	@rm -rf gontroller/build/plugins/*.so
+	@rm -rf gontroller/.build/plugins/*.so
 	@$(foreach module, $(GOMODULES), \
 		echo "Cleaning $(module)..."; \
 		(cd $(module) && go clean); \

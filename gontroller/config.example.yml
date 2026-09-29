@@ -1,0 +1,21 @@
+# gontroller config. Copy to .var/config.yml for `make run`:
+#   mkdir -p .var && cp config.example.yml .var/config.yml
+# Or run with --config <file> (or GONTROLLER_CONFIG=<file>).
+# Relative paths are resolved against the directory of this file.
+
+# Library root: the photos to import
+path: "/Users/me/Pictures/"
+
+# External perceptors (`make build-plugins` from the repo root)
+plugins:
+  - ../.build/plugins/exif_geo.so
+
+# Database and caches (thumbnails). Default: the directory of this file
+# data_dir: .
+
+# ExifTool executable. Default: exiftool from PATH
+# exiftool: /opt/exiftool/exiftool
+
+server:
+  host: ""      # all interfaces
+  port: 1323
