@@ -24,8 +24,7 @@
   },
   "type": "module",
   "dependencies": {
-    "dexie": "^4.4.6",
-    "dexie-observable": "^4.0.1-beta.13"
+    "dexie": "^4.4.6"
   },
   "private": true
 }

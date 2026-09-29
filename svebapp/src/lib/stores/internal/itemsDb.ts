@@ -9,4 +9,5 @@ export const itemsDb: Dexie & {
 itemsDb.version(3).stores({
     items: '&guid, id, width, height, mimeType, date'
 });
-itemsDb.table("items").clear()
+// Cleared by wsync at the start of a sync — not on import: several contexts import
+// this module, and a clear here would race with wsync's writes.

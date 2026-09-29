@@ -73,6 +73,70 @@ was used.
   Possible use: relayout of an already loaded gallery. Code kept; `dijkstra.js` is
   third-party MIT code (2008) under `// @ts-nocheck`.
 
+### Visible window over layoutDb + resize anchoring (2026-09-29)
+
+The gallery moved to the original design (`Workers.puml`): `wlayout` writes positions
+to `layoutDb`, the page subscribes to the visible window with `liveQuery`; worker → UI
+messages are gone. Details: [svebapp README](../../svebapp/README.md#visible-window-and-resize-anchoring).
+
+- Only the window is in the DOM (≈40 tiles for 2400 photos, container height from
+  `meta`). The window query itself takes 1–3 ms.
+- **Resize keeps the view:** without an anchor the same `scrollY` shows other photos
+  after a relayout (true for the previous message-based version too). The first
+  visible photo is sent as an anchor, the worker reports its new position in `meta` in
+  the same transaction, one `liveQuery` returns items + `scrollTo` together. Checked
+  at 700 / 1000 / 450 / 600 px and a 30-step drag: the anchor photo stays in the top
+  row.
+- **Bug found while testing:** scrolling before the new (taller) height was in the
+  DOM got clamped to the old document height (450 px case). Apply height/items,
+  `tick()`, then scroll.
+- **Streaming:** main-thread timer lag p50 0 ms, p95 8 ms, max 14 ms with 3000 photos
+  at 5 ms each (the old per-item messaging froze the tab for ~90 s). A relayout in
+  the middle of the stream (at 475 photos) → the final layout of 3000 is consistent
+  (full-width rows, no overlaps, height matches).
+- **Fixes after a manual test (2026-09-29):**
+  - *Streaming felt worse than it should:* every streamed photo updated the total
+    height in the meta record that the window query reads → the window query re-ran
+    per photo (the "whole-table subscription" trap through `meta`). Now `meta` has two
+    records: `layout` (rev, width, anchor — changes only on a relayout; the window
+    query reads only this) and `size` (height, count — separate cheap subscription).
+    Streamed photos are written in batches (one transaction per 16 ms, not per photo).
+    Timer lag during a 3000-photo stream: p95 8 → 2 ms.
+  - *The view drifted after several resizes back and forth:* the anchor was re-taken
+    on every resize. While a relayout is on its way the screen shows the old layout at
+    an already corrected scroll; and after a reflow the top-left photo is often an
+    earlier one than the anchor — each burst walked the view back a little. Now the
+    anchor (with a relative offset: fraction of the tile height) is taken once and kept
+    across all resizes until the user scrolls. Six bursts of back-and-forth resizes:
+    the anchor stays in the top row, returning to 1000 px gives the same `scrollY`
+    every time.
+  - Snapshots are applied on the next animation frame **or** after 100 ms — frames
+    stall in windows that are "visible" but not painting.
+  - *Blank tiles while scrolling* (the tile is there and clickable, the image appears
+    after opening the viewer). First guess — `loading="lazy"` missing tiles moved by
+    `transform` — was **wrong**: without it blanks got more frequent. Real cause: the
+    gallery shows **originals** (median 0.5 MB, up to 5 MB; ~40 % HEIC) in 200 px tiles;
+    decoding a window of ~80 multi-megapixel images exceeds the browser's decoded-
+    image budget, it drops some and paints nothing until a repaint (the viewer
+    triggers one). Lazy loading only limits concurrent decodes. Proper fix:
+    thumbnails from the server (also needed for HEIC — Chrome/Firefox cannot show it).
+  - *Anchor still drifted a little:* the browser's own scroll anchoring adjusted
+    `scrollY` when content changed, which read as a user scroll and dropped our
+    anchor. `overflow-anchor: none` on the gallery.
+  - *Rows taller than the fixed 1000 px overlap* (Codex review): a portrait closed
+    alone is stretched to the full width, a row can be thousands of px tall and
+    vanished when scrolled past its top. Items now have an indexed `bottom`; the
+    window query finds the first row reaching into the window exactly (bounded
+    ranges only, so streamed photos below the window still do not re-run it).
+  - Not a bug: with the mock's repeating aspect ratios a 1008 px layout is taller per
+    photo than a 700 px one (rows of 3 stretched to the full width), so the page gets
+    shorter when narrowed mid-stream.
+- **Test environment:** the agent's browser pane often does not paint; then
+  `requestAnimationFrame` runs at 0–1 fps and `ResizeObserver`/scroll events are not
+  delivered. Mid-stream resize was verified by calling `updateLayout` directly
+  (`await import('/src/lib/workers/proxy.ts')` on the dev server returns the live
+  module).
+
 ### liveQuery across threads — spike (2026-09-29)
 
 Spike: [`svebapp/spikes/livequery`](../../svebapp/spikes/livequery) — a worker writes into
@@ -95,8 +159,8 @@ IndexedDB with Dexie, the page subscribes with `liveQuery`.
   window only; totals (gallery height, count) come from a small separate record.
 - So the original failure was not Dexie. Remaining suspects: `.clear()` on import of
   `itemsDb`/`layoutDb` in every context (it can wipe rows another worker just wrote),
-  the `derived` wiring. `dexie-observable` is not imported anywhere — a dead
-  dependency, not the cause.
+  the `derived` wiring. `dexie-observable` was never imported — a dead dependency,
+  removed.
 
 ### liveQuery instead of messages (original design, not implemented yet)
 
@@ -121,7 +185,7 @@ compose with `derived`. The current message protocol is a deviation from this de
   transaction → the same O(N²). It only pays off when the UI subscribes to the
   **visible window** (`where('order').between(from, to)`) — which is virtualisation
   for free.
-- `layoutDb` is unused right now but kept as the base for this design.
+- Implemented — see "Visible window over layoutDb" above.
 
 ---
 
@@ -204,6 +268,18 @@ compose with `derived`. The current message protocol is a deviation from this de
 ---
 
 ## Infrastructure
+
+### Safari: 500 on every page (2026-09-29)
+
+- Safari showed SvelteKit's 500 page with `ReferenceError: Cannot access 'load' before
+  initialization`. Not a circular import: `getLogger()` read the caller from
+  `stack.split('\n')[2]` — Chrome's format (`Error` header + `at …` lines). Safari and
+  Firefox print `fn@url:line:col` without a header, so at module top level there was
+  no third line → `undefined.match` threw while `proxy.ts` initialised → `+layout.ts`
+  never finished → Kit's export validator (`for…in` over the module namespace, which
+  JavaScriptCore evaluates, V8 does not) hit the uninitialised `load`.
+- `callerContext()` now parses both formats and never throws. Rule: code that runs at
+  module initialisation must not throw — in Safari it takes the whole app down.
 
 ### perceplib: subtree instead of submodule (2026-09-29)
 
