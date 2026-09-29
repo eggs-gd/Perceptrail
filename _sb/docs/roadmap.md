@@ -47,10 +47,74 @@ Target architecture — the diagrams in [`../puml`](../puml).
 
 ## Next
 
+Each step is one PR unless noted.
+
+### Dates and time zones
+
+Time zones belong to the core (the date), not to the geo perceptor.
+
+- [ ] **D1. Date bugs.** `FileModifyDate` never parses (exiftool prints it with a
+      zone) — 1741 of 2413 items have a zero date (screenshots, messenger files).
+      Ignore invalid `0000:00:00 00:00:00`. Table tests on real tag sets (iPhone
+      HEIC with a zone, camera JPEG without one, QuickTime video, PNG without EXIF).
+- [ ] **D2. Offset in the model and the API.** `ItemDto`: instant (UTC) + offset in
+      minutes (NULL = unknown) + source tag / "assumed" flag. The offset is its own
+      column: sqlite and Postgres `timestamptz` return UTC on read. The perceplib
+      date API gets an explicit offset (+00:00 vs unknown) → perceplib v0.0.7,
+      plugins rebuilt.
+- [ ] **D3. Offset chain in `exif_core/date`.** Tags by group (exiftool `-G`; today
+      `-s2` without groups — `CreateDate` is EXIF for photos but already-UTC
+      QuickTime for videos). In order:
+      1. `OffsetTimeOriginal` (videos: `Keys:CreationDate` with a zone);
+      2. `DateTimeOriginal` − GPS UTC time, rounded to 15 min (sanity ±14 h);
+      3. GPS coordinates → IANA zone from an embedded dictionary
+         (`github.com/ringsaturn/tzf`), offset via `time.LoadLocation` (DST,
+         history). Not longitude/15: no DST, wrong at administrative borders;
+      4. the server's time zone, marked as assumed.
+      `SubSecTimeOriginal` for bursts.
+- [ ] **D4. API and client.** `/items` returns the date with its offset (RFC3339
+      `…+02:00`); the client keeps it (display in the local time of the shot).
+      Sorting/grouping the gallery by date is separate (it makes all of this visible).
+- Existing items are not re-read (unchanged files are skipped): in dev — delete
+  `.var/media_library.db*` and rescan. Reprocessing on plugin change is "Later".
+
+### Validator per [`Walker.puml`](../puml/Walker.puml)
+
+Today: files are keyed by path, the item GUID = the main file's GUID. A moved file
+becomes a new item and the old one stays forever (`finalizeWalk` is a TODO);
+`Dirty` is set but nothing reads it; every item stays `New`.
+
+- [ ] **V1. Walk safety** (prerequisite for deletions). An unreadable directory skips
+      its subtree instead of aborting the whole walk; a missing/unmounted library
+      root never counts as "everything deleted"; finalization runs only after a
+      complete walk (today `Stop()` would also run it on cancel).
+- [ ] **V2. Deleted.** `finalizeWalk`: files with `CheckTime` older than the run are
+      gone. Main file gone → the item is `Deleted` (soft delete, excluded from
+      `/items`; the client resyncs fully on load, so no tombstones yet). A sidecar
+      gone → its group is re-emitted.
+- [ ] **V3. Moved.** New path, hash matches an item whose path no longer exists →
+      the file row and the item get the new path, the GUID stays (thumbnails keyed by
+      GUID survive). Same hash and the old path still exists → **duplicate**: a new
+      item (as now); reusing its thumbnails is a later optimisation.
+- [ ] **V4. Changed and states.** Same path, new hash → `Dirty` → re-run plugins,
+      later regenerate thumbnails. Define who moves `New → Processing → Ready`
+      (until the transcoder exists: the closer sets `Ready`).
+- [ ] **V5. Tests.** Walker + validator on a temp directory and a temp sqlite (now
+      possible via `model.Configure`): new, same, changed, moved, duplicate, deleted
+      main/sidecar, unreadable subdirectory, missing root. Update `Walker.puml`
+      where the code deviates (exif reading is merged into the validator step) and
+      findings.
+- Known limit: the short hash is size + non-volatile EXIF — two files without EXIF
+  and with the same byte size look identical. Acceptable for now; a full hash is an
+  option for CPU-rich setups (already noted in `ItemDto`).
+
+### Then
+
 - [ ] Thumbnails on the server: libvips via `bimg` (needs `brew install vips`), 400 px
       for tiles, 1600 px for the viewer, WebP; `/assets/:guid?size=…` falls back to the
-      original. Fixes blank tiles (decoding originals) and HEIC in Chrome/Firefox.
-- [ ] First perceptor end to end (primitive geo) → release 0.2.0.
+      original; regenerated for `Dirty`, dropped for `Deleted`. Fixes blank tiles
+      (decoding originals) and HEIC in Chrome/Firefox.
+- [ ] First perceptor end to end (primitive geo: map, markers) → release 0.2.0.
 
 ## Core — product (gontroller)
 
@@ -60,26 +124,10 @@ Target architecture — the diagrams in [`../puml`](../puml).
 - [ ] Main file of a group: the photo in a Live Photo, deterministic for RAW+JPEG;
       Live Photo pairs by `ContentIdentifier`; one main item merged from all sidecars
       ([`Item flow.puml`](../puml/Item%20flow.puml)).
-- [ ] `date`: the `FileModifyDate` fallback never parses (printed with a zone) — 1741
-      of 2413 items have a zero date (files without EXIF: screenshots, messengers).
-- [ ] `date`: time zones — in the core, not in the geo perceptor. Store the instant
-      (UTC) + offset (minutes, NULL = unknown) + source tag; the offset must be a
-      column: sqlite and Postgres `timestamptz` return UTC on read. Needs an explicit
-      offset in the perceplib date API (+00:00 vs unknown). Offset, in order:
-      1. `OffsetTimeOriginal` (videos: `Keys:CreationDate` with a zone);
-      2. `DateTimeOriginal` − GPS UTC time, rounded to 15 min;
-      3. GPS coordinates → IANA zone from an embedded dictionary
-         (`github.com/ringsaturn/tzf`), offset via `time.LoadLocation` (DST, history).
-         Not longitude/15: no DST, wrong at administrative borders;
-      4. the server's time zone, marked as assumed.
-      Tags by group (EXIF vs QuickTime: `QuickTime:CreateDate` is already UTC).
-      Visible only once the gallery sorts/groups by date — do together.
 - [ ] Embedded RAW preview (`PreviewImage`/`JpgFromRaw`) for the transcoder.
 
 ## Core — service (gontroller)
 
-- [ ] Validator per [`Walker.puml`](../puml/Walker.puml): same / moved / duplicate /
-      changed by `HashShort`; `finalizeWalk` for deleted files (`Deleted`), `Dirty`.
 - [ ] Unreadable/broken files still become items (0×0): exiftool returns File tags
       even for garbage. Decide how to mark them (ignored? error state?).
 - [ ] Fewer Info logs in `fswalker` (several per file).
