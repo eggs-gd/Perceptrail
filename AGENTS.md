@@ -35,23 +35,33 @@ No symlinks (Windows).
 - Work happens in `feature/<name>` branches created from `develop`.
 - `feature/*` → `develop`: a pull request, merged with **squash**. Each merge into
   `develop` is a patch increment `0.0.x`. Several PRs accumulate in `develop`.
-- `develop` → `master`: a pull request, merged with **rebase** (no merge commit).
-  Each merge into `master` is a minor increment `0.x.0`.
+- Release `develop` → `master` = a minor increment `0.x.0`:
+  1. a feature PR into `develop` that runs `scripts/version.sh minor` (changes only
+     `VERSION`);
+  2. a PR `develop` → `master` for CI and review;
+  3. merged as a **fast-forward**: `git push origin develop:master` (admin bypass on
+     `master`). Not with the GitHub rebase button — it rewrites every commit (new
+     hashes), `develop` stops being an ancestor of `master` and the branches diverge
+     (this happened with PR #2).
 - Open PRs against `develop` unless the task is the `develop` → `master` release.
-- Version: one for the whole monorepo, in the root [`VERSION`](VERSION), synced into
-  `svebapp/package.json` (+ lock) and `gontroller/pkg/app/version.go`. Bump it in the
-  PR itself: `scripts/version.sh patch` in every feature PR, `scripts/version.sh minor`
-  in the `develop` → `master` PR. CI fails if the files are out of sync
-  (`scripts/version.sh check`). `perceplib` is versioned separately by its own tags.
+- Version: one for the whole monorepo, **derived from git history** — nothing to bump
+  or commit per PR, so parallel PRs never race. The root [`VERSION`](VERSION) holds
+  only `MAJOR.MINOR`; `PATCH` = first-parent commits since `VERSION` last changed
+  (one squash merge = +1). `scripts/version.sh` prints it; builds inject it
+  (gontroller: `-ldflags -X .../app.Version`, see `gontroller/Makefile`; svebapp:
+  `__APP_VERSION__` via `vite.config.ts`). `package.json` `version` is a placeholder
+  (`0.0.0`, private). Needs full history (CI uses `fetch-depth: 0`). `perceplib` is
+  versioned separately by its own tags.
 - `develop` stays linear (squash merges only), which is what makes the rebase into
   `master` possible — GitHub cannot rebase a PR that contains merge commits.
   Operations that create merge commits (e.g. `git subtree pull` for `perceplib`)
   are done in a feature branch and get squashed on the way into `develop`.
 - Enforced by GitHub **rulesets** only (no classic branch protection): per branch —
   PR with 1 approval and resolved threads, allowed merge method (`develop`: squash,
-  `master`: rebase), required checks `go` + `svebapp` (branch up to date), linear
-  history, no force-push, no deletion. Repository admins may bypass only when
-  merging a PR; direct pushes to `master`/`develop` are rejected for everyone.
+  `master`: rebase — do not use it, see the release steps), required checks `go` +
+  `svebapp` (branch up to date), linear history, no force-push, no deletion.
+  `develop`: admins may bypass only when merging a PR. `master`: admins may push
+  directly — only for the fast-forward release push.
 
 
 ---

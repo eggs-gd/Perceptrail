@@ -1,4 +1,6 @@
 package app
 
-// Version is synced from the repo-root VERSION file by scripts/version.sh.
-const Version = "0.1.0"
+// Version is set at build time from scripts/version.sh:
+//
+//	go build -ldflags "-X perceptrail/gontroller/pkg/app.Version=$(../scripts/version.sh)"
+var Version = "dev"

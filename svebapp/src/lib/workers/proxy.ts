@@ -18,6 +18,8 @@ let viewChannel: MessageChannel;
 let syncStarted = false;
 
 if (browser) {
+    logger.info(`svebapp ${__APP_VERSION__}`);
+
     workersChannel = new MessageChannel();
     viewChannel = new MessageChannel();
     updateLayoutPort(viewChannel.port2);

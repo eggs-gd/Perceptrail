@@ -14,9 +14,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0  # scripts/version.sh counts commits
 
-    - name: Version in sync
-      run: scripts/version.sh check
+    - name: Version
+      run: scripts/version.sh
 
     - name: Set up Go
       uses: actions/setup-go@v7
@@ -53,6 +55,8 @@ jobs:
       PUBLIC_API_PATH: http://localhost:1323
     steps:
     - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0  # vite.config.ts derives the version from history
 
     - name: Set up Node
       uses: actions/setup-node@v7
