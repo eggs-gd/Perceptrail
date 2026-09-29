@@ -25,6 +25,13 @@ The core concept is to provide an infinite way to explore content. By navigating
 - Filtering based on various criteria depending on installed **Perceptors**.
 - Support for batch operations for bulk metadata editing.
 
+## Documentation
+
+- [Roadmap](_sb/docs/roadmap.md) and [findings & decisions](_sb/docs/findings.md)
+- [Design diagrams](_sb/puml) (PlantUML; rendered in [_sb/diagrams](_sb/diagrams))
+- Modules: [gontroller](gontroller/readme.md) · [perceplib](perceplib/README.md) ·
+  [perceptors](perceptors/readme.md) · [svebapp](svebapp/README.md)
+
 ## Big Flow
 
 ![Alt text](./_sb/diagrams/Item%20Flow.svg)
