@@ -27,14 +27,30 @@ type Config struct {
 	Server   struct {
 		Host string `yaml:"host"`
 		Port int    `yaml:"port"`
+		// CORS: origins allowed to call the API (the client in dev runs on another
+		// port). Default: any
+		AllowedOrigins []string `yaml:"allowed_origins"`
 	} `yaml:"server"`
+	// Behind GORM, so the driver can change later; only sqlite for now
+	Database struct {
+		Driver string `yaml:"driver"`
+		// sqlite: the database file, relative to DataDir
+		Name string `yaml:"name"`
+	} `yaml:"database"`
 }
 
-const defaultPort = 1323
+const (
+	defaultPort     = 1323
+	defaultDBDriver = "sqlite"
+	defaultDBName   = "media_library.db"
+)
 
-// DatabasePath is the SQLite database inside DataDir.
+// DatabasePath is the SQLite database file (Database.Name inside DataDir).
 func (c *Config) DatabasePath() string {
-	return filepath.Join(c.DataDir, "media_library.db")
+	if filepath.IsAbs(c.Database.Name) {
+		return c.Database.Name
+	}
+	return filepath.Join(c.DataDir, c.Database.Name)
 }
 
 // CacheDir holds generated files (thumbnails, …) inside DataDir.
@@ -84,6 +100,9 @@ func initConfig(config *Config, logger *l.Logger) {
 	}
 
 	config.resolve(filepath.Dir(path))
+	if config.Database.Driver != defaultDBDriver {
+		logger.Fatal("Unsupported database driver (only sqlite for now)", l.String("driver", config.Database.Driver))
+	}
 	if err := os.MkdirAll(config.DataDir, 0o755); err != nil {
 		logger.Fatal("Cannot create data_dir", l.String("data_dir", config.DataDir), l.Error(err))
 	}
@@ -107,6 +126,15 @@ func (c *Config) resolve(base string) {
 	c.DataDir = abs(c.DataDir)
 	for i, p := range c.Plugins {
 		c.Plugins[i] = abs(p)
+	}
+	if c.Database.Driver == "" {
+		c.Database.Driver = defaultDBDriver
+	}
+	if c.Database.Name == "" {
+		c.Database.Name = defaultDBName
+	}
+	if len(c.Server.AllowedOrigins) == 0 {
+		c.Server.AllowedOrigins = []string{"*"}
 	}
 	// A bare command name is looked up in PATH; only paths are resolved
 	if filepath.Base(c.Exiftool) != c.Exiftool {

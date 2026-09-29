@@ -1,0 +1,21 @@
+#path: "/Users/dukobpa3/Pictures/Screenshots"
+path: "/Users/dukobpa3/Pictures/"
+plugins:
+  - build/plugins/exif_geo.so
+app_name: "gontroller"
+server:
+  host: "0.0.0.0"
+  port: 8080
+database:
+  driver: "postgres"
+  username: "user"
+  password: "password"
+  database: "mydatabase"
+allowed_hosts:
+  - "localhost"
+  - "example.com"
+  - "myapp.com"
+api_keys:
+  service1: "key1"
+  service2: "key2"
+  service3: "key3"

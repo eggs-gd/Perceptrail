@@ -42,7 +42,7 @@ Config lookup: `--config <file>`, then `$GONTROLLER_CONFIG`, then `./config.yml`
 Relative paths in the config are resolved against the config's directory, so the
 same config gives the same database and caches from any working directory. See
 [`config.example.yml`](config.example.yml) for the fields (`path`, `plugins`,
-`data_dir`, `exiftool`, `server`).
+`data_dir`, `exiftool`, `server` with CORS `allowed_origins`, `database`).
 
 Host and plugins must be built with the same Go and the same versions of shared
 packages — see [findings](../_sb/docs/findings.md#go-plugins-2026-09-28).

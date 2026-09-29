@@ -19,3 +19,11 @@ plugins:
 server:
   host: ""      # all interfaces
   port: 1323
+  # CORS: origins allowed to call the API. Default: any ("*")
+  # allowed_origins:
+  #   - http://localhost:5173
+
+# Behind GORM: another driver can be added later (host/username/password …)
+database:
+  driver: sqlite            # the only one for now
+  name: media_library.db    # file, relative to data_dir

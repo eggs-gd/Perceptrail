@@ -18,6 +18,8 @@ func TestConfigResolve(t *testing.T) {
 		"DatabasePath": {c.DatabasePath(), "/srv/gontroller/.var/media_library.db"},
 		"Exiftool":     {c.Exiftool, "exiftool"}, // bare name: looked up in PATH
 		"Addr":         {c.Addr(), ":1323"},
+		"Driver":       {c.Database.Driver, "sqlite"},
+		"Origins":      {c.Server.AllowedOrigins[0], "*"},
 	}
 	for name, v := range checks {
 		if v[0] != v[1] {
@@ -26,9 +28,11 @@ func TestConfigResolve(t *testing.T) {
 	}
 
 	c = Config{DataDir: "data", Exiftool: "tools/exiftool"}
+	c.Database.Name = "/db/photos.db"
 	c.Server.Host, c.Server.Port = "127.0.0.1", 8080
 	c.resolve("/cfg")
-	if c.DataDir != "/cfg/data" || c.Exiftool != "/cfg/tools/exiftool" || c.Addr() != "127.0.0.1:8080" {
-		t.Errorf("got DataDir %q, Exiftool %q, Addr %q", c.DataDir, c.Exiftool, c.Addr())
+	if c.DataDir != "/cfg/data" || c.Exiftool != "/cfg/tools/exiftool" || c.Addr() != "127.0.0.1:8080" ||
+		c.DatabasePath() != "/db/photos.db" {
+		t.Errorf("got DataDir %q, Exiftool %q, Addr %q, DatabasePath %q", c.DataDir, c.Exiftool, c.Addr(), c.DatabasePath())
 	}
 }

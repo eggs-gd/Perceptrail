@@ -28,7 +28,7 @@ func (s *webService) Start(parentCtx context.Context) {
 
 	e := echo.New()
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"*"},
+		AllowOrigins: s.appCtx.Config().Server.AllowedOrigins,
 		AllowMethods: []string{echo.GET, echo.POST, echo.PUT, echo.DELETE},
 	}))
 	e.Use(middleware.Logger())
