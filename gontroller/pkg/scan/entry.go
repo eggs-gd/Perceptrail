@@ -26,18 +26,18 @@ var itemsProxy model.ItemsApi
 // - fswalker (fswalker.go): root -> fileEvent - reports every file it finds (path +
 //   stat), nothing else. An unreadable subdirectory is skipped and recorded; the
 //   walk ends with a marker carrying the walk result (complete? unreadable dirs?).
-// - groups switch (groups.go): fileEvent -> fileEvent - routes a file to the grouper
+// - source switch (sourceswitch.go): fileEvent -> fileEvent - routes a file to the grouper
 //   of its source; the marker goes to every grouper. Apple Photos is off
 //   (photosLibraryEnabled): the library goes to generic for now, which reads only
 //   its originals/ — derivatives and Apple's own images must not become items.
-// - groupers (groups.go): fileEvent -> FileGroup - a buffer of open groups inside;
+// - groupers (genericgrouper.go, photosgrouper.go): fileEvent -> FileGroup - a buffer of open groups inside;
 //   a group goes out when it is complete (not ranked yet: no main file). generic:
 //   sidecars by name, next to each other, so one open group; the last one goes out
 //   with the marker. Apple Photos (stub): will group by the library's DB.
 // Exit: -> FileGroup - one whole asset: the files that belong together
 //
 // Enter: FileGroup ->
-// - files gate (gate.go): FileGroup -> FileGroup - the files table: finds/creates
+// - files gate (filesgate.go): FileGroup -> FileGroup - the files table: finds/creates
 //   the rows, refreshes stat, stamps CheckTime. Lets through only groups that need
 //   work: new or changed files, never linked, the item missing or not Ready (New,
 //   Dirty, interrupted); the rest is dropped, so unchanged files never reach
@@ -47,7 +47,7 @@ var itemsProxy model.ItemsApi
 // - exif (exifextractor.go): FileGroup -> RawItem - exiftool -all for every file of
 //   the group (the main file is unknown yet): RawItem.Files + Exif, no Item yet; N
 //   steps in parallel on the same channels, groups are independent from here on.
-// - mime (mime.go): RawItem -> RawItem - Kinds: the kind of every file (exif MIMEType ->
+// - mime (mimeranker.go): RawItem -> RawItem - Kinds: the kind of every file (exif MIMEType ->
 //   own extension table -> content sniff; no system MIME tables), then the rank:
 //   the main file is the source — RAW > video > image; the JPEG of RAW+JPEG and
 //   the photo of a Live Photo are derivatives (sidecars). Nothing to show -> not media.
@@ -60,7 +60,8 @@ var itemsProxy model.ItemsApi
 // Exit: -> RawItem - the item (GUID) with its whole group, main file first
 //
 // Enter: RawItem ->
-// - transcode switch (transcoder.go): by the kind of the asset: photo (image, RAW)
+// - transcode switch (transcodeswitch.go, phototranscoder.go, videotranscoder.go,
+//   livephototranscoder.go): by the kind of the asset: photo (image, RAW)
 //   / video / Live Photo (a video with its photo). Transcoders take the whole group,
 //   not a file. Stubs for now: they pass the item on.
 // - plugins (exifpluginprocessor.go): core (date with its zone, size), then
@@ -97,7 +98,7 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	}()
 
 	// Channels between the steps: from -> to, what it carries. The message types
-	// are in events.go (fileEvent, FileGroup, walkResult) and types.go (RawItem).
+	// are in types.go (fileEvent, FileGroup, walkResult, RawItem).
 
 	// fswalker -> source switch: one file (path + stat), or the end-of-walk marker
 	files := make(chan fileEvent)

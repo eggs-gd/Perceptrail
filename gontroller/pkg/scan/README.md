@@ -4,7 +4,8 @@
 steps built on [`perceplib/chain`](../../../perceplib/chain/README.md): every step
 is its own goroutine, steps are connected by channels. The chain is assembled in
 [`entry.go`](entry.go) (`NewImporterService`); the comment there describes every
-step, the comments at the channels say what each carries.
+step, the comments at the channels say what each carries. One step = one file,
+named after its constructor (`NewFilesGate` -> `filesgate.go`).
 
 Diagrams: [`Import chain.puml`](../../../_sb/puml/Import%20chain.puml) (the whole
 chain), [`Walker.puml`](../../../_sb/puml/Walker.puml) (files gate and validator in
@@ -23,27 +24,28 @@ fswalker -> source switch ─┬─ generic grouper ──┬─> files gate -> 
 | Step | File | In -> out | What it does |
 |---|---|---|---|
 | fswalker | `fswalker.go` | root -> `fileEvent` | Reports every file (path + stat), then the end-of-walk marker. Unreadable subdirectories are skipped and recorded. |
-| source switch | `groups.go` | `fileEvent` -> `fileEvent` | Routes a file to the grouper of its source; the marker goes to every grouper. |
-| generic grouper | `groups.go` | `fileEvent` -> `FileGroup` | Sidecars by name, next to each other: one open group; a complete group goes out, the last one with the marker. |
-| Apple Photos grouper | `groups.go` | `fileEvent` -> `FileGroup` | Stub: passes the marker on. `photosLibraryEnabled = false` sends the library to generic, which reads only its `originals/`. |
-| files gate | `gate.go` | `FileGroup` -> `FileGroup` | The files table (rows, stat, `CheckTime`); drops groups that need no work; deletions after every grouper's marker. |
+| source switch | `sourceswitch.go` | `fileEvent` -> `fileEvent` | Routes a file to the grouper of its source; the marker goes to every grouper. |
+| generic grouper | `genericgrouper.go` | `fileEvent` -> `FileGroup` | Sidecars by name, next to each other: one open group; a complete group goes out, the last one with the marker. |
+| Apple Photos grouper | `photosgrouper.go` | `fileEvent` -> `FileGroup` | Stub: passes the marker on. `photosLibraryEnabled = false` sends the library to generic, which reads only its `originals/`. |
+| files gate | `filesgate.go` | `FileGroup` -> `FileGroup` | The files table (rows, stat, `CheckTime`); drops groups that need no work; deletions after every grouper's marker. |
 | exif | `exifextractor.go` | `FileGroup` -> `*RawItem` | `exiftool -all` for every file; N steps in parallel on the same channels. |
-| mime | `mime.go` | `*RawItem` -> `*RawItem` | The kind of every file; the main file (the source) first. |
+| mime | `mimeranker.go` | `*RawItem` -> `*RawItem` | The kind of every file; the main file (the source) first. |
 | validator | `validator.go` | `*RawItem` -> `*RawItem` | Links the group, same / changed / moved / duplicate -> the item. |
-| transcode switch | `transcoder.go` | `*RawItem` -> `*RawItem` | Routes the asset by kind; the transcoders are stubs for now. |
+| transcode switch | `transcodeswitch.go` | `*RawItem` -> `*RawItem` | Routes the asset by kind. |
+| photo / video / Live Photo transcoders | `phototranscoder.go`, `videotranscoder.go`, `livephototranscoder.go` | `*RawItem` -> `*RawItem` | Stubs for now: pass the asset on. |
 | plugins, closer | `exifpluginprocessor.go` | `*RawItem` -> `*dto.ItemDto` | Core plugins (date, size), external perceptors, then the item is saved `Ready`. |
 
 ## Types
 
-- `fileEvent` ([`events.go`](events.go)) — one found file, or the end-of-walk marker.
-- `FileGroup` ([`events.go`](events.go)) — **one whole asset**: all its files (main
+- `fileEvent` ([`types.go`](types.go)) — one found file, or the end-of-walk marker.
+- `FileGroup` ([`types.go`](types.go)) — **one whole asset**: all its files (main
   file, sidecars, derivatives), or the marker (`Done`). Before the gate the files
   carry only their stat, after it they are rows of the files table (GUIDs).
 - `RawItem` ([`types.go`](types.go)) — the asset from exif to the closer: `Files`,
   `Exif`, `Kinds` are aligned. exif fills `Files` + `Exif`, mime fills `Kinds` and
   puts the main file first, the validator sets `Item`. Plugins see it through
   `exif_core.RawItemRW` / `api.RawItemR`.
-- `walkResult` ([`events.go`](events.go)) — rides in the marker: root, start time,
+- `walkResult` ([`types.go`](types.go)) — rides in the marker: root, start time,
   complete or not, unreadable directories.
 
 ## Rules that are easy to break
