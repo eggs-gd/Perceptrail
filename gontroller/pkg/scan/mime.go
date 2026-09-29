@@ -60,47 +60,43 @@ var extTable = map[string]extInfo{
 type mimeStep struct{}
 
 // NewMimeRanker: the kind of every file, the main file first
-func NewMimeRanker(chin <-chan exifGroup, chout chan<- exifGroup) chain.Processor {
+func NewMimeRanker(chin <-chan *RawItem, chout chan<- *RawItem) chain.Processor {
 	return chain.NewDecorator(chin, chout, mimeStep{})
 }
 
-func (mimeStep) Decorate(g exifGroup) (exifGroup, error) {
-	g.kinds = make([]MediaKind, len(g.files))
-	for i, f := range g.files {
+// Decorate fills Kinds (and every file's MimeType) and puts the main file first
+func (mimeStep) Decorate(g *RawItem) (*RawItem, error) {
+	g.Kinds = make([]MediaKind, len(g.Files))
+	for i, f := range g.Files {
 		var exifMime string
-		if g.exifs[i] != nil {
-			exifMime = string(g.exifs[i]["MIMEType"])
+		if g.Exif[i] != nil {
+			exifMime = string(g.Exif[i]["MIMEType"])
 		}
-		g.kinds[i], f.MimeType = kindOf(f.Path, exifMime)
+		g.Kinds[i], f.MimeType = kindOf(f.Path, exifMime)
 	}
 
 	// Rank: the main file first. Ties: the bigger file, then the name — deterministic
-	order := make([]int, len(g.files))
+	order := make([]int, len(g.Files))
 	for i := range order {
 		order[i] = i
 	}
 	sort.SliceStable(order, func(a, b int) bool {
 		i, j := order[a], order[b]
-		if ri, rj := kindRank[g.kinds[i]], kindRank[g.kinds[j]]; ri != rj {
+		if ri, rj := kindRank[g.Kinds[i]], kindRank[g.Kinds[j]]; ri != rj {
 			return ri < rj
 		}
-		if g.files[i].Size != g.files[j].Size {
-			return g.files[i].Size > g.files[j].Size
+		if g.Files[i].Size != g.Files[j].Size {
+			return g.Files[i].Size > g.Files[j].Size
 		}
-		return g.files[i].Name < g.files[j].Name
+		return g.Files[i].Name < g.Files[j].Name
 	})
-	files, exifs, kinds := g.files[:0:0], g.exifs[:0:0], g.kinds[:0:0]
+	files, exifs, kinds := g.Files[:0:0], g.Exif[:0:0], g.Kinds[:0:0]
 	for _, i := range order {
-		files = append(files, g.files[i])
-		exifs = append(exifs, g.exifs[i])
-		kinds = append(kinds, g.kinds[i])
+		files = append(files, g.Files[i])
+		exifs = append(exifs, g.Exif[i])
+		kinds = append(kinds, g.Kinds[i])
 	}
-	g.files, g.exifs, g.kinds = files, exifs, kinds
-
-	switch g.kinds[0] {
-	case KindImage, KindRaw, KindVideo:
-		g.media = true
-	}
+	g.Files, g.Exif, g.Kinds = files, exifs, kinds
 	return g, nil
 }
 

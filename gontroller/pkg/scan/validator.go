@@ -22,7 +22,7 @@ type validator struct {
 // No transcoder yet: there is nothing to regenerate
 func noOutputs(string) bool { return true }
 
-func NewValidator(chin <-chan exifGroup, chout chan<- *RawItem, logger *l.Logger) chain.Processor {
+func NewValidator(chin <-chan *RawItem, chout chan<- *RawItem, logger *l.Logger) chain.Processor {
 	return chain.NewDecorator(chin, chout, newValidator(logger))
 }
 
@@ -30,28 +30,29 @@ func newValidator(logger *l.Logger) *validator {
 	return &validator{logger: logger, outputsComplete: noOutputs}
 }
 
-func (v *validator) Decorate(g exifGroup) (*RawItem, error) {
-	main := g.files[0]
+// Decorate sets the item of the group (ranked by mime: the main file first)
+func (v *validator) Decorate(g *RawItem) (*RawItem, error) {
+	main := g.Files[0]
 
-	if !g.media { // nothing to show: remembered, so the gate skips it from now on
-		for _, f := range g.files {
+	if !g.isMedia() { // nothing to show: remembered, so the gate skips it from now on
+		for _, f := range g.Files {
 			f.SetIgnored()
 		}
-		if _, err := filesProxy.UpdateFiles(g.files); err != nil {
+		if _, err := filesProxy.UpdateFiles(g.Files); err != nil {
 			return nil, err
 		}
 		return nil, chain.ErrSkippedItem
 	}
-	if g.exifs[0] == nil {
+	if g.Exif[0] == nil {
 		return nil, fmt.Errorf("no metadata for the main file %s", main.Path)
 	}
 
-	for _, f := range g.files {
+	for _, f := range g.Files {
 		f.LinkTo(main)
 	}
 	// A file that was the main file of its own item is a sidecar now (e.g. a JPEG
 	// imported alone, then its RAW appeared): that item goes
-	for _, f := range g.files[1:] {
+	for _, f := range g.Files[1:] {
 		if old, err := itemsProxy.GetItemByGuid(f.GUID); err == nil {
 			if err := itemsProxy.DeleteItem(old); err != nil {
 				return nil, err
@@ -59,11 +60,11 @@ func (v *validator) Decorate(g exifGroup) (*RawItem, error) {
 			v.logger.Info("Former main file is a sidecar now", l.String("file", f.Path), l.String("main", main.Path))
 		}
 	}
-	if _, err := filesProxy.UpdateFiles(g.files); err != nil {
+	if _, err := filesProxy.UpdateFiles(g.Files); err != nil {
 		return nil, err
 	}
 
-	item, outcome, err := itemsProxy.ValidateFile(main, g.exifs[0])
+	item, outcome, err := itemsProxy.ValidateFile(main, g.Exif[0])
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +78,8 @@ func (v *validator) Decorate(g exifGroup) (*RawItem, error) {
 		return nil, chain.ErrSkippedItem
 	}
 
-	return &RawItem{Item: item, Exif: g.exifs, Files: g.files, Kinds: g.kinds}, nil
+	g.Item = item
+	return g, nil
 }
 
 func (v *validator) Stop() {}

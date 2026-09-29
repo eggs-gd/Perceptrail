@@ -36,21 +36,21 @@ var itemsProxy model.ItemsApi
 // Exit: -> fileGroup - files that belong together
 //
 // Enter: fileGroup ->
-// - files gate (gate.go): fileGroup -> storedGroup - the files table: finds/creates
+// - files gate (gate.go): fileGroup -> []FileDto - the files table: finds/creates
 //   the rows, refreshes stat, stamps CheckTime. Lets through only groups that need
 //   work: new or changed files, never linked, the item missing or not Ready (New,
 //   Dirty, interrupted); the rest is dropped, so unchanged files never reach
 //   exiftool. After the marker from every grouper: deletions — files not stamped
 //   by this walk are gone (only after a complete walk that found files, never under
 //   an unreadable dir): main file -> item Deleted, sidecar -> item Dirty.
-// - exif (exifextractor.go): storedGroup -> exifGroup - exiftool -all for every file
-//   of the group (the main file is unknown yet); N steps in parallel on the same
-//   channels, groups are independent from here on.
-// - mime (mime.go): exifGroup -> exifGroup - the kind of every file (exif MIMEType ->
+// - exif (exifextractor.go): []FileDto -> RawItem - exiftool -all for every file of
+//   the group (the main file is unknown yet): RawItem.Files + Exif, no Item yet; N
+//   steps in parallel on the same channels, groups are independent from here on.
+// - mime (mime.go): RawItem -> RawItem - Kinds: the kind of every file (exif MIMEType ->
 //   own extension table -> content sniff; no system MIME tables), then the rank:
 //   the main file is the source — RAW > video > image; the JPEG of RAW+JPEG and
 //   the photo of a Live Photo are derivatives (sidecars). Nothing to show -> not media.
-// - validator (validator.go): exifGroup -> RawItem - not media: rows marked ignored,
+// - validator (validator.go): RawItem -> RawItem - sets Item. Not media: rows marked ignored,
 //   dropped. Otherwise links the files to the main file (a former main file that is
 //   a sidecar now loses its item), then by the short hash of the main file (size +
 //   non-volatile exif): same / changed (Dirty) / moved (the item keeps its GUID,
@@ -98,9 +98,9 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	files := make(chan fileEvent)
 	toGeneric, toPhotos := make(chan fileEvent), make(chan fileEvent)
 	groups := make(chan fileGroup)
-	stored := make(chan storedGroup)
-	exifed := make(chan exifGroup)
-	ranked := make(chan exifGroup)
+	stored := make(chan []*dto.FileDto)
+	exifed := make(chan *RawItem)
+	ranked := make(chan *RawItem)
 	validated := make(chan *RawItem)
 	toPhoto, toVideo, toLivePhoto := make(chan *RawItem), make(chan *RawItem), make(chan *RawItem)
 	transcoded := make(chan *RawItem)

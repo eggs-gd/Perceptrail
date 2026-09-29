@@ -80,8 +80,8 @@ func TestMimeRanking(t *testing.T) {
 	file := func(name string, size int64) *dto.FileDto {
 		return &dto.FileDto{ItemEntry: dto.ItemEntry{Path: "/lib/" + name, Name: name, Size: size}}
 	}
-	rank := func(files ...*dto.FileDto) exifGroup {
-		g, _ := mimeStep{}.Decorate(exifGroup{files: files, exifs: make([]api.RawExif, len(files))})
+	rank := func(files ...*dto.FileDto) *RawItem {
+		g, _ := mimeStep{}.Decorate(&RawItem{Files: files, Exif: make([]api.RawExif, len(files))})
 		return g
 	}
 	cases := []struct {
@@ -98,8 +98,8 @@ func TestMimeRanking(t *testing.T) {
 	}
 	for _, c := range cases {
 		g := rank(c.files...)
-		if g.files[0].Name != c.main || g.media != c.media {
-			t.Errorf("main %s media %v, want %s %v", g.files[0].Name, g.media, c.main, c.media)
+		if g.Files[0].Name != c.main || g.isMedia() != c.media {
+			t.Errorf("main %s media %v, want %s %v", g.Files[0].Name, g.isMedia(), c.main, c.media)
 		}
 	}
 	if k, m := kindOf("/x/a.CR2", ""); k != KindRaw || m != "image/x-canon-cr2" {

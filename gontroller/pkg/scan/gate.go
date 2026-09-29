@@ -26,7 +26,7 @@ type filesGate struct {
 }
 
 // NewFilesGate: branches is the number of groupers that send an end-of-walk marker
-func NewFilesGate(branches int, chin <-chan fileGroup, chout chan<- storedGroup, logger *l.Logger) chain.Processor {
+func NewFilesGate(branches int, chin <-chan fileGroup, chout chan<- []*dto.FileDto, logger *l.Logger) chain.Processor {
 	return chain.NewDecorator(chin, chout, newFilesGate(branches, logger))
 }
 
@@ -34,7 +34,7 @@ func newFilesGate(branches int, logger *l.Logger) *filesGate {
 	return &filesGate{logger: logger, branches: branches}
 }
 
-func (g *filesGate) Decorate(in fileGroup) (storedGroup, error) {
+func (g *filesGate) Decorate(in fileGroup) ([]*dto.FileDto, error) {
 	// A grouper's last group comes with its end-of-walk marker: the group first
 	out, err := g.pass(in.entries)
 	if in.done != nil {
@@ -48,18 +48,18 @@ func (g *filesGate) Decorate(in fileGroup) (storedGroup, error) {
 }
 
 // pass stores the group and lets it through if it needs work
-func (g *filesGate) pass(entries []dto.ItemEntry) (storedGroup, error) {
+func (g *filesGate) pass(entries []dto.ItemEntry) ([]*dto.FileDto, error) {
 	if len(entries) == 0 {
-		return storedGroup{}, chain.ErrSkippedItem
+		return nil, chain.ErrSkippedItem
 	}
 	files, changed, err := g.store(entries)
 	if err != nil {
-		return storedGroup{}, err
+		return nil, err
 	}
 	if changed || g.needsProcessing(files) {
-		return storedGroup{files: files}, nil
+		return files, nil
 	}
-	return storedGroup{}, chain.ErrSkippedItem
+	return nil, chain.ErrSkippedItem
 }
 
 func (g *filesGate) Stop() {}
