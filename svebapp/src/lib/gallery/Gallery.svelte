@@ -3,22 +3,25 @@
     import {tick, untrack} from 'svelte';
     import ItemView from "./components/ItemView.svelte";
     import type {LayoutItem} from "$lib/stores";
-    import {rowHeight, screenWidth} from "$lib/stores";
     import {updateLayout} from "$lib/workers";
     import type {LayoutSize} from "$lib/stores";
     import {type AnchorState, findAnchor, watchSize, watchWindow, type WindowSnapshot} from "./layoutWindow";
 
     interface Props {
         gutter?: number;
-        selectItem: (item: LayoutItem) => void,
+        /** Target row height, px */
+        rowHeight?: number;
         openItem: (item: LayoutItem) => void,
     }
 
     let {
         gutter = 8,
-        selectItem,
+        rowHeight = 220,
         openItem
     }: Props = $props();
+
+    /** Width available to the gallery (bound to the container) */
+    let screenWidth = $state(0);
 
     let containerEl: HTMLDivElement | undefined = $state();
     let scrollY = $state(0);
@@ -44,8 +47,8 @@
     // would walk the view (while a relayout is on its way the screen shows the old
     // layout; after a reflow the top-left photo is often an earlier one).
     $effect(() => {
-        const width = $screenWidth;
-        const targetRowHeight = $rowHeight;
+        const width = screenWidth;
+        const targetRowHeight = rowHeight;
         if (!width) return;
         untrack(() => {
             if (!anchorState.pending) {
@@ -163,15 +166,14 @@
 
 <svelte:window bind:scrollY bind:innerHeight/>
 
-<div class="masonry" bind:clientWidth={$screenWidth}>
-    <div class="container" bind:this={containerEl} style="height: {height}px" class:hidden={!$screenWidth}>
+<div class="masonry" bind:clientWidth={screenWidth}>
+    <div class={['container', !screenWidth && 'hidden']} bind:this={containerEl} style:height="{height}px">
         {#each images as itm (itm.guid)}
             <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
             <div class="image"
                  in:fade={{ duration: 300 }}
                  style={tileStyle(itm, delays.get(itm.guid) ?? 0)}
                  onclick={() => {
-                     selectItem(itm);
                      openItem(itm);
                  }}>
                 <ItemView item={itm} index={itm.order}/>

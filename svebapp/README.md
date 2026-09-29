@@ -89,6 +89,24 @@ Gallery.svelte     renders the window: absolutely positioned tiles, keyed by gui
 | `sync-start`, `sync-done` | — |
 | `create`, `update`, `delete` | `item` |
 
+## Conventions (Svelte 5 / Kit 2)
+
+Checked against the Svelte docs (Svelte MCP `get-documentation`: best practices).
+
+- `$app/state`, not `$app/stores`; no `svelte/store` — component state with runes,
+  external data via `LiveQuery` (`lib/stores/internal/liveQuery.ts`, a Dexie
+  `liveQuery` on `createSubscriber`; create it in `$derived` when it depends on state).
+  `LiveQuery` is not re-exported from `$lib/stores` (workers import that module).
+- `$derived` for anything computed; `$effect` only for real integrations (worker
+  messages, the window subscription with its per-frame scheduling and scroll
+  correction, `document.body` style).
+- `{@attach}` instead of actions / `onMount` + `bind:this` for element listeners.
+- `class={[...]}` / `class={{...}}` instead of `class:`; `style:` for single styles.
+- No side effects in `load` (it runs on the server and on every navigation): the sync
+  starts in `onMount` of the root layout.
+- Code that runs at module initialisation must never throw (Safari takes the whole app
+  down, see findings).
+
 ## Rules learned the hard way
 
 Details and reasons — [findings](../_sb/docs/findings.md#frontend-gallery-layout-resize-streaming).
