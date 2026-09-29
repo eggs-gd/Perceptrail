@@ -15,8 +15,8 @@ import (
 
 var db *gorm.DB
 
-// dbPath is set from the config before the first NewProxy
-var dbPath = "media_library.db"
+// dbPath has no default: the caller owns the location (app.Config.DatabasePath)
+var dbPath string
 
 // SetDatabasePath points the database at path (app.Config.DatabasePath). Call it
 // before the first NewProxy.
@@ -45,6 +45,9 @@ func sqliteDSN(path string) string {
 }
 
 func initDB(logger *l.Logger) *gorm.DB {
+	if dbPath == "" {
+		panic("model: SetDatabasePath must be called before NewProxy")
+	}
 	logger.Info("Database Initiating...")
 	// WAL + busy_timeout: importer writes while /items stream reads
 	logger.Info("Database", l.String("path", dbPath))
