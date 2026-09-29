@@ -74,7 +74,7 @@ hid inside the exif step, so groups and MIME were decided before EXIF was known.
       own buffer of open groups: a group goes out when it is complete, so every file
       closes at most one group. `generic`: sidecars by name, next to each other
       (name order), case-insensitive — one open group. Apple Photos: a stub branch;
-      `photosLibraryEnabled = false` keeps the library in `generic` until the Photos
+      `groups.appleEnabled = false` keeps the library in `generic` until the Photos
       milestone (there: the first file of the library loads the asset links from its
       DB, a group closes when all its files arrived; incomplete groups at the marker
       — e.g. cloud-only originals — to decide). The marker is broadcast to every

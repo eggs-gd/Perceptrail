@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/scan/flow"
 
 	"github.com/eggs-gd/perceplib/chain"
 
@@ -23,7 +24,7 @@ type inType struct {
 	path string
 	info os.DirEntry
 	// Set only on the end-of-walk marker
-	done *walkResult
+	done *flow.WalkResult
 }
 
 type fsMonitor struct {
@@ -36,7 +37,7 @@ type fsMonitor struct {
 	path string
 }
 
-func NewFsWalker(path string, chout chan<- fileEvent, logger *l.Logger) chain.Processor {
+func NewFsWalker(path string, chout chan<- flow.FileEvent, logger *l.Logger) chain.Processor {
 	return chain.NewEntryPoint(chout, &fsMonitor{logger: logger, path: path})
 }
 
@@ -56,8 +57,8 @@ func (m *fsMonitor) Start(chin chan<- inType, ctx context.Context) {
 
 // walk sends every file under the root to chin. An unreadable subdirectory is
 // skipped and recorded; an unreadable root or a cancel makes the walk incomplete.
-func (m *fsMonitor) walk(chin chan<- inType) walkResult {
-	result := walkResult{root: m.path, started: time.Now()}
+func (m *fsMonitor) walk(chin chan<- inType) flow.WalkResult {
+	result := flow.WalkResult{Root: m.path, Started: time.Now()}
 
 	if info, err := os.Stat(m.path); err != nil || !info.IsDir() {
 		m.logger.Error("Library root is not a readable directory", l.String("path", m.path), l.Error(err))
@@ -73,7 +74,7 @@ func (m *fsMonitor) walk(chin chan<- inType) walkResult {
 				return err
 			}
 			m.logger.Warn("Unreadable, skipped", l.String("path", path), l.Error(err))
-			result.unreadable = append(result.unreadable, path)
+			result.Unreadable = append(result.Unreadable, path)
 			if entry != nil && entry.IsDir() {
 				return fs.SkipDir
 			}
@@ -85,7 +86,7 @@ func (m *fsMonitor) walk(chin chan<- inType) walkResult {
 
 		select {
 		case chin <- inType{path: path, info: entry}:
-			result.files++
+			result.Files++
 			return nil
 		case <-m.ctx.Done():
 			return m.ctx.Err()
@@ -98,7 +99,7 @@ func (m *fsMonitor) walk(chin chan<- inType) walkResult {
 		}
 		return result
 	}
-	result.complete = true
+	result.Complete = true
 	return result
 }
 
@@ -113,15 +114,15 @@ func (m *fsMonitor) Stop() {
 
 // Decorate adds the stat. A file that vanished since it was listed is skipped: it
 // is not seen, so the gate will take it as deleted.
-func (m *fsMonitor) Decorate(in inType) (fileEvent, error) {
+func (m *fsMonitor) Decorate(in inType) (flow.FileEvent, error) {
 	if in.done != nil {
-		return fileEvent{done: in.done}, nil
+		return flow.FileEvent{Done: in.done}, nil
 	}
 	info, err := in.info.Info()
 	if err != nil {
-		return fileEvent{}, chain.ErrSkippedItem
+		return flow.FileEvent{}, chain.ErrSkippedItem
 	}
-	return fileEvent{entry: dto.ItemEntry{
+	return flow.FileEvent{Entry: dto.ItemEntry{
 		Path:    in.path,
 		Name:    in.info.Name(),
 		Size:    info.Size(),

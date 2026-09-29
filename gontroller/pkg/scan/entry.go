@@ -6,6 +6,14 @@ import (
 	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/scan/flow"
+	"perceptrail/gontroller/pkg/scan/groups"
+	"perceptrail/gontroller/pkg/scan/groups/apple"
+	"perceptrail/gontroller/pkg/scan/groups/generic"
+	"perceptrail/gontroller/pkg/scan/transcode"
+	"perceptrail/gontroller/pkg/scan/transcode/livephoto"
+	"perceptrail/gontroller/pkg/scan/transcode/photo"
+	"perceptrail/gontroller/pkg/scan/transcode/video"
 
 	"github.com/eggs-gd/perceplib/chain"
 
@@ -23,14 +31,14 @@ var itemsProxy model.ItemsApi
 //	mime -> validator -> transcode switch (photo | video | Live Photo) -> plugins -> closer
 //
 // Enter: library root ->
-// - fswalker (fswalker.go): root -> fileEvent - reports every file it finds (path +
+// - fswalker (fswalker.go): root -> FileEvent - reports every file it finds (path +
 //   stat), nothing else. An unreadable subdirectory is skipped and recorded; the
 //   walk ends with a marker carrying the walk result (complete? unreadable dirs?).
-// - source switch (sourceswitch.go): fileEvent -> fileEvent - routes a file to the grouper
+// - source switch (groups/sourceswitch.go): FileEvent -> FileEvent - routes a file to the grouper
 //   of its source; the marker goes to every grouper. Apple Photos is off
-//   (photosLibraryEnabled): the library goes to generic for now, which reads only
+//   (groups.appleEnabled): the library goes to generic for now, which reads only
 //   its originals/ — derivatives and Apple's own images must not become items.
-// - groupers (genericgrouper.go, photosgrouper.go): fileEvent -> FileGroup - a buffer of open groups inside;
+// - groupers (groups/generic, groups/apple): FileEvent -> FileGroup - a buffer of open groups inside;
 //   a group goes out when it is complete (not ranked yet: no main file). generic:
 //   sidecars by name, next to each other, so one open group; the last one goes out
 //   with the marker. Apple Photos (stub): will group by the library's DB.
@@ -60,8 +68,8 @@ var itemsProxy model.ItemsApi
 // Exit: -> RawItem - the item (GUID) with its whole group, main file first
 //
 // Enter: RawItem ->
-// - transcode switch (transcodeswitch.go, phototranscoder.go, videotranscoder.go,
-//   livephototranscoder.go): by the kind of the asset: photo (image, RAW)
+// - transcode switch (transcode/switch.go; transcoders transcode/photo, video,
+//   livephoto): by the kind of the asset: photo (image, RAW)
 //   / video / Live Photo (a video with its photo). Transcoders take the whole group,
 //   not a file. Stubs for now: they pass the item on.
 // - plugins (exifpluginprocessor.go): core (date with its zone, size), then
@@ -98,30 +106,30 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	}()
 
 	// Channels between the steps: from -> to, what it carries. The message types
-	// are in types.go (fileEvent, FileGroup, walkResult, RawItem).
+	// are in the flow package (FileEvent, FileGroup, WalkResult, RawItem).
 
 	// fswalker -> source switch: one file (path + stat), or the end-of-walk marker
-	files := make(chan fileEvent)
+	files := make(chan flow.FileEvent)
 	// source switch -> its grouper: the same, split by source; the marker goes to both
-	toGeneric, toPhotos := make(chan fileEvent), make(chan fileEvent)
+	toGeneric, toApple := make(chan flow.FileEvent), make(chan flow.FileEvent)
 	// groupers -> files gate: a complete group (no main file yet), and/or the
 	// grouper's marker; both groupers write here
-	groups := make(chan FileGroup)
+	grouped := make(chan flow.FileGroup)
 	// files gate -> exif: the same group, stored: rows of the files table (GUIDs);
 	// only groups that need work
-	stored := make(chan FileGroup)
+	stored := make(chan flow.FileGroup)
 	// exif -> mime: RawItem with Files + Exif
-	exifed := make(chan *RawItem)
+	exifed := make(chan *flow.RawItem)
 	// mime -> validator: + Kinds, the main file first
-	ranked := make(chan *RawItem)
+	ranked := make(chan *flow.RawItem)
 	// validator -> transcode switch: + Item (the GUID); not media and moved-and-done
 	// items do not get here
-	validated := make(chan *RawItem)
+	validated := make(chan *flow.RawItem)
 	// transcode switch -> its transcoder: the same, split by the kind of the asset
-	toPhoto, toVideo, toLivePhoto := make(chan *RawItem), make(chan *RawItem), make(chan *RawItem)
+	toPhoto, toVideo, toLivePhoto := make(chan *flow.RawItem), make(chan *flow.RawItem), make(chan *flow.RawItem)
 	// transcoders -> plugins: the item with its outputs (stubs: passed on as is);
 	// all transcoders write here
-	transcoded := make(chan *RawItem)
+	transcoded := make(chan *flow.RawItem)
 	// closer -> nobody yet: finished items, drained in Start (later: events to the
 	// client); buffered so the closer does not wait for the drain
 	items := make(chan *dto.ItemDto, 1000)
@@ -129,19 +137,19 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	importChain := chain.NewChainProcessor(errch)
 	importChain.AddStep(NewFsWalker(ctx.Config().Path, files, logger))
 
-	importChain.AddStep(NewSourceSwitch(files, toGeneric, toPhotos))
-	importChain.AddStep(NewGenericGrouper(toGeneric, groups))
-	importChain.AddStep(NewPhotosGrouper(toPhotos, groups))
+	importChain.AddStep(groups.NewSourceSwitch(files, toGeneric, toApple))
+	importChain.AddStep(generic.NewGrouper(toGeneric, grouped))
+	importChain.AddStep(apple.NewGrouper(toApple, grouped))
 
-	importChain.AddStep(NewFilesGate(groupBranches, groups, stored, logger))
+	importChain.AddStep(NewFilesGate(groups.Branches, grouped, stored, logger))
 	importChain.AddStep(NewExifExtractor(exifWorkers, stored, exifed, errch, logger))
 	importChain.AddStep(NewMimeRanker(exifed, ranked))
 	importChain.AddStep(NewValidator(ranked, validated, logger))
 
-	importChain.AddStep(NewTranscodeSwitch(validated, toPhoto, toVideo, toLivePhoto))
-	importChain.AddStep(NewPhotoTranscoder(toPhoto, transcoded))
-	importChain.AddStep(NewVideoTranscoder(toVideo, transcoded))
-	importChain.AddStep(NewLivePhotoTranscoder(toLivePhoto, transcoded))
+	importChain.AddStep(transcode.NewSwitch(validated, toPhoto, toVideo, toLivePhoto))
+	importChain.AddStep(photo.NewTranscoder(toPhoto, transcoded))
+	importChain.AddStep(video.NewTranscoder(toVideo, transcoded))
+	importChain.AddStep(livephoto.NewTranscoder(toLivePhoto, transcoded))
 
 	importChain.AddStep(NewExifPluginProcessor(transcoded, items, errch, logger))
 

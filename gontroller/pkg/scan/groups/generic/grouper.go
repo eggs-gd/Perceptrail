@@ -1,50 +1,48 @@
-package scan
+// Package generic groups plain folders: sidecars have the main file's name and sit
+// next to it, and the walk lists a directory in name order — so a group's files
+// come one after another. One group is open; a file that does not belong to it
+// closes it (the group goes out) and opens the next. The end-of-walk marker goes
+// out with the last group.
+package generic
 
 import (
 	"path/filepath"
 	"strings"
 
 	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/scan/flow"
 
 	"github.com/eggs-gd/perceplib/chain"
 )
 
-// genericGrouper: sidecars have the main file's name and sit next to it, and the
-// walk lists a directory in name order — so a group's files come one after
-// another. One group is open; a file that does not belong to it closes it (the
-// group goes out) and opens the next. The marker goes out with the last group.
-type genericGrouper struct {
+type Grouper struct {
 	open []*dto.FileDto
 }
 
-func NewGenericGrouper(chin <-chan fileEvent, chout chan<- FileGroup) chain.Processor {
-	return chain.NewDecorator(chin, chout, newGenericGrouper())
+func NewGrouper(chin <-chan flow.FileEvent, chout chan<- flow.FileGroup) chain.Processor {
+	return chain.NewDecorator(chin, chout, &Grouper{})
 }
 
-func newGenericGrouper() *genericGrouper {
-	return &genericGrouper{}
-}
-
-func (g *genericGrouper) Decorate(ev fileEvent) (FileGroup, error) {
-	if ev.done != nil {
+func (g *Grouper) Decorate(ev flow.FileEvent) (flow.FileGroup, error) {
+	if ev.Done != nil {
 		last := g.open
 		g.open = nil
-		return FileGroup{Files: last, Done: ev.done}, nil
+		return flow.FileGroup{Files: last, Done: ev.Done}, nil
 	}
-	if shouldSkipPath(ev.entry.Path) {
-		return FileGroup{}, chain.ErrSkippedItem
+	if shouldSkipPath(ev.Entry.Path) {
+		return flow.FileGroup{}, chain.ErrSkippedItem
 	}
-	file := &dto.FileDto{ItemEntry: ev.entry}
+	file := &dto.FileDto{ItemEntry: ev.Entry}
 	if len(g.open) == 0 || sameGroup(g.open, file) {
 		g.open = append(g.open, file)
-		return FileGroup{}, chain.ErrSkippedItem // not complete yet
+		return flow.FileGroup{}, chain.ErrSkippedItem // not complete yet
 	}
 	closed := g.open
 	g.open = []*dto.FileDto{file}
-	return FileGroup{Files: closed}, nil
+	return flow.FileGroup{Files: closed}, nil
 }
 
-func (g *genericGrouper) Stop() {}
+func (g *Grouper) Stop() {}
 
 // sameGroup: the file sits in the group's directory and its name without the last
 // extension is the name or the stem of a group member: "a.jpg", "a.xmp",

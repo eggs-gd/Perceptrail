@@ -6,6 +6,10 @@ import (
 	"path/filepath"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/scan/flow"
+	"perceptrail/gontroller/pkg/scan/groups"
+	"perceptrail/gontroller/pkg/scan/groups/apple"
+	"perceptrail/gontroller/pkg/scan/groups/generic"
 	"testing"
 
 	"github.com/eggs-gd/perceplib/api"
@@ -49,11 +53,11 @@ func scan(t *testing.T, root string) []string {
 	t.Helper()
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
 	m := newTestMonitor(t, root)
-	groupers := map[int]chain.Decorator[fileEvent, FileGroup]{
-		branchGeneric: newGenericGrouper(),
-		branchPhotos:  photosGrouper{},
+	groupers := map[int]chain.Decorator[flow.FileEvent, flow.FileGroup]{
+		groups.BranchGeneric: &generic.Grouper{},
+		groups.BranchApple:   apple.Grouper{},
 	}
-	gate := newFilesGate(groupBranches, logger)
+	gate := newFilesGate(groups.Branches, logger)
 	exif := &exifExtractor{logger: logger, extract: fakeExif}
 	valid := newValidator(logger)
 
@@ -67,12 +71,12 @@ func scan(t *testing.T, root string) []string {
 		}
 		return true
 	}
-	toGroupers := func(ev fileEvent) {
-		branches, err := sourceSwitch{}.Switch(ev)
+	toGroupers := func(ev flow.FileEvent) {
+		branches, err := groups.SourceSwitch{}.Switch(ev)
 		if !ok(err) {
 			return
 		}
-		for b := range groupBranches { // marker: every branch, in branch order
+		for b := range groups.Branches { // marker: every branch, in branch order
 			in, has := branches[b]
 			if !has {
 				continue
@@ -105,7 +109,7 @@ func scan(t *testing.T, root string) []string {
 	}
 
 	ch := make(chan inType)
-	res := make(chan walkResult)
+	res := make(chan flow.WalkResult)
 	go func() {
 		r := m.walk(ch)
 		close(ch)

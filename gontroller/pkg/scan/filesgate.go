@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/scan/flow"
 
 	"github.com/eggs-gd/perceplib/chain"
 
@@ -26,7 +27,7 @@ type filesGate struct {
 }
 
 // NewFilesGate: branches is the number of groupers that send an end-of-walk marker
-func NewFilesGate(branches int, chin <-chan FileGroup, chout chan<- FileGroup, logger *l.Logger) chain.Processor {
+func NewFilesGate(branches int, chin <-chan flow.FileGroup, chout chan<- flow.FileGroup, logger *l.Logger) chain.Processor {
 	return chain.NewDecorator(chin, chout, newFilesGate(branches, logger))
 }
 
@@ -34,7 +35,7 @@ func newFilesGate(branches int, logger *l.Logger) *filesGate {
 	return &filesGate{logger: logger, branches: branches}
 }
 
-func (g *filesGate) Decorate(in FileGroup) (FileGroup, error) {
+func (g *filesGate) Decorate(in flow.FileGroup) (flow.FileGroup, error) {
 	// A grouper's last group comes with its end-of-walk marker: the group first
 	out, err := g.pass(in.Files)
 	if in.Done != nil {
@@ -48,18 +49,18 @@ func (g *filesGate) Decorate(in FileGroup) (FileGroup, error) {
 }
 
 // pass stores the group and lets it through if it needs work
-func (g *filesGate) pass(found []*dto.FileDto) (FileGroup, error) {
+func (g *filesGate) pass(found []*dto.FileDto) (flow.FileGroup, error) {
 	if len(found) == 0 {
-		return FileGroup{}, chain.ErrSkippedItem
+		return flow.FileGroup{}, chain.ErrSkippedItem
 	}
 	files, changed, err := g.store(found)
 	if err != nil {
-		return FileGroup{}, err
+		return flow.FileGroup{}, err
 	}
 	if changed || g.needsProcessing(files) {
-		return FileGroup{Files: files}, nil
+		return flow.FileGroup{Files: files}, nil
 	}
-	return FileGroup{}, chain.ErrSkippedItem
+	return flow.FileGroup{}, chain.ErrSkippedItem
 }
 
 func (g *filesGate) Stop() {}
@@ -122,24 +123,24 @@ func (g *filesGate) needsProcessing(files []*dto.FileDto) bool {
 }
 
 // finalizeWalk derives deletions: files not stamped by this walk are gone.
-func (g *filesGate) finalizeWalk(result walkResult) {
-	if !result.complete {
+func (g *filesGate) finalizeWalk(result flow.WalkResult) {
+	if !result.Complete {
 		g.logger.Warn("Walk incomplete: deletions are not checked")
 		return
 	}
-	if result.files == 0 {
+	if result.Files == 0 {
 		// An empty root (e.g. an unmounted drive's mount point) must not delete the library
-		g.logger.Warn("Walk found no files: deletions are not checked", l.String("path", result.root))
+		g.logger.Warn("Walk found no files: deletions are not checked", l.String("path", result.Root))
 		return
 	}
-	g.logger.Info("Walk complete", l.Int("files", result.files), l.Int("unreadable", len(result.unreadable)))
+	g.logger.Info("Walk complete", l.Int("files", result.Files), l.Int("unreadable", len(result.Unreadable)))
 
-	stale, err := filesProxy.GetFilesCheckedBefore(result.started)
+	stale, err := filesProxy.GetFilesCheckedBefore(result.Started)
 	if err != nil {
 		g.logger.Error("Deletions: can't read files", l.Error(err))
 		return
 	}
-	gone := goneFiles(stale, result.root, result.unreadable)
+	gone := goneFiles(stale, result.Root, result.Unreadable)
 	deletedItems, dirtyItems := 0, 0
 
 	for _, f := range gone {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"perceptrail/gontroller/pkg/scan/flow"
 	"testing"
 
 	l "github.com/eggs-gd/perceplib/logger"
@@ -22,9 +23,9 @@ func newTestMonitor(t *testing.T, root string) *fsMonitor {
 }
 
 // runWalk collects what walk sends and returns it with the result
-func runWalk(m *fsMonitor) (walkResult, []string) {
+func runWalk(m *fsMonitor) (flow.WalkResult, []string) {
 	ch := make(chan inType)
-	res := make(chan walkResult)
+	res := make(chan flow.WalkResult)
 	go func() {
 		r := m.walk(ch)
 		close(ch)
@@ -54,7 +55,7 @@ func TestWalkComplete(t *testing.T) {
 	writeFile(t, filepath.Join(root, "sub", "b.jpg"))
 
 	result, paths := runWalk(newTestMonitor(t, root))
-	if !result.complete || result.files != 2 || len(paths) != 2 || len(result.unreadable) != 0 {
+	if !result.Complete || result.Files != 2 || len(paths) != 2 || len(result.Unreadable) != 0 {
 		t.Errorf("got %+v, paths %v", result, paths)
 	}
 }
@@ -76,17 +77,17 @@ func TestWalkSkipsUnreadableDir(t *testing.T) {
 	t.Cleanup(func() { os.Chmod(locked, 0o755) })
 
 	result, paths := runWalk(newTestMonitor(t, root))
-	if !result.complete || result.files != 2 {
+	if !result.Complete || result.Files != 2 {
 		t.Errorf("got %+v, paths %v", result, paths)
 	}
-	if len(result.unreadable) != 1 || result.unreadable[0] != locked {
-		t.Errorf("unreadable = %v, want [%s]", result.unreadable, locked)
+	if len(result.Unreadable) != 1 || result.Unreadable[0] != locked {
+		t.Errorf("unreadable = %v, want [%s]", result.Unreadable, locked)
 	}
 }
 
 func TestWalkMissingRoot(t *testing.T) {
 	result, paths := runWalk(newTestMonitor(t, filepath.Join(t.TempDir(), "unmounted")))
-	if result.complete || len(paths) != 0 {
+	if result.Complete || len(paths) != 0 {
 		t.Errorf("got %+v, paths %v", result, paths)
 	}
 }
@@ -98,12 +99,12 @@ func TestWalkCancelled(t *testing.T) {
 
 	m := newTestMonitor(t, root)
 	ch := make(chan inType)
-	res := make(chan walkResult)
+	res := make(chan flow.WalkResult)
 	go func() { res <- m.walk(ch) }()
 	<-ch // take one file, then cancel
 	m.cancel()
 
-	if result := <-res; result.complete {
+	if result := <-res; result.Complete {
 		t.Errorf("cancelled walk reported complete: %+v", result)
 	}
 }

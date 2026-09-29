@@ -5,6 +5,7 @@ import (
 
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/scan/flow"
 
 	"github.com/eggs-gd/perceplib/chain"
 
@@ -22,7 +23,7 @@ type validator struct {
 // No transcoder yet: there is nothing to regenerate
 func noOutputs(string) bool { return true }
 
-func NewValidator(chin <-chan *RawItem, chout chan<- *RawItem, logger *l.Logger) chain.Processor {
+func NewValidator(chin <-chan *flow.RawItem, chout chan<- *flow.RawItem, logger *l.Logger) chain.Processor {
 	return chain.NewDecorator(chin, chout, newValidator(logger))
 }
 
@@ -31,10 +32,10 @@ func newValidator(logger *l.Logger) *validator {
 }
 
 // Decorate sets the item of the group (ranked by mime: the main file first)
-func (v *validator) Decorate(g *RawItem) (*RawItem, error) {
+func (v *validator) Decorate(g *flow.RawItem) (*flow.RawItem, error) {
 	main := g.Files[0]
 
-	if !g.isMedia() { // nothing to show: remembered, so the gate skips it from now on
+	if !g.IsMedia() { // nothing to show: remembered, so the gate skips it from now on
 		for _, f := range g.Files {
 			f.SetIgnored()
 		}

@@ -1,4 +1,7 @@
-package scan
+// Package flow holds what flows between the steps of the import chain
+// (_sb/puml/Import chain.puml): the chain and its sub-packages (groups/…,
+// transcode/…) share these types.
+package flow
 
 import (
 	"time"
@@ -7,6 +10,48 @@ import (
 	"perceptrail/gontroller/pkg/plugins/exif_core"
 
 	"github.com/eggs-gd/perceplib/api"
+)
+
+// FileEvent: fswalker -> source switch -> groupers. One found file (Entry: path
+// and stat), or the end-of-walk marker (Done).
+type FileEvent struct {
+	Entry dto.ItemEntry
+	Done  *WalkResult
+}
+
+// FileGroup is one whole asset: all its files (a main file and its sidecars,
+// derivatives), or the end-of-walk marker. Groupers build it (files not stored
+// yet: only the stat is set), the files gate stores it (rows of the files table,
+// with GUIDs), exif turns it into a RawItem. Done is set on a grouper's marker,
+// which may come together with its last group.
+type FileGroup struct {
+	Files []*dto.FileDto
+	Done  *WalkResult
+}
+
+// WalkResult describes a finished walk; it rides in the end-of-walk marker.
+// Deletions may be derived from it only if the walk was complete: a cancelled walk
+// or an unreadable root says nothing about which files are gone.
+type WalkResult struct {
+	Root    string
+	Started time.Time
+	// The walk reached the end
+	Complete bool
+	// Files seen (before grouping and filtering)
+	Files int
+	// Directories that could not be read: their files are not "deleted"
+	Unreadable []string
+}
+
+// MediaKind is the role a file can play in a group (set by the mime step)
+type MediaKind string
+
+const (
+	KindImage   MediaKind = "image"
+	KindRaw     MediaKind = "raw"
+	KindVideo   MediaKind = "video"
+	KindSidecar MediaKind = "sidecar"
+	KindOther   MediaKind = "other"
 )
 
 // RawItem is an item on its way from exif to the closer: its group of files.
@@ -20,8 +65,8 @@ type RawItem struct {
 	Kinds []MediaKind
 }
 
-// isMedia: the main file is something to show
-func (r *RawItem) isMedia() bool {
+// IsMedia: the main file is something to show
+func (r *RawItem) IsMedia() bool {
 	switch r.Kinds[0] {
 	case KindImage, KindRaw, KindVideo:
 		return true
@@ -29,7 +74,8 @@ func (r *RawItem) isMedia() bool {
 	return false
 }
 
-func (r *RawItem) hasKind(k MediaKind) bool {
+// HasKind: some file of the group is of kind k
+func (r *RawItem) HasKind(k MediaKind) bool {
 	for _, kind := range r.Kinds {
 		if kind == k {
 			return true
@@ -98,35 +144,3 @@ var (
 	_ api.RawItemR         = (*RawItem)(nil)
 	_ exif_core.RawItemRW  = (*RawItem)(nil)
 )
-
-// What flows between the steps of the import chain (see _sb/puml/Import chain.puml)
-
-// fileEvent: fswalker -> groups switch. One found file, or the end-of-walk marker.
-type fileEvent struct {
-	entry dto.ItemEntry
-	done  *walkResult
-}
-
-// FileGroup is one whole asset: all its files (a main file and its sidecars,
-// derivatives), or the end-of-walk marker. Groupers build it (files not stored
-// yet: only the stat is set), the files gate stores it (rows of the files table,
-// with GUIDs), exif turns it into a RawItem. Done is set on a grouper's marker,
-// which may come together with its last group.
-type FileGroup struct {
-	Files []*dto.FileDto
-	Done  *walkResult
-}
-
-// walkResult describes a finished walk. Deletions may be derived from it only if
-// the walk was complete: a cancelled walk or an unreadable root says nothing about
-// which files are gone.
-type walkResult struct {
-	root    string
-	started time.Time
-	// The walk reached the end
-	complete bool
-	// Files seen (before grouping and filtering)
-	files int
-	// Directories that could not be read: their files are not "deleted"
-	unreadable []string
-}

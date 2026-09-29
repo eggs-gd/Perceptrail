@@ -2,6 +2,7 @@ package scan
 
 import (
 	"fmt"
+	"perceptrail/gontroller/pkg/scan/flow"
 	"slices"
 	"sync"
 	"time"
@@ -41,7 +42,7 @@ type exifExtractor struct {
 
 // NewExifExtractor starts count exiftool processes and count steps on the same
 // channels: groups are independent, so they are read in parallel.
-func NewExifExtractor(count int, chin <-chan FileGroup, chout chan<- *RawItem, errch chan error, logger *l.Logger) chain.Processor {
+func NewExifExtractor(count int, chin <-chan flow.FileGroup, chout chan<- *flow.RawItem, errch chan error, logger *l.Logger) chain.Processor {
 	e := &exifExtractor{logger: logger, freeCh: make(chan *exiftool.Server, count)}
 	for i := 0; i < count; i++ {
 		et, err := exiftool.NewServer(commonArgs...)
@@ -63,9 +64,9 @@ func NewExifExtractor(count int, chin <-chan FileGroup, chout chan<- *RawItem, e
 
 // Decorate starts the item of the group: its files and their metadata (a nil
 // Exif: exiftool returned nothing). The item itself comes from the validator.
-func (e *exifExtractor) Decorate(g FileGroup) (*RawItem, error) {
+func (e *exifExtractor) Decorate(g flow.FileGroup) (*flow.RawItem, error) {
 	files := g.Files
-	out := &RawItem{Files: files, Exif: make([]api.RawExif, len(files))}
+	out := &flow.RawItem{Files: files, Exif: make([]api.RawExif, len(files))}
 	found := false
 	for i, f := range files {
 		res, err := e.extract(f.Path)
