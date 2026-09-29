@@ -115,6 +115,10 @@
         const snapshot = latestWindow;
         const meta = snapshot?.meta;
         const relayout = meta !== undefined && meta.rev !== lastRev;
+        // Tiles mounted by a relayout appear in place at once: fading them in from 0
+        // left the screen nearly white when widening (the shorter layout brings in many
+        // photos that were not rendered). New photos from the stream still fade in.
+        fadeMs = relayout ? 0 : FADE_MS;
 
         // FLIP "first": where every tile is right now, mid-animation included
         const first = measureTiles();
@@ -157,6 +161,8 @@
 
     const reducedMotion = new MediaQuery('prefers-reduced-motion: reduce');
     let lastRev = -1;
+    const FADE_MS = 300;
+    let fadeMs = $state(FADE_MS);
 
     interface Box { x: number, y: number, w: number, h: number }
 
@@ -175,22 +181,66 @@
         return boxes;
     }
 
+    /** Where the relayout wave starts: a row, and a point in it (x) */
+    interface WaveOrigin { row: number, x: number }
+
     /**
-     * Where the relayout wave starts: the anchor settles first and the others follow
-     * outwards (by order: one above, one below…). Page top: from the first visible
-     * photo down; page bottom: from the last one up; otherwise from the pinned photo.
+     * Pinned photo mid-page: its row, from the photo outwards. Page top: the first
+     * visible row, page bottom: the last visible row — both from the left edge.
      */
-    function waveOrigin(): number | undefined {
+    function waveOrigin(): WaveOrigin | undefined {
         const a = anchorState.pending;
         if (a?.guid) {
             const pinned = images.find((i) => i.guid === a.guid);
-            if (pinned) return pinned.order;
+            if (pinned) return {row: pinned.row, x: pinned.x + pinned.w / 2};
         }
         const top = window.scrollY - containerTop;
         const visible = images.filter((i) => i.y + i.h > top && i.y < top + window.innerHeight);
         if (visible.length === 0) return undefined;
-        const orders = visible.map((i) => i.order);
-        return a?.mode === 'bottom' ? Math.max(...orders) : Math.min(...orders);
+        const rows = visible.map((i) => i.row);
+        return {row: a?.mode === 'bottom' ? Math.max(...rows) : Math.min(...rows), x: 0};
+    }
+
+    /**
+     * The wave goes by rows: rows at the same distance above and below the origin start
+     * together, and within a row photos go left to right (in the origin row: from the
+     * origin outwards). Reverse photo order — right to left, bottom to top — looked
+     * unnatural going up. Returns delays for the photos visible before or after the
+     * relayout, the whole wave fitting into STAGGER_MAX_MS.
+     */
+    function waveDelays(origin: WaveOrigin, first: Map<string, Box>, delta: number): Map<string, number> {
+        const top = window.scrollY - containerTop;
+        const bottom = top + window.innerHeight;
+        const involved = images.filter((i) => {
+            const from = first.get(i.guid);
+            const seenNow = i.y + i.h > top && i.y < bottom;
+            const seenBefore = from !== undefined && from.y + delta + from.h > top && from.y + delta < bottom;
+            return seenNow || seenBefore;
+        });
+
+        const rows = new Map<number, LayoutItem[]>();
+        for (const i of involved) (rows.get(i.row) ?? rows.set(i.row, []).get(i.row)!).push(i);
+
+        // Position in the wave: whole rows by distance + the photo's place in its row
+        const position = new Map<string, number>();
+        let last = 0;
+        for (const [row, items] of rows) {
+            const distance = Math.abs(row - origin.row);
+            const ordered = distance === 0
+                ? [...items].sort((a, b) => Math.abs(a.x + a.w / 2 - origin.x) - Math.abs(b.x + b.w / 2 - origin.x))
+                : [...items].sort((a, b) => a.x - b.x);
+            ordered.forEach((itm, k) => {
+                const p = distance + k / ordered.length;
+                position.set(itm.guid, p);
+                last = Math.max(last, p);
+            });
+        }
+
+        const avgRow = involved.length / Math.max(1, rows.size);
+        const rowMs = Math.min(STAGGER_STEP_MS * avgRow, STAGGER_MAX_MS / Math.max(1, last));
+        const delays = new Map<string, number>();
+        for (const [guid, p] of position) delays.set(guid, Math.min(p * rowMs, STAGGER_MAX_MS));
+        return delays;
     }
 
     /**
@@ -199,25 +249,10 @@
      * screen. A tile waiting for its turn in the wave stays exactly where it was
      * (fill: backwards). New tiles have no start and just fade in.
      */
-    function animateTiles(first: Map<string, Box>, delta: number, origin: number | undefined) {
+    function animateTiles(first: Map<string, Box>, delta: number, origin: WaveOrigin | undefined) {
         if (!containerEl || first.size === 0) return;
         const byGuid = new Map(images.map((i) => [i.guid, i]));
-
-        // Step so that the farthest photo visible before OR after the relayout starts at
-        // STAGGER_MAX_MS (photos leaving the screen are part of the wave too)
-        let step = 0;
-        if (origin !== undefined) {
-            const top = window.scrollY - containerTop;
-            const bottom = top + window.innerHeight;
-            let farthest = 1;
-            for (const i of images) {
-                const from = first.get(i.guid);
-                const seenNow = i.y + i.h > top && i.y < bottom;
-                const seenBefore = from !== undefined && from.y + delta + from.h > top && from.y + delta < bottom;
-                if (seenNow || seenBefore) farthest = Math.max(farthest, Math.abs(i.order - origin));
-            }
-            step = Math.min(STAGGER_STEP_MS, STAGGER_MAX_MS / farthest);
-        }
+        const delays = origin ? waveDelays(origin, first, delta) : undefined;
 
         for (const el of containerEl.querySelectorAll<HTMLElement>('[data-guid]')) {
             const from = first.get(el.dataset.guid!);
@@ -228,7 +263,7 @@
                 && Math.abs(from.w - to.w) < 0.5 && Math.abs(from.h - to.h) < 0.5) continue;
 
             moves.get(el)?.forEach((a) => a.cancel());
-            const delay = origin === undefined ? 0 : Math.min(Math.abs(to.order - origin) * step, STAGGER_MAX_MS);
+            const delay = delays?.get(to.guid) ?? 0;
             moves.set(el, [
                 el.animate(
                     [{transform: `translate(${from.x}px, ${fromY}px)`}, {transform: `translate(${to.x}px, ${to.y}px)`}],
@@ -259,7 +294,7 @@
             <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
             <div class="image"
                  data-guid={itm.guid}
-                 in:fade={{ duration: 300 }}
+                 in:fade={{ duration: fadeMs }}
                  style={tileStyle(itm)}
                  onclick={() => {
                      openItem(itm);

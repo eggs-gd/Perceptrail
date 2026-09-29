@@ -147,6 +147,13 @@ messages are gone. Details: [svebapp README](../../svebapp/README.md#visible-win
   moved 0 px; with a fixed 60 ms step and a 500 ms cap only ~9 tiles formed the wave
   and the rest started together — the step is now adaptive (26 visible tiles →
   26 distinct delays, 20 ms apart).
+- **Upward wave looked unnatural, widening flashed white (2026-09-29).** A wave by
+  photo order goes right-to-left, bottom-to-top when it runs upwards (page bottom, the
+  upper half around a centre anchor). Now the wave goes by rows (same distance above
+  and below together), left to right within a row. Widening makes the layout shorter,
+  so many photos that were not rendered come into view: they faded in from 0 while the
+  old tiles left at once → a nearly white screen for a moment. Tiles mounted by a
+  relayout now appear without the fade.
 - **Considered, not done:** window/size subscriptions as `LiveQuery` in `$derived`.
   A new query per window step starts empty → tiles would disappear for a moment on
   every step unless the previous value is kept; and the per-frame application plus

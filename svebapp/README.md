@@ -77,12 +77,15 @@ Gallery.svelte     renders the window: absolutely positioned tiles, keyed by gui
   current box is measured (mid-animation included); after the DOM update and the
   scroll correction (Δ) each tile animates from its current screen position
   (shifted by Δ, so nothing jumps) to its new place. No CSS transitions on tiles.
-- **Wave from the anchor:** on a relayout the anchor starts first, the others one
-  after another by order distance (above and below alternate — a "spiral"); page top:
-  from the first visible photo down, page bottom: from the last one up. A tile waiting
-  for its turn stays exactly where it was (`fill: backwards`). The whole wave over the
-  photos visible before or after fits into `STAGGER_MAX_MS` (step ≤ `STAGGER_STEP_MS`).
-  Off with `prefers-reduced-motion`.
+- **Wave from the anchor, by rows:** rows start by their distance from the anchor's
+  row (rows at the same distance above and below start together); within a row photos
+  go left to right, in the anchor's row from the anchor outwards. Page top: from the
+  first visible row down; page bottom: from the last visible row up. A tile waiting for
+  its turn stays exactly where it was (`fill: backwards`). The wave over the photos
+  visible before or after fits into `STAGGER_MAX_MS`. Off with `prefers-reduced-motion`.
+- Tiles mounted by a relayout appear in place at once (no fade): widening brings in
+  many photos that were not rendered, and fading them from 0 flashed the screen white.
+  Photos arriving with the stream still fade in.
   The worker writes the relayout and `meta.anchor` (the anchor's new `y`, `h`) in one
   transaction. The window query sees a new `meta.rev` with that anchor, takes the
   window around the new position and returns `scrollTo`; the gallery applies height
