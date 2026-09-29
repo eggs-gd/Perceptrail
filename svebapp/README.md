@@ -19,50 +19,63 @@ Variables prefixed with `SVEBAPP_` are read by adapter-node.
 
 ## Architecture
 
+The original design of [Workers.puml](../_sb/puml/Workers.puml): workers write to
+IndexedDB, the page subscribes with `liveQuery` — no worker → UI messages.
+
 ```
 gontroller /items (NDJSON, one item at a time)
    │
    ▼
 wsync (worker) ── put ──► itemsDb (Dexie "items")
    │  Dexie hooks: create / update / delete, sync-start / sync-done
-   ▼  MessageChannel
+   ▼  MessageChannel (worker → worker)
 wlayout (worker)   all photos in memory, synchronous layout → x, y, w, h
-   │  upsert (each new photo) / replace (full rebuild, e.g. resize)
-   ▼  MessageChannel
-stores.ts          queue → applied once per frame (requestAnimationFrame)
-   │  layoutItems (Map) → items (sorted)
+   │  writes layoutDb: a full relayout = ONE transaction (items + meta),
+   │  a streamed photo = one small transaction
    ▼
-Gallery.svelte     flat list of absolutely positioned tiles, keyed by guid
+layoutDb (Dexie "layout": items by y/order, meta {rev, height, anchor})
+   │  liveQuery over the VISIBLE WINDOW only (layoutWindow.ts)
+   ▼
+Gallery.svelte     renders the window: absolutely positioned tiles, keyed by guid
 ```
 
-This deviates from the original design in [Workers.puml](../_sb/puml/Workers.puml)
-(LayoutWorker writes to `LayoutDB`, the View subscribes to it) — see "liveQuery"
-below.
-
-- `lib/workers/proxy.ts` — creates the workers and channels, `loadFromServer()`,
-  `updateLayout(screenWidth, rowHeight)`.
-- `lib/workers/tasks/wsync.ts` — reads the NDJSON stream and writes to `itemsDb`.
+- `lib/workers/proxy.ts` — creates the workers, `loadFromServer()`,
+  `updateLayout(screenWidth, rowHeight, anchor?)`.
+- `lib/workers/tasks/wsync.ts` — clears `itemsDb`, reads the NDJSON stream, writes items.
 - `lib/workers/tasks/wlayout.ts` — row layout (greedy: fits → into the row;
   overflow < ½ of the photo → close the row without it; otherwise add it and shrink
-  the row). The last, incomplete row stays at the target height.
-- `lib/stores` — Svelte stores, types (`Item`, `LayoutItem`), Dexie databases.
-- `lib/gallery` — `Gallery.svelte`, components `ItemView/Img/Video`.
-- `routes/+layout.svelte` — the gallery lives here so it is not remounted on
-  `/` ↔ `/[index]`; `routes/[index=itemIndex]` — the viewer with zoom.
+  the row; the last row stays at the target height). All layoutDb writes go through
+  one ordered queue; at most one full relayout waits in it.
+- `lib/gallery/layoutWindow.ts` — `watchWindow()`: one `liveQuery` that reads meta
+  and the window's items in one read transaction (a consistent snapshot);
+  `findAnchor()`.
+- `lib/gallery/Gallery.svelte` — tracks scroll, subscribes to the window, applies at
+  most one snapshot per frame, captures the anchor on resize, the "wave" animation.
+- `routes/[index=itemIndex]` — the viewer reads its item from `layoutDb` by `order`.
 - `lib/workers/layout/` — **unused**: the original optimal masonry layout with
-  Dijkstra (a graph of row breaks). Kept for a possible relayout of an already loaded
-  gallery; `dijkstra.js` is third-party MIT code under `@ts-nocheck`.
-- `lib/stores/internal/layoutDb.ts` — unused right now; the base for the liveQuery
-  design.
+  Dijkstra. `dijkstra.js` is third-party MIT code under `@ts-nocheck`.
 
-### Message protocol (`MessageFromSync`)
+### Visible window and resize anchoring
 
-| From → to | action | Payload |
-|---|---|---|
-| wsync → wlayout | `sync-start`, `sync-done` | — |
-| wsync → wlayout | `create`, `update`, `delete` | `item` |
-| wlayout → view | `upsert` | `items` — new/changed positions |
-| wlayout → view | `replace` | `items` — the whole layout (replaces the view) |
+- Window = `y` range `[scroll − 1 viewport, scroll + 2 viewports]` (layout
+  coordinates), moving in steps of half a viewport — scrolling inside a step does not
+  re-create the subscription. Writes outside the window do not re-run it.
+- On a width change the gallery takes the first visible item as the **anchor**
+  (`guid`, offset from the viewport top, height) and sends it with `updateLayout`.
+  The worker writes the relayout and `meta.anchor` (the anchor's new `y`, `h`) in one
+  transaction. The window query sees a new `meta.rev` with that anchor, takes the
+  window around the new position and returns `scrollTo`; the gallery applies height
+  and items first, then scrolls (`tick()` — the browser clamps scrolling to the
+  current document height).
+- Totals (height, count) live in `meta` — never subscribe to the whole table
+  (it re-runs on every streamed photo).
+
+### Worker messages (`MessageFromSync`, wsync → wlayout)
+
+| action | Payload |
+|---|---|
+| `sync-start`, `sync-done` | — |
+| `create`, `update`, `delete` | `item` |
 
 ## Rules learned the hard way
 
@@ -71,21 +84,17 @@ Details and reasons — [findings](../_sb/docs/findings.md#frontend-gallery-layo
 - Compute the layout **synchronously, in memory** in the worker. No async tasks with
   cancellation and no per-task hook subscriptions — that caused races and "vanished"
   photos.
-- A resize is **one `replace`**, without clearing the view first.
-- The UI does not process messages one by one: queue + once per frame. Otherwise the
-  main thread is busy and clicks and resize do not work.
+- A relayout is **one transaction** (items + meta), without clearing the view first.
+- The page renders the visible window only and applies at most one snapshot per
+  frame. Otherwise the main thread is busy and clicks and resize do not work.
+- No `.clear()` on module import (several contexts import the Dexie modules).
 - Tiles are absolute, keyed by `guid`, moved with CSS `transition` on `transform`,
   `width`, `height`. Not `animate:flip` (measures every tile) and not one `{#each}`
   per row (a tile cannot move between rows).
 - While dragging the window edge a new layout arrives every ~33 ms; any animation
   delays must stay short (≤ 150 ms now).
-- Test animations in a **visible** tab only: `requestAnimationFrame` does not fire in
-  a hidden one. Streaming issues need a slow backend (a mock with a delay).
+- Test in a **visible, painting** tab: in a hidden one `requestAnimationFrame`,
+  `ResizeObserver` and scroll events stop (the gallery falls back to `setTimeout` for
+  snapshots, but a resize or scroll is never noticed). Streaming issues need a slow
+  backend (a mock with a delay).
 - `GUTTER` in `wlayout.ts` must match `gutter` in `Gallery.svelte`.
-
-## Next: liveQuery
-
-Back to the original design: workers write to IndexedDB directly, the UI holds
-`liveQuery` subscriptions to the **visible window** (`where('order').between(from, to)`)
-— no worker ↔ UI messaging, and virtualisation for free. First, an experiment: do
-events cross threads on Dexie 4. Details and caveats — in findings.

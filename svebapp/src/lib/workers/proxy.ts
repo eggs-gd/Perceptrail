@@ -4,7 +4,6 @@ import UpdateLayoutWorker from './tasks/wlayout?worker';
 import {browser} from "$app/environment";
 import {PUBLIC_API_PATH} from "$env/static/public";
 import {getLogger} from "$lib/logger";
-import {updateLayoutPort} from "$lib/stores";
 
 const logger = getLogger();
 
@@ -14,15 +13,13 @@ let workers: {
 }
 
 let workersChannel: MessageChannel;
-let viewChannel: MessageChannel;
 let syncStarted = false;
 
 if (browser) {
     logger.info(`svebapp ${__APP_VERSION__}`);
 
+    // wsync → wlayout; wlayout writes the layout to layoutDb, the page reads it with liveQuery
     workersChannel = new MessageChannel();
-    viewChannel = new MessageChannel();
-    updateLayoutPort(viewChannel.port2);
 
     workers = {
         workerSync: new UpdateDbWorker(),
@@ -36,11 +33,11 @@ if (browser) {
 
     const msg2: InitMessage = {
         task: "init",
-        payload: [workersChannel.port2, viewChannel.port1]
+        payload: [workersChannel.port2]
     }
 
     workers.workerSync.postMessage(msg1, [workersChannel.port1]);
-    workers.workerLayout.postMessage(msg2, [workersChannel.port2, viewChannel.port1]);
+    workers.workerLayout.postMessage(msg2, [workersChannel.port2]);
 
     workers.workerSync.onmessage = handleWorkerMessage;
     workers.workerLayout.onmessage = handleWorkerMessage;
@@ -62,13 +59,11 @@ export const loadFromServer = () => {
     workers?.workerSync.postMessage(msg);
 }
 
-export const updateLayout = (screenWidth: number, rowHeight: number) => {
+/** anchor: guid of the first visible item, kept in view across the relayout */
+export const updateLayout = (screenWidth: number, rowHeight: number, anchor?: string) => {
     const msg: UpdateLayoutMessage = {
         task: 'update',
-        payload: {
-            screenWidth: screenWidth,
-            rowHeight: rowHeight,
-        },
+        payload: {screenWidth, rowHeight, anchor},
     }
     workers?.workerLayout.postMessage(msg);
 }

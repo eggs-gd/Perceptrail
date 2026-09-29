@@ -17,3 +17,16 @@ export interface LayoutItem extends Item {
     w: number;
     h: number;
 }
+
+/** Single record next to the layout: what the page needs besides the visible items */
+export interface LayoutMeta {
+    key: 'layout';
+    /** Increases with every full relayout (resize) */
+    rev: number;
+    width: number;
+    /** Total gallery height, px */
+    height: number;
+    count: number;
+    /** Item to keep in view across the relayout of this rev: its new position */
+    anchor?: {guid: string, y: number, h: number};
+}

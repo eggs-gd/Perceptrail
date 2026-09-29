@@ -43,6 +43,8 @@ export interface WorkerMessage<T, T1> {
 export interface UpdateLayoutPayload {
     screenWidth: number;
     rowHeight: number;
+    /** guid of the first visible item: the relayout reports where it moved */
+    anchor?: string;
 }
 
 export type InitMessage = WorkerMessage<'init', MessagePort[]>;
@@ -53,12 +55,10 @@ export interface WorkerEventData {
     status: string,
 }
 
+/** wsync → wlayout. The layout itself reaches the page through layoutDb (liveQuery). */
 export interface MessageFromSync {
-    /** wsync → wlayout: one item per create/update/delete */
     item?: Item | LayoutItem,
-    /** wlayout → view: laid out items (replace = the complete layout) */
-    items?: LayoutItem[],
-    action: 'create' | 'update' | 'delete' | 'reset' | 'replace' | 'upsert' | 'sync-start' | 'sync-done',
+    action: 'create' | 'update' | 'delete' | 'sync-start' | 'sync-done',
 }
 
 export type CurrentWorkerTask = { controller: AbortController; promise: Promise<void> } | null;

@@ -1,15 +1,21 @@
 <script lang="ts">
     import ItemView from "$lib/gallery/components/ItemView.svelte";
     import {page} from '$app/stores';
-    import {currentIndex, currentItem, items} from "$lib/stores";
+    import {currentIndex, currentItem, layoutDb} from "$lib/stores";
     import {onMount} from "svelte";
+    import {liveQuery} from "dexie";
 
-    // Reactive, not a one-off at init: /3 → /4 reuses this component, and on a
-    // direct /N load the items stream in after the first render
+    // The gallery only holds the visible window, so the item comes from layoutDb.
+    // Reactive: /3 → /4 reuses this component, and on a direct /N load the item is
+    // written by the layout worker after the first render.
     $effect.pre(() => {
         const index = Number($page.params.index);
         $currentIndex = index;
-        $currentItem = $items[index];
+        const sub = liveQuery(() => layoutDb.items.where('order').equals(index).first())
+            .subscribe((item) => {
+                if (item) $currentItem = item;
+            });
+        return () => sub.unsubscribe();
     });
 
     const MIN_ZOOM = 0.25;

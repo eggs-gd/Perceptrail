@@ -29,6 +29,9 @@ function startNewTask(apiPath: string) {
     return {
         controller,
         promise: (async () => {
+            // Full resync: start from an empty table. Before the hooks, or clear()
+            // would report every leftover row of the previous session as a delete.
+            await itemsDb.items.clear();
             itemsDb.items.hook.creating.subscribe(hookCreate);
             itemsDb.items.hook.updating.subscribe(hookUpdate);
             itemsDb.items.hook.deleting.subscribe(hookDelete);
