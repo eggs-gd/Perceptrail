@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Runs the CI checks for the parts changed since develop, before they reach CI.
+# Enable once per clone: git config core.hooksPath .githooks
+# Skip: git push --no-verify
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+base=$(git merge-base HEAD origin/develop 2>/dev/null || true)
+[ -z "$base" ] && exit 0
+changed=$(git diff --name-only "$base" HEAD)
+[ -z "$changed" ] && exit 0
+
+touches() { echo "$changed" | grep -qE "$1"; }
+
+if touches '^(perceplib|gontroller|perceptors)/'; then
+  echo "pre-push: Go checks"
+  (cd perceplib && go vet ./... && go test ./...)
+  (cd gontroller && pkgs=$(go list ./... | grep -v transcoder/images) \
+    && go vet $pkgs && go test $pkgs)
+  make build-plugins > /dev/null
+fi
+
+if touches '^svebapp/'; then
+  echo "pre-push: svebapp checks"
+  (cd svebapp && npm run check --silent)
+fi

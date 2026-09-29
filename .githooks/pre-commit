@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Local fast checks. Enable once per clone: git config core.hooksPath .githooks
+# Skip in an emergency: git commit --no-verify
+set -euo pipefail
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null || true)
+if [ "$branch" = "master" ] || [ "$branch" = "develop" ]; then
+  echo "pre-commit: do not commit to $branch directly — use a feature/* branch (see AGENTS.md)" >&2
+  exit 1
+fi
+
+go_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.go')
+if [ -n "$go_files" ]; then
+  # shellcheck disable=SC2086
+  unformatted=$(gofmt -l $go_files)
+  if [ -n "$unformatted" ]; then
+    echo "pre-commit: gofmt needed:" >&2
+    echo "$unformatted" >&2
+    echo "run: gofmt -w $(echo $unformatted)" >&2
+    exit 1
+  fi
+fi
