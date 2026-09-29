@@ -64,8 +64,9 @@ Gallery.svelte     renders the window: absolutely positioned tiles, keyed by gui
   by the indexed `bottom` (rows can be taller than the window), then takes the rows
   starting before its end. All ranges are bounded: writes outside the window do not
   re-run it.
-- No `loading="lazy"` on tiles (it misses tiles moved by `transform`; the window is
-  the lazy loading) and `overflow-anchor: none` (we anchor the view ourselves).
+- Tiles keep `loading="lazy"`: the gallery still loads **originals**, and lazy
+  loading limits how many are decoded at once (without it blank tiles get more
+  frequent). `overflow-anchor: none` — we anchor the view ourselves.
 - On a width change the gallery takes the first visible item as the **anchor**
   (`guid`, offset from the viewport top as a fraction of its height) and sends it with
   `updateLayout`. The anchor is kept across all following resizes until the user

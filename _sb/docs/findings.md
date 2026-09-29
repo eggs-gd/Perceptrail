@@ -113,10 +113,13 @@ messages are gone. Details: [svebapp README](../../svebapp/README.md#visible-win
   - Snapshots are applied on the next animation frame **or** after 100 ms — frames
     stall in windows that are "visible" but not painting.
   - *Blank tiles while scrolling* (the tile is there and clickable, the image appears
-    after opening the viewer): native `loading="lazy"` does not notice tiles moved by
-    `transform` inside a tall container; a layout change (the viewer hides the
-    scrollbar) makes it re-check. Removed — the gallery already renders only the
-    window.
+    after opening the viewer). First guess — `loading="lazy"` missing tiles moved by
+    `transform` — was **wrong**: without it blanks got more frequent. Real cause: the
+    gallery shows **originals** (median 0.5 MB, up to 5 MB; ~40 % HEIC) in 200 px tiles;
+    decoding a window of ~80 multi-megapixel images exceeds the browser's decoded-
+    image budget, it drops some and paints nothing until a repaint (the viewer
+    triggers one). Lazy loading only limits concurrent decodes. Proper fix:
+    thumbnails from the server (also needed for HEIC — Chrome/Firefox cannot show it).
   - *Anchor still drifted a little:* the browser's own scroll anchoring adjusted
     `scrollY` when content changed, which read as a user scroll and dropped our
     anchor. `overflow-anchor: none` on the gallery.
