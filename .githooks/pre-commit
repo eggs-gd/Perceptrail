@@ -9,14 +9,17 @@ if [ "$branch" = "master" ] || [ "$branch" = "develop" ]; then
   exit 1
 fi
 
-go_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.go')
-if [ -n "$go_files" ]; then
-  # shellcheck disable=SC2086
-  unformatted=$(gofmt -l $go_files)
-  if [ -n "$unformatted" ]; then
-    echo "pre-commit: gofmt needed:" >&2
-    echo "$unformatted" >&2
-    echo "run: gofmt -w $(echo $unformatted)" >&2
-    exit 1
+# Check the staged (index) version — that is what gets committed, not the working copy
+unformatted=""
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  if [ -n "$(git show ":$f" | gofmt -l)" ]; then
+    unformatted="$unformatted $f"
   fi
+done < <(git diff --cached --name-only --diff-filter=ACM -- '*.go')
+
+if [ -n "$unformatted" ]; then
+  echo "pre-commit: staged Go files need gofmt:$unformatted" >&2
+  echo "run: gofmt -w$unformatted && git add$unformatted" >&2
+  exit 1
 fi
