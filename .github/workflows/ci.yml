@@ -1,0 +1,63 @@
+name: CI
+
+# Minimal checks: build, vet and tests. No artifacts, no releases.
+
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+
+  go:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Set up Go
+      uses: actions/setup-go@v7
+      with:
+        go-version-file: gontroller/go.mod
+        cache-dependency-path: '**/go.sum'
+
+    - name: perceplib
+      working-directory: perceplib
+      run: |
+        go vet ./...
+        go test ./...
+
+    # pkg/transcoder/images needs libvips (cgo) and is not used by the server yet
+    - name: gontroller
+      working-directory: gontroller
+      run: |
+        go build -o /dev/null .
+        pkgs=$(go list ./... | grep -v transcoder/images)
+        go vet $pkgs
+        go test $pkgs
+
+    # Plugins must build against the same perceplib/zap versions as the host
+    - name: perceptors
+      run: make build-plugins
+
+  svebapp:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: svebapp
+    env:
+      # svebapp/.env is not committed; $env/static/public needs it at build time
+      PUBLIC_API_PATH: http://localhost:1323
+    steps:
+    - uses: actions/checkout@v7
+
+    - name: Set up Node
+      uses: actions/setup-node@v7
+      with:
+        node-version: 24
+        cache: npm
+        cache-dependency-path: svebapp/package-lock.json
+
+    - run: npm ci
+    - run: npm run check
+    - run: npm run build
