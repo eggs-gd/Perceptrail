@@ -2,6 +2,7 @@ package app
 
 import (
 	"flag"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -70,7 +71,7 @@ func (c *Config) Addr() string {
 	if port == 0 {
 		port = defaultPort
 	}
-	return c.Server.Host + ":" + strconv.Itoa(port)
+	return net.JoinHostPort(c.Server.Host, strconv.Itoa(port))
 }
 
 var configFlag = flag.String("config", "", "path to config.yml (default: $GONTROLLER_CONFIG, then ./config.yml)")

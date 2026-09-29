@@ -1,6 +1,8 @@
 package model
 
 import (
+	"net/url"
+	"path/filepath"
 	"perceptrail/gontroller/pkg/model/dto"
 
 	l "github.com/eggs-gd/perceplib/logger"
@@ -35,11 +37,18 @@ func NewProxy(logger *l.Logger) *proxy {
 	return &proxy{logger, db}
 }
 
+// sqliteDSN builds a SQLite URI for path. The path is percent-encoded: a raw '#',
+// '?' or '%' (e.g. in data_dir) would otherwise change which file is opened.
+func sqliteDSN(path string) string {
+	u := url.URL{Path: filepath.ToSlash(path)}
+	return "file:" + u.EscapedPath() + "?_busy_timeout=5000&_journal_mode=WAL&_fk=1"
+}
+
 func initDB(logger *l.Logger) *gorm.DB {
 	logger.Info("Database Initiating...")
 	// WAL + busy_timeout: importer writes while /items stream reads
 	logger.Info("Database", l.String("path", dbPath))
-	dsn := "file:" + dbPath + "?_busy_timeout=5000&_journal_mode=WAL&_fk=1"
+	dsn := sqliteDSN(dbPath)
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: newLogger(logger),
 	})

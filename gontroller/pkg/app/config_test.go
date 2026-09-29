@@ -35,4 +35,9 @@ func TestConfigResolve(t *testing.T) {
 		c.DatabasePath() != "/db/photos.db" {
 		t.Errorf("got DataDir %q, Exiftool %q, Addr %q, DatabasePath %q", c.DataDir, c.Exiftool, c.Addr(), c.DatabasePath())
 	}
+
+	c.Server.Host = "::1"
+	if c.Addr() != "[::1]:8080" {
+		t.Errorf("IPv6 Addr = %q", c.Addr())
+	}
 }
