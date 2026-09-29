@@ -1,6 +1,10 @@
 package scan
 
 import (
+	"fmt"
+	"slices"
+	"time"
+
 	"perceptrail/gontroller/pkg/model/dto"
 
 	"github.com/eggs-gd/go-exiftool"
@@ -10,6 +14,9 @@ import (
 
 	l "github.com/eggs-gd/perceplib/logger"
 )
+
+// One file must not block an exiftool worker forever (broken or huge files)
+const exiftoolTimeout = 2 * time.Minute
 
 var commonArgs []string = []string{ // all sidecars
 	//"-j",
@@ -55,30 +62,44 @@ func (cd *exifExtractor) Decorate(in []*dto.FileDto) (*RawItem, error) {
 	var result []api.RawExif
 
 	for i, item := range in {
-		var args []string
-		if i == 0 {
-			args = append(mainTags, item.Path)
-		} else {
-			args = append(metaTags, item.Path)
+		isMain := i == 0
+		tags := metaTags
+		if isMain {
+			tags = mainTags
 		}
+		args := slices.Concat(tags, []string{item.Path})
 
 		cd.logger.Info("Command", l.Any("args", args))
 
 		et := cd.getWorker()
-		out, err := et.Command(args...)
+		out, cmdErr := et.Command(args...)
 		cd.releaseWorker(et)
-		if err != nil {
-			cd.logger.Error("Command", l.Any("out", out), l.String("file", item.Path), l.Error(err))
-		}
 
 		res := map[string][]byte{}
-		if err := exiftool.Unmarshal(out, res); err != nil {
-			return &RawItem{}, err
+		if len(out) > 0 {
+			if err := exiftool.Unmarshal(out, res); err != nil && cmdErr == nil {
+				cmdErr = err
+			}
 		}
 
-		if err == nil {
-			result = append(result, api.RawExif(res))
+		if len(res) == 0 {
+			// Nothing usable. Without the main file's EXIF the group cannot become an item
+			// (processMeta validates it against the first entry), a sidecar is just skipped.
+			if cmdErr == nil {
+				cmdErr = fmt.Errorf("no metadata")
+			}
+			if isMain {
+				return nil, fmt.Errorf("exiftool %s: %w", item.Path, cmdErr)
+			}
+			cd.logger.Error("exiftool: sidecar skipped", l.String("file", item.Path), l.Error(cmdErr))
+			continue
 		}
+		if cmdErr != nil {
+			// ExifTool reported a problem but still returned data: use it
+			cd.logger.Warn("exiftool reported a problem", l.String("file", item.Path), l.Error(cmdErr))
+		}
+
+		result = append(result, api.RawExif(res))
 	}
 
 	return cd.processMeta(in[0], result)
@@ -101,6 +122,7 @@ func NewExifExtractor(count int, chin <-chan []*dto.FileDto, chout chan<- *RawIt
 		if err != nil {
 			logger.Panic("NewWorker", l.Any("et", et), l.Error(err))
 		}
+		et.SetTimeout(exiftoolTimeout)
 		workers[i] = et
 		freeCh <- et
 	}

@@ -16,6 +16,9 @@ Target architecture — the diagrams in [`../puml`](../puml).
 - Import pipeline: external EXIF plugins no longer stall it; the last walked group is
   emitted; changed files store fresh metadata. Viewer `/N` is reactive.
   `make build-plugins` works on a fresh clone.
+- exiftool hardening: go-exiftool v0.5.1 (command timeout, no zombie processes,
+  output kept on stderr errors); the extractor skips a group whose main file cannot
+  be read instead of mixing in a sidecar's EXIF. Lazy image loading.
 - Favicon, tab title.
 - `perceplib` moved to `eggs-gd` (module `github.com/eggs-gd/perceplib`, v0.0.6) and
   vendored into Perceptrail as a git subtree instead of a submodule.
@@ -28,10 +31,8 @@ Target architecture — the diagrams in [`../puml`](../puml).
       latency, without `.clear()` on import). If yes — back to the original design
       of [`Workers.puml`](../puml/Workers.puml): UI subscribes to the visible window
       of `LayoutDB` + virtualisation.
-- [ ] `Img.svelte`: `loading="lazy"` (the browser currently fetches every image).
-- [ ] `exifextractor`: shadowed `err` → an empty `RawExif` is added to the group.
-- [ ] go-exiftool: per-command timeout with restart, `Wait` after `Kill`, handle the
-      `start()` error in `restart`.
+- [ ] Unreadable/broken files still become items (0×0): exiftool returns File tags
+      even for garbage. Decide how to mark them (ignored? error state?).
 
 ## Core correctness (gontroller)
 
