@@ -23,7 +23,13 @@ server:
   # allowed_origins:
   #   - http://localhost:5173
 
-# Behind GORM: another driver can be added later (host/username/password …)
+# Behind GORM: another driver can be added later
 database:
   driver: sqlite            # the only one for now
-  name: media_library.db    # file, relative to data_dir
+  name: media_library.db    # sqlite: file, relative to data_dir; others: database name
+  # Server drivers only (sqlite ignores them): username/password or token
+  # host: localhost
+  # port: 5432
+  # username: user
+  # password: password
+  # token: ""

@@ -34,8 +34,14 @@ type Config struct {
 	// Behind GORM, so the driver can change later; only sqlite for now
 	Database struct {
 		Driver string `yaml:"driver"`
-		// sqlite: the database file, relative to DataDir
+		// sqlite: the database file, relative to DataDir; server drivers: database name
 		Name string `yaml:"name"`
+		// Server drivers only; sqlite ignores them
+		Host     string `yaml:"host"`
+		Port     int    `yaml:"port"`
+		Username string `yaml:"username"`
+		Password string `yaml:"password"`
+		Token    string `yaml:"token"`
 	} `yaml:"database"`
 }
 
