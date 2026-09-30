@@ -2,6 +2,8 @@ export interface Item {
     id: number;
     guid: string;
     mimeType: string;
+    /** What /assets/:guid serves (an image, or a playable video): picks <img> or <video> */
+    previewMime: string;
     width: number;
     height: number;
     date: Date;

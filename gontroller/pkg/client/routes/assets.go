@@ -14,7 +14,7 @@ func RegisterAssetsRoutes(segment string, e *echo.Echo, logger *l.Logger) {
 	}
 
 	userGroup := e.Group(segment)
-	userGroup.GET("/:item", getFile) // all items
+	userGroup.GET("/:item", getFile) // the best that can be shown
 }
 
 func getFile(c echo.Context) error {
@@ -25,5 +25,10 @@ func getFile(c echo.Context) error {
 		return err
 	}
 
+	// The cheap preview until our own previews exist; items from before the cheap
+	// stage: the original
+	if item.PreviewPath != "" {
+		return c.File(item.PreviewPath)
+	}
 	return c.File(item.Path)
 }

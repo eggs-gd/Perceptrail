@@ -14,9 +14,10 @@
 </script>
 
 
-{#if item.mimeType.startsWith("image")}
+<!-- The preview decides, not the original: a video may be shown as its photo -->
+{#if item.previewMime.startsWith("image")}
     <Img item={item}/>
-{:else if item.mimeType.startsWith("video")}
+{:else if item.previewMime.startsWith("video")}
     <Video item={item}/>
 {:else}
     <div>

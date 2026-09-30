@@ -132,7 +132,20 @@ func (g *filesGate) needsProcessing(files []*dto.FileDto) bool {
 	if err != nil {
 		return errors.Is(err, gorm.ErrRecordNotFound)
 	}
-	return item.State != dto.Ready
+	return !cheapStageDone(item)
+}
+
+// cheapStageDone: the item went through the cheap stage (Visible, Waiting) or is
+// fully done (Ready). An item shown without a preview is from before the cheap
+// stage existed: it goes through once more.
+func cheapStageDone(item *dto.ItemDto) bool {
+	switch item.State {
+	case dto.Visible, dto.Ready:
+		return item.PreviewPath != ""
+	case dto.Waiting:
+		return true
+	}
+	return false
 }
 
 // finalizeWalk derives deletions: files not stamped by this walk are gone.

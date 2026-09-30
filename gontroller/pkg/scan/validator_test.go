@@ -60,6 +60,8 @@ func scan(t *testing.T, root string) []string {
 	gate := newFilesGate(groups.Branches, newProgress(), logger)
 	exif := &exifExtractor{logger: logger, extract: fakeExif}
 	valid := newValidator(logger)
+	preview := &cheapPreview{logger: logger, dir: t.TempDir(),
+		extract: func(string, string, string) (string, error) { return "", errors.New("no exiftool in tests") }}
 
 	var processed []string
 	ok := func(err error) bool {
@@ -99,7 +101,11 @@ func scan(t *testing.T, root string) []string {
 				if !ok(err) {
 					continue
 				}
-				it.Item.State = dto.Ready // the closer
+				it, _ = preview.Decorate(it)
+				it.Item.State = dto.Waiting // the closer
+				if it.Item.PreviewPath != "" {
+					it.Item.State = dto.Visible
+				}
 				if _, err := itemsProxy.UpdateItem(it.Item); err != nil {
 					t.Fatal(err)
 				}
@@ -176,7 +182,7 @@ func TestValidatorLifecycle(t *testing.T) {
 	if got := scan(t, root); len(got) != 1 || got[0] != a {
 		t.Errorf("changed: processed %v", got)
 	}
-	if item := itemAt(t, a); item.Guid != guidA || item.HashShort == hashA || item.State != dto.Ready {
+	if item := itemAt(t, a); item.Guid != guidA || item.HashShort == hashA || item.State != dto.Visible {
 		t.Errorf("changed: %+v", item)
 	}
 
@@ -242,7 +248,7 @@ func TestValidatorSidecarDeleted(t *testing.T) {
 	if got := scan(t, root); len(got) != 1 || got[0] != photo {
 		t.Errorf("dirty: processed %v", got)
 	}
-	if item := itemAt(t, photo); item.State != dto.Ready {
+	if item := itemAt(t, photo); item.State != dto.Visible {
 		t.Errorf("dirty: state %d after processing", item.State)
 	}
 }
@@ -312,7 +318,7 @@ func TestValidatorDeletedThenBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	scan(t, root)
-	if item := itemAt(t, back); item.Guid != guid || item.State != dto.Ready {
-		t.Errorf("back: %+v, want GUID %s, Ready", item, guid)
+	if item := itemAt(t, back); item.Guid != guid || item.State != dto.Visible {
+		t.Errorf("back: %+v, want GUID %s, Visible", item, guid)
 	}
 }

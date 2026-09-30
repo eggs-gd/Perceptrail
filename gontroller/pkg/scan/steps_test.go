@@ -68,8 +68,9 @@ func TestSourceBecomesMain(t *testing.T) {
 	}
 }
 
-// A move is recognised and needs no work: it does not reach the plugins
-func TestMovedSkipsTranscode(t *testing.T) {
+// A move keeps the item (its GUID); the cheap stage runs again for it, so its
+// preview follows the file
+func TestMovedKeepsItemAndPreview(t *testing.T) {
 	root := t.TempDir()
 	a := filepath.Join(root, "a.jpg")
 	write(t, a, "moving")
@@ -83,10 +84,8 @@ func TestMovedSkipsTranscode(t *testing.T) {
 	if err := os.Rename(a, moved); err != nil {
 		t.Fatal(err)
 	}
-	if got := scan(t, root); len(got) != 0 {
-		t.Errorf("a moved file was processed again: %v", got)
-	}
-	if item := itemAt(t, moved); item.Guid != guid || item.State != dto.Ready {
+	scan(t, root)
+	if item := itemAt(t, moved); item.Guid != guid || item.State != dto.Visible || item.PreviewPath != moved {
 		t.Errorf("moved: %+v", item)
 	}
 }
@@ -129,7 +128,7 @@ func TestFormerMainGone(t *testing.T) {
 	}
 	scan(t, root)
 	assertNoItem(t, rawGuid)
-	if item := itemAt(t, jpeg); item.State != dto.Ready {
+	if item := itemAt(t, jpeg); item.State != dto.Visible {
 		t.Errorf("the JPEG is not an item after one walk: %+v", item)
 	}
 }

@@ -3,8 +3,6 @@ package scan
 import (
 	"fmt"
 
-	"perceptrail/gontroller/pkg/model"
-	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/scan/flow"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -16,19 +14,14 @@ import (
 // main file, then same / changed / moved / duplicate -> the item.
 type validator struct {
 	logger *l.Logger
-	// outputsComplete: everything the transcoder makes for the item exists
-	outputsComplete func(guid string) bool
 }
-
-// No transcoder yet: there is nothing to regenerate
-func noOutputs(string) bool { return true }
 
 func NewValidator(chin <-chan *flow.RawItem, chout chan<- *flow.RawItem, logger *l.Logger) chain.Processor {
 	return chain.NewDecorator(chin, chout, newValidator(logger))
 }
 
 func newValidator(logger *l.Logger) *validator {
-	return &validator{logger: logger, outputsComplete: noOutputs}
+	return &validator{logger: logger}
 }
 
 // Decorate sets the item of the group (ranked by mime: the main file first)
@@ -65,18 +58,12 @@ func (v *validator) Decorate(g *flow.RawItem) (*flow.RawItem, error) {
 		return nil, err
 	}
 
-	item, outcome, err := itemsProxy.ValidateFile(main, g.Exif[0])
+	// Moved items go on too: the cheap stage is cheap, and their preview path
+	// changed with them. Skipping outputs that already exist is the expensive
+	// stage's business.
+	item, _, err := itemsProxy.ValidateFile(main, g.Exif[0])
 	if err != nil {
 		return nil, err
-	}
-
-	if outcome == model.OutcomeMoved && v.outputsComplete(item.Guid) {
-		// Same content at another path: nothing to transcode or extract again
-		item.State = dto.Ready
-		if _, err := itemsProxy.UpdateItem(item); err != nil {
-			return nil, err
-		}
-		return nil, chain.ErrSkippedItem
 	}
 
 	g.Item = item
