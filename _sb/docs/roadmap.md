@@ -105,6 +105,25 @@ hid inside the exif step, so groups and MIME were decided before EXIF was known.
       as ready previews — saves a transcode; Live Photo pairs checked by
       `ContentIdentifier` (today by name); `animated` kind.
 
+### Cheap stage: show what exists (with the Apple Photos grouper)
+
+One PR (`feature/cheap-stage`). Photo and video transcode are the next milestones.
+
+- [x] **S1. Visible / Waiting and the cheap preview** for generic groups: the main
+      file if the browser shows it (JPEG, PNG, WebP, AVIF…; H.264 video), else the
+      biggest viewable derivative, else an embedded preview (`exiftool -b` into
+      `cache/previews/<guid>/`). HEIC (no extractable preview in HEIF) and HEVC wait.
+      `/items`: Visible + Ready, `previewMime`; `/assets/:guid`: the preview.
+- [ ] **S2. Minimal Apple grouper**: asset links from a copy of the DB, one group
+      per asset (trashed skipped), files ordered by what to show first (render →
+      ~2000 px → ~1000 px → master → `.THM`); a group key = the asset UUID as the
+      item's GUID (a changing main file — derivative, then the downloaded original —
+      keeps the item); `appleEnabled = true`.
+- [ ] **S3. Minimal DB metadata** as a virtual exif record with exiftool's tag names
+      (`DateTimeOriginal`, `OffsetTimeOriginal`, `ImageWidth`, GPS…): date + zone,
+      dimensions, GPS — the plugins work unchanged; required for cloud-only assets.
+- [ ] **S4. Tests**: a fixture library.
+
 ### Dates and time zones
 
 D1–D3 done (PR #13), see Done.

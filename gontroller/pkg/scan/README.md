@@ -14,7 +14,7 @@ scan/flow/                what flows between the steps (shared by everything bel
 scan/groups/              the source switch
 scan/groups/generic/      plain folders: sidecars by name
 scan/groups/apple/        Apple Photos library (stub)
-scan/transcode/           the switch by the kind of the asset
+scan/transcode/           the switch by the kind of the asset (not wired yet)
 scan/transcode/photo/     thumbnails (stub)
 scan/transcode/video/     poster, previews, playable video (stub)
 scan/transcode/livephoto/ the video with its photo (stub)
@@ -32,9 +32,9 @@ detail).
 ```
 fswalker -> source switch ─┬─ generic grouper ───┬─> files gate -> exif (N) -> mime -> validator
                            └─ Apple Photos (stub)┘
-         -> transcode switch ─┬─ photo ──────┬─> plugins -> closer
-                              ├─ video ──────┤
-                              └─ Live Photo ─┘
+         -> cheap preview -> plugins -> closer (Visible | Waiting)
+
+later, its own chain:  feeder (DB) -> transcode switch (photo | video | Live Photo) -> Ready
 ```
 
 ## Steps
@@ -49,9 +49,9 @@ fswalker -> source switch ─┬─ generic grouper ───┬─> files gate 
 | exif | `exifextractor.go` | `FileGroup` -> `*RawItem` | `exiftool -all` for every file; N steps in parallel on the same channels. |
 | mime | `mimeranker.go` | `*RawItem` -> `*RawItem` | The kind of every file; the main file (the source) first. |
 | validator | `validator.go` | `*RawItem` -> `*RawItem` | Links the group, same / changed / moved / duplicate -> the item. |
-| transcode switch | `transcode/switch.go` | `*RawItem` -> `*RawItem` | Routes the asset by kind. |
-| photo / video / Live Photo transcoders | `transcode/photo`, `transcode/video`, `transcode/livephoto` | `*RawItem` -> `*RawItem` | Stubs for now: pass the asset on. |
-| plugins, closer | `exifpluginprocessor.go` | `*RawItem` -> `*dto.ItemDto` | Core plugins (date, size), external perceptors, then the item is saved `Ready`. |
+| cheap preview | `cheappreview.go` | `*RawItem` -> `*RawItem` | What the browser shows now, no transcode: the main file (JPEG, PNG, …; H.264 video), else the biggest viewable derivative, else an embedded preview extracted into `cache/previews/<guid>/`. Any size counts. |
+| plugins, closer | `exifpluginprocessor.go` | `*RawItem` -> `*dto.ItemDto` | Core plugins (date, size), external perceptors, then the item is saved `Visible` (a preview) or `Waiting` (none). |
+| transcode switch + transcoders | `transcode/…` | `*RawItem` -> `*RawItem` | Not wired: the expensive chain (fed from the DB) comes with thumbnails and sets `Ready`. |
 
 ## Types (package [`flow`](flow/flow.go))
 
@@ -87,6 +87,9 @@ fswalker -> source switch ─┬─ generic grouper ───┬─> files gate 
 - **Item == asset**: a derivative never becomes an item of its own. Inside an
   Apple Photos library only `originals/` are read (`generic.shouldSkipPath`) until its
   grouper links derivatives from the library's DB.
+- **States**: `Visible` (a cheap preview), `Waiting` (nothing viewable yet — HEIC,
+  HEVC, a RAW without previews), `Ready` (the expensive stage, later). The client
+  gets `Visible` and `Ready` only; `/assets/:guid` serves the preview.
 - **The main file is the source**: RAW > video > image. The JPEG of RAW+JPEG and
   the photo of a Live Photo are derivatives (sidecars), future ready previews.
 - **A link outside the group** (a file linked to a GUID that is not in its group:
