@@ -236,7 +236,7 @@ compose with `derived`. The current message protocol is a deviation from this de
   list filled with sample media, since this process cannot read the library): 6 420
   assets with local files loaded, 6 417 items Visible (3 were fixture PNGs left
   empty), first import 27 s, 0 errors. Previews: small thumbnail 2 634 (videos pick
-  it over `.THM`), ~2000 px 1 658, original 1 157 (JPEG originals; HEIC ones show
+  it over `.THM`, rightly: `.THM` is 32×32, the thumbnail ~360×640), ~2000 px 1 658, original 1 157 (JPEG originals; HEIC ones show
   Apple's JPEG), ~1000 px 640, the edit 328.
 - A keyed asset is media if any of its files is (a broken original still has
   Apple's derivatives).
@@ -271,8 +271,8 @@ Every file belongs to a known asset; the DB's local-resource counts match the fi
   | `resources/derivatives/<X>/<UUID>_1_101_o`, `_1_102_o.jpeg` | preview of the original | ~2000–2600 |
   | `resources/derivatives/<X>/<UUID>_1_102_a.jpeg` | preview of the edit | ~2000 |
   | `resources/derivatives/<X>/<UUID>_1_105_c`, `_1_106_c.jpeg` | medium preview | ~1000 |
-  | `resources/derivatives/masters/<X>/<UUID>_4_5005_c.jpeg` | small thumbnail, nearly every asset | not in the DB |
-  | `resources/derivatives/<X>/<UUID>.THM` | video poster | — |
+  | `resources/derivatives/masters/<X>/<UUID>_4_5005_c.jpeg` | small thumbnail, nearly every asset | ~640 (360×640 measured; not in the DB) |
+  | `resources/derivatives/<X>/<UUID>.THM` | video "poster": a JPEG icon | 32×32 (measured) |
   | `resources/derivatives/cvt/<X>/<UUID>/…_cvt_tNNNN.jpeg` | video frames (scrubbing) | — |
 
   In `ZINTERNALRESOURCE` (local rows): `(type 0, version 0, subtype 1)` = originals,
