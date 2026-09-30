@@ -123,8 +123,10 @@ grouper plugs into the import chain as the `groups/apple` branch (today a stub,
 - [x] **P0. Spike** (2026-09-30, on a copy of the dev library's DB + a file list):
       every file maps to a known asset; the layout and the local coverage are in
       findings.
-- [ ] **P1. Grouper.** The first file of a library loads the asset links from the DB
-      (read-only, a copy/`mode=ro`: Photos may have it open); files arrive, a group
+- [ ] **P1. Grouper.** The first file of a library loads the asset links from the DB —
+      from a copy (`Photos.sqlite` + `-wal`/`-shm` into a temp dir, then read):
+      Photos may have it open and write it, and the library may be a network share
+      or a copy (SQLite with WAL over SMB is unsafe); files arrive, a group
       goes out when all its local files are in (or at the end-of-walk marker). One
       group = one asset (GUID from the asset UUID): the original is the source (main
       file), the rest is linked to it (render, derivatives, Live Photo video, posters).
@@ -152,6 +154,19 @@ grouper plugs into the import chain as the `groups/apple` branch (today a stub,
 - [ ] **P5. Tests** on a fixture library (a minimal `Photos.sqlite` with the columns we
       read + files per the layout), including a Live Photo (its video is not local in
       the dev library: `<UUID>_3.mov` per osxphotos, unverified) and cloud-only assets.
+- [ ] **Later: "show the original" for cloud-only assets.** We never write to the
+      library — we ask Photos to download the original (PhotoKit, network access
+      allowed); the next walk sees the original and reprocesses the group. PhotoKit
+      exists only on the Mac that owns the library, in a user session — not in Docker
+      (even on the same Mac), not on a NAS reading a share or a copy, not for an
+      archived library. So it is an optional capability: a small macOS agent
+      (launchd + a Swift helper) next to Photos, called by the server; the UI shows
+      the button only when that agent is reachable; the grouper works on any copy
+      without it. Needs the Photos privacy permission (not Full Disk Access). First a
+      spike: does a PhotoKit request leave the original local in the library, or only
+      hand the data to the caller? (AppleScript export copies the file out — not
+      wanted.) Photos may purge the original again (Optimize Mac Storage): then the
+      asset falls back to its derivative.
 - Supported schema: `ZASSET` (macOS 11+); older (`ZGENERICASSET`) — not planned.
 - Later: albums, people (`ZPERSON` / `ZDETECTEDFACE`) → perceptors.
 
