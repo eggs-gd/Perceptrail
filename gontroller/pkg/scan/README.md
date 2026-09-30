@@ -92,7 +92,7 @@ fswalker -> source switch ─┬─ generic grouper ───┬─> files gate 
 - **A link outside the group** (a file linked to a GUID that is not in its group:
   the main file is gone, e.g. a RAW deleted and its JPEG left) makes the gate pass
   the group, so the survivor becomes the item in the same walk.
-- **Changing the kind detection** (`mimeRanker`, the extension table) needs a new
+- **Changing the kind detection** (`mimeranker.go`: the extension table, the fallbacks) needs a new
   `mimeVersion`: on start, a new version clears every "ignored" mark, so groups an
   older detection dropped are classified once more (stored in the `meta` table).
 - **exiftool args are part of the short hash**: changing `allTags` changes every hash
