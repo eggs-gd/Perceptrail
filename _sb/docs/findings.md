@@ -219,6 +219,23 @@ compose with `derived`. The current message protocol is a deviation from this de
 
 ## Backend: gontroller, plugins, exiftool
 
+### The asset contract (2026-09-30)
+
+- **The client gets the whole asset once and decides** (decision): files by role
+  (original, edit, stills, motion, frames) with size, mime and a video's codec. The
+  browser does the choosing itself: `<picture>` with a `<source type>` per format
+  and `srcset` widths + `sizes` = the tile's pixel width (it picks the format and
+  the size, retina included); `<video>` gets `<source type='video/mp4;
+  codecs="hvc1"'>` — MOV is offered as MP4 (same container family; Chrome plays it
+  but does not claim `video/quicktime`), unplayable sources are filtered with
+  `canPlayType` up front.
+- Hover: a playable video, else Apple's video frames as a flip-book — turned by an
+  attachment on the `<img>` (no component state per frame). Viewer: `sizes=100vw`,
+  "Original" opens what the browser shows and downloads the rest (HEIC in Chrome).
+- Live check on the real library (a build before the contract): 6 420 Apple assets as
+  items keyed by UUID, all dated from the DB, 2 987 old generic items of the
+  library removed; 6 985 Visible, 9 Waiting (HEVC/HEIC outside the library).
+
 ### Apple Photos grouper (2026-09-30)
 
 - **No 1 -> N step needed** (decision, after proposing one): the files of an asset are

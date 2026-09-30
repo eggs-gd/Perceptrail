@@ -44,7 +44,7 @@
      onclick={() => history.back()}>
     {#if item}
         <div class="stage" style:transform="scale({zoom})">
-            <ItemView {item} {index}/>
+            <ItemView {item} {index} mode="view" sizes="100vw"/>
         </div>
     {/if}
 </div>

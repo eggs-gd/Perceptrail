@@ -136,7 +136,7 @@ One PR (`feature/cheap-stage`). Photo and video transcode are the next milestone
       only, `/assets/:guid/embedded` the extracted embedded preview. `PreviewPath`
       stays as the default preview (Visible, `/assets/:guid`). A cloud-only asset has
       no `original` (the derivative standing in keeps its own size).
-- [ ] **S7. The client decides**: the tile — `<picture>`/`srcset` from stills or the
+- [x] **S7. The client decides**: the tile — `<picture>`/`srcset` from stills or the
       edit (the browser picks the size and the format: HEIC in Safari, JPEG
       elsewhere); hover — motion, or Apple's frames as a flip-book; click — the
       biggest still; "show the original" — open it, or download when the browser

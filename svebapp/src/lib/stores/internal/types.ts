@@ -1,9 +1,36 @@
+/** One file of an asset as the server offers it (see gontroller routes/asset.go) */
+export interface Rendition {
+    /** Relative to the API: /assets/<guid>/<id> */
+    url: string;
+    mime: string;
+    w?: number;
+    h?: number;
+    /** A video's codec: avc1, hvc1, … */
+    codec?: string;
+}
+
+/** Every file of an asset, by role: the client decides what to show when */
+export interface Asset {
+    /** The source; may not be viewable (HEIC, RAW, HEVC). null: not local (iCloud) */
+    original: Rendition | null;
+    /** The user's edit, smallest first */
+    edit: Rendition[];
+    /** Viewable images, smallest first */
+    stills: Rendition[];
+    /** Videos of the asset (a Live Photo's video) */
+    motion: Rendition[];
+    /** A flip-book, in order (Apple's video frames) */
+    frames: Rendition[];
+}
+
 export interface Item {
     id: number;
     guid: string;
     mimeType: string;
     /** What /assets/:guid serves (an image, or a playable video): picks <img> or <video> */
     previewMime: string;
+    /** Every file of the asset; absent from an older server */
+    asset?: Asset;
     width: number;
     height: number;
     date: Date;
