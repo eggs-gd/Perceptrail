@@ -173,9 +173,32 @@ reference); reading needs Full Disk Access for the process (TCC).
       counts** — even a 160 px thumbnail: trust the data we have, the expensive step
       delivers the quality. States `New -> Visible -> Ready` (+ `Dirty`); `/items`
       shows `Visible` and `Ready`; `/assets/:guid?size=` serves the best that
-      exists. Exif plugins move before transcode, ML after it. Open: the walker's
-      rescan should wait for the cheap part only — the expensive step then needs a
-      queue of its own that walks do not feed twice.
+      exists. Exif plugins move before transcode.
+
+      **Two stages, two chains** (decided):
+      ```
+      cheap chain (as now):   walker -> ... -> exif plugins -> cheap preview -> Visible
+                              -> perceptors, cheap pass (on what the group has)
+                              the walker waits for this chain only, then the rescan pause
+      expensive chain:        feeder (next item needing work, from the DB)
+                              -> transcode (photo | video | Live Photo) -> Ready
+                              -> perceptors, full pass (on our previews): results replace
+                                 the cheap-pass ones, the client gets an update
+      ```
+      - **The expensive queue is DB state, not a channel** (a channel is a snapshot
+        that cannot change): "items that still lack X" — `Visible`/`Dirty` without
+        outputs; a perceptor whose stage/version for the item is behind. The feeder
+        pulls the next one when a worker is free. New photos just appear in it,
+        deleted items drop out of it, a move changes nothing (the path is read at
+        pick time; outputs live under the GUID: `cache/thumbs/<guid>/…`).
+      - An item being worked on may change meanwhile: at commit, deleted -> discard
+        (long work checks between stages and stops); a different hash -> discard, the
+        item stays queued; only the path changed -> keep.
+      - Several workers: an "in work since" mark; stale marks go back to the queue.
+      - Perceptors know their stage (cheap input vs our previews) and choose: colour
+        runs on the cheap pass, faces may wait for the full one. Per item and
+        perceptor we store the stage done (and the perceptor version). Order comes
+        from the stages: every new item gets its cheap pass first.
 - [ ] First perceptor end to end (primitive geo: map, markers) → release 0.2.0.
 
 ## Core — product (gontroller)
