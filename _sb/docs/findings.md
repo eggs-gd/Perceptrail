@@ -247,9 +247,10 @@ Every file belongs to a known asset; the DB's local-resource counts match the fi
   `_1_105_c`, `(0,2,4)` = `_1_102_a`, `(14,3,0)` = masters; video = type 1, Live
   Photo video = type 3.
 - **Optimize Mac Storage**: 1 782 originals are local, none of the videos and none of
-  the Live Photo videos. Best local preview per live asset: original 1 781; render
-  330; ~2000 px derivative 1 682; small master only 2 082; video poster 544 (+ 222
-  video assets with a ~2000 px image); **nothing at all: 7 of 6 427**. So a
+  the Live Photo videos. Best local preview per live photo asset (5 661): original
+  1 781; render 328; ~2000 px derivative 1 463; only the small master 2 082; nothing
+  7. Videos (766): poster `.THM` 544, a ~2000 px image 219, other 3. **Nothing at all:
+  7 of 6 427**. So a
   derivative can show 6 420 assets where the originals alone show 1 781.
 - Decisions: cloud-only assets are items (preview from the derivative, metadata from
   the DB); an edited photo shows its edit; any size counts; Apple's derivatives are
