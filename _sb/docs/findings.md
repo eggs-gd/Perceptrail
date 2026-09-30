@@ -261,6 +261,11 @@ compose with `derived`. The current message protocol is a deviation from this de
   looks through the group, main first).
 - **The closer blocked after 1000 items**: it wrote to a buffered channel nobody
   read. Finished items are drained now (later: events to the client).
+- Codex review: (1) a derivative whose main file was deleted stayed linked to the
+  deleted item and was dropped by the gate — now a link to a GUID outside the group
+  means "process"; (2) groups ignored by the old system-MIME logic would stay
+  ignored forever — a `meta` table keeps `mime_version`, a new version clears the
+  "ignored" marks once.
 - The gate stamps `CheckTime` with its own clock; the marker carries the walk start,
   and "not stamped since the walk started" = gone.
 

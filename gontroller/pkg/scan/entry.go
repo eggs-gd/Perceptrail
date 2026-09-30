@@ -77,6 +77,9 @@ func NewImporterService(ctx app.AppContext) *importerService {
 
 	itemsProxy = model.NewProxy(ctx.Logger(string(app.LogDB)))
 	filesProxy = model.NewProxy(ctx.Logger(string(app.LogDB)))
+	if err := reclassifyIgnored(model.NewProxy(ctx.Logger(string(app.LogDB))), filesProxy, logger); err != nil {
+		logger.Error("MIME version check failed", l.Error(err))
+	}
 
 	logErr := func(err error) {
 		if !errors.Is(err, chain.ErrSkippedItem) { // skips are on purpose (buffered, unchanged, not media)

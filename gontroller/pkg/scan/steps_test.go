@@ -1,6 +1,10 @@
 package scan
 
 import (
+	"perceptrail/gontroller/pkg/model"
+
+	l "github.com/eggs-gd/perceplib/logger"
+	"github.com/eggs-gd/perceplib/logger/decorators"
 	"os"
 	"path/filepath"
 	"perceptrail/gontroller/pkg/scan/flow"
@@ -108,4 +112,55 @@ func statEntry(t *testing.T, path string) dto.ItemEntry {
 		t.Fatal(err)
 	}
 	return dto.ItemEntry{Path: path, Name: filepath.Base(path), Size: info.Size(), ModTime: info.ModTime()}
+}
+
+// The RAW is deleted, its JPEG stays: the JPEG becomes the item in the same walk
+// (it was linked to the RAW's item, which the walk deletes)
+func TestFormerMainGone(t *testing.T) {
+	root := t.TempDir()
+	raw, jpeg := filepath.Join(root, "D.NEF"), filepath.Join(root, "D.JPG")
+	write(t, raw, "source")
+	write(t, jpeg, "derivative")
+	scan(t, root)
+	rawGuid := itemAt(t, raw).Guid
+
+	if err := os.Remove(raw); err != nil {
+		t.Fatal(err)
+	}
+	scan(t, root)
+	assertNoItem(t, rawGuid)
+	if item := itemAt(t, jpeg); item.State != dto.Ready {
+		t.Errorf("the JPEG is not an item after one walk: %+v", item)
+	}
+}
+
+// A new MIME detection classifies the ignored groups once more
+func TestReclassifyIgnored(t *testing.T) {
+	root := t.TempDir()
+	clip := filepath.Join(root, "clip.mov")
+	write(t, clip, "a video the old detection missed")
+	f, err := filesProxy.CreateFile(statEntry(t, clip))
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.SetIgnored()
+	if _, err := filesProxy.UpdateFile(f); err != nil {
+		t.Fatal(err)
+	}
+
+	meta := model.NewProxy(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
+	if err := meta.SetMeta(mimeVersionKey, "1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := reclassifyIgnored(meta, filesProxy, logger); err != nil {
+		t.Fatal(err)
+	}
+	if v, _ := meta.GetMeta(mimeVersionKey); v != mimeVersion {
+		t.Errorf("version %q, want %q", v, mimeVersion)
+	}
+	scan(t, root)
+	if item := itemAt(t, clip); item.MimeType != "video/quicktime" {
+		t.Errorf("the video is still not an item: %+v", item)
+	}
 }

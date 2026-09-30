@@ -105,15 +105,23 @@ func (g *filesGate) store(found []*dto.FileDto) ([]*dto.FileDto, bool, error) {
 }
 
 // needsProcessing: nothing changed on disk, but the group is not done — a file
-// was never linked, or the item is missing or not Ready (new, Dirty, interrupted).
-// Groups that are known not to be media stay ignored.
+// was never linked or is linked outside the group (its main file is gone: a RAW
+// deleted, its JPEG left), or the item is missing or not Ready (new, Dirty,
+// interrupted). Groups that are known not to be media stay ignored.
 func (g *filesGate) needsProcessing(files []*dto.FileDto) bool {
+	inGroup := make(map[string]bool, len(files))
+	for _, f := range files {
+		inGroup[f.GUID] = true
+	}
 	main := ""
 	for _, f := range files {
 		switch {
 		case f.LinkedTo == "":
 			return true
-		case !f.IsIgnored() && main == "":
+		case f.IsIgnored():
+		case !inGroup[f.LinkedTo]:
+			return true
+		case main == "":
 			main = f.LinkedTo
 		}
 	}

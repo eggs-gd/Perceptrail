@@ -1,6 +1,9 @@
 package scan
 
 import (
+	"perceptrail/gontroller/pkg/model"
+
+	l "github.com/eggs-gd/perceplib/logger"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -141,4 +144,27 @@ func sniff(path string) string {
 		return ""
 	}
 	return http.DetectContentType(buf[:n])
+}
+
+// mimeVersion changes whenever the kind detection changes. Groups ignored by an
+// older detection are classified once more (the system MIME tables lost HEIC,
+// MOV, RAW in a minimal Docker image: those groups were ignored for good).
+const mimeVersion = "2"
+
+const mimeVersionKey = "mime_version"
+
+// reclassifyIgnored runs at start: a new mimeVersion clears every "ignored" mark,
+// the gate then sends those groups through mime again
+func reclassifyIgnored(meta model.MetaApi, files model.FilesApi, logger *l.Logger) error {
+	stored, err := meta.GetMeta(mimeVersionKey)
+	if err != nil || stored == mimeVersion {
+		return err
+	}
+	n, err := files.UnignoreFiles()
+	if err != nil {
+		return err
+	}
+	logger.Info("MIME detection changed: ignored files are classified again",
+		l.String("from", stored), l.String("to", mimeVersion), l.Int("files", int(n)))
+	return meta.SetMeta(mimeVersionKey, mimeVersion)
 }

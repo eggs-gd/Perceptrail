@@ -30,7 +30,7 @@ chain), [`Walker.puml`](../../../_sb/puml/Walker.puml) (files gate and validator
 detail).
 
 ```
-fswalker -> source switch ─┬─ generic grouper ──┬─> files gate -> exif (N) -> mime -> validator
+fswalker -> source switch ─┬─ generic grouper ───┬─> files gate -> exif (N) -> mime -> validator
                            └─ Apple Photos (stub)┘
          -> transcode switch ─┬─ photo ──────┬─> plugins -> closer
                               ├─ video ──────┤
@@ -89,6 +89,12 @@ fswalker -> source switch ─┬─ generic grouper ──┬─> files gate -> 
   grouper links derivatives from the library's DB.
 - **The main file is the source**: RAW > video > image. The JPEG of RAW+JPEG and
   the photo of a Live Photo are derivatives (sidecars), future ready previews.
+- **A link outside the group** (a file linked to a GUID that is not in its group:
+  the main file is gone, e.g. a RAW deleted and its JPEG left) makes the gate pass
+  the group, so the survivor becomes the item in the same walk.
+- **Changing the kind detection** (`mimeRanker`, the extension table) needs a new
+  `mimeVersion`: on start, a new version clears every "ignored" mark, so groups an
+  older detection dropped are classified once more (stored in the `meta` table).
 - **exiftool args are part of the short hash**: changing `allTags` changes every hash
   (every item becomes "changed").
 
