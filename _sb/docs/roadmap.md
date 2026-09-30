@@ -195,10 +195,11 @@ reference); reading needs Full Disk Access for the process (TCC).
         (long work checks between stages and stops); a different hash -> discard, the
         item stays queued; only the path changed -> keep.
       - Several workers: an "in work since" mark; stale marks go back to the queue.
-      - Perceptors know their stage (cheap input vs our previews) and choose: colour
-        runs on the cheap pass, faces may wait for the full one. Per item and
-        perceptor we store the stage done (and the perceptor version). Order comes
-        from the stages: every new item gets its cheap pass first.
+      - Perceptors always run on both passes — incremental refinement for the
+        client: e.g. faces on cheap previews find blurred spots that cluster as one
+        face; on our previews part of them moves out into clusters of their own.
+        Per item and perceptor we store the pass done (and the perceptor version).
+        Order comes from the stages: every new item gets its cheap pass first.
 - [ ] First perceptor end to end (primitive geo: map, markers) → release 0.2.0.
 
 ## Core — product (gontroller)
