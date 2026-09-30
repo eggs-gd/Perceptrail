@@ -219,6 +219,56 @@ compose with `derived`. The current message protocol is a deviation from this de
 
 ## Backend: gontroller, plugins, exiftool
 
+### Item == asset (2026-09-29)
+
+- **Decision: one entity.** An item is the asset — one whole group of files (source
+  + sidecars + derivatives); no separate asset/item split. What must hold instead:
+  a derivative never becomes an item of its own, it is linked to its asset.
+- Found: 65 items from an Apple Photos library were not assets — images of Apple's
+  own in `internal/` (Messages backdrops) and `scopes/` (iCloud sharing); only the
+  `resources/` exclusion kept derivatives out. Now only `originals/` of a library
+  are read (until the Apple Photos grouper exists); the rest of the bundle is
+  skipped, so the old items are soft-deleted by the next complete walk (not seen =
+  gone).
+- A derivative is simply a file linked to its source (`LinkedTo`) — no separate
+  "derivative" flag. For the Apple Photos grouper the links come from
+  `Photos.sqlite` (original = source; render, derivatives, Live Photo video =
+  linked to it): the grouper states the main file and mime does not re-rank such a
+  group — it ranks only groups nobody decided (generic). Otherwise an original HEIC
+  and its render JPEG, both images, would be decided by size.
+
+### Import chain as small steps (2026-09-29)
+
+- **Groupers are plain decorators with a buffer of open groups** (decision): a group
+  goes out when it is complete, so each incoming file closes at most one group —
+  one output per call is enough. A first version buffered a whole directory
+  (`WalkDir` visits subdirectories between a directory's files) and released many
+  groups at once, which needed a 1 → N step in perceplib (`Expander`); dropped:
+  sidecars are next to their main file, one open group suffices for `generic`.
+  Known limit: a name sorting between members splits a group (`a.aae`,
+  `a.edited.jpg`, `a.jpg`; a subdirectory `a.jpg.d/` between `a.jpg` and `a.xmp`).
+  Skipped items (`ErrSkippedItem`) are not logged any more.
+- **exif was serial.** A decorator runner is one goroutine: the pool of 5 exiftool
+  processes was used one at a time. Now N runners read the same channel (groups are
+  independent after the gate); `Stop` is called by each, closing is `sync.Once`.
+- **The main file is known only after exif**, so every file of a group gets `-all`
+  (same arguments as the main file had: short hashes stay stable) and the validator
+  links the group. **The main file is always the source** (decision): RAW > video >
+  image. The JPEG of RAW+JPEG and the photo of a Live Photo are derivatives —
+  sidecars that can later serve as ready previews. A file that was a main file and
+  becomes a sidecar (a JPEG imported before its RAW) loses its item. Side effect:
+  tags missing in the main file can now come from a sidecar's full set (`GetExif`
+  looks through the group, main first).
+- **The closer blocked after 1000 items**: it wrote to a buffered channel nobody
+  read. Finished items are drained now (later: events to the client).
+- Codex review: (1) a derivative whose main file was deleted stayed linked to the
+  deleted item and was dropped by the gate — now a link to a GUID outside the group
+  means "process"; (2) groups ignored by the old system-MIME logic would stay
+  ignored forever — a `meta` table keeps `mime_version`, a new version clears the
+  "ignored" marks once.
+- The gate stamps `CheckTime` with its own clock; the marker carries the walk start,
+  and "not stamped since the walk started" = gone.
+
 ### Go plugins (2026-09-28)
 
 - Host and `.so` must be built with **the same toolchain** and **identical versions

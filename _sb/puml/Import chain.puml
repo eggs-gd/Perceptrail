@@ -40,11 +40,11 @@ end
 
 alt plain folder
     Groups -> Generic: file
-    Generic -> Generic: sidecars by name\n(buffered per directory)
+    Generic -> Generic: sidecars by name, next to each other\n(buffer: one open group; a complete group goes out)
     Generic -> Gate: group
 else inside *.photoslibrary
     Groups -> Photos: file
-    Photos -> Photos: Photos.sqlite: assets\n(original, render, Live Photo video)\ncaches ignored
+    Photos -> Photos: first file: asset links from Photos.sqlite\n(original, render, Live Photo video); buffer of open\ngroups, a group goes out when all its files arrived
     Photos -> Gate: group (asset UUID)
 else other formats (Takeout, ...)
     Groups ->x Groups: later
@@ -97,5 +97,7 @@ note right of Groups: broadcast to every branch
 Generic -> Gate: last groups, marker
 Photos -> Gate: last groups, marker
 Gate -> DB: after the marker from every branch:\ndeletions (V2), only after a complete walk,\nnot under unreadable directories
+Closer --> Walker: the last group of the walk is done (items + errors counted)
+Walker -> Walker: rescan pause (1 min), then walk again
 
 @enduml

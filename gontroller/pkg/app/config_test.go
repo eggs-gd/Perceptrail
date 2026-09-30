@@ -1,6 +1,11 @@
 package app
 
-import "testing"
+import (
+	"testing"
+	"time"
+
+	"gopkg.in/yaml.v3"
+)
 
 func TestConfigResolve(t *testing.T) {
 	c := Config{
@@ -38,5 +43,12 @@ func TestConfigResolve(t *testing.T) {
 	c.resolve("/cfg")
 	if c.Database.Name != "perceptrail" {
 		t.Errorf("postgres Name = %q", c.Database.Name)
+	}
+}
+
+func TestConfigRescanDuration(t *testing.T) {
+	var c Config
+	if err := yaml.Unmarshal([]byte("rescan: 30s\n"), &c); err != nil || c.Rescan != 30*time.Second {
+		t.Errorf("rescan = %v, %v", c.Rescan, err)
 	}
 }

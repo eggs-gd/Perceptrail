@@ -58,35 +58,52 @@ Target architecture — the diagrams in [`../puml`](../puml).
 
 ## Next
 
-One PR per feature (its steps are commits). Next: the import chain C1–C7 (its own
-PR). The validator (V1–V5) and dates (D1–D3) are in PR #13.
+One PR per feature (its steps are commits). The import chain C1–C7 is in its own
+PR (`feature/import-chain`).
 
 ### Import chain: one small step per node
 
 Graph: [`Import chain.puml`](../puml/Import%20chain.puml); gate and validator
-details: [`Walker.puml`](../puml/Walker.puml). Today `fswalker` does everything
+details: [`Walker.puml`](../puml/Walker.puml). Before, `fswalker` did everything
 (walk, MIME, grouping, files table, change detection, deletions) and the validator
-hides inside the exif step, so groups and MIME are decided before EXIF is known.
+hid inside the exif step, so groups and MIME were decided before EXIF was known.
 
-- [ ] **C1. fswalker = spam.** Every file found (path + stat), nothing else; walk
+- [x] **C1. fswalker = spam.** Every file found (path + stat), nothing else; walk
       safety from V1 stays.
-- [ ] **C2. Groups: a switch by source.** `generic` = sidecars by name next to each
-      other (buffered per directory); Apple Photos and others are branches added
-      later (the Photos milestone). The end-of-walk marker is broadcast to every
-      branch; all branches write to one channel.
-- [ ] **C3. Files gate.** The files table: new / changed (size, mtime) / item not
-      Ready → pass, otherwise drop (no exiftool for unchanged files); `CheckTime`;
-      deletions (V2) after the marker from every branch.
-- [ ] **C4. exif** for the whole group (today's extractor without the validator).
-- [ ] **C5. mime.** Kind of every file: exif `FileType`/`MIMEType` → own extension
-      table (`MediaKind`: image/raw/video/animated/sidecar) → content sniff; rank the
-      group: main file (the photo in a Live Photo, deterministic RAW+JPEG, pairs by
-      `ContentIdentifier`). No system `mime` tables (Docker).
-- [ ] **C6. validator** as its own step (V3): same / changed / moved / duplicate; a
-      moved item whose outputs for the GUID are complete → `Ready`, no transcode.
-- [ ] **C7. transcode switch** by kind (photo / video / Live Photo; pass-through until
-      thumbnails exist), then plugins (after transcode: the client gets items with
-      thumbnails), closer → `Ready`. Tests reworked per step.
+- [x] **C2. Groups: a switch by source.** Groupers are plain decorators with their
+      own buffer of open groups: a group goes out when it is complete, so every file
+      closes at most one group. `generic`: sidecars by name, next to each other
+      (name order), case-insensitive — one open group. Apple Photos: a stub branch;
+      `groups.appleEnabled = false` keeps the library in `generic` until the Photos
+      milestone (there: the first file of the library loads the asset links from its
+      DB, a group closes when all its files arrived; incomplete groups at the marker
+      — e.g. cloud-only originals — to decide). The marker is broadcast to every
+      branch and goes out with the grouper's last group.
+- [x] **C3. Files gate.** The files table: new / changed (size, mtime) / never
+      linked / item not Ready → pass, otherwise drop (no exiftool for unchanged
+      files); `CheckTime`; deletions (V2) after the marker from every branch.
+- [x] **C4. exif** for every file of the group (`-all`: the main file is not known
+      yet), N steps in parallel on the same channels (it was one serial step with a
+      pool of 5 processes).
+- [x] **C5. mime.** Kind of every file: exif `MIMEType` → own extension table
+      (`MediaKind`: image/raw/video/sidecar/other) → content sniff; rank: the main
+      file is always the source — RAW > video > image; the JPEG of RAW+JPEG and the
+      photo of a Live Photo are derivatives (sidecars); ties by size, name. No system
+      `mime` tables (Docker).
+- [x] **C6. validator** as its own step: links the group to the main file, a former
+      main file that became a sidecar loses its item (a JPEG whose RAW appeared); same /
+      changed / moved / duplicate; a moved item with complete outputs → `Ready`, no
+      transcode (no outputs exist yet, so always).
+- [x] **C7. transcode switch** by kind (photo / video / Live Photo; stubs pass the
+      item on), then plugins, closer → `Ready`. Finished items are drained (the
+      closer used to block after 1000 items: nothing read the channel).
+- [x] **Repeated walks.** `rescan` (default 1 min) after the last group of the
+      previous walk is processed, not after the walk: walks never overlap.
+      Known cost: a group that fails (e.g. exiftool returns nothing) is retried on
+      every walk — see "broken files".
+- [ ] Later: derivatives in a group (the JPEG of a RAW, the photo of a Live Photo)
+      as ready previews — saves a transcode; Live Photo pairs checked by
+      `ContentIdentifier` (today by name); `animated` kind.
 
 ### Dates and time zones
 
@@ -119,6 +136,8 @@ reference); reading needs Full Disk Access for the process (TCC).
       Everything else in the bundle is not scanned. Trashed assets are not emitted
       (→ `Deleted` via V2). Cloud-only: skip (or a derivative as a fallback — decide
       in P0).
+- [ ] Links from the DB: the grouper states the source (main file), derivatives are
+      linked to it (never items of their own); mime does not re-rank such a group.
 - [ ] **P2. Library metadata.** The asset's DB attributes join the group as a
       virtual metadata record (e.g. `Photos:*` tags next to exiftool's), so the core
       plugins use them: the zone from the library comes first in D3, the original
@@ -131,7 +150,56 @@ reference); reading needs Full Disk Access for the process (TCC).
 - [ ] Thumbnails on the server: libvips via `bimg` (needs `brew install vips`), 400 px
       for tiles, 1600 px for the viewer, WebP; `/assets/:guid?size=…` falls back to the
       original; regenerated for `Dirty`, dropped for `Deleted`. Fixes blank tiles
-      (decoding originals) and HEIC in Chrome/Firefox.
+      (decoding originals) and HEIC in Chrome/Firefox. Transcoders take the whole
+      asset (group), not a file. Video: web previews are always downscaled (even a
+      browser-playable H.264 can be 4K); codecs (H.264 / HEVC / AV1 support) decided
+      then. Motion previews for videos and Live Photos: a short muted clip (or GIF)
+      that plays on mouseover in the gallery, the poster otherwise.
+
+      **Two-stage readiness** (decided): show what we can as early as possible, but
+      never content the browser cannot show.
+      ```
+      validator -> exif plugins (date, size: fast, needed for the layout)
+        -> cheap preview: what already exists, no transcode
+             found  -> item Visible -> the client gets it
+             none   -> the item waits for the expensive step
+        -> expensive transcode (photo | video | Live Photo) -> item Ready -> client: updated
+        -> ML perceptors (need thumbnails; results arrive as later updates)
+      ```
+      Cheap preview, in order: a browser-viewable derivative in the group (the JPEG
+      of a RAW, the photo of a Live Photo, a Photos render); the embedded preview
+      (`PreviewImage` / `JpgFromRaw`, `exiftool -b`); the original itself if the
+      browser shows it (JPEG, PNG, WebP); a video's embedded poster. **Any size
+      counts** — even a 160 px thumbnail: trust the data we have, the expensive step
+      delivers the quality. States `New -> Visible -> Ready` (+ `Dirty`); `/items`
+      shows `Visible` and `Ready`; `/assets/:guid?size=` serves the best that
+      exists. Exif plugins move before transcode.
+
+      **Two stages, two chains** (decided):
+      ```
+      cheap chain (as now):   walker -> ... -> exif plugins -> cheap preview -> Visible
+                              -> perceptors, cheap pass (on what the group has)
+                              the walker waits for this chain only, then the rescan pause
+      expensive chain:        feeder (next item needing work, from the DB)
+                              -> transcode (photo | video | Live Photo) -> Ready
+                              -> perceptors, full pass (on our previews): results replace
+                                 the cheap-pass ones, the client gets an update
+      ```
+      - **The expensive queue is DB state, not a channel** (a channel is a snapshot
+        that cannot change): "items that still lack X" — `Visible`/`Dirty` without
+        outputs; a perceptor whose stage/version for the item is behind. The feeder
+        pulls the next one when a worker is free. New photos just appear in it,
+        deleted items drop out of it, a move changes nothing (the path is read at
+        pick time; outputs live under the GUID: `cache/thumbs/<guid>/…`).
+      - An item being worked on may change meanwhile: at commit, deleted -> discard
+        (long work checks between stages and stops); a different hash -> discard, the
+        item stays queued; only the path changed -> keep.
+      - Several workers: an "in work since" mark; stale marks go back to the queue.
+      - Perceptors always run on both passes — incremental refinement for the
+        client: e.g. faces on cheap previews find blurred spots that cluster as one
+        face; on our previews part of them moves out into clusters of their own.
+        Per item and perceptor we store the pass done (and the perceptor version).
+        Order comes from the stages: every new item gets its cheap pass first.
 - [ ] First perceptor end to end (primitive geo: map, markers) → release 0.2.0.
 
 ## Core — product (gontroller)
@@ -176,7 +244,7 @@ Don't rush — a stable core first.
   face management).
 - Perceptor routes (`/p/<name>/…`), a common query/filter API (set intersection).
 - `ItemGroup` processing mode (series, Live Photo, clusters, duplicates).
-- Reprocessing on plugin version change; fsnotify instead of a one-shot walk.
+- Reprocessing on plugin version change; fsnotify instead of the periodic walk.
 
 ### Core vs. perceptors
 

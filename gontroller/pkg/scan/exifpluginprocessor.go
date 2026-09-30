@@ -6,6 +6,7 @@ import (
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/plugins"
 	"perceptrail/gontroller/pkg/plugins/exif_core"
+	"perceptrail/gontroller/pkg/scan/flow"
 
 	"github.com/eggs-gd/perceplib/api"
 	"github.com/eggs-gd/perceplib/chain"
@@ -17,7 +18,7 @@ type opener struct {
 	logger *l.Logger
 }
 
-func (fd *opener) Decorate(in *RawItem) (exif_core.RawItemRW, error) {
+func (fd *opener) Decorate(in *flow.RawItem) (exif_core.RawItemRW, error) {
 	if in.Item == nil {
 		return nil, chain.ErrSkippedItem
 	}
@@ -26,7 +27,7 @@ func (fd *opener) Decorate(in *RawItem) (exif_core.RawItemRW, error) {
 
 func (fd *opener) Stop() {}
 
-func newOpener(chin <-chan *RawItem, chout chan<- exif_core.RawItemRW, logger *l.Logger) chain.Processor {
+func newOpener(chin <-chan *flow.RawItem, chout chan<- exif_core.RawItemRW, logger *l.Logger) chain.Processor {
 	processor := &opener{logger}
 	return chain.NewDecorator(chin, chout, processor)
 }
@@ -41,9 +42,9 @@ func (fd *closer) Decorate(in exif_core.RawItemRW) (*dto.ItemDto, error) {
 		return nil, chain.ErrSkippedItem
 	}
 
-	rawItem, ok := in.(*RawItem)
+	rawItem, ok := in.(*flow.RawItem)
 	if !ok {
-		return nil, fmt.Errorf("expected *RawItem, got %T", in)
+		return nil, fmt.Errorf("expected *flow.RawItem, got %T", in)
 	}
 
 	if rawItem.Item == nil {
@@ -82,7 +83,7 @@ func (toReadWrite) Decorate(in api.RawItemR) (exif_core.RawItemRW, error) {
 func (toReadWrite) Stop() {}
 
 // Chain implementation
-func NewExifPluginProcessor(chin <-chan *RawItem, chout chan<- *dto.ItemDto, errch chan error, logger *l.Logger) chain.Processor {
+func NewExifPluginProcessor(chin <-chan *flow.RawItem, chout chan<- *dto.ItemDto, errch chan error, logger *l.Logger) chain.Processor {
 	exifChain := chain.NewChainProcessor(errch)
 
 	prev := make(chan exif_core.RawItemRW, 1)

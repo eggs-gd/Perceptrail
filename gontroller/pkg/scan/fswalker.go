@@ -4,41 +4,27 @@ import (
 	"context"
 	"errors"
 	"io/fs"
-	"mime"
-	"net/http"
 	"os"
 	"path/filepath"
-	"perceptrail/gontroller/pkg/model/dto"
-	"slices"
-	"sort"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/eggs-gd/perceplib/api"
+	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/scan/flow"
+
 	"github.com/eggs-gd/perceplib/chain"
 
 	l "github.com/eggs-gd/perceplib/logger"
-
-	"gorm.io/gorm"
 )
+
+// fswalker: the entry point. It only reports what it finds — every file with its
+// stat, then the end-of-walk marker. Grouping, MIME, the DB are later steps.
 
 type inType struct {
 	path string
 	info os.DirEntry
 	// Set only on the end-of-walk marker
-	done *walkResult
-}
-
-// walkResult describes a finished walk. Deletions may be derived from it only if
-// the walk was complete: a cancelled walk or an unreadable root says nothing about
-// which files are gone.
-type walkResult struct {
-	complete bool
-	// Files seen (before grouping and filtering)
-	files int
-	// Directories that could not be read: their files are not "deleted"
-	unreadable []string
+	done *flow.WalkResult
 }
 
 type fsMonitor struct {
@@ -48,20 +34,15 @@ type fsMonitor struct {
 
 	mu sync.Mutex // guards cancel: Stop is called from two goroutines
 
-	path         string
-	currentGroup []dto.ItemEntry // current group of files
-	currentRun   time.Time       // timestamp for current walker run
+	path     string
+	interval time.Duration // pause after the work of a walk is done
+	progress *progress
 }
 
-func NewFsWalker(path string, chout chan<- []*dto.FileDto, logger *l.Logger) chain.Processor {
-
-	m := &fsMonitor{
-		logger:       logger,
-		path:         path,
-		currentGroup: []dto.ItemEntry{},
-	}
-
-	return chain.NewEntryPoint(chout, m)
+// NewFsWalker walks the library again and again: interval after the chain has
+// processed the previous walk (progress), not after the walk itself
+func NewFsWalker(path string, interval time.Duration, progress *progress, chout chan<- flow.FileEvent, logger *l.Logger) chain.Processor {
+	return chain.NewEntryPoint(chout, &fsMonitor{logger: logger, path: path, interval: interval, progress: progress})
 }
 
 func (m *fsMonitor) Start(chin chan<- inType, ctx context.Context) {
@@ -70,21 +51,29 @@ func (m *fsMonitor) Start(chin chan<- inType, ctx context.Context) {
 	m.mu.Unlock()
 	defer m.Stop()
 
-	m.currentRun = time.Now()
-	result := m.walk(chin)
-
-	// Groups are emitted when the next group starts; the marker flushes the last one
-	// and carries the result to Decorate, which runs after every group is stored
-	select {
-	case chin <- inType{done: &result}:
-	case <-m.ctx.Done():
+	// Walk, wait until the chain has processed that walk, pause, walk again
+	for {
+		result := m.walk(chin)
+		select {
+		case chin <- inType{done: &result}:
+		case <-m.ctx.Done():
+			return
+		}
+		if !m.progress.waitIdle(m.ctx) {
+			return
+		}
+		select {
+		case <-time.After(m.interval):
+		case <-m.ctx.Done():
+			return
+		}
 	}
 }
 
 // walk sends every file under the root to chin. An unreadable subdirectory is
 // skipped and recorded; an unreadable root or a cancel makes the walk incomplete.
-func (m *fsMonitor) walk(chin chan<- inType) walkResult {
-	var result walkResult
+func (m *fsMonitor) walk(chin chan<- inType) flow.WalkResult {
+	result := flow.WalkResult{Root: m.path, Started: time.Now()}
 
 	if info, err := os.Stat(m.path); err != nil || !info.IsDir() {
 		m.logger.Error("Library root is not a readable directory", l.String("path", m.path), l.Error(err))
@@ -100,7 +89,7 @@ func (m *fsMonitor) walk(chin chan<- inType) walkResult {
 				return err
 			}
 			m.logger.Warn("Unreadable, skipped", l.String("path", path), l.Error(err))
-			result.unreadable = append(result.unreadable, path)
+			result.Unreadable = append(result.Unreadable, path)
 			if entry != nil && entry.IsDir() {
 				return fs.SkipDir
 			}
@@ -112,7 +101,7 @@ func (m *fsMonitor) walk(chin chan<- inType) walkResult {
 
 		select {
 		case chin <- inType{path: path, info: entry}:
-			result.files++
+			result.Files++
 			return nil
 		case <-m.ctx.Done():
 			return m.ctx.Err()
@@ -125,85 +114,8 @@ func (m *fsMonitor) walk(chin chan<- inType) walkResult {
 		}
 		return result
 	}
-	result.complete = true
+	result.Complete = true
 	return result
-}
-
-// finalizeWalk runs after the last group of a walk is stored.
-func (m *fsMonitor) finalizeWalk(result walkResult) {
-	if !result.complete {
-		m.logger.Warn("Walk incomplete: deletions are not checked")
-		return
-	}
-	if result.files == 0 {
-		// An empty root (e.g. an unmounted drive's mount point) must not delete the library
-		m.logger.Warn("Walk found no files: deletions are not checked", l.String("path", m.path))
-		return
-	}
-	m.logger.Info("Walk complete", l.Int("files", result.files), l.Int("unreadable", len(result.unreadable)))
-
-	stale, err := filesProxy.GetFilesCheckedBefore(m.currentRun)
-	if err != nil {
-		m.logger.Error("Deletions: can't read files", l.Error(err))
-		return
-	}
-	gone := m.goneFiles(stale, result.unreadable)
-	deletedItems, dirtyItems := 0, 0
-
-	for _, f := range gone {
-		switch {
-		case f.IsIgnored():
-		case f.LinkedTo == f.GUID: // main file: the item is gone
-			item, err := itemsProxy.GetItemByGuid(f.GUID)
-			if err != nil {
-				continue // never became an item, or already deleted
-			}
-			if err := itemsProxy.DeleteItem(item); err != nil {
-				m.logger.Error("Deletions: can't delete item", l.String("guid", item.Guid), l.Error(err))
-				continue
-			}
-			deletedItems++
-		default: // sidecar: its item must be processed again
-			item, err := itemsProxy.GetItemByGuid(f.LinkedTo)
-			if err != nil {
-				continue
-			}
-			item.State = dto.Dirty
-			if _, err := itemsProxy.UpdateItem(item); err != nil {
-				m.logger.Error("Deletions: can't mark item dirty", l.String("guid", item.Guid), l.Error(err))
-				continue
-			}
-			dirtyItems++
-		}
-	}
-
-	if err := filesProxy.DeleteFiles(gone); err != nil {
-		m.logger.Error("Deletions: can't delete files", l.Error(err))
-		return
-	}
-	m.logger.Info("Deletions", l.Int("files", len(gone)), l.Int("items", deletedItems), l.Int("dirty", dirtyItems))
-}
-
-// goneFiles keeps the stale files that belong to this root and were not hidden by
-// an unreadable directory: only those are known to be deleted.
-func (m *fsMonitor) goneFiles(stale []*dto.FileDto, unreadable []string) []*dto.FileDto {
-	var gone []*dto.FileDto
-	for _, f := range stale {
-		if !isUnder(f.Path, m.path) {
-			continue // another library root (config changed): not ours to judge
-		}
-		if slices.ContainsFunc(unreadable, func(dir string) bool { return f.Path == dir || isUnder(f.Path, dir) }) {
-			continue
-		}
-		gone = append(gone, f)
-	}
-	return gone
-}
-
-// isUnder reports whether path is inside dir
-func isUnder(path, dir string) bool {
-	rel, err := filepath.Rel(dir, path)
-	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func (m *fsMonitor) Stop() {
@@ -215,246 +127,20 @@ func (m *fsMonitor) Stop() {
 	}
 }
 
-func (m *fsMonitor) Decorate(in inType) ([]*dto.FileDto, error) {
-	if in.done != nil { // end of walk: emit the last group, then finalize
-		group := m.currentGroup
-		m.currentGroup = []dto.ItemEntry{}
-		res := m.entryToFile(group)
-		m.finalizeWalk(*in.done)
-		if res != nil {
-			return res, nil
-		}
-		return nil, chain.ErrSkippedItem
+// Decorate adds the stat. A file that vanished since it was listed is skipped: it
+// is not seen, so the gate will take it as deleted.
+func (m *fsMonitor) Decorate(in inType) (flow.FileEvent, error) {
+	if in.done != nil {
+		return flow.FileEvent{Done: in.done}, nil
 	}
-
-	m.logger.Info("processFile", l.String("path", in.path))
-
-	if shouldSkipPath(in.path) {
-		return nil, chain.ErrSkippedItem
-	}
-
-	item := newItemEntryFromDirEntry(in.path, in.info)
-	updateMimeType(&item, m.logger)
-
-	if m.tryPutInGroup(item) {
-		return nil, chain.ErrSkippedItem
-	} else { // start new group
-		group := m.currentGroup
-		m.currentGroup = []dto.ItemEntry{item}
-		res := m.entryToFile(group)
-		if res == nil {
-			return nil, chain.ErrSkippedItem
-
-		}
-		return res, nil
-	}
-}
-
-func (m *fsMonitor) tryPutInGroup(entry dto.ItemEntry) bool {
-	m.logger.Info("tryPutInGroup", l.Any("entry", entry))
-	if len(m.currentGroup) == 0 {
-		m.currentGroup = append(m.currentGroup, entry)
-		return true
-	}
-
-	first := m.currentGroup[0]
-	if filepath.Dir(first.Path) != filepath.Dir(entry.Path) {
-		return false
-	}
-
-	firstParts := strings.Split(first.Name, ".")
-	secondParts := strings.Split(entry.Name, ".")
-
-	var base string = ""
-	var compare string = ""
-
-	if len(firstParts) < len(secondParts) {
-		base = strings.Join(firstParts, ".")
-		compare = strings.Join(secondParts[:len(firstParts)], ".")
-	} else if len(firstParts) > len(secondParts) {
-		base = strings.Join(secondParts, ".")
-		compare = strings.Join(firstParts[:len(secondParts)], ".")
-	} else {
-		base = strings.Join(firstParts[:len(firstParts)-1], ".")
-		compare = strings.Join(secondParts[:len(secondParts)-1], ".")
-	}
-
-	if base == compare {
-		m.currentGroup = append(m.currentGroup, entry)
-		sort.Slice(m.currentGroup, func(i, j int) bool {
-			return ((strings.Contains(m.currentGroup[i].MimeType, "video/") && !strings.Contains(m.currentGroup[j].MimeType, "video/")) ||
-				(strings.Contains(m.currentGroup[i].MimeType, "image/") && !strings.Contains(m.currentGroup[j].MimeType, "image/")) ||
-				(m.currentGroup[i].MimeType == m.currentGroup[j].MimeType && m.currentGroup[i].Size >= m.currentGroup[j].Size))
-		})
-		return true
-	}
-
-	return false
-}
-
-func (m *fsMonitor) entryToFile(group []dto.ItemEntry) []*dto.FileDto {
-	m.logger.Info("entryToFile", l.Any("group", group))
-	var dbitems []*dto.FileDto
-	var changedFiles []*dto.FileDto
-
-	if len(group) == 0 {
-		return nil
-	}
-
-	for _, item := range group {
-		dbitem, err := filesProxy.GetFileByPath(item.Path)
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				dbitem, err = filesProxy.CreateFile(item)
-				m.logger.Info("entryToFile", l.Any("changedFiles add new", dbitem))
-				changedFiles = api.AppendUniq(changedFiles, dbitem)
-
-				if err != nil {
-					// cant create file
-					m.logger.Error("Error creating file", l.Error(err))
-					continue
-				}
-			} else {
-				// Something went wrong with db access, probably should be panic
-				m.logger.Error("Error retrieving file", l.Error(err))
-				continue
-			}
-		}
-
-		if dbitem.ID != 0 {
-			dbitem.CheckTime = m.currentRun
-			dbitems = api.AppendUniq(dbitems, dbitem)
-		} else {
-			// something went wrong but should be catched above on creating phase
-			m.logger.Error("Error got empty file", l.Error(err))
-			continue
-		}
-
-		if dbitem.LinkTo(dbitems[0]) && !dbitem.IsIgnored() {
-			m.logger.Info("entryToFile", l.Any("changedFiles add linked", dbitems))
-			changedFiles = api.AppendUniq(changedFiles, dbitem)
-		}
-
-		if item.ModTime.UTC() == dbitem.ModTime.UTC() &&
-			item.Size == dbitem.Size {
-			continue // do nothing, skip
-		}
-
-		// Changed on disk: store the fresh size/time, or every scan sees it as changed again
-		// (and HashShort is computed from the stale size)
-		m.logger.Info("entryToFile -> changedFiles ad changed", l.Any("item", item.ModTime), l.Any("dbItem", dbitem.ModTime))
-		dbitem.Size = item.Size
-		dbitem.ModTime = item.ModTime
-		dbitem.MimeType = item.MimeType
-		if !dbitem.IsIgnored() {
-			changedFiles = api.AppendUniq(changedFiles, dbitem)
-		}
-	}
-
-	if len(dbitems) == 0 {
-		return nil
-	}
-
-	// ignore whole group if main file is not media
-	if !strings.Contains(dbitems[0].MimeType, "video/") &&
-		!strings.Contains(dbitems[0].MimeType, "image/") {
-		for i := range dbitems {
-			dbitems[i].SetIgnored()
-		}
-
-		changedFiles = nil
-	}
-
-	if _, err := filesProxy.UpdateFiles(dbitems); err != nil {
-		m.logger.Panic("can't update files")
-	}
-
-	// Unchanged files, but the item is not done (new, dirty, or processing was
-	// interrupted): process the whole group again
-	if len(changedFiles) == 0 && !dbitems[0].IsIgnored() && m.needsProcessing(dbitems[0]) {
-		for _, f := range dbitems {
-			if !f.IsIgnored() {
-				changedFiles = append(changedFiles, f)
-			}
-		}
-	}
-
-	if len(changedFiles) > 0 {
-		if !slices.Contains(changedFiles, dbitems[0]) {
-			changedFiles = append([]*dto.FileDto{dbitems[0]}, changedFiles...)
-		}
-
-		return changedFiles
-	}
-
-	return nil
-}
-
-// needsProcessing: the main file has no item yet, or its item is not Ready
-func (m *fsMonitor) needsProcessing(main *dto.FileDto) bool {
-	item, err := itemsProxy.GetItemByGuid(main.GUID)
+	info, err := in.info.Info()
 	if err != nil {
-		return errors.Is(err, gorm.ErrRecordNotFound)
+		return flow.FileEvent{}, chain.ErrSkippedItem
 	}
-	return item.State != dto.Ready
-}
-
-func updateMimeType(entry *dto.ItemEntry, logger *l.Logger) {
-	updateMimeTypeGeneric(entry)
-	updateMimeTypeFromMeta(entry, logger)
-}
-
-func updateMimeTypeGeneric(entry *dto.ItemEntry) {
-	if entry.MimeType != "" {
-		return
-	}
-
-	ext := filepath.Ext(entry.Path)
-	entry.MimeType = mime.TypeByExtension(ext)
-}
-
-func updateMimeTypeFromMeta(entry *dto.ItemEntry, logger *l.Logger) {
-	if entry.MimeType != "" {
-		return
-	}
-
-	file, err := os.Open(entry.Path)
-	if err != nil {
-		logger.Error("updateMimeTypeFromMeta", l.Error(err))
-	}
-	defer file.Close()
-
-	buffer := make([]byte, 512)
-	_, err = file.Read(buffer)
-	if err != nil {
-		logger.Error("updateMimeTypeFromMeta", l.Error(err))
-	}
-
-	entry.MimeType = http.DetectContentType(buffer)
-}
-
-func newItemEntryFromDirEntry(path string, dirEntry os.DirEntry) dto.ItemEntry {
-	i := dto.ItemEntry{
-		Path: path,
-		Name: dirEntry.Name(),
-	}
-
-	info, err := dirEntry.Info()
-	if err == nil {
-		i.Size = info.Size()
-		i.ModTime = info.ModTime()
-	}
-	return i
-}
-
-// Apple Photos internals: .THM posters and generated derivatives are not gallery sources.
-func shouldSkipPath(path string) bool {
-	lower := strings.ToLower(path)
-	if strings.HasSuffix(lower, ".thm") {
-		return true
-	}
-	if strings.Contains(lower, ".photoslibrary/resources/") {
-		return true
-	}
-	return false
+	return flow.FileEvent{Entry: dto.ItemEntry{
+		Path:    in.path,
+		Name:    in.info.Name(),
+		Size:    info.Size(),
+		ModTime: info.ModTime(),
+	}}, nil
 }

@@ -15,7 +15,7 @@ type ItemsApi interface {
 	// - short hash gate,
 	// - full hash gate
 	//GetShortHash(rawExif t.RawExif, fileSizeBytes uint64) string
-	ValidateFile(item *dto.FileDto, meta api.RawExif) (*dto.ItemDto, error)
+	ValidateFile(item *dto.FileDto, meta api.RawExif) (*dto.ItemDto, Outcome, error)
 
 	GetAllItems() ([]*dto.ItemDto, error)
 	// StreamAllItems walks items via a DB cursor without loading the full table into memory.

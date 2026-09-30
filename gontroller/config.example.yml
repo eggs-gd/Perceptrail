@@ -13,6 +13,9 @@ plugins:
 # Database and caches (thumbnails). Default: the directory of this file
 # data_dir: .
 
+# Pause between the end of one scan's processing and the next scan. Default: 1m
+# rescan: 1m
+
 # ExifTool executable. Default: exiftool from PATH
 # exiftool: /opt/exiftool/exiftool
 

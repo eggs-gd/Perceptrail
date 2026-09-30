@@ -50,6 +50,7 @@ func initDB(logger *l.Logger) *gorm.DB {
 	err = db.AutoMigrate(
 		&dto.ItemDto{},
 		&dto.FileDto{},
+		&dto.MetaDto{},
 		// &Tag{},
 		// &Album{},
 	)
