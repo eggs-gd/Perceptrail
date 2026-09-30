@@ -40,9 +40,16 @@ export function pictureSources(asset: Asset): PictureSource[] {
         }));
 }
 
+/** Is there an image to show: the edit, a still, or an original every browser shows */
+export function hasImage(asset: Asset): boolean {
+    return asset.edit.length > 0 || asset.stills.length > 0
+        || (!!asset.original && VIEWABLE_IMAGES.has(asset.original.mime));
+}
+
 /** The <img> fallback: the biggest image every browser shows */
 export function fallbackImage(asset: Asset): Rendition | undefined {
     const images = [...asset.edit, ...asset.stills].filter((r) => VIEWABLE_IMAGES.has(r.mime));
+    if (asset.original && VIEWABLE_IMAGES.has(asset.original.mime)) images.push(asset.original);
     return images.sort((a, b) => (b.w ?? 0) - (a.w ?? 0))[0];
 }
 

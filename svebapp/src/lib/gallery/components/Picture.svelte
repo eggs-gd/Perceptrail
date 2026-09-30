@@ -9,9 +9,15 @@
         alt: string;
         width?: number;
         height?: number;
+        /**
+         * eager: the gallery renders only a window of tiles (with a margin above and
+         * below), so its images load at once — lazy would hold back exactly the
+         * margin that is there to load them before they scroll in
+         */
+        loading?: 'eager' | 'lazy';
     }
 
-    let {asset, sizes, alt, width, height}: Props = $props();
+    let {asset, sizes, alt, width, height, loading = 'eager'}: Props = $props();
 
     let sources = $derived(pictureSources(asset));
     let fallback = $derived(fallbackImage(asset));
@@ -22,7 +28,7 @@
         <source type={source.type} srcset={source.srcset} {sizes}>
     {/each}
     {#if fallback}
-        <img src={assetUrl(fallback)} {width} {height} {alt} loading="lazy" decoding="async">
+        <img src={assetUrl(fallback)} {width} {height} {alt} {loading} decoding="async">
     {/if}
 </picture>
 

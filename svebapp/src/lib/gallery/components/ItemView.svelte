@@ -5,7 +5,7 @@
     import Video from "./Video.svelte";
     import Picture from "./Picture.svelte";
     import Motion from "./Motion.svelte";
-    import {assetUrl, fallbackImage, originalViewable, playableVideos} from "./asset";
+    import {assetUrl, fallbackImage, hasImage, originalViewable, playableVideos} from "./asset";
 
     interface Props {
         item: Item;
@@ -20,7 +20,8 @@
 
     // The client decides what to show: the asset has every file by role
     let asset = $derived(item.asset);
-    let hasStill = $derived(!!asset && (asset.edit.length > 0 || asset.stills.length > 0));
+    // An original the browser shows counts too (a generic PNG/JPEG with no smaller copy)
+    let hasStill = $derived(!!asset && hasImage(asset));
     let videos = $derived(asset ? playableVideos(asset) : []);
     let hasMotion = $derived(videos.length > 0 || (asset?.frames.length ?? 0) > 1);
     let hovered = $state(false);
