@@ -219,6 +219,44 @@ compose with `derived`. The current message protocol is a deviation from this de
 
 ## Backend: gontroller, plugins, exiftool
 
+### Apple Photos library: spike (2026-09-30)
+
+On a copy of the dev library's `Photos.sqlite` (read with `mode=ro`) and a list of
+the bundle's files (`originals/`, `resources/renders/`, `resources/derivatives/`).
+Every file belongs to a known asset; the DB's local-resource counts match the files.
+
+- 6 457 assets: 5 691 photos (367 Live Photos, 449 screenshots, 22 panoramas), 766
+  videos; 30 trashed, none hidden. Schema `ZASSET` (macOS 11+).
+- The DB stores only the original's path: `originals/<ZDIRECTORY>/<ZFILENAME>`.
+  Everything else follows a naming layout (`<X>` = the UUID's first character):
+
+  | File | What | Long side |
+  |---|---|---|
+  | `originals/<X>/<UUID>.<ext>` | the original (source) | full |
+  | `resources/renders/<X>/<UUID>_1_201_a.jpeg\|heic` | the user's edit, full size | ~1600, up to 5700 |
+  | `resources/renders/<X>/<UUID>.plist` | edit data (not an image) | — |
+  | `resources/derivatives/<X>/<UUID>_1_101_o`, `_1_102_o.jpeg` | preview of the original | ~2000–2600 |
+  | `resources/derivatives/<X>/<UUID>_1_102_a.jpeg` | preview of the edit | ~2000 |
+  | `resources/derivatives/<X>/<UUID>_1_105_c`, `_1_106_c.jpeg` | medium preview | ~1000 |
+  | `resources/derivatives/masters/<X>/<UUID>_4_5005_c.jpeg` | small thumbnail, nearly every asset | not in the DB |
+  | `resources/derivatives/<X>/<UUID>.THM` | video poster | — |
+  | `resources/derivatives/cvt/<X>/<UUID>/…_cvt_tNNNN.jpeg` | video frames (scrubbing) | — |
+
+  In `ZINTERNALRESOURCE` (local rows): `(type 0, version 0, subtype 1)` = originals,
+  `(0,2,2)` = renders, `(0,0,4)` = `_1_102_o`, `(0,0,3)` = `_1_101_o`, `(0,3,0)` =
+  `_1_105_c`, `(0,2,4)` = `_1_102_a`, `(14,3,0)` = masters; video = type 1, Live
+  Photo video = type 3.
+- **Optimize Mac Storage**: 1 782 originals are local, none of the videos and none of
+  the Live Photo videos. Best local preview per live asset: original 1 781; render
+  330; ~2000 px derivative 1 682; small master only 2 082; video poster 544 (+ 222
+  video assets with a ~2000 px image); **nothing at all: 7 of 6 427**. So a
+  derivative can show 6 420 assets where the originals alone show 1 781.
+- Decisions: cloud-only assets are items (preview from the derivative, metadata from
+  the DB); an edited photo shows its edit; any size counts; Apple's derivatives are
+  used as they are — transcode only fills gaps (see roadmap P3).
+- Unverified here: the Live Photo video's file name (`<UUID>_3.mov` per osxphotos) —
+  no Live Photo video is local in this library.
+
 ### Item == asset (2026-09-29)
 
 - **Decision: one entity.** An item is the asset — one whole group of files (source
