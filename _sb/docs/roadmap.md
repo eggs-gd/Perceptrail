@@ -155,6 +155,27 @@ reference); reading needs Full Disk Access for the process (TCC).
       browser-playable H.264 can be 4K); codecs (H.264 / HEVC / AV1 support) decided
       then. Motion previews for videos and Live Photos: a short muted clip (or GIF)
       that plays on mouseover in the gallery, the poster otherwise.
+
+      **Two-stage readiness** (decided): show what we can as early as possible, but
+      never content the browser cannot show.
+      ```
+      validator -> exif plugins (date, size: fast, needed for the layout)
+        -> cheap preview: what already exists, no transcode
+             found  -> item Visible -> the client gets it
+             none   -> the item waits for the expensive step
+        -> expensive transcode (photo | video | Live Photo) -> item Ready -> client: updated
+        -> ML perceptors (need thumbnails; results arrive as later updates)
+      ```
+      Cheap preview, in order: a browser-viewable derivative in the group (the JPEG
+      of a RAW, the photo of a Live Photo, a Photos render); the embedded preview
+      (`PreviewImage` / `JpgFromRaw`, `exiftool -b`); the original itself if the
+      browser shows it (JPEG, PNG, WebP); a video's embedded poster. **Any size
+      counts** — even a 160 px thumbnail: trust the data we have, the expensive step
+      delivers the quality. States `New -> Visible -> Ready` (+ `Dirty`); `/items`
+      shows `Visible` and `Ready`; `/assets/:guid?size=` serves the best that
+      exists. Exif plugins move before transcode, ML after it. Open: the walker's
+      rescan should wait for the cheap part only — the expensive step then needs a
+      queue of its own that walks do not feed twice.
 - [ ] First perceptor end to end (primitive geo: map, markers) → release 0.2.0.
 
 ## Core — product (gontroller)
