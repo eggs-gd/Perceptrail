@@ -52,6 +52,14 @@ func (c *cheapPreview) Decorate(it *flow.RawItem) (*flow.RawItem, error) {
 }
 
 func (c *cheapPreview) pick(it *flow.RawItem) (path, mime string) {
+	// The source said what to show first (an Apple asset: the edit, the original,
+	// then its derivatives)
+	for _, f := range it.Show {
+		if viewableImage[f.MimeType] {
+			return f.Path, f.MimeType
+		}
+	}
+
 	main := it.Files[0]
 	if viewable(main, it.Kinds[0], it.Exif[0]) {
 		return main.Path, main.MimeType

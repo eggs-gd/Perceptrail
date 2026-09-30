@@ -32,8 +32,13 @@ func (FileDto) TableName() string {
 }
 
 func (f *FileDto) LinkTo(mainFile *FileDto) bool {
-	if f.LinkedTo != mainFile.GUID {
-		f.LinkedTo = mainFile.GUID
+	return f.LinkToItem(mainFile.GUID)
+}
+
+// LinkToItem links the file to an item by its GUID (a keyed group: the asset's key)
+func (f *FileDto) LinkToItem(guid string) bool {
+	if f.LinkedTo != guid {
+		f.LinkedTo = guid
 		return true
 	}
 	return false

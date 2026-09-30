@@ -41,6 +41,10 @@ func (v *validator) Decorate(g *flow.RawItem) (*flow.RawItem, error) {
 		return nil, fmt.Errorf("no metadata for the main file %s", main.Path)
 	}
 
+	if g.Key != "" {
+		return v.keyed(g)
+	}
+
 	for _, f := range g.Files {
 		f.LinkTo(main)
 	}
@@ -66,6 +70,32 @@ func (v *validator) Decorate(g *flow.RawItem) (*flow.RawItem, error) {
 		return nil, err
 	}
 
+	g.Item = item
+	return g, nil
+}
+
+// keyed: the source knows the identity (an Apple Photos asset UUID): the item's
+// GUID is the key, every file links to it, whatever the main file is
+func (v *validator) keyed(g *flow.RawItem) (*flow.RawItem, error) {
+	for _, f := range g.Files {
+		// An item of the file's own from before (the generic grouper read the
+		// library's originals): the asset's item replaces it
+		if f.GUID != g.Key {
+			if old, err := itemsProxy.GetItemByGuid(f.GUID); err == nil {
+				if err := itemsProxy.DeleteItem(old); err != nil {
+					return nil, err
+				}
+			}
+		}
+		f.LinkToItem(g.Key)
+	}
+	if _, err := filesProxy.UpdateFiles(g.Files); err != nil {
+		return nil, err
+	}
+	item, err := itemsProxy.ValidateKeyed(g.Key, g.Files[0], g.Exif[0])
+	if err != nil {
+		return nil, err
+	}
 	g.Item = item
 	return g, nil
 }

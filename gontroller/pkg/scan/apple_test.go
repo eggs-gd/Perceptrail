@@ -1,0 +1,110 @@
+package scan
+
+import (
+	"database/sql"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/scan/flow"
+)
+
+const (
+	appleEdited = "A1111111-0000-0000-0000-00000000000A"
+	appleCloud  = "B2222222-0000-0000-0000-00000000000B"
+	appleLive   = "C3333333-0000-0000-0000-00000000000C"
+)
+
+// photosLibrary writes a minimal Apple Photos library under root: ZASSET rows and
+// files per the layout. Returns the bundle and a func to change ZASSET.
+func photosLibrary(t *testing.T, root string) (string, func(query string, args ...any)) {
+	t.Helper()
+	bundle := filepath.Join(root, "Photos Library.photoslibrary")
+	files := []string{
+		"originals/A/" + appleEdited + ".heic",
+		"resources/renders/A/" + appleEdited + "_1_201_a.jpeg",
+		"resources/derivatives/A/" + appleEdited + "_1_102_o.jpeg",
+		"resources/derivatives/B/" + appleCloud + "_1_105_c.jpeg",
+		"resources/derivatives/masters/B/" + appleCloud + "_4_5005_c.jpeg",
+		"originals/C/" + appleLive + ".heic",
+		"originals/C/" + appleLive + "_3.mov",
+		"resources/derivatives/C/" + appleLive + "_1_102_o.jpeg",
+	}
+	for _, f := range files {
+		write(t, filepath.Join(bundle, f), f)
+	}
+	os.MkdirAll(filepath.Join(bundle, "database"), 0o755)
+	db, err := sql.Open("sqlite3", filepath.Join(bundle, "database", "Photos.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	exec := func(q string, args ...any) {
+		t.Helper()
+		if _, err := db.Exec(q, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	exec(`CREATE TABLE ZASSET (Z_PK INTEGER PRIMARY KEY, ZUUID VARCHAR, ZDIRECTORY VARCHAR,
+		ZFILENAME VARCHAR, ZTRASHEDSTATE INTEGER, ZHIDDEN INTEGER)`)
+	for _, a := range [][3]string{
+		{appleEdited, "A", appleEdited + ".heic"},
+		{appleCloud, "B", appleCloud + ".jpeg"},
+		{appleLive, "C", appleLive + ".heic"},
+	} {
+		exec(`INSERT INTO ZASSET (ZUUID, ZDIRECTORY, ZFILENAME, ZTRASHEDSTATE, ZHIDDEN) VALUES (?,?,?,0,0)`, a[0], a[1], a[2])
+	}
+	return bundle, exec
+}
+
+func TestApplePhotosLibrary(t *testing.T) {
+	root := t.TempDir()
+	bundle, exec := photosLibrary(t, root)
+
+	scan(t, root)
+	check := func(guid, preview string) *dto.ItemDto {
+		t.Helper()
+		item, err := itemsProxy.GetItemByGuid(guid)
+		if err != nil {
+			t.Fatalf("no item %s: %v", guid, err)
+		}
+		if item.State != dto.Visible || filepath.Base(item.PreviewPath) != preview {
+			t.Errorf("%s: state %d, preview %q, want Visible, %q", guid, item.State, filepath.Base(item.PreviewPath), preview)
+		}
+		return item
+	}
+	check(appleEdited, appleEdited+"_1_201_a.jpeg") // the edit
+	check(appleCloud, appleCloud+"_1_105_c.jpeg")   // cloud-only: the biggest derivative
+	check(appleLive, appleLive+"_1_102_o.jpeg")     // HEIC not viewable: Apple's JPEG
+	if f, _ := filesProxy.GetFileByPath(filepath.Join(bundle, "originals/C/"+appleLive+"_3.mov")); f.LinkedTo != appleLive {
+		t.Errorf("a file of the asset is not linked to its key: %+v", f)
+	}
+
+	if got := scan(t, root); len(got) != 0 {
+		t.Errorf("nothing changed, processed %v", got)
+	}
+
+	// Photos downloads the cloud-only original: the same item, the original shown
+	write(t, filepath.Join(bundle, "originals/B/"+appleCloud+".jpeg"), "the original")
+	scan(t, root)
+	if item := check(appleCloud, appleCloud+".jpeg"); filepath.Base(item.Path) != appleCloud+".jpeg" {
+		t.Errorf("cloud-only: main %s, want the original", item.Path)
+	}
+
+	// Moved to the trash in Photos: the item goes
+	exec(`UPDATE ZASSET SET ZTRASHEDSTATE = 1 WHERE ZUUID = ?`, appleEdited)
+	scan(t, root)
+	assertNoItem(t, appleEdited)
+}
+
+// A broken original (not an image) with good derivatives: still an item
+func TestAppleBrokenOriginal(t *testing.T) {
+	it := &flow.RawItem{Key: appleEdited, Kinds: []flow.MediaKind{flow.KindOther, flow.KindImage}}
+	if !it.IsMedia() {
+		t.Error("a keyed asset with a viewable derivative is media")
+	}
+	if (&flow.RawItem{Kinds: []flow.MediaKind{flow.KindOther, flow.KindImage}}).IsMedia() {
+		t.Error("a generic group is judged by its main file")
+	}
+}

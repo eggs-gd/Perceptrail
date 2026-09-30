@@ -13,7 +13,7 @@ scan/                     fswalker, files gate, exif, mime, validator, plugins; 
 scan/flow/                what flows between the steps (shared by everything below)
 scan/groups/              the source switch
 scan/groups/generic/      plain folders: sidecars by name
-scan/groups/apple/        Apple Photos library (stub)
+scan/groups/apple/        Apple Photos library: groups from its DB
 scan/transcode/           the switch by the kind of the asset (not wired yet)
 scan/transcode/photo/     thumbnails (stub)
 scan/transcode/video/     poster, previews, playable video (stub)
@@ -44,7 +44,7 @@ later, its own chain:  feeder (DB) -> transcode switch (photo | video | Live Pho
 | fswalker | `fswalker.go` | root -> `FileEvent` | Reports every file (path + stat), then the end-of-walk marker. Unreadable subdirectories are skipped and recorded. |
 | source switch | `groups/sourceswitch.go` | `FileEvent` -> `FileEvent` | Routes a file to the grouper of its source; the marker goes to every grouper. |
 | generic grouper | `groups/generic` | `FileEvent` -> `FileGroup` | Sidecars by name, next to each other: one open group; a complete group goes out, the last one with the marker. |
-| Apple Photos grouper | `groups/apple` | `FileEvent` -> `FileGroup` | Stub: passes the marker on. `appleEnabled = false` sends the library to generic, which reads only its `originals/`. |
+| Apple Photos grouper | `groups/apple` | `FileEvent` -> `FileGroup` | The first file of a library loads the assets from a copy of `Photos.sqlite` and forms the groups (files that exist, per the naming layout); a group goes out when its last file arrives. Key = asset UUID; the main file = the source; `Show` = the edit, the original, then Apple's derivatives. Trashed / hidden assets are not sent; incomplete groups are `Held` with the marker. |
 | files gate | `filesgate.go` | `FileGroup` -> `FileGroup` | The files table (rows, stat, `CheckTime`); drops groups that need no work; deletions after every grouper's marker. |
 | exif | `exifextractor.go` | `FileGroup` -> `*RawItem` | `exiftool -all` for every file; N steps in parallel on the same channels. |
 | mime | `mimeranker.go` | `*RawItem` -> `*RawItem` | The kind of every file; the main file (the source) first. |
@@ -84,9 +84,12 @@ later, its own chain:  feeder (DB) -> transcode switch (photo | video | Live Pho
   (`progress.go`).
 - **Moves race with deletions** (the chain is asynchronous): the validator also finds
   soft-deleted items by hash and restores them, so a moved file keeps its GUID.
-- **Item == asset**: a derivative never becomes an item of its own. Inside an
-  Apple Photos library only `originals/` are read (`generic.shouldSkipPath`) until its
-  grouper links derivatives from the library's DB.
+- **Item == asset**: a derivative never becomes an item of its own; in an Apple
+  library every file of an asset links to its key.
+- **Keyed groups** (`FileGroup.Key`, Apple): the key is the item's GUID, so a main
+  file that changes (a derivative, then the downloaded original) keeps the item;
+  mime does not re-rank them; exif reads only the main file; the cheap preview
+  follows `Show`. An item with no files left is deleted.
 - **States**: `Visible` (a cheap preview), `Waiting` (nothing viewable yet — HEIC,
   HEVC, a RAW without previews), `Ready` (the expensive stage, later). The client
   gets `Visible` and `Ready` only; `/assets/:guid` serves the preview.
@@ -105,8 +108,11 @@ later, its own chain:  feeder (DB) -> transcode switch (photo | video | Live Pho
 
 - `fswalker_test.go` — walk results (complete, unreadable dir, missing root, cancel).
 - `groups/…_test.go`, `groups/generic/…_test.go`, `transcode/…_test.go` — the
-  switches and the generic grouper (names, directories, the marker, a Photos
-  library's `originals/` only).
+  switches and the generic grouper (names, directories, the marker).
+- `groups/apple/grouper_test.go` — a fixture library: edit, cloud-only, Live Photo,
+  trashed, Photos' own files, a file vanishing mid-walk (held, complete next walk).
+- `apple_test.go` — a fixture library through the chain: keys, previews, nothing
+  to do on the next walk, a downloaded original, an asset moved to the trash.
 - `steps_test.go` — ranking, a source that appears later, moved -> no
   reprocessing, not media remembered.
 - `validator_test.go` — whole walks through the real steps on a temp library and a

@@ -47,9 +47,12 @@ func NewExifExtractor(count int, pool *exiftoolPool, chin <-chan flow.FileGroup,
 // Exif: exiftool returned nothing). The item itself comes from the validator.
 func (e *exifExtractor) Decorate(g flow.FileGroup) (*flow.RawItem, error) {
 	files := g.Files
-	out := &flow.RawItem{Files: files, Exif: make([]api.RawExif, len(files))}
+	out := &flow.RawItem{Files: files, Exif: make([]api.RawExif, len(files)), Key: g.Key, Show: g.Show}
 	found := false
 	for i, f := range files {
+		if g.Key != "" && i > 0 {
+			break // a keyed group: the grouper knows the files, only the main one is read
+		}
 		res, err := e.extract(f.Path)
 		if len(res) == 0 {
 			// Nothing usable: mime falls back to the extension for this file; the

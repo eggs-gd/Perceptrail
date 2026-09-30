@@ -51,8 +51,10 @@ var itemsProxy model.ItemsApi
 //   unreadable directory: an unmounted drive must not wipe the library.
 // - The chain is async: deletions may run before a moved file is validated, so the
 //   validator restores deleted items by hash.
-// - Apple Photos is off: its library goes to generic, which reads only originals/
-//   (a derivative must never become an item).
+// - An Apple Photos library is grouped by its DB: the groups are formed up front
+//   (the files that exist), so each file still closes at most one group; a group
+//   that could not complete (a file vanished mid-walk) is held back, its files are
+//   not "gone". The asset UUID is the item's GUID (the key), whatever the main file.
 // - The walk repeats: rescan after the last group of the previous walk is done
 //   (not after the walk — processing takes longer), so walks never overlap.
 
@@ -140,7 +142,7 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	// Files -> whole assets, a grouper per source
 	importChain.AddStep(groups.NewSourceSwitch(files, toGeneric, toApple))
 	importChain.AddStep(generic.NewGrouper(toGeneric, grouped))
-	importChain.AddStep(apple.NewGrouper(toApple, grouped))
+	importChain.AddStep(apple.NewGrouper(toApple, grouped, logger))
 
 	// Assets -> items: only what needs work, then metadata, kinds, identity
 	importChain.AddStep(NewFilesGate(groups.Branches, progress, grouped, stored, logger))

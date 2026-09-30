@@ -16,6 +16,9 @@ type ItemsApi interface {
 	// - full hash gate
 	//GetShortHash(rawExif t.RawExif, fileSizeBytes uint64) string
 	ValidateFile(item *dto.FileDto, meta api.RawExif) (*dto.ItemDto, Outcome, error)
+	// ValidateKeyed: the item of a group whose source knows its identity (an Apple
+	// Photos asset UUID); found by the key — restored if deleted — or created
+	ValidateKeyed(key string, main *dto.FileDto, meta api.RawExif) (*dto.ItemDto, error)
 
 	GetAllItems() ([]*dto.ItemDto, error)
 	// StreamAllItems walks items via a DB cursor without loading the full table into memory.

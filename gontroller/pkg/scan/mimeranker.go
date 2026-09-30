@@ -68,6 +68,10 @@ func (mimeStep) Decorate(g *flow.RawItem) (*flow.RawItem, error) {
 		g.Kinds[i], f.MimeType = kindOf(f.Path, exifMime)
 	}
 
+	if g.Key != "" {
+		return g, nil // the grouper decided the main file
+	}
+
 	// Rank: the main file first. Ties: the bigger file, then the name — deterministic
 	order := make([]int, len(g.Files))
 	for i := range order {

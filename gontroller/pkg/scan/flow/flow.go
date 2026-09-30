@@ -26,7 +26,17 @@ type FileEvent struct {
 // which may come together with its last group.
 type FileGroup struct {
 	Files []*dto.FileDto
-	Done  *WalkResult
+	// Set by a grouper that knows the asset (Apple Photos: the asset UUID): the
+	// item's GUID, and Files[0] is the main file as the grouper decided — mime
+	// does not re-rank. "" (generic): the GUID of the main file, mime ranks.
+	Key string
+	// What to show first, best first (a keyed group; e.g. the edit before the
+	// original); nil: the cheap preview decides by itself
+	Show []*dto.FileDto
+	Done *WalkResult
+	// With the marker: files the grouper saw but held back (their group did not
+	// complete in this walk) — not "gone" for the deletions
+	Held []string
 }
 
 // WalkResult describes a finished walk; it rides in the end-of-walk marker.
@@ -63,10 +73,16 @@ type RawItem struct {
 	Exif  []api.RawExif
 	Files []*dto.FileDto
 	Kinds []MediaKind
+	Key   string         // FileGroup.Key
+	Show  []*dto.FileDto // FileGroup.Show
 }
 
-// IsMedia: the main file is something to show
+// IsMedia: there is something to show — the main file; in a keyed group any file
+// (an Apple asset whose original is broken still has Apple's derivatives)
 func (r *RawItem) IsMedia() bool {
+	if r.Key != "" {
+		return r.HasKind(KindImage) || r.HasKind(KindRaw) || r.HasKind(KindVideo)
+	}
 	switch r.Kinds[0] {
 	case KindImage, KindRaw, KindVideo:
 		return true

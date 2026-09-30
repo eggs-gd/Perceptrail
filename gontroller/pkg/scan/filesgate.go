@@ -24,6 +24,7 @@ type filesGate struct {
 	logger   *l.Logger
 	branches int // markers to wait for
 	markers  int
+	held     []string // files the groupers held back in this walk: not gone
 	progress *progress
 }
 
@@ -38,23 +39,45 @@ func newFilesGate(branches int, progress *progress, logger *l.Logger) *filesGate
 
 func (g *filesGate) Decorate(in flow.FileGroup) (flow.FileGroup, error) {
 	// A grouper's last group comes with its end-of-walk marker: the group first
-	out, err := g.pass(in.Files)
+	out, err := g.pass(in.Files, in.Key)
 	if err == nil {
+		out.Key, out.Show = in.Key, stored(in.Show, out.Files)
 		g.progress.passed()
 	}
 	if in.Done != nil {
+		g.held = append(g.held, in.Held...)
 		g.markers++
 		if g.markers == g.branches { // every grouper has flushed: all files are stamped
 			g.markers = 0
-			g.finalizeWalk(*in.Done)
+			g.finalizeWalk(*in.Done, g.held)
+			g.held = nil
 			g.progress.walkGated()
 		}
 	}
 	return out, err
 }
 
+// stored maps the grouper's files to the stored rows of the group (by path): the
+// later steps fill the rows (MimeType, links)
+func stored(files, rows []*dto.FileDto) []*dto.FileDto {
+	if files == nil {
+		return nil
+	}
+	byPath := make(map[string]*dto.FileDto, len(rows))
+	for _, r := range rows {
+		byPath[r.Path] = r
+	}
+	out := make([]*dto.FileDto, 0, len(files))
+	for _, f := range files {
+		if r, ok := byPath[f.Path]; ok {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 // pass stores the group and lets it through if it needs work
-func (g *filesGate) pass(found []*dto.FileDto) (flow.FileGroup, error) {
+func (g *filesGate) pass(found []*dto.FileDto, key string) (flow.FileGroup, error) {
 	if len(found) == 0 {
 		return flow.FileGroup{}, chain.ErrSkippedItem
 	}
@@ -62,7 +85,7 @@ func (g *filesGate) pass(found []*dto.FileDto) (flow.FileGroup, error) {
 	if err != nil {
 		return flow.FileGroup{}, err
 	}
-	if changed || g.needsProcessing(files) {
+	if changed || g.needsProcessing(files, key) {
 		return flow.FileGroup{Files: files}, nil
 	}
 	return flow.FileGroup{}, chain.ErrSkippedItem
@@ -108,8 +131,8 @@ func (g *filesGate) store(found []*dto.FileDto) ([]*dto.FileDto, bool, error) {
 // was never linked or is linked outside the group (its main file is gone: a RAW
 // deleted, its JPEG left), or the item is missing or not Ready (new, Dirty,
 // interrupted). Groups that are known not to be media stay ignored.
-func (g *filesGate) needsProcessing(files []*dto.FileDto) bool {
-	inGroup := make(map[string]bool, len(files))
+func (g *filesGate) needsProcessing(files []*dto.FileDto, key string) bool {
+	inGroup := map[string]bool{key: key != ""}
 	for _, f := range files {
 		inGroup[f.GUID] = true
 	}
@@ -149,7 +172,7 @@ func cheapStageDone(item *dto.ItemDto) bool {
 }
 
 // finalizeWalk derives deletions: files not stamped by this walk are gone.
-func (g *filesGate) finalizeWalk(result flow.WalkResult) {
+func (g *filesGate) finalizeWalk(result flow.WalkResult, held []string) {
 	if !result.Complete {
 		g.logger.Warn("Walk incomplete: deletions are not checked")
 		return
@@ -166,7 +189,7 @@ func (g *filesGate) finalizeWalk(result flow.WalkResult) {
 		g.logger.Error("Deletions: can't read files", l.Error(err))
 		return
 	}
-	gone := goneFiles(stale, result.Root, result.Unreadable)
+	gone := goneFiles(stale, result.Root, result.Unreadable, held)
 	deletedItems, dirtyItems := 0, 0
 
 	for _, f := range gone {
@@ -200,18 +223,36 @@ func (g *filesGate) finalizeWalk(result flow.WalkResult) {
 		g.logger.Error("Deletions: can't delete files", l.Error(err))
 		return
 	}
+	// An item with no files left is gone too (a keyed asset: every file is "linked",
+	// none is "main" by its own GUID)
+	for _, f := range gone {
+		if f.LinkedTo == "" || f.IsIgnored() {
+			continue
+		}
+		if n, err := filesProxy.CountLinkedFiles(f.LinkedTo); err == nil && n == 0 {
+			if item, err := itemsProxy.GetItemByGuid(f.LinkedTo); err == nil {
+				if err := itemsProxy.DeleteItem(item); err == nil {
+					deletedItems++
+				}
+			}
+		}
+	}
 	g.logger.Info("Deletions", l.Int("files", len(gone)), l.Int("items", deletedItems), l.Int("dirty", dirtyItems))
 }
 
 // goneFiles keeps the stale files that belong to this root and were not hidden by
 // an unreadable directory: only those are known to be deleted.
-func goneFiles(stale []*dto.FileDto, root string, unreadable []string) []*dto.FileDto {
+func goneFiles(stale []*dto.FileDto, root string, unreadable, held []string) []*dto.FileDto {
+	isHeld := make(map[string]bool, len(held))
+	for _, p := range held {
+		isHeld[p] = true
+	}
 	var gone []*dto.FileDto
 	for _, f := range stale {
 		if !isUnder(f.Path, root) {
 			continue // another library root (config changed): not ours to judge
 		}
-		if slices.ContainsFunc(unreadable, func(dir string) bool { return f.Path == dir || isUnder(f.Path, dir) }) {
+		if isHeld[f.Path] || slices.ContainsFunc(unreadable, func(dir string) bool { return f.Path == dir || isUnder(f.Path, dir) }) {
 			continue
 		}
 		gone = append(gone, f)

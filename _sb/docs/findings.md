@@ -219,6 +219,28 @@ compose with `derived`. The current message protocol is a deviation from this de
 
 ## Backend: gontroller, plugins, exiftool
 
+### Apple Photos grouper (2026-09-30)
+
+- **No 1 -> N step needed** (decision, after proposing one): the files of an asset are
+  scattered over the bundle, but the grouper forms the groups up front from the DB
+  and a `stat` of every candidate path — the expected files are exactly those on
+  disk, so each walked file closes at most one group. A file vanishing mid-walk
+  (Photos purging a derivative) leaves a group incomplete: it is held back with the
+  marker (`FileGroup.Held`), the gate does not count its files as gone, the next
+  walk reloads the DB.
+- **The asset UUID is the item's GUID** (`FileGroup.Key`): the main file of an asset
+  changes (a derivative while cloud-only, then the downloaded original) — the item
+  stays. Every file links to the key; an item with no files left is deleted (the
+  main/sidecar rule does not apply to keyed files).
+- Synthetic run (a copy of the dev library's real `Photos.sqlite` + the real file
+  list filled with sample media, since this process cannot read the library): 6 420
+  assets with local files loaded, 6 417 items Visible (3 were fixture PNGs left
+  empty), first import 27 s, 0 errors. Previews: small thumbnail 2 634 (videos pick
+  it over `.THM`), ~2000 px 1 658, original 1 157 (JPEG originals; HEIC ones show
+  Apple's JPEG), ~1000 px 640, the edit 328.
+- A keyed asset is media if any of its files is (a broken original still has
+  Apple's derivatives).
+
 ### Apple Photos library: spike (2026-09-30)
 
 On a copy of the dev library's `Photos.sqlite` (read with `mode=ro`) and a list of

@@ -114,7 +114,7 @@ One PR (`feature/cheap-stage`). Photo and video transcode are the next milestone
       biggest viewable derivative, else an embedded preview (`exiftool -b` into
       `cache/previews/<guid>/`). HEIC (no extractable preview in HEIF) and HEVC wait.
       `/items`: Visible + Ready, `previewMime`; `/assets/:guid`: the preview.
-- [ ] **S2. Minimal Apple grouper**: asset links from a copy of the DB, one group
+- [x] **S2. Minimal Apple grouper**: asset links from a copy of the DB, one group
       per asset (trashed skipped), files ordered by what to show first (render →
       ~2000 px → ~1000 px → master → `.THM`); a group key = the asset UUID as the
       item's GUID (a changing main file — derivative, then the downloaded original —

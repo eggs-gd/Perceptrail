@@ -212,3 +212,29 @@ func (p *proxy) moveItem(item *dto.ItemDto, file *dto.FileDto) error {
 	file.GUID, file.LinkedTo = oldGuid, oldGuid
 	return nil
 }
+
+// ValidateKeyed: the key is the item's identity (it never changes, whatever the
+// main file is): same hash -> as is; another hash -> Dirty (the main file changed,
+// e.g. a derivative replaced by the downloaded original); deleted -> restored.
+func (p *proxy) ValidateKeyed(key string, main *dto.FileDto, meta api.RawExif) (*dto.ItemDto, error) {
+	hash := p.getShortHash(main, meta)
+	var item dto.ItemDto
+	err := p.db.Unscoped().Where("guid = ?", key).First(&item).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		item = dto.ItemDto{Guid: key, State: dto.New, Path: main.Path, MimeType: main.MimeType, HashShort: hash}
+		return &item, p.db.Create(&item).Error
+	}
+	if err != nil {
+		return nil, err
+	}
+	if item.DeletedAt.Valid {
+		item.DeletedAt = gorm.DeletedAt{}
+		item.State = dto.Dirty
+	}
+	if item.HashShort != hash {
+		item.HashShort = hash
+		item.State = dto.Dirty
+	}
+	item.Path, item.MimeType = main.Path, main.MimeType
+	return &item, p.db.Unscoped().Save(&item).Error
+}

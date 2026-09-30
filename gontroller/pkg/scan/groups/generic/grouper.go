@@ -66,19 +66,8 @@ func nameStem(name string) string {
 	return strings.TrimSuffix(name, filepath.Ext(name))
 }
 
-// Not gallery sources: .THM posters; everything in an Apple Photos library except
-// originals/ (derivatives, renders, caches, internal/ and scopes/ images of Apple's
-// own) — until the Apple Photos grouper takes over the library and links the
-// derivatives to their asset from the library's DB.
+// Not gallery sources: .THM posters (next to a video they are its derivative; in an
+// Apple Photos library the apple grouper handles them)
 func shouldSkipPath(path string) bool {
-	if strings.HasSuffix(strings.ToLower(path), ".thm") {
-		return true
-	}
-	parts := strings.Split(filepath.ToSlash(path), "/")
-	for i, part := range parts {
-		if strings.HasSuffix(strings.ToLower(part), ".photoslibrary") {
-			return i+1 >= len(parts) || parts[i+1] != "originals"
-		}
-	}
-	return false
+	return strings.HasSuffix(strings.ToLower(path), ".thm")
 }

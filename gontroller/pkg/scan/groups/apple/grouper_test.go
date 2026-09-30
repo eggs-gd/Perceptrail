@@ -1,0 +1,197 @@
+package apple
+
+import (
+	"database/sql"
+	"errors"
+	"os"
+	"path/filepath"
+	"sort"
+	"testing"
+
+	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/scan/flow"
+
+	"github.com/eggs-gd/perceplib/chain"
+	l "github.com/eggs-gd/perceplib/logger"
+	"github.com/eggs-gd/perceplib/logger/decorators"
+)
+
+const (
+	edited    = "A1111111-0000-0000-0000-000000000001" // original HEIC + edit + derivatives
+	cloudOnly = "B2222222-0000-0000-0000-000000000002" // no original: derivatives only
+	live      = "C3333333-0000-0000-0000-000000000003" // Live Photo: photo + video
+	trashed   = "D4444444-0000-0000-0000-000000000004"
+	vanishing = "E5555555-0000-0000-0000-000000000005" // a file disappears during the walk
+)
+
+type fixtureAsset struct {
+	uuid, dir, filename string
+	trashed             bool
+	files               []string // relative to the bundle
+}
+
+// makeLibrary: a minimal Photos library — ZASSET with the columns we read, plus
+// the files. Returns the bundle path.
+func makeLibrary(t *testing.T, root string, assets []fixtureAsset) string {
+	t.Helper()
+	bundle := filepath.Join(root, "Photos Library.photoslibrary")
+	if err := os.MkdirAll(filepath.Join(bundle, "database"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite3", filepath.Join(bundle, "database", "Photos.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TABLE ZASSET (Z_PK INTEGER PRIMARY KEY, ZUUID VARCHAR,
+		ZDIRECTORY VARCHAR, ZFILENAME VARCHAR, ZTRASHEDSTATE INTEGER, ZHIDDEN INTEGER)`); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range assets {
+		tr := 0
+		if a.trashed {
+			tr = 1
+		}
+		if _, err := db.Exec(`INSERT INTO ZASSET (ZUUID, ZDIRECTORY, ZFILENAME, ZTRASHEDSTATE, ZHIDDEN) VALUES (?,?,?,?,0)`,
+			a.uuid, a.dir, a.filename, tr); err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range a.files {
+			p := filepath.Join(bundle, f)
+			if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(p, []byte(f), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	// Photos' own files: not assets
+	for _, f := range []string{"resources/caches/x.data", "database/search/psi.sqlite"} {
+		p := filepath.Join(bundle, f)
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte("x"), 0o644)
+	}
+	return bundle
+}
+
+func fixture() []fixtureAsset {
+	return []fixtureAsset{
+		{uuid: edited, dir: "A", filename: edited + ".heic", files: []string{
+			"originals/A/" + edited + ".heic",
+			"resources/renders/A/" + edited + "_1_201_a.jpeg",
+			"resources/derivatives/A/" + edited + "_1_102_o.jpeg",
+			"resources/derivatives/masters/A/" + edited + "_4_5005_c.jpeg",
+		}},
+		{uuid: cloudOnly, dir: "B", filename: cloudOnly + ".jpeg", files: []string{
+			"resources/derivatives/B/" + cloudOnly + "_1_105_c.jpeg",
+			"resources/derivatives/masters/B/" + cloudOnly + "_4_5005_c.jpeg",
+		}},
+		{uuid: live, dir: "C", filename: live + ".heic", files: []string{
+			"originals/C/" + live + ".heic",
+			"originals/C/" + live + "_3.mov",
+			"resources/derivatives/C/" + live + "_1_102_o.jpeg",
+		}},
+		{uuid: trashed, dir: "D", filename: trashed + ".jpeg", trashed: true, files: []string{
+			"originals/D/" + trashed + ".jpeg",
+		}},
+		{uuid: vanishing, dir: "E", filename: vanishing + ".jpeg", files: []string{
+			"originals/E/" + vanishing + ".jpeg",
+			"resources/derivatives/masters/E/" + vanishing + "_4_5005_c.jpeg",
+		}},
+	}
+}
+
+// walk feeds every file under root in the walker's order (sorted paths)
+func walk(t *testing.T, g *Grouper, root string, before func(path string)) (map[string]flow.FileGroup, flow.FileGroup) {
+	t.Helper()
+	var paths []string
+	filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			paths = append(paths, p)
+		}
+		return nil
+	})
+	sort.Strings(paths)
+	groups := map[string]flow.FileGroup{}
+	for _, p := range paths {
+		if before != nil {
+			before(p)
+		}
+		if _, err := os.Stat(p); err != nil {
+			continue // vanished: the walker would not see it
+		}
+		out, err := g.Decorate(flow.FileEvent{Entry: dto.ItemEntry{Path: p, Name: filepath.Base(p)}})
+		if errors.Is(err, chain.ErrSkippedItem) {
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, dup := groups[out.Key]; dup {
+			t.Fatalf("asset %s sent twice", out.Key)
+		}
+		groups[out.Key] = out
+	}
+	marker, _ := g.Decorate(flow.FileEvent{Done: &flow.WalkResult{}})
+	return groups, marker
+}
+
+func names(files []*dto.FileDto) []string {
+	var out []string
+	for _, f := range files {
+		out = append(out, filepath.Base(f.Path))
+	}
+	return out
+}
+
+func TestGrouper(t *testing.T) {
+	root := t.TempDir()
+	bundle := makeLibrary(t, root, fixture())
+	g := NewDecorator(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+
+	vanished := filepath.Join(bundle, "resources/derivatives/masters/E/"+vanishing+"_4_5005_c.jpeg")
+	groups, marker := walk(t, g, root, func(p string) {
+		if filepath.Base(p) == filepath.Base(vanished) {
+			os.Remove(vanished) // Photos purged it after the library was loaded
+		}
+	})
+
+	if len(groups) != 3 {
+		t.Fatalf("groups %v, want edited, cloud-only, live", groups)
+	}
+	ed := groups[edited]
+	if got := names(ed.Files); got[0] != edited+".heic" || len(got) != 4 {
+		t.Errorf("edited: files %v, want the original first", got)
+	}
+	if got := names(ed.Show); got[0] != edited+"_1_201_a.jpeg" || got[1] != edited+".heic" {
+		t.Errorf("edited: show %v, want the edit, then the original", got)
+	}
+	if got := names(groups[cloudOnly].Files); got[0] != cloudOnly+"_1_105_c.jpeg" {
+		t.Errorf("cloud-only: main %v, want the biggest derivative", got)
+	}
+	if got := names(groups[live].Files); got[0] != live+"_3.mov" || got[1] != live+".heic" {
+		t.Errorf("live: files %v, want the video (the source), then the photo", got)
+	}
+	if _, ok := groups[trashed]; ok {
+		t.Error("a trashed asset was sent")
+	}
+	if len(marker.Held) != 2 {
+		t.Errorf("held %v, want both files of the asset that did not complete", marker.Held)
+	}
+
+	// The next walk loads the library again: the vanished file is not expected
+	groups, marker = walk(t, g, root, nil)
+	if _, ok := groups[vanishing]; !ok || len(marker.Held) != 0 {
+		t.Errorf("next walk: %v, held %v", groups[vanishing], marker.Held)
+	}
+}
+
+func TestBundleRoot(t *testing.T) {
+	if got := BundleRoot("/Pictures/Photos Library.photoslibrary/originals/A/x.heic"); got != "/Pictures/Photos Library.photoslibrary" {
+		t.Errorf("got %q", got)
+	}
+	if got := BundleRoot("/Pictures/a.jpg"); got != "" {
+		t.Errorf("got %q", got)
+	}
+}

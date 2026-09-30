@@ -20,6 +20,8 @@ type FilesApi interface {
 	DeleteFiles(files []*dto.FileDto) error
 	// UnignoreFiles clears the "ignored" mark: those groups are classified again
 	UnignoreFiles() (int64, error)
+	// CountLinkedFiles: how many files an item still has
+	CountLinkedFiles(guid string) (int64, error)
 }
 
 func (p *proxy) CreateFile(entry dto.ItemEntry) (*dto.FileDto, error) {
@@ -72,4 +74,10 @@ func (p *proxy) DeleteFiles(files []*dto.FileDto) error {
 func (p *proxy) UnignoreFiles() (int64, error) {
 	res := p.db.Model(&dto.FileDto{}).Where("linked_to = ?", "-").Update("linked_to", "")
 	return res.RowsAffected, res.Error
+}
+
+func (p *proxy) CountLinkedFiles(guid string) (int64, error) {
+	var n int64
+	err := p.db.Model(&dto.FileDto{}).Where("linked_to = ?", guid).Count(&n).Error
+	return n, err
 }

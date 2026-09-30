@@ -55,7 +55,7 @@ func scan(t *testing.T, root string) []string {
 	m := newTestMonitor(t, root)
 	groupers := map[int]chain.Decorator[flow.FileEvent, flow.FileGroup]{
 		groups.BranchGeneric: &generic.Grouper{},
-		groups.BranchApple:   apple.Grouper{},
+		groups.BranchApple:   apple.NewDecorator(logger),
 	}
 	gate := newFilesGate(groups.Branches, newProgress(), logger)
 	exif := &exifExtractor{logger: logger, extract: fakeExif}
