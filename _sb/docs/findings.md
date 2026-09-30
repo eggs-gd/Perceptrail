@@ -232,6 +232,13 @@ compose with `derived`. The current message protocol is a deviation from this de
 - Hover: a playable video, else Apple's video frames as a flip-book — turned by an
   attachment on the `<img>` (no component state per frame). Viewer: `sizes=100vw`,
   "Original" opens what the browser shows and downloads the rest (HEIC in Chrome).
+- **Blank tiles were `loading="lazy"`**, measured on the real library: the gallery
+  renders a window with a margin (1 viewport above, 2 below) exactly so images load
+  before they scroll in — lazy loading held that margin back. A scroll pass: 37
+  tiles blank 400–800 ms → 0 over 300 ms with `eager` (bounded: only the window
+  is rendered); resizes: ≤ 50 ms. What is left: a far jump (one frame), generic
+  assets whose only image is a big original (decode; the photo transcode fixes it),
+  a video with no stills (its metadata loads first).
 - Live check on the real library (a build before the contract): 6 420 Apple assets as
   items keyed by UUID, all dated from the DB, 2 987 old generic items of the
   library removed; 6 985 Visible, 9 Waiting (HEVC/HEIC outside the library).
