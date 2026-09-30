@@ -44,6 +44,11 @@ No symlinks (Windows).
      hashes), `develop` stops being an ancestor of `master` and the branches diverge
      (this happened with PR #2).
 - Open PRs against `develop` unless the task is the `develop` → `master` release.
+- One feature = one branch = one PR; its steps are commits on that branch (no PR
+  per step, no branches stacked on each other).
+- Open the PR as a **draft** as soon as the branch has its first commit (the work
+  is visible, CI runs on every push); mark it **ready for review** only when the
+  feature is done.
 - Version: one for the whole monorepo, **derived from git history** — nothing to bump
   or commit per PR, so parallel PRs never race. The root [`VERSION`](VERSION) holds
   only `MAJOR.MINOR`; `PATCH` = first-parent commits since `VERSION` last changed
