@@ -220,3 +220,22 @@ func TestSetSizes(t *testing.T) {
 		t.Errorf("still %dx%d, want 64x48 from the header", f.Width, f.Height)
 	}
 }
+
+// A derivative standing in for a cloud-only original has its own size, not the
+// original's from the metadata
+func TestSetSizesDerivativeAsMain(t *testing.T) {
+	dir := t.TempDir()
+	still := filepath.Join(dir, "d.jpg")
+	out, _ := os.Create(still)
+	jpeg.Encode(out, image.NewRGBA(image.Rect(0, 0, 32, 24)), nil)
+	out.Close()
+	it := &flow.RawItem{
+		Files: []*dto.FileDto{{Role: dto.RoleStill, ItemEntry: dto.ItemEntry{Path: still}}},
+		Exif:  []api.RawExif{nil},
+		Meta:  api.RawExif{"ImageWidth": []byte("4032"), "ImageHeight": []byte("3024")},
+	}
+	setSizes(it)
+	if f := it.Files[0]; f.Width != 32 || f.Height != 24 {
+		t.Errorf("%dx%d, want the derivative's 32x24", f.Width, f.Height)
+	}
+}

@@ -60,7 +60,7 @@ func (c *cheapPreview) Decorate(it *flow.RawItem) (*flow.RawItem, error) {
 	return it, nil
 }
 
-// setSizes: the pixel size of every file the client may show. The main file's comes
+// setSizes: the pixel size of every file the client may show. The original's comes
 // from its metadata (the source's first: the Photos DB size is oriented); images
 // from their header — no decoding
 func setSizes(it *flow.RawItem) {
@@ -68,7 +68,12 @@ func setSizes(it *flow.RawItem) {
 		if f.Role == dto.RoleMeta {
 			continue
 		}
-		if i == 0 {
+		if it.Exif[i] != nil {
+			f.Codec = string(it.Exif[i]["CompressorID"])
+		}
+		// The metadata describes the original: a derivative standing in as the main
+		// file (a cloud-only asset) has its own size
+		if i == 0 && f.Role == dto.RoleOriginal {
 			w, _ := strconv.Atoi(mainTag(it, "ImageWidth"))
 			h, _ := strconv.Atoi(mainTag(it, "ImageHeight"))
 			if w > 0 && h > 0 {

@@ -22,6 +22,7 @@ type FilesApi interface {
 	UnignoreFiles() (int64, error)
 	// CountLinkedFiles: how many files an item still has
 	CountLinkedFiles(guid string) (int64, error)
+	GetFileByID(id uint) (*dto.FileDto, error)
 }
 
 func (p *proxy) CreateFile(entry dto.ItemEntry) (*dto.FileDto, error) {
@@ -80,4 +81,9 @@ func (p *proxy) CountLinkedFiles(guid string) (int64, error) {
 	var n int64
 	err := p.db.Model(&dto.FileDto{}).Where("linked_to = ?", guid).Count(&n).Error
 	return n, err
+}
+
+func (p *proxy) GetFileByID(id uint) (*dto.FileDto, error) {
+	var f dto.FileDto
+	return &f, p.db.First(&f, id).Error
 }

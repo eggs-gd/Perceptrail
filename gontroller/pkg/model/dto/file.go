@@ -31,6 +31,9 @@ type FileDto struct {
 	// metadata); 0 = unknown
 	Width  int
 	Height int
+	// A video's codec (exiftool CompressorID: avc1, hvc1, …) when known: lets the
+	// client offer <source type="video/mp4; codecs=…"> and the browser choose
+	Codec string
 
 	ItemEntry
 }

@@ -130,9 +130,12 @@ One PR (`feature/cheap-stage`). Photo and video transcode are the next milestone
       .aae). Apple: from the grouper; generic: from mime. Sizes: images from their
       header (JPEG, PNG, GIF, WebP), the main file from its metadata (the Photos DB
       first: already oriented).
-- [ ] **S6. The asset contract in the API**: `/items` sends each asset by roles
-      (original, edit, stills, motion, frames — url, mime, size); `/assets/:guid/:name`
-      serves any file of that asset (and only of it). `PreviewPath` goes.
+- [x] **S6. The asset contract in the API**: `/items` sends each asset by roles
+      (original, edit, stills, motion, frames — url, mime, size, video codec; files
+      fetched per page, not per item); `/assets/:guid/:id` serves a file of that asset
+      only, `/assets/:guid/embedded` the extracted embedded preview. `PreviewPath`
+      stays as the default preview (Visible, `/assets/:guid`). A cloud-only asset has
+      no `original` (the derivative standing in keeps its own size).
 - [ ] **S7. The client decides**: the tile — `<picture>`/`srcset` from stills or the
       edit (the browser picks the size and the format: HEIC in Safari, JPEG
       elsewhere); hover — motion, or Apple's frames as a flip-book; click — the

@@ -90,6 +90,11 @@ later, its own chain:  feeder (DB) -> transcode switch (photo | video | Live Pho
   file that changes (a derivative, then the downloaded original) keeps the item;
   mime does not re-rank them; exif reads only the main file; the cheap preview
   follows `Show`. An item with no files left is deleted.
+- **The asset contract**: every file has a role (`original`, `edit`, `still`,
+  `motion`, `frames`, `meta`) and a size; `/items` sends the asset by roles and
+  the client decides what to show when (`pkg/client/routes/asset.go`). Roles come
+  from the Apple grouper, else from mime; sizes from the header (images) or the
+  metadata (the original only).
 - **The source's metadata wins** (`FileGroup.Meta`, Apple: date + zone, oriented
   size, GPS from `Photos.sqlite` with exiftool's tag names): `RawItem.GetExif` reads
   it before the files' EXIF — the user may have corrected it in Photos, and a
