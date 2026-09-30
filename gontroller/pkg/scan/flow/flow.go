@@ -33,7 +33,11 @@ type FileGroup struct {
 	// What to show first, best first (a keyed group; e.g. the edit before the
 	// original); nil: the cheap preview decides by itself
 	Show []*dto.FileDto
-	Done *WalkResult
+	// Metadata from the source itself (the Apple Photos DB): wins over the files'
+	// EXIF; MetaHash tells the gate it changed while the files did not
+	Meta     api.RawExif
+	MetaHash string
+	Done     *WalkResult
 	// With the marker: files the grouper saw but held back (their group did not
 	// complete in this walk) — not "gone" for the deletions
 	Held []string
@@ -69,12 +73,14 @@ const (
 // exif fills Files and Exif, mime fills Kinds and puts the main file first, the
 // validator sets Item.
 type RawItem struct {
-	Item  *dto.ItemDto
-	Exif  []api.RawExif
-	Files []*dto.FileDto
-	Kinds []MediaKind
-	Key   string         // FileGroup.Key
-	Show  []*dto.FileDto // FileGroup.Show
+	Item     *dto.ItemDto
+	Exif     []api.RawExif
+	Files    []*dto.FileDto
+	Kinds    []MediaKind
+	Key      string         // FileGroup.Key
+	Show     []*dto.FileDto // FileGroup.Show
+	Meta     api.RawExif    // FileGroup.Meta: GetExif reads it first
+	MetaHash string
 }
 
 // IsMedia: there is something to show — the main file; in a keyed group any file
@@ -102,6 +108,9 @@ func (r *RawItem) HasKind(k MediaKind) bool {
 
 // ExifProvider implementation
 func (r *RawItem) GetExif(key string) string {
+	if v, ok := r.Meta[key]; ok {
+		return string(v)
+	}
 	for _, e := range r.Exif {
 		if bytes, ok := e[key]; ok {
 			return string(bytes)

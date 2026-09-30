@@ -20,6 +20,8 @@ import (
 	"strings"
 
 	"perceptrail/gontroller/pkg/model/dto"
+
+	"github.com/eggs-gd/perceplib/api"
 	"perceptrail/gontroller/pkg/scan/flow"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -116,11 +118,13 @@ func (lib *library) pending() []string {
 }
 
 type asset struct {
-	uuid    string
-	files   []candidate // on disk at load time, in group order: the main file first
-	show    []string    // what to show first, best first
-	arrived map[string]*dto.FileDto
-	sent    bool
+	uuid     string
+	meta     api.RawExif // the DB's metadata (wins over the files' EXIF)
+	metaHash string
+	files    []candidate // on disk at load time, in group order: the main file first
+	show     []string    // what to show first, best first
+	arrived  map[string]*dto.FileDto
+	sent     bool
 }
 
 type candidate struct {
@@ -129,7 +133,7 @@ type candidate struct {
 }
 
 func (a *asset) group() flow.FileGroup {
-	g := flow.FileGroup{Key: a.uuid}
+	g := flow.FileGroup{Key: a.uuid, Meta: a.meta, MetaHash: a.metaHash}
 	for _, c := range a.files {
 		g.Files = append(g.Files, a.arrived[c.path])
 	}
@@ -193,7 +197,8 @@ func loadLibrary(root string) (*library, error) {
 		if r.trashed || r.hidden || len(r.uuid) < 2 {
 			continue
 		}
-		a := &asset{uuid: r.uuid, arrived: map[string]*dto.FileDto{}}
+		meta := r.meta.record()
+		a := &asset{uuid: r.uuid, arrived: map[string]*dto.FileDto{}, meta: meta, metaHash: hashRecord(meta)}
 		byRole := map[role]string{}
 		for _, c := range candidates(root, r.uuid, r.dir, r.filename) {
 			if info, err := os.Stat(c.path); err == nil && !info.IsDir() {
@@ -220,6 +225,7 @@ func loadLibrary(root string) (*library, error) {
 type assetRow struct {
 	uuid, dir, filename string
 	trashed, hidden     bool
+	meta                assetMeta
 }
 
 func readAssets(root string) ([]assetRow, error) {
@@ -242,8 +248,12 @@ func readAssets(root string) ([]assetRow, error) {
 		return nil, err
 	}
 	defer db.Close()
-	rs, err := db.Query(`SELECT ZUUID, ifnull(ZDIRECTORY,''), ifnull(ZFILENAME,''),
-		ifnull(ZTRASHEDSTATE,0), ifnull(ZHIDDEN,0) FROM ZASSET`)
+	// CAST: ZDATECREATED is declared TIMESTAMP; a whole-second value is stored as an
+	// integer, which the driver would turn into a time.Time
+	rs, err := db.Query(`SELECT a.ZUUID, ifnull(a.ZDIRECTORY,''), ifnull(a.ZFILENAME,''),
+		ifnull(a.ZTRASHEDSTATE,0), ifnull(a.ZHIDDEN,0),
+		CAST(a.ZDATECREATED AS REAL), a.ZWIDTH, a.ZHEIGHT, a.ZLATITUDE, a.ZLONGITUDE, x.ZTIMEZONEOFFSET
+		FROM ZASSET a LEFT JOIN ZADDITIONALASSETATTRIBUTES x ON x.ZASSET = a.Z_PK`)
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +262,9 @@ func readAssets(root string) ([]assetRow, error) {
 	for rs.Next() {
 		var r assetRow
 		var trashed, hidden int
-		if err := rs.Scan(&r.uuid, &r.dir, &r.filename, &trashed, &hidden); err != nil {
+		m := &r.meta
+		if err := rs.Scan(&r.uuid, &r.dir, &r.filename, &trashed, &hidden,
+			&m.created, &m.width, &m.height, &m.lat, &m.lon, &m.tzOffset); err != nil {
 			return nil, err
 		}
 		r.trashed, r.hidden = trashed != 0, hidden != 0

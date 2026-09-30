@@ -119,10 +119,10 @@ One PR (`feature/cheap-stage`). Photo and video transcode are the next milestone
       ~2000 px → ~1000 px → master → `.THM`); a group key = the asset UUID as the
       item's GUID (a changing main file — derivative, then the downloaded original —
       keeps the item); `appleEnabled = true`.
-- [ ] **S3. Minimal DB metadata** as a virtual exif record with exiftool's tag names
+- [x] **S3. Minimal DB metadata** as a virtual exif record with exiftool's tag names
       (`DateTimeOriginal`, `OffsetTimeOriginal`, `ImageWidth`, GPS…): date + zone,
       dimensions, GPS — the plugins work unchanged; required for cloud-only assets.
-- [ ] **S4. Tests**: a fixture library.
+- [x] **S4. Tests**: a fixture library (grouper, the whole chain, DB metadata).
 
 ### Dates and time zones
 

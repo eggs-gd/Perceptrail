@@ -44,7 +44,10 @@ func makeLibrary(t *testing.T, root string, assets []fixtureAsset) string {
 	}
 	defer db.Close()
 	if _, err := db.Exec(`CREATE TABLE ZASSET (Z_PK INTEGER PRIMARY KEY, ZUUID VARCHAR,
-		ZDIRECTORY VARCHAR, ZFILENAME VARCHAR, ZTRASHEDSTATE INTEGER, ZHIDDEN INTEGER)`); err != nil {
+		ZDIRECTORY VARCHAR, ZFILENAME VARCHAR, ZTRASHEDSTATE INTEGER, ZHIDDEN INTEGER,
+		ZDATECREATED TIMESTAMP, ZWIDTH INTEGER, ZHEIGHT INTEGER, ZLATITUDE FLOAT, ZLONGITUDE FLOAT);
+		CREATE TABLE ZADDITIONALASSETATTRIBUTES (Z_PK INTEGER PRIMARY KEY, ZASSET INTEGER,
+		ZTIMEZONEOFFSET INTEGER)`); err != nil {
 		t.Fatal(err)
 	}
 	for _, a := range assets {
@@ -52,8 +55,14 @@ func makeLibrary(t *testing.T, root string, assets []fixtureAsset) string {
 		if a.trashed {
 			tr = 1
 		}
-		if _, err := db.Exec(`INSERT INTO ZASSET (ZUUID, ZDIRECTORY, ZFILENAME, ZTRASHEDSTATE, ZHIDDEN) VALUES (?,?,?,?,0)`,
-			a.uuid, a.dir, a.filename, tr); err != nil {
+		res, err := db.Exec(`INSERT INTO ZASSET (ZUUID, ZDIRECTORY, ZFILENAME, ZTRASHEDSTATE, ZHIDDEN,
+			ZDATECREATED, ZWIDTH, ZHEIGHT, ZLATITUDE, ZLONGITUDE) VALUES (?,?,?,?,0, 758992569.5, 3024, 4032, 50.4293, -30.5381)`,
+			a.uuid, a.dir, a.filename, tr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		pk, _ := res.LastInsertId()
+		if _, err := db.Exec(`INSERT INTO ZADDITIONALASSETATTRIBUTES (ZASSET, ZTIMEZONEOFFSET) VALUES (?, 7200)`, pk); err != nil {
 			t.Fatal(err)
 		}
 		for _, f := range a.files {
@@ -193,5 +202,34 @@ func TestBundleRoot(t *testing.T) {
 	}
 	if got := BundleRoot("/Pictures/a.jpg"); got != "" {
 		t.Errorf("got %q", got)
+	}
+}
+
+// The DB's metadata as exiftool would print it: the local time + its offset, the
+// oriented size (the file's Orientation must not turn it again), the place
+func TestMetaRecord(t *testing.T) {
+	root := t.TempDir()
+	makeLibrary(t, root, fixture())
+	g := NewDecorator(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	groups, _ := walk(t, g, root, nil)
+	m := groups[edited].Meta
+	want := map[string]string{
+		// 758992569.5 s after 2001-01-01 UTC = 2025-01-19 15:16:09.5 UTC, +02:00
+		"DateTimeOriginal":   "2025:01:19 17:16:09",
+		"OffsetTimeOriginal": "+02:00",
+		"SubSecTimeOriginal": "500",
+		"ImageWidth":         "3024",
+		"ImageHeight":        "4032",
+		"Orientation":        "1",
+		"GPSLatitude":        `50 deg 25' 45.48" N`,
+		"GPSLongitude":       `30 deg 32' 17.16" W`,
+	}
+	for k, v := range want {
+		if got := string(m[k]); got != v {
+			t.Errorf("%s = %q, want %q", k, got, v)
+		}
+	}
+	if groups[edited].MetaHash == "" {
+		t.Error("no meta hash")
 	}
 }

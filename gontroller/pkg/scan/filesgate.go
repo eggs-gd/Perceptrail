@@ -39,9 +39,10 @@ func newFilesGate(branches int, progress *progress, logger *l.Logger) *filesGate
 
 func (g *filesGate) Decorate(in flow.FileGroup) (flow.FileGroup, error) {
 	// A grouper's last group comes with its end-of-walk marker: the group first
-	out, err := g.pass(in.Files, in.Key)
+	out, err := g.pass(in.Files, in.Key, in.MetaHash)
 	if err == nil {
 		out.Key, out.Show = in.Key, stored(in.Show, out.Files)
+		out.Meta, out.MetaHash = in.Meta, in.MetaHash
 		g.progress.passed()
 	}
 	if in.Done != nil {
@@ -77,7 +78,7 @@ func stored(files, rows []*dto.FileDto) []*dto.FileDto {
 }
 
 // pass stores the group and lets it through if it needs work
-func (g *filesGate) pass(found []*dto.FileDto, key string) (flow.FileGroup, error) {
+func (g *filesGate) pass(found []*dto.FileDto, key, metaHash string) (flow.FileGroup, error) {
 	if len(found) == 0 {
 		return flow.FileGroup{}, chain.ErrSkippedItem
 	}
@@ -85,7 +86,7 @@ func (g *filesGate) pass(found []*dto.FileDto, key string) (flow.FileGroup, erro
 	if err != nil {
 		return flow.FileGroup{}, err
 	}
-	if changed || g.needsProcessing(files, key) {
+	if changed || g.needsProcessing(files, key, metaHash) {
 		return flow.FileGroup{Files: files}, nil
 	}
 	return flow.FileGroup{}, chain.ErrSkippedItem
@@ -131,7 +132,7 @@ func (g *filesGate) store(found []*dto.FileDto) ([]*dto.FileDto, bool, error) {
 // was never linked or is linked outside the group (its main file is gone: a RAW
 // deleted, its JPEG left), or the item is missing or not Ready (new, Dirty,
 // interrupted). Groups that are known not to be media stay ignored.
-func (g *filesGate) needsProcessing(files []*dto.FileDto, key string) bool {
+func (g *filesGate) needsProcessing(files []*dto.FileDto, key, metaHash string) bool {
 	inGroup := map[string]bool{key: key != ""}
 	for _, f := range files {
 		inGroup[f.GUID] = true
@@ -155,7 +156,8 @@ func (g *filesGate) needsProcessing(files []*dto.FileDto, key string) bool {
 	if err != nil {
 		return errors.Is(err, gorm.ErrRecordNotFound)
 	}
-	return !cheapStageDone(item)
+	// The source's metadata changed (a date corrected in Photos), the files did not
+	return !cheapStageDone(item) || item.MetaHash != metaHash
 }
 
 // cheapStageDone: the item went through the cheap stage (Visible, Waiting) or is

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/scan/flow"
@@ -47,13 +48,17 @@ func photosLibrary(t *testing.T, root string) (string, func(query string, args .
 		}
 	}
 	exec(`CREATE TABLE ZASSET (Z_PK INTEGER PRIMARY KEY, ZUUID VARCHAR, ZDIRECTORY VARCHAR,
-		ZFILENAME VARCHAR, ZTRASHEDSTATE INTEGER, ZHIDDEN INTEGER)`)
-	for _, a := range [][3]string{
+		ZFILENAME VARCHAR, ZTRASHEDSTATE INTEGER, ZHIDDEN INTEGER, ZDATECREATED TIMESTAMP,
+		ZWIDTH INTEGER, ZHEIGHT INTEGER, ZLATITUDE FLOAT, ZLONGITUDE FLOAT)`)
+	exec(`CREATE TABLE ZADDITIONALASSETATTRIBUTES (Z_PK INTEGER PRIMARY KEY, ZASSET INTEGER, ZTIMEZONEOFFSET INTEGER)`)
+	for i, a := range [][3]string{
 		{appleEdited, "A", appleEdited + ".heic"},
 		{appleCloud, "B", appleCloud + ".jpeg"},
 		{appleLive, "C", appleLive + ".heic"},
 	} {
-		exec(`INSERT INTO ZASSET (ZUUID, ZDIRECTORY, ZFILENAME, ZTRASHEDSTATE, ZHIDDEN) VALUES (?,?,?,0,0)`, a[0], a[1], a[2])
+		exec(`INSERT INTO ZASSET (Z_PK, ZUUID, ZDIRECTORY, ZFILENAME, ZTRASHEDSTATE, ZHIDDEN, ZDATECREATED,
+			ZWIDTH, ZHEIGHT, ZLATITUDE, ZLONGITUDE) VALUES (?,?,?,?,0,0, 758992569, 3024, 4032, -180, -180)`, i+1, a[0], a[1], a[2])
+		exec(`INSERT INTO ZADDITIONALASSETATTRIBUTES (ZASSET, ZTIMEZONEOFFSET) VALUES (?, 7200)`, i+1)
 	}
 	return bundle, exec
 }
@@ -106,5 +111,32 @@ func TestAppleBrokenOriginal(t *testing.T) {
 	}
 	if (&flow.RawItem{Kinds: []flow.MediaKind{flow.KindOther, flow.KindImage}}).IsMedia() {
 		t.Error("a generic group is judged by its main file")
+	}
+}
+
+// The DB is the truth: the date and size come from it (the files have no EXIF
+// here at all); a date corrected in Photos reaches the item on the next walk
+func TestAppleMetadataFromDB(t *testing.T) {
+	root := t.TempDir()
+	_, exec := photosLibrary(t, root)
+	scan(t, root)
+
+	item, err := itemsProxy.GetItemByGuid(appleCloud)
+	if err != nil {
+		t.Fatal(err)
+	}
+	local := item.Date.In(time.FixedZone("", item.DateOffset*60)).Format(time.RFC3339)
+	if local != "2025-01-19T17:16:09+02:00" || item.Size.W != 3024 || item.Size.H != 4032 {
+		t.Errorf("from the DB: date %s, size %v", local, item.Size)
+	}
+
+	// Corrected in Photos by a day; no file changed
+	exec(`UPDATE ZASSET SET ZDATECREATED = ZDATECREATED - 86400 WHERE ZUUID = ?`, appleCloud)
+	if got := scan(t, root); len(got) != 1 {
+		t.Fatalf("processed %v, want the one asset whose DB metadata changed", got)
+	}
+	item, _ = itemsProxy.GetItemByGuid(appleCloud)
+	if got := item.Date.In(time.FixedZone("", item.DateOffset*60)).Format(time.RFC3339); got != "2025-01-18T17:16:09+02:00" {
+		t.Errorf("corrected date %s", got)
 	}
 }

@@ -96,6 +96,7 @@ func (v *validator) keyed(g *flow.RawItem) (*flow.RawItem, error) {
 	if err != nil {
 		return nil, err
 	}
+	item.MetaHash = g.MetaHash // saved by the closer
 	g.Item = item
 	return g, nil
 }

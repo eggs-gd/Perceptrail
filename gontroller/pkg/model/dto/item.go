@@ -40,6 +40,8 @@ type ItemDto struct {
 	// preview in the cache. "" = nothing (Waiting)
 	PreviewPath string
 	PreviewMime string
+	// Hash of the source's own metadata (Apple Photos DB) this item was built from
+	MetaHash string
 
 	Date time.Time // CreationDate of asset: the instant (the DB returns it in UTC)
 	// Local zone of the shot, minutes east of UTC: sqlite and Postgres timestamptz

@@ -90,6 +90,11 @@ later, its own chain:  feeder (DB) -> transcode switch (photo | video | Live Pho
   file that changes (a derivative, then the downloaded original) keeps the item;
   mime does not re-rank them; exif reads only the main file; the cheap preview
   follows `Show`. An item with no files left is deleted.
+- **The source's metadata wins** (`FileGroup.Meta`, Apple: date + zone, oriented
+  size, GPS from `Photos.sqlite` with exiftool's tag names): `RawItem.GetExif` reads
+  it before the files' EXIF — the user may have corrected it in Photos, and a
+  cloud-only asset has nothing else. `MetaHash` makes the gate reprocess a group
+  whose DB metadata changed while its files did not.
 - **States**: `Visible` (a cheap preview), `Waiting` (nothing viewable yet — HEIC,
   HEVC, a RAW without previews), `Ready` (the expensive stage, later). The client
   gets `Visible` and `Ready` only; `/assets/:guid` serves the preview.

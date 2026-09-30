@@ -240,6 +240,17 @@ compose with `derived`. The current message protocol is a deviation from this de
   Apple's JPEG), ~1000 px 640, the edit 328.
 - A keyed asset is media if any of its files is (a broken original still has
   Apple's derivatives).
+- **The Photos DB wins over the files' EXIF** (decision): it is what the user sees
+  and may have corrected in Photos; a cloud-only asset has nothing else. Date
+  (`ZDATECREATED`, Core Data seconds since 2001 UTC) + `ZTIMEZONEOFFSET` (known for
+  6 456 of 6 457 assets), `ZWIDTH`/`ZHEIGHT` (already oriented: they are swapped
+  against the original for orientation 6 — so the record says Orientation 1), GPS
+  (`-180` = none; 3 242 assets have it). Synthetic run: all 6 420 items dated from
+  the DB, real sizes.
+- **`ZDATECREATED` is declared `TIMESTAMP`**: SQLite keeps whole-second values as
+  integers (1 361 of 6 457 here) and the Go driver turns such values into
+  `time.Time` — scanning into a float failed and would have dropped the whole
+  library. Read it as `CAST(… AS REAL)`.
 
 ### Apple Photos library: spike (2026-09-30)
 
