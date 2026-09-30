@@ -118,6 +118,11 @@ func (g *filesGate) store(found []*dto.FileDto) ([]*dto.FileDto, bool, error) {
 			f.Size, f.ModTime = e.Size, e.ModTime
 			changed = true
 		}
+		// The source's grouper knows the role (Apple): a new role is new work
+		if fe.Role != "" && f.Role != fe.Role {
+			f.Role = fe.Role
+			changed = true
+		}
 		f.CheckTime = now
 		files = append(files, f)
 	}
@@ -142,6 +147,8 @@ func (g *filesGate) needsProcessing(files []*dto.FileDto, key, metaHash string) 
 		switch {
 		case f.LinkedTo == "":
 			return true
+		case !f.IsIgnored() && f.Role == "":
+			return true // from before roles existed: classified once more
 		case f.IsIgnored():
 		case !inGroup[f.LinkedTo]:
 			return true

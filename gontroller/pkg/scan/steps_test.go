@@ -1,6 +1,8 @@
 package scan
 
 import (
+	"image"
+	"image/jpeg"
 	"perceptrail/gontroller/pkg/model"
 
 	l "github.com/eggs-gd/perceplib/logger"
@@ -161,5 +163,60 @@ func TestReclassifyIgnored(t *testing.T) {
 	scan(t, root)
 	if item := itemAt(t, clip); item.MimeType != "video/quicktime" {
 		t.Errorf("the video is still not an item: %+v", item)
+	}
+}
+
+// Roles of a generic group: the source is the original, a photo next to it a
+// still, a video next to a photo motion, .xmp metadata
+func TestGenericRoles(t *testing.T) {
+	file := func(name string, size int64) *dto.FileDto {
+		return &dto.FileDto{ItemEntry: dto.ItemEntry{Path: "/lib/" + name, Name: name, Size: size}}
+	}
+	g, _ := mimeStep{}.Decorate(&flow.RawItem{
+		Files: []*dto.FileDto{file("D.JPG", 5000), file("D.xmp", 10), file("D.NEF", 30000), file("D.MOV", 900)},
+		Exif:  make([]api.RawExif, 4),
+	})
+	want := map[string]string{"D.NEF": dto.RoleOriginal, "D.JPG": dto.RoleStill, "D.xmp": dto.RoleMeta}
+	for _, f := range g.Files {
+		if w, ok := want[f.Name]; ok && f.Role != w {
+			t.Errorf("%s: role %q, want %q", f.Name, f.Role, w)
+		}
+	}
+	lp, _ := mimeStep{}.Decorate(&flow.RawItem{
+		Files: []*dto.FileDto{file("L.HEIC", 2000), file("L.MOV", 3000)},
+		Exif:  make([]api.RawExif, 2),
+	})
+	if lp.Files[0].Name != "L.MOV" || lp.Files[0].Role != dto.RoleOriginal || lp.Files[1].Role != dto.RoleStill {
+		t.Errorf("Live Photo: %s %s / %s %s", lp.Files[0].Name, lp.Files[0].Role, lp.Files[1].Name, lp.Files[1].Role)
+	}
+}
+
+// Sizes: images from their header, the main file from the source's metadata
+func TestSetSizes(t *testing.T) {
+	dir := t.TempDir()
+	still := filepath.Join(dir, "s.jpg")
+	out, err := os.Create(still)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := jpeg.Encode(out, image.NewRGBA(image.Rect(0, 0, 64, 48)), nil); err != nil {
+		t.Fatal(err)
+	}
+	out.Close()
+
+	it := &flow.RawItem{
+		Files: []*dto.FileDto{
+			{Role: dto.RoleOriginal, ItemEntry: dto.ItemEntry{Path: filepath.Join(dir, "o.heic")}},
+			{Role: dto.RoleStill, ItemEntry: dto.ItemEntry{Path: still}},
+		},
+		Exif: []api.RawExif{{"ImageWidth": []byte("4032"), "ImageHeight": []byte("3024")}, nil},
+		Meta: api.RawExif{"ImageWidth": []byte("3024"), "ImageHeight": []byte("4032")},
+	}
+	setSizes(it)
+	if f := it.Files[0]; f.Width != 3024 || f.Height != 4032 {
+		t.Errorf("main %dx%d, want the source's 3024x4032", f.Width, f.Height)
+	}
+	if f := it.Files[1]; f.Width != 64 || f.Height != 48 {
+		t.Errorf("still %dx%d, want 64x48 from the header", f.Width, f.Height)
 	}
 }

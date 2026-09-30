@@ -2,6 +2,7 @@ package scan
 
 import (
 	"perceptrail/gontroller/pkg/model"
+	"perceptrail/gontroller/pkg/model/dto"
 
 	l "github.com/eggs-gd/perceplib/logger"
 	"net/http"
@@ -94,10 +95,29 @@ func (mimeStep) Decorate(g *flow.RawItem) (*flow.RawItem, error) {
 		kinds = append(kinds, g.Kinds[i])
 	}
 	g.Files, g.Exif, g.Kinds = files, exifs, kinds
+	setRoles(g)
 	return g, nil
 }
 
 func (mimeStep) Stop() {}
+
+// setRoles: the main file is the original, what else the group has is by kind — a
+// photo is a still (the JPEG of a RAW, the photo of a Live Photo), a video is
+// motion, the rest (.xmp, .aae) is metadata
+func setRoles(g *flow.RawItem) {
+	for i, f := range g.Files {
+		switch {
+		case i == 0:
+			f.Role = dto.RoleOriginal
+		case g.Kinds[i] == flow.KindImage || g.Kinds[i] == flow.KindRaw:
+			f.Role = dto.RoleStill
+		case g.Kinds[i] == flow.KindVideo:
+			f.Role = dto.RoleMotion
+		default:
+			f.Role = dto.RoleMeta
+		}
+	}
+}
 
 // kindOf: the MIME type from the content (exiftool), else the extension table, else
 // a sniff of the first bytes; the kind follows from it

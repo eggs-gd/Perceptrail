@@ -10,6 +10,7 @@ require (
 	github.com/labstack/echo/v4 v4.16.0
 	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/ringsaturn/tzf v1.2.5
+	golang.org/x/image v0.46.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.2

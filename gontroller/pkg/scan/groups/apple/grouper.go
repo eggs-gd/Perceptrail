@@ -135,7 +135,12 @@ type candidate struct {
 func (a *asset) group() flow.FileGroup {
 	g := flow.FileGroup{Key: a.uuid, Meta: a.meta, MetaHash: a.metaHash}
 	for _, c := range a.files {
-		g.Files = append(g.Files, a.arrived[c.path])
+		f := a.arrived[c.path]
+		f.Role = c.role.fileRole()
+		if c.role == roleOriginal && a.files[0].role == roleLiveVideo {
+			f.Role = dto.RoleStill // a Live Photo's photo: its video is the source
+		}
+		g.Files = append(g.Files, f)
 	}
 	for _, p := range a.show {
 		g.Show = append(g.Show, a.arrived[p])
@@ -157,9 +162,24 @@ const (
 	roleLarge2      // ~2000 px of the original
 	roleMedium      // ~1000 px
 	roleMedium2     // ~1000 px
-	roleThumb       // the small thumbnail
-	roleVideoPoster // .THM
+	roleThumb       // the small thumbnail (~360×640)
+	roleVideoPoster // .THM (32×32)
+	roleFrame       // cvt/…/_cvt_tNNNN.jpeg: frames of a video (a flip-book)
 )
+
+// fileRole: what the file is to the asset, for the client
+func (r role) fileRole() string {
+	switch r {
+	case roleLiveVideo, roleOriginal:
+		return dto.RoleOriginal
+	case roleRender, roleRenderHEIC, roleEditPreview:
+		return dto.RoleEdit
+	case roleFrame:
+		return dto.RoleFrames
+	default:
+		return dto.RoleStill
+	}
+}
 
 // showRank: the edit first (it is what the user sees in Photos), then the original,
 // then the biggest derivative; the cheap stage takes the first the browser shows
@@ -185,6 +205,23 @@ func candidates(root, uuid, dir, filename string) []candidate {
 	}
 }
 
+// frames: the frames Photos keeps for a video (resources/derivatives/cvt/<X>/<UUID>/),
+// in order
+func frames(root, uuid string) []candidate {
+	dir := filepath.Join(root, "resources", "derivatives", "cvt", strings.ToUpper(uuid[:1]), uuid)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out []candidate
+	for _, e := range entries { // ReadDir sorts by name: _t0000, _t0001, …
+		if !e.IsDir() && strings.HasSuffix(strings.ToLower(e.Name()), ".jpeg") {
+			out = append(out, candidate{filepath.Join(dir, e.Name()), roleFrame})
+		}
+	}
+	return out
+}
+
 // loadLibrary reads the assets from a copy of the DB (Photos may have it open,
 // the library may be a share or a copy) and keeps the files that exist
 func loadLibrary(root string) (*library, error) {
@@ -206,6 +243,7 @@ func loadLibrary(root string) (*library, error) {
 				byRole[c.role] = c.path
 			}
 		}
+		a.files = append(a.files, frames(root, r.uuid)...)
 		if len(a.files) == 0 {
 			continue // nothing local: not even a thumbnail
 		}

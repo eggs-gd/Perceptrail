@@ -100,6 +100,8 @@ func fixture() []fixtureAsset {
 			"originals/C/" + live + ".heic",
 			"originals/C/" + live + "_3.mov",
 			"resources/derivatives/C/" + live + "_1_102_o.jpeg",
+			"resources/derivatives/cvt/C/" + live + "/" + live + "_cvt_t0000.jpeg",
+			"resources/derivatives/cvt/C/" + live + "/" + live + "_cvt_t0001.jpeg",
 		}},
 		{uuid: trashed, dir: "D", filename: trashed + ".jpeg", trashed: true, files: []string{
 			"originals/D/" + trashed + ".jpeg",
@@ -231,5 +233,41 @@ func TestMetaRecord(t *testing.T) {
 	}
 	if groups[edited].MetaHash == "" {
 		t.Error("no meta hash")
+	}
+}
+
+// Roles for the client: the source, the edit, stills, frames of a video
+func TestGrouperRoles(t *testing.T) {
+	root := t.TempDir()
+	makeLibrary(t, root, fixture())
+	g := NewDecorator(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	groups, _ := walk(t, g, root, nil)
+
+	roles := func(uuid string) map[string]string {
+		out := map[string]string{}
+		for _, f := range groups[uuid].Files {
+			out[filepath.Base(f.Path)] = f.Role
+		}
+		return out
+	}
+	for name, want := range map[string]string{
+		edited + ".heic":          dto.RoleOriginal,
+		edited + "_1_201_a.jpeg":  dto.RoleEdit,
+		edited + "_1_102_o.jpeg":  dto.RoleStill,
+		edited + "_4_5005_c.jpeg": dto.RoleStill,
+	} {
+		if got := roles(edited)[name]; got != want {
+			t.Errorf("edited %s: %q, want %q", name, got, want)
+		}
+	}
+	for name, want := range map[string]string{
+		live + "_3.mov":          dto.RoleOriginal, // the video is the source
+		live + ".heic":           dto.RoleStill,
+		live + "_cvt_t0000.jpeg": dto.RoleFrames,
+		live + "_cvt_t0001.jpeg": dto.RoleFrames,
+	} {
+		if got := roles(live)[name]; got != want {
+			t.Errorf("live %s: %q, want %q", name, got, want)
+		}
 	}
 }

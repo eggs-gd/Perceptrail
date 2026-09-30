@@ -123,6 +123,21 @@ One PR (`feature/cheap-stage`). Photo and video transcode are the next milestone
       (`DateTimeOriginal`, `OffsetTimeOriginal`, `ImageWidth`, GPS…): date + zone,
       dimensions, GPS — the plugins work unchanged; required for cloud-only assets.
 - [x] **S4. Tests**: a fixture library (grouper, the whole chain, DB metadata).
+- [x] **S5. Roles and sizes of the asset's files** (decided: the client gets the
+      whole asset once and decides what to show when). Role per file: `original`
+      (the source), `edit`, `still` (a viewable image, any size), `motion` (a Live
+      Photo's video), `frames` (Apple's video frames: a flip-book), `meta` (.xmp,
+      .aae). Apple: from the grouper; generic: from mime. Sizes: images from their
+      header (JPEG, PNG, GIF, WebP), the main file from its metadata (the Photos DB
+      first: already oriented).
+- [ ] **S6. The asset contract in the API**: `/items` sends each asset by roles
+      (original, edit, stills, motion, frames — url, mime, size); `/assets/:guid/:name`
+      serves any file of that asset (and only of it). `PreviewPath` goes.
+- [ ] **S7. The client decides**: the tile — `<picture>`/`srcset` from stills or the
+      edit (the browser picks the size and the format: HEIC in Safari, JPEG
+      elsewhere); hover — motion, or Apple's frames as a flip-book; click — the
+      biggest still; "show the original" — open it, or download when the browser
+      cannot show it.
 
 ### Dates and time zones
 

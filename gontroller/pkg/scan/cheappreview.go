@@ -1,6 +1,10 @@
 package scan
 
 import (
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -9,6 +13,7 @@ import (
 	"perceptrail/gontroller/pkg/scan/flow"
 
 	"github.com/eggs-gd/perceplib/chain"
+	_ "golang.org/x/image/webp"
 
 	l "github.com/eggs-gd/perceplib/logger"
 )
@@ -47,8 +52,59 @@ var viewableVideoCodec = map[string]bool{"avc1": true, "avc3": true}
 var embeddedPreviews = []string{"JpgFromRaw", "PreviewImage", "ThumbnailImage"}
 
 func (c *cheapPreview) Decorate(it *flow.RawItem) (*flow.RawItem, error) {
+	setSizes(it)
+	if _, err := filesProxy.UpdateFiles(it.Files); err != nil {
+		return nil, err
+	}
 	it.Item.PreviewPath, it.Item.PreviewMime = c.pick(it)
 	return it, nil
+}
+
+// setSizes: the pixel size of every file the client may show. The main file's comes
+// from its metadata (the source's first: the Photos DB size is oriented); images
+// from their header — no decoding
+func setSizes(it *flow.RawItem) {
+	for i, f := range it.Files {
+		if f.Role == dto.RoleMeta {
+			continue
+		}
+		if i == 0 {
+			w, _ := strconv.Atoi(mainTag(it, "ImageWidth"))
+			h, _ := strconv.Atoi(mainTag(it, "ImageHeight"))
+			if w > 0 && h > 0 {
+				f.Width, f.Height = w, h
+				continue
+			}
+		}
+		if w, h, ok := headerSize(f.Path); ok {
+			f.Width, f.Height = w, h
+		}
+	}
+}
+
+// mainTag: a tag of the main file — the source's metadata first, then its EXIF
+func mainTag(it *flow.RawItem, tag string) string {
+	if v, ok := it.Meta[tag]; ok {
+		return string(v)
+	}
+	if it.Exif[0] != nil {
+		return string(it.Exif[0][tag])
+	}
+	return ""
+}
+
+// headerSize reads an image's size from its header (JPEG, PNG, GIF, WebP)
+func headerSize(path string) (int, int, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, 0, false
+	}
+	defer f.Close()
+	cfg, _, err := image.DecodeConfig(f)
+	if err != nil {
+		return 0, 0, false
+	}
+	return cfg.Width, cfg.Height, true
 }
 
 func (c *cheapPreview) pick(it *flow.RawItem) (path, mime string) {
