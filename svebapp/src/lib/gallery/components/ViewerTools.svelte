@@ -96,6 +96,8 @@
         top: 1rem;
         right: 1rem;
         z-index: 1;
+        /* The layout turns pointer events off under the viewer (main.viewing): on again */
+        pointer-events: auto;
         display: flex;
         gap: 0.5rem;
     }
