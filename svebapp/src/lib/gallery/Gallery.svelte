@@ -6,6 +6,7 @@
     import type {LayoutItem} from "$lib/stores";
     import {updateLayout} from "$lib/workers";
     import type {LayoutSize} from "$lib/stores";
+    import {layoutDb} from "$lib/stores";
     import {type AnchorState, findAnchor, watchSize, watchWindow, type WindowSnapshot} from "./layoutWindow";
 
     interface Props {
@@ -13,12 +14,15 @@
         /** Target row height, px */
         rowHeight?: number;
         openItem: (item: LayoutItem) => void,
+        /** The item open in the viewer (its order); undefined: the viewer is closed */
+        viewing?: number;
     }
 
     let {
         gutter = 8,
         rowHeight = 220,
-        openItem
+        openItem,
+        viewing,
     }: Props = $props();
 
     /** Width available to the gallery (bound to the container) */
@@ -72,6 +76,27 @@
     // A scroll that is not ours (anchor correction) is the user's: drop the anchor,
     // the next resize anchors whatever is on screen then
     let programmaticScrollY: number | undefined;
+
+    // The viewer may have stepped far away (arrows): when it closes, the gallery shows
+    // the item it closed on — scrolled to the middle if it is not on screen
+    let lastViewed: number | undefined;
+    $effect(() => {
+        if (viewing !== undefined) {
+            lastViewed = viewing;
+        } else if (lastViewed !== undefined) {
+            reveal(lastViewed);
+            lastViewed = undefined;
+        }
+    });
+
+    async function reveal(order: number) {
+        const item = await layoutDb.items.where('order').equals(order).first();
+        if (!item || !containerEl?.parentElement) return;
+        const top = containerEl.parentElement.getBoundingClientRect().top + window.scrollY + item.y;
+        if (top >= window.scrollY && top + item.h <= window.scrollY + window.innerHeight) return;
+        programmaticScrollY = Math.max(0, top - (window.innerHeight - item.h) / 2);
+        window.scrollTo({top: programmaticScrollY, behavior: 'instant'});
+    }
 
     function onScroll() {
         if (programmaticScrollY !== undefined && Math.abs(window.scrollY - programmaticScrollY) <= 2) return;

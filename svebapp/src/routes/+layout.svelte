@@ -23,13 +23,13 @@
     });
 
     function openItem(item: LayoutItem) {
-        goto("/" + item.order, {noScroll: true});
+        goto("/" + item.order, {noScroll: true, state: {fromGallery: true}});
     }
 </script>
 
 <main class={{viewing: viewingItem}}>
     <!-- Stays mounted under / and /[index] so gallery doesn't remount -->
-    <Gallery {openItem}/>
+    <Gallery {openItem} viewing={viewingItem ? Number(page.params.index) : undefined}/>
     {@render children()}
 </main>
 
