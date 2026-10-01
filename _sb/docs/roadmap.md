@@ -233,6 +233,19 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 
 ## Frontend
 
+- [ ] **Item info panel** in the viewer: a toolbar toggle, can be pinned open (kept in
+      the browser). Its content comes from the perceptors: each one gives what it knows
+      about the item — a base requirement next to navigation (`Perceptor.Info(item)` →
+      fields with labels and values; `GET /items/:guid/info` → per perceptor: its title,
+      icon and fields). Today: date (the date, its zone and where it came from), size
+      (pixels, megapixels), length, place (coordinates, region / city), the asset's
+      files (original, edits, what is local / in iCloud).
+- [ ] **A burger menu instead of the side panel's pin**: a dropdown with toggles — pin
+      the side panel; show / hide each perceptor's button. Three levels for a perceptor:
+      **off** (config `enabled: false` — not run), **hidden by the server** (`client:
+      false` — runs, the client does not get it), **hidden by the client** (the user's
+      toggle in the menu, kept in the browser).
+
 - [ ] **Views and photos have URLs** (with "a stable link to a photo"): today a view is
       a button and an in-memory switch, the viewer is `/N` (a position in the current
       sheet). Proposed — the same for every view, the date included (it is a
