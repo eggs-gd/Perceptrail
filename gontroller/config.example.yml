@@ -3,6 +3,10 @@
 # Or run with --config <file> (or GONTROLLER_CONFIG=<file>).
 # Relative paths are resolved against the directory of this file.
 
+# debug: SQL and every request logged, debug marks in the gallery (tile borders,
+# console logging); release (the default): Info logs, a clean gallery
+# mode: debug
+
 # Library root: the photos to import
 path: "/Users/me/Pictures/"
 

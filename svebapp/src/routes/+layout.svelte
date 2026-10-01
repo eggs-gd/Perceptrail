@@ -2,7 +2,8 @@
     import "../app.css";
     import Gallery from "$lib/gallery/Gallery.svelte";
     import type {LayoutItem} from "$lib/stores";
-    import {loadFromServer} from "$lib/workers";
+    import {loadFromServer, setWorkersMode} from "$lib/workers";
+    import {loadApp} from "$lib/app.svelte";
     import {loadPerceptors, photoHref} from "$lib/gallery/perceptors.svelte";
     import {goto} from "$app/navigation";
     import {page} from "$app/state";
@@ -18,6 +19,7 @@
     // Start the sync once, in the browser. Not in a load function: load must stay free
     // of side effects (it also runs on the server and on every navigation).
     onMount(() => {
+        loadApp().then(setWorkersMode);
         loadFromServer();
         // The views; the URL says which one the sheet is in (the stream itself comes
         // newest first, so the photos show before the order arrives)

@@ -18,7 +18,7 @@ import {
     type LayoutSize,
     type SectionMark,
 } from "$lib/stores";
-import {getLogger} from "$lib/logger";
+import {getLogger, setLogLevel} from "$lib/logger";
 
 const logger = getLogger()
 
@@ -92,7 +92,9 @@ function enqueue(write: () => Promise<unknown>) {
 self.onmessage = function (msg: { data: WorkerMessage<any, any> }) {
     const {task, payload} = msg.data;
 
-    if (task === 'init') {
+    if (task === 'mode') {
+        setLogLevel(payload);
+    } else if (task === 'init') {
         const itemsDbPort: MessagePort = payload[0];
         itemsDbPort.onmessage = onItemsDbMessage;
         logger.debug('Inited')

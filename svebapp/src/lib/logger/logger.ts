@@ -1,3 +1,14 @@
+type Level = 'debug' | 'info' | 'warn' | 'error';
+const ORDER: Record<Level, number> = {debug: 0, info: 1, warn: 2, error: 3};
+
+// The server's mode sets it (GET /app; the workers get it as a message): debug —
+// everything, release — warnings and errors. Before that a dev build shows all.
+let minLevel: Level = import.meta.env.DEV ? 'debug' : 'warn';
+
+export function setLogLevel(mode: string) {
+    minLevel = mode === 'debug' ? 'debug' : 'warn';
+}
+
 class Logger {
     private readonly context: string;
 
@@ -5,7 +16,8 @@ class Logger {
         this.context = context; //getCallerModule();
     }
 
-    private log(level: 'info' | 'warn' | 'error' | 'debug', color: string, ...messages: any[]) {
+    private log(level: Level, color: string, ...messages: any[]) {
+        if (ORDER[level] < ORDER[minLevel]) return;
         const timestamp = new Date().toLocaleString();
 
         console[level](

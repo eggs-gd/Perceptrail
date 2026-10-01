@@ -57,6 +57,12 @@ function handleWorkerMessage(event: MessageEvent<any>) {
 let orderSeq = 0;
 const pendingOrders = new Map<number, (ok: boolean) => void>();
 
+/** The server's mode for the workers' loggers */
+export const setWorkersMode = (mode: string) => {
+    workers?.workerSync.postMessage({task: 'mode', payload: mode});
+    workers?.workerLayout.postMessage({task: 'mode', payload: mode});
+}
+
 export const loadFromServer = () => {
     if (!browser || syncStarted) return;
     syncStarted = true;

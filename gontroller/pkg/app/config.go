@@ -19,6 +19,9 @@ import (
 // on the working directory: `make run` and `./.build/gontroller --config …` use the
 // same database, caches and plugins.
 type Config struct {
+	// debug (development: SQL and every request logged, debug marks in the
+	// gallery) or release (the default)
+	Mode string `yaml:"mode"`
 	// Library root: the photos to import
 	Path string `yaml:"path"`
 	// Plugin files (.so)
@@ -37,6 +40,14 @@ type Config struct {
 	// Behind GORM: sqlite, postgres (not implemented yet)
 	Database model.DBConfig `yaml:"database"`
 }
+
+// Modes (Config.Mode)
+const (
+	ModeDebug   = "debug"
+	ModeRelease = "release"
+)
+
+func (c *Config) Debug() bool { return c.Mode == ModeDebug }
 
 const (
 	defaultDBDriver = model.DriverSQLite
@@ -97,6 +108,9 @@ func (c *Config) resolve(base string) {
 		return filepath.Join(base, p)
 	}
 
+	if c.Mode != ModeDebug {
+		c.Mode = ModeRelease // an unknown mode is not a debug one
+	}
 	c.Path = abs(c.Path)
 	if c.DataDir == "" {
 		c.DataDir = base

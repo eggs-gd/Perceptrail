@@ -8,6 +8,7 @@
     import type {LayoutItem} from "$lib/stores";
     import {setOrder, updateLayout} from "$lib/workers";
     import {nextRequest, orderApplied, perceptors, viewHref} from "./perceptors.svelte";
+    import {debug} from "$lib/app.svelte";
     import {goto, replaceState} from "$app/navigation";
     import {page} from "$app/state";
     import type {Anchor} from "./layoutWindow";
@@ -408,7 +409,7 @@
 
 <!-- The pinned side panel takes its width from the photos (a resize: the photo in
      the middle stays in place); unpinned it shows over them while scrolling -->
-<div class="masonry" class:pinned={perceptors.pinned} bind:clientWidth={screenWidth}>
+<div class="masonry" class:pinned={perceptors.pinned} class:debug={debug()} bind:clientWidth={screenWidth}>
     <div class={['container', !screenWidth && 'hidden']} bind:this={containerEl} style:height="{height}px">
         {#each images as itm (itm.guid)}
             <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
@@ -451,6 +452,10 @@
         top: 0;
         left: 0;
         box-sizing: border-box;
+    }
+
+    /* Debug mode: every tile's box */
+    .debug .image {
         border: 1px solid green;
     }
 

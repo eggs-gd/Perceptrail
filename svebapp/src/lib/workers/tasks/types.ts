@@ -33,7 +33,7 @@ export function isAbortError(error: Error): error is AbortError {
     return error instanceof AbortError;
 }
 
-export type WorkerTaskType = 'init' | 'start' | 'update' | 'order';
+export type WorkerTaskType = 'init' | 'start' | 'update' | 'order' | 'mode';
 
 export interface WorkerMessage<T, T1> {
     task: T;

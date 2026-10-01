@@ -1,6 +1,6 @@
 import {type Item, itemsDb} from "$lib/stores";
 import {type CurrentWorkerTask, type MessageFromSync, type WorkerMessage, type WorkerTask} from "./types";
-import {getLogger} from "$lib/logger";
+import {getLogger, setLogLevel} from "$lib/logger";
 
 const logger = getLogger();
 let currentTask: CurrentWorkerTask = null;
@@ -10,7 +10,9 @@ let updatesPort: MessagePort;
 self.onmessage = async function (msg: { data: WorkerMessage<any, any> }) {
     const {task, payload} = msg.data;
 
-    if (task === 'init') {
+    if (task === 'mode') {
+        setLogLevel(payload);
+    } else if (task === 'init') {
         updatesPort = payload[0];
         logger.debug('Inited');
     } else if (task === 'start' && !currentTask) {

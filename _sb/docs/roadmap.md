@@ -204,26 +204,17 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 
 - [ ] Unreadable/broken files still become items (0×0): exiftool returns File tags
       even for garbage. Decide how to mark them (ignored? error state?).
-- [ ] Fewer Info logs in `fswalker` (several per file).
+- [x] Fewer Info logs in `fswalker` — none per file since the import chain (C1).
 - [ ] `TestLoadExternalPlugins` should load real `.so` files.
 
 ## Deployment (first release)
 
-- [ ] **Debug / release mode in the config** (`mode: debug | release`; release in the
-      image, debug in the dev config). The server gives it to the client (with the
-      version, e.g. `GET /app`), so one client build serves both. What it switches —
-      the dev crutches found so far:
-      - server log level: always Debug today (`SetLogLevel` is commented out in
-        `main`) — every SQL statement is logged (GORM trace); release: Info, no SQL;
-      - Echo's request log (`middleware.Logger`): a JSON line per HTTP request, every
-        tile image included — debug only;
-      - `fswalker`: several Info lines per file (see "Core — service");
-      - client: the 1 px green border around every tile (`Gallery.svelte`);
-      - client logger without levels: every debug / info goes to the console (worker
-        `Inited`, `relayout` per resize, `Task result`, `Rest data saved`) — release:
-        warnings and errors;
-      - client: "Can't render item N: guid" shown on a tile — release: a neutral
-        placeholder.
+- [x] **Debug / release mode in the config** (PR #18): `mode: debug | release`
+      (release by default, debug in the dev config); `GET /app` gives the client the
+      version and the mode, so one client build serves both. Release: server logs at
+      Info (no SQL — it is logged at Debug), no per-request lines; the client logs
+      warnings and errors only (the workers get the mode as a message), no tile
+      borders, a neutral placeholder instead of "Can't render item".
 
 - [ ] Dockerfile (with 0.2.0): CGO (sqlite, libvips), jellyfin-ffmpeg, exiftool from a
       `dist-*` release, fix `CMD` (`--config /data/config.yml`, `/data` as a volume =
