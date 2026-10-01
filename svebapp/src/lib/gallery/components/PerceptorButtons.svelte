@@ -1,5 +1,5 @@
 <script lang="ts">
-    import {iconMask, perceptors} from '../perceptors.svelte';
+    import {iconMask, perceptors, shownPerceptors} from '../perceptors.svelte';
 
     interface Props {
         /** A perceptor was picked (the active one too: back to the sheet around the photo) */
@@ -11,7 +11,7 @@
 
 <!-- One button per perceptor: its icon (a mask — the button's colour paints it, an SVG
      from a plugin cannot run anything), its title and help as the tooltip -->
-{#each perceptors.list as p (p.slug)}
+{#each shownPerceptors() as p (p.slug)}
     <button class="tool" class:on={perceptors.active === p.slug}
             title={p.help ? `${p.title}: ${p.help}` : p.title} aria-label={p.title}
             aria-pressed={perceptors.active === p.slug}

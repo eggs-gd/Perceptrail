@@ -1,6 +1,6 @@
 // The perceptors — each gives the sheet its order (a view of the library) — and the
 // gallery's choices about them. The view itself lives in the URL (/v/<slug>?at=<guid>);
-// only the pinned side panel is kept in the browser.
+// the browser keeps the user's choices: the pinned side panel, the hidden buttons.
 import {PUBLIC_API_PATH} from '$env/static/public';
 import {getLogger} from '$lib/logger';
 
@@ -24,11 +24,27 @@ export interface SwitchRequest {
     seq: number;
 }
 
-function loadPinned(): boolean {
+interface Saved {
+    pinned?: boolean;
+    /** Views whose buttons the user hid (the views still work by URL) */
+    hidden?: string[];
+}
+
+function load(): Saved {
     try {
-        return JSON.parse(localStorage.getItem(KEY) ?? '{}').pinned ?? false;
+        return JSON.parse(localStorage.getItem(KEY) ?? '{}');
     } catch {
-        return false;
+        return {};
+    }
+}
+
+const saved = load();
+
+function save() {
+    try {
+        localStorage.setItem(KEY, JSON.stringify({pinned: perceptors.pinned, hidden: perceptors.hidden}));
+    } catch {
+        // not kept: still switched for this visit
     }
 }
 
@@ -37,7 +53,12 @@ export const perceptors = $state({
     /** The view the sheet is laid out in (its order applied); '' until the first */
     active: '',
     /** The side panel is always shown and takes its width from the photos */
-    pinned: loadPinned(),
+    pinned: saved.pinned ?? false,
+    /**
+     * Buttons hidden by the user — the third level after the server's config
+     * (enabled: not run; client: not given): kept in this browser
+     */
+    hidden: saved.hidden ?? ([] as string[]),
     request: undefined as SwitchRequest | undefined,
 });
 
@@ -84,11 +105,20 @@ export function orderApplied(request: SwitchRequest, ok: boolean): boolean {
 
 export function togglePinned() {
     perceptors.pinned = !perceptors.pinned;
-    try {
-        localStorage.setItem(KEY, JSON.stringify({pinned: perceptors.pinned}));
-    } catch {
-        // not kept: still switched for this visit
-    }
+    save();
+}
+
+/** Shows or hides a view's button (the view itself still works by URL) */
+export function toggleHidden(slug: string) {
+    perceptors.hidden = perceptors.hidden.includes(slug)
+        ? perceptors.hidden.filter((s) => s !== slug)
+        : [...perceptors.hidden, slug];
+    save();
+}
+
+/** The views whose buttons are shown */
+export function shownPerceptors(): PerceptorView[] {
+    return perceptors.list.filter((p) => !perceptors.hidden.includes(p.slug));
 }
 
 /** An SVG icon as a CSS mask: the button's colour paints it, no script can run */

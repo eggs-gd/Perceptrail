@@ -231,8 +231,8 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
       icon and fields). Today: date (the date, its zone and where it came from), size
       (pixels, megapixels), length, place (coordinates, region / city), the asset's
       files (original, edits, what is local / in iCloud).
-- [ ] **A burger menu instead of the side panel's pin**: a dropdown with toggles — pin
-      the side panel; show / hide each perceptor's button. Three levels for a perceptor:
+- [x] **A burger menu instead of the side panel's pin** (PR #18): a dropdown with
+      toggles — pin the side panel; show / hide each perceptor's button. Three levels for a perceptor:
       **off** (config `enabled: false` — not run), **hidden by the server** (`client:
       false` — runs, the client does not get it), **hidden by the client** (the user's
       toggle in the menu, kept in the browser).
