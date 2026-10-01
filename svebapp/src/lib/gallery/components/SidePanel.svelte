@@ -55,23 +55,25 @@
     let viewHeight = $derived(Math.max(2, toTrack(Math.max(0, scrollY - top) + innerHeight) - viewTop));
 
     // The section under the pointer with the sections it is in ("September 2025"):
-    // per level, the last one starting above it, down to the deepest found
+    // per level, the last one whose share starts above it, down to the deepest found.
+    // By the track, not the sheet's y: sections that start in one row share a y but
+    // each has a share of its own.
     let hovered = $derived.by(() => {
         if (pointerY === undefined) return undefined;
-        const y = toSheet(pointerY);
-        const byLevel: SectionMark[] = [];
+        const byLevel: {m: SectionMark, at: number}[] = [];
         for (const m of marks) {
-            if (m.y > y) continue;
+            const at = scale.markAt(m);
+            if (at > pointerY) continue;
             const prev = byLevel[m.level];
-            if (!prev || m.y >= prev.y) byLevel[m.level] = m;
+            if (!prev || at > prev.at || (at === prev.at && m.order > prev.m.order)) byLevel[m.level] = {m, at};
         }
         // A deeper section counts only inside the coarser one found
         const path: string[] = [];
         let from = -Infinity;
-        for (const m of byLevel) {
-            if (!m || m.y < from) break;
-            path.unshift(m.label);
-            from = m.y;
+        for (const e of byLevel) {
+            if (!e || e.at < from) break;
+            path.unshift(e.m.label);
+            from = e.at;
         }
         return path.length ? path.join(' ') : undefined;
     });

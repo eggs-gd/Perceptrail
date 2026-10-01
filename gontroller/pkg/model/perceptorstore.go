@@ -145,7 +145,12 @@ func (s *PerceptorStore) Load(guids []string) (map[string]api.Values, error) {
 			}
 			out[guid] = v
 		}
+		// An error mid-way ends Next() too: not a partial answer passed off as whole
+		err = rows.Err()
 		rows.Close()
+		if err != nil {
+			return nil, err
+		}
 	}
 	return out, nil
 }
