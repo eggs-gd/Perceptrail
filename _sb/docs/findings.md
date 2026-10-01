@@ -256,6 +256,16 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
   is the viewed photo with ratio 0.5 (centred). Closing the viewer then must not
   "reveal" the photo by its old position — the gallery skips it when that photo is
   the pending anchor.
+- **The side panel's scale is by sections, √ of their photos** (decided). Linear by
+  the sheet's height, a big "no value" section (two thirds of a library without a
+  place) took two thirds of the panel and the real places' labels did not fit. A
+  fixed small share for it (10%) was rejected — it flips the problem: two thirds of
+  the library in a tenth of the scale. Now every coarsest section gets a share by √
+  of its photo count (and room for its label when that fits); "no value" is not
+  special, just big. 30 places × 30 photos + 6 000 without: "no value" 87% → 32% of
+  the panel. Linear within a section, so scrubbing stays smooth; the view marker gets
+  taller where photos are sparse. Considered next: a magnifier around the pointer
+  (like the macOS Dock) for very large libraries.
 - **Every rearrangement uses the wave** (decided: the wave is the product's style). A
   switch first replaced the screen at once — it reused the resize relayout, where new
   tiles appear without a fade (a fade from 0 left the screen empty when widening),

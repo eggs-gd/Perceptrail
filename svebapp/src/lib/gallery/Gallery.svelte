@@ -38,6 +38,7 @@
     /** Visible items (plus overscan) from layoutDb, and the total height */
     let images: LayoutItem[] = $state([]);
     let height = $state(0);
+    let count = $state(0);
 
     // Gallery top in document coordinates; the gallery is laid out from y = 0
     let containerTop = $state(0);
@@ -187,6 +188,7 @@
         height = latestSize && latestSize.rev >= (meta?.rev ?? 0)
             ? latestSize.height
             : meta?.height ?? 0;
+        count = latestSize?.count ?? count;
 
         // New positions and height in the DOM before scrolling (the browser clamps
         // scrollTo to the current document height) and before animating
@@ -379,7 +381,7 @@
 </div>
 {#if viewing === undefined}
     <GalleryTools/>
-    <SidePanel {height} top={containerTop} {scrollY} {innerHeight} pinned={perceptors.pinned}/>
+    <SidePanel {height} {count} top={containerTop} {scrollY} {innerHeight} pinned={perceptors.pinned}/>
 {/if}
 
 <style>

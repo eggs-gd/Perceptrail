@@ -2,10 +2,12 @@
     import {LAYOUT_SECTIONS_KEY, layoutDb, type LayoutSections, type SectionMark} from '$lib/stores';
     // Not re-exported from $lib/stores: the workers import that, this is page-only
     import {LiveQuery} from '$lib/stores/internal/liveQuery';
+    import {sheetScale} from './sheetScale';
 
     interface Props {
-        /** Gallery height and where it starts on the page, px */
+        /** Gallery height and where it starts on the page, px; its photo count */
         height: number;
+        count: number;
         top: number;
         scrollY: number;
         innerHeight: number;
@@ -13,7 +15,7 @@
         pinned: boolean;
     }
 
-    let {height, top, scrollY, innerHeight, pinned}: Props = $props();
+    let {height, count, top, scrollY, innerHeight, pinned}: Props = $props();
 
     // The side panel: the active perceptor's sections along the whole sheet (years and
     // months for the date), where the view is, and a scrubber — press or drag to jump
@@ -29,9 +31,10 @@
     let dragging = $state(false);
     let scrolling = $state(false);
 
-    // Track position ↔ gallery y: the whole sheet maps onto the track
-    const toTrack = (y: number) => (height ? (y / height) * trackHeight : 0);
-    const toSheet = (p: number) => (trackHeight ? (p / trackHeight) * height : 0);
+    // Track position ↔ gallery y: by sections, each by √(its photos) — see sheetScale
+    let scale = $derived(sheetScale(marks, height, count, trackHeight, MIN_GAP));
+    const toTrack = (y: number) => scale.toTrack(y);
+    const toSheet = (p: number) => scale.toSheet(p);
 
     // Labels that fit: every coarsest one that does not touch the previous, deeper ones
     // only where there is room around them
@@ -47,8 +50,9 @@
         return out.sort((a, b) => a.at - b.at);
     });
 
+    // The view on the track: taller where photos are sparse, shorter where dense
     let viewTop = $derived(toTrack(Math.max(0, scrollY - top)));
-    let viewHeight = $derived(Math.max(2, toTrack(innerHeight)));
+    let viewHeight = $derived(Math.max(2, toTrack(Math.max(0, scrollY - top) + innerHeight) - viewTop));
 
     // The section under the pointer with the sections it is in ("September 2025"):
     // per level, the last one starting above it, down to the deepest found
