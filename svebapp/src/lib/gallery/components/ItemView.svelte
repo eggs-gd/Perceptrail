@@ -7,7 +7,7 @@
     import Picture from "./Picture.svelte";
     import Motion from "./Motion.svelte";
     import KindBadge from "./KindBadge.svelte";
-    import {assetUrl, fallbackImage, hasImage, playableVideos} from "./asset";
+    import {assetUrl, biggestImage, fallbackImage, hasImage, playableVideos} from "./asset";
 
     interface Props {
         item: Item;
@@ -47,6 +47,14 @@
     let failedFor = $state<string | null>(null);
     let showOriginal = $derived(originalFor === item.guid);
     let originalIsImage = $derived(!!asset?.original?.mime.startsWith('image/') && failedFor !== item.guid);
+
+    // The viewer: the image at its own pixel size, fitted into the screen — never
+    // stretched. srcset makes an <img> as wide as `sizes` (100vw), so the box is sized
+    // here from the image the asset has. Unknown size: the image's natural size.
+    let shown = $derived(asset && mode === 'view' ? (showOriginal ? asset.original : biggestImage(asset)) : undefined);
+    let fit = $derived(shown?.w && shown.h
+        ? {width: `min(${shown.w}px, 100vw, calc(100vh * ${shown.w} / ${shown.h}))`, ratio: `${shown.w} / ${shown.h}`}
+        : undefined);
 </script>
 
 {#if asset && mode === 'view' && videos.length}
@@ -60,6 +68,10 @@
 {:else if asset && hasStill}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="asset"
+         class:view={mode === 'view'}
+         class:natural={mode === 'view' && !fit}
+         style:width={fit?.width}
+         style:aspect-ratio={fit?.ratio}
          onmouseenter={() => (hovered = true)}
          onmouseleave={() => (hovered = false)}>
         {#if showOriginal && asset.original}
@@ -117,6 +129,24 @@
         position: relative;
         width: 100%;
         height: 100%;
+    }
+
+    .asset.view {
+        height: auto;
+    }
+
+    .asset.view :global(img) {
+        width: 100%;
+        height: 100%;
+        max-width: none;
+        max-height: none;
+    }
+
+    .asset.natural :global(img) {
+        width: auto;
+        height: auto;
+        max-width: 100vw;
+        max-height: 100vh;
     }
 
     .tile-video {

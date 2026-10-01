@@ -46,6 +46,18 @@ export function hasImage(asset: Asset): boolean {
         || (!!asset.original && VIEWABLE_IMAGES.has(asset.original.mime));
 }
 
+/**
+ * The biggest image the <picture> may show, with its size: the viewer shows no more
+ * pixels than that (a small image is not stretched), fitted into the screen
+ */
+export function biggestImage(asset: Asset): Rendition | undefined {
+    const images = [...(asset.edit.length ? asset.edit : asset.stills)];
+    if (!asset.edit.length && asset.original && VIEWABLE_IMAGES.has(asset.original.mime)) {
+        images.push(asset.original);
+    }
+    return images.filter((r) => r.w && r.h).sort((a, b) => b.w! - a.w!)[0];
+}
+
 /** The <img> fallback: the biggest image every browser shows */
 export function fallbackImage(asset: Asset): Rendition | undefined {
     const images = [...asset.edit, ...asset.stills].filter((r) => VIEWABLE_IMAGES.has(r.mime));

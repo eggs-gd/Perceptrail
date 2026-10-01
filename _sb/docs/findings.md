@@ -258,6 +258,11 @@ compose with `derived`. The current message protocol is a deviation from this de
   the preview in place; the browser decides by loading it (HEIC shows in Safari,
   fails in Chrome) — on an error the button becomes "Download original". A video or
   RAW original is downloaded.
+- **The viewer never stretches an image** (2026-10-01): with `srcset` + `sizes=100vw`
+  the browser sizes an `<img>` as 100vw whatever the file, so `width: auto` +
+  `max-width/height` stopped capping it and every preview filled the screen. The
+  box is now sized from the biggest image the asset has: `min(w px, 100vw, 100vh ×
+  w/h)` with its aspect ratio — a 360 px preview stays 360 px, a big one fits.
 - **Blank tiles were `loading="lazy"`**, measured on the real library: the gallery
   renders a window with a margin (1 viewport above, 2 below) exactly so images load
   before they scroll in — lazy loading held that margin back. A scroll pass: 37
