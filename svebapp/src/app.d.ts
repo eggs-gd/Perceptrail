@@ -8,7 +8,10 @@ declare global {
         // interface Error {}
         // interface Locals {}
         // interface PageData {}
-        // interface PageState {}
+        interface PageState {
+            /** The viewer was opened from the gallery: closing it goes back */
+            fromGallery?: boolean;
+        }
         // interface Platform {}
     }
 }

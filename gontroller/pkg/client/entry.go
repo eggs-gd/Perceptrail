@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"perceptrail/gontroller/pkg/client/routes"
 
+	"github.com/eggs-gd/perceplib/api"
 	l "github.com/eggs-gd/perceplib/logger"
 
 	"github.com/labstack/echo/v4"
@@ -12,17 +13,19 @@ import (
 )
 
 type webService struct {
-	logger *l.Logger
-	cfg    ServerConfig
+	logger     *l.Logger
+	cfg        ServerConfig
+	perceptors []api.Perceptor
 }
 
-// NewWebService checks cfg (see ServerConfig) and fills its defaults.
-func NewWebService(cfg ServerConfig, logger *l.Logger) (*webService, error) {
+// NewWebService checks cfg (see ServerConfig) and fills its defaults. perceptors:
+// the ones the client is given (/perceptors, /p/:name/order).
+func NewWebService(cfg ServerConfig, perceptors []api.Perceptor, logger *l.Logger) (*webService, error) {
 	cfg, err := cfg.withDefaults()
 	if err != nil {
 		return nil, err
 	}
-	return &webService{logger, cfg}, nil
+	return &webService{logger, cfg, perceptors}, nil
 }
 
 func (s *webService) Start(parentCtx context.Context) {
@@ -43,6 +46,7 @@ func (s *webService) Start(parentCtx context.Context) {
 
 	routes.RegisterItemsRoutes("/items", e, s.logger)
 	routes.RegisterAssetsRoutes("/assets", e, s.logger)
+	routes.RegisterPerceptorsRoutes(e, s.perceptors, s.logger)
 
 	e.Logger.Fatal(e.Start(s.cfg.Addr()))
 

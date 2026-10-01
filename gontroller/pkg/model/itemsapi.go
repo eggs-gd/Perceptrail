@@ -21,9 +21,14 @@ type ItemsApi interface {
 	ValidateKeyed(key string, main *dto.FileDto, meta api.RawExif) (*dto.ItemDto, error)
 
 	GetAllItems() ([]*dto.ItemDto, error)
-	// StreamAllItems walks items via a DB cursor without loading the full table into
-	// memory; every item comes with its files (one query per page)
+	// StreamAllItems walks items newest first (the default sheet: date) without
+	// loading the full table into memory; every item comes with its files (one query
+	// per page)
 	StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) error
+	// GetItemsInStates: the items in these states, newest first, with what
+	// perceptors read to order them (guid, date and its zone, size, duration) — not
+	// the whole rows
+	GetItemsInStates(states ...dto.ItemState) ([]*dto.ItemDto, error)
 	GetItemByGuid(guid string) (*dto.ItemDto, error)
 	GetItemByPath(path string) (*dto.ItemDto, error)
 	GetItemByHash(hash string) (*dto.ItemDto, error)
@@ -45,24 +50,25 @@ func (p *proxy) GetAllItems() ([]*dto.ItemDto, error) {
 
 func (p *proxy) StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) error {
 	const pageSize = 32
-	var lastID uint
 
-	for {
-		var batch []dto.ItemDto
-		q := p.db.Model(&dto.ItemDto{}).Order("id").Limit(pageSize)
-		if lastID > 0 {
-			q = q.Where("id > ?", lastID)
-		}
-		if err := q.Find(&batch).Error; err != nil {
+	// The ids in sheet order first (cheap), then the items page by page: a stable
+	// order while the import writes, without paging by a date
+	var ids []uint
+	if err := p.db.Model(&dto.ItemDto{}).Order("date DESC, id DESC").Pluck("id", &ids).Error; err != nil {
+		return err
+	}
+
+	for start := 0; start < len(ids); start += pageSize {
+		page := ids[start:min(start+pageSize, len(ids))]
+		var batch []*dto.ItemDto
+		if err := p.db.Where("id IN ?", page).Find(&batch).Error; err != nil {
 			return err
 		}
-		if len(batch) == 0 {
-			return nil
-		}
-
+		byID := make(map[uint]*dto.ItemDto, len(batch))
 		guids := make([]string, len(batch))
-		for i := range batch {
-			guids[i] = batch[i].Guid
+		for i, it := range batch {
+			byID[it.ID] = it
+			guids[i] = it.Guid
 		}
 		var files []*dto.FileDto
 		if err := p.db.Where("linked_to IN ?", guids).Order("id").Find(&files).Error; err != nil {
@@ -73,13 +79,23 @@ func (p *proxy) StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) erro
 			byItem[f.LinkedTo] = append(byItem[f.LinkedTo], f)
 		}
 
-		for i := range batch {
-			if err := fn(&batch[i], byItem[batch[i].Guid]); err != nil {
+		for _, id := range page {
+			it, ok := byID[id]
+			if !ok {
+				continue // deleted meanwhile
+			}
+			if err := fn(it, byItem[it.Guid]); err != nil {
 				return err
 			}
-			lastID = batch[i].ID
 		}
 	}
+	return nil
+}
+
+func (p *proxy) GetItemsInStates(states ...dto.ItemState) ([]*dto.ItemDto, error) {
+	var items []*dto.ItemDto
+	return items, p.db.Select("id", "guid", "date", "date_offset", "date_source", "size_w", "size_h", "ratio_w", "ratio_h", "duration").
+		Where("state IN ?", states).Order("date DESC, id DESC").Find(&items).Error
 }
 
 func (p *proxy) GetItemByGuid(guid string) (*dto.ItemDto, error) {

@@ -1,7 +1,9 @@
 <script lang="ts">
     import ItemView from "$lib/gallery/components/ItemView.svelte";
     import ViewerTools from "$lib/gallery/components/ViewerTools.svelte";
+    import {switchPerceptor} from "$lib/gallery/perceptors.svelte";
     import {page} from '$app/state';
+    import {goto} from '$app/navigation';
     import {layoutDb} from "$lib/stores";
     // Not re-exported from $lib/stores: the workers import that, this is page-only (svelte/reactivity)
     import {LiveQuery} from "$lib/stores/internal/liveQuery";
@@ -30,6 +32,45 @@
     let zoomState = $state({guid: '', value: 1});
     let zoom = $derived(zoomState.guid === item?.guid ? zoomState.value : 1);
 
+    // Close: back to the gallery entry it was opened from; opened directly (/N typed,
+    // a link, a reload of a replaced entry) there is none — go to the gallery instead
+    // of leaving the site
+    function close() {
+        if (page.state.fromGallery) history.back();
+        else goto('/', {replaceState: true, noScroll: true});
+    }
+
+    // ← →: the previous / next item. The entry is replaced, so Back (and close) still
+    // leads to the gallery, not through every item seen. Steps count from the item
+    // being navigated to (a held key or quick presses add up); only the latest step
+    // navigates, past the end it stays.
+    let pending: number | undefined;
+    function step(delta: number) {
+        const next = (pending ?? index) + delta;
+        if (next < 0) return;
+        pending = next;
+        layoutDb.items.where('order').equals(next).count().then((found) => {
+            if (pending !== next) return; // a later step took over
+            if (!found) {
+                pending = undefined;
+                return;
+            }
+            goto('/' + next, {replaceState: true, noScroll: true, keepFocus: true, state: page.state})
+                .finally(() => {
+                    if (pending === next) pending = undefined;
+                });
+        });
+    }
+
+    function onkeydown(e: KeyboardEvent) {
+        if (e.metaKey || e.ctrlKey || e.altKey) return;
+        if (e.key === 'Escape') close();
+        else if (e.key === 'ArrowRight') step(1);
+        else if (e.key === 'ArrowLeft') step(-1);
+        else return;
+        e.preventDefault();
+    }
+
     // onwheel={...} would be passive: preventDefault() needs a manual listener
     const wheelZoom: Attachment<HTMLElement> = (node) => {
         const onWheel = (e: WheelEvent) => {
@@ -43,10 +84,12 @@
     };
 </script>
 
+<svelte:window {onkeydown}/>
+
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div class="viewer"
      {@attach wheelZoom}
-     onclick={() => history.back()}>
+     onclick={close}>
     {#if item}
         <div class="stage" style:transform="scale({zoom})">
             <ItemView {item} {index} mode="view" sizes="100vw" {showOriginal}/>
@@ -56,7 +99,8 @@
 <!-- Outside the zoomed stage: a transform would make the toolbar scale and move -->
 {#if item?.asset}
     <ViewerTools asset={item.asset} {showOriginal}
-                 ontoggleoriginal={() => (originalFor = showOriginal ? null : item!.guid)}/>
+                 ontoggleoriginal={() => (originalFor = showOriginal ? null : item!.guid)}
+                 onperceptor={(name) => { switchPerceptor(name, item!.guid); close(); }}/>
 {/if}
 
 <style>

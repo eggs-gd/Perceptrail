@@ -217,6 +217,67 @@ compose with `derived`. The current message protocol is a deviation from this de
 
 ---
 
+## Navigation: perceptors and the sheet
+
+### Every perceptor gives the sheet its order (2026-10-01)
+
+Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
+
+- **Navigation is a base requirement of a perceptor, not a kind of it** (decided):
+  `View`/`Order` are in the base interface; if a split is ever needed it is added
+  then. Every perceptor gives an honest view (size by megapixels, videos by length;
+  stubs without data say so). **Sections come from the real values**, like years and
+  months for the date — "12 MP" then "4032×3024", "3 min", "45 s" — not fixed bands;
+  the one fixed label per perceptor is "no value" ("No date", "Unknown size", "No
+  length"). On the real library: 35 megapixel sections (1 707 exact sizes below
+  them, panoramas mostly), 65 lengths.
+- A "videos only" filter button was considered and is not needed: the Length view
+  puts every video first, longest to shortest — the slice does what the filter would.; the config decides which ones the client gets
+  (`perceptors.<name>.client`, next to `enabled`).
+- **A perceptor's point is a way through the library** (decided): the user always
+  sees the whole endless sheet, ordered by the active perceptor around the photo
+  they are at. **No filters** — one sheet in different slices. Absolute perceptors
+  (date, geo) ignore the anchor; relative ones (faces, objects, similar) build a
+  **two-sided trail**: from the anchor to the nearest unseen photo, then the nearest
+  to that, both ways — a distance is a ring around the photo, not a line; the trail
+  makes a line where neighbours are really alike (the name: Perceptrail).
+- **The server orders, the client lays out** (decided). Perceptors are Go plugins on
+  the server — ordering on the client would mean writing each one twice; embeddings
+  do not fit a browser (2 KB per photo × 100k) and need a nearest-neighbour index.
+  The layout stays in the client's worker: it depends on the window width (a
+  server-side layout was considered earlier and moved to the client for that).
+- **Sections ride in the order stream** (`{guid, section?: {level, label}}` on the
+  first item of a section), not a separate list: the panel's positions come from the
+  layout (the client's), and a relative perceptor's sections depend on the anchor.
+- **Geo is not one axis**: west → east puts Krakow next to Cape Town. A Hilbert curve
+  maps (lat, lon) to one number that keeps near places mostly near (planned).
+- A switch reuses the resize anchor: the worker relays out with `anchor`, the window
+  query scrolls so the anchor keeps its screen position; from the viewer the anchor
+  is the viewed photo with ratio 0.5 (centred). Closing the viewer then must not
+  "reveal" the photo by its old position — the gallery skips it when that photo is
+  the pending anchor.
+- **Every rearrangement uses the wave** (decided: the wave is the product's style). A
+  switch first replaced the screen at once — it reused the resize relayout, where new
+  tiles appear without a fade (a fade from 0 left the screen empty when widening),
+  and on a switch almost every tile is new. Now the switch's relayout fades the new
+  tiles in by the same wave as the moves: from the anchor outwards, row by row,
+  within 500 ms; the anchor and shared tiles move as on a resize.
+- A perceptor's icon is SVG from a plugin: shown as a CSS `mask-image` — no script in
+  it runs, and the button's colour paints it (`currentColor` does not reach an
+  `<img>`).
+- `routes` cannot import the plugin manager (`app` imports `client` for its config):
+  `main` passes the loaded perceptors to the web service.
+- `LiveQuery.current` read outside an effect or a template (a key handler) is
+  `undefined` — the subscription is only active while something reactive reads it.
+  The viewer's bound check queries Dexie directly.
+- The layout turns pointer events off for the whole `<main>` under the viewer (only
+  `.viewer` turns them on): anything fixed outside `.viewer` (the toolbar) must turn
+  them on itself, or clicks fall through and close the viewer. `element.click()` in a
+  test does not hit-test — check with `elementFromPoint` or a real click.
+- Testing on a second server started from an agent's shell: macOS does not let that
+  process read `Photos Library.photoslibrary` (privacy), so Apple files are 404
+  there while the user's server serves them.
+
 ## Backend: gontroller, plugins, exiftool
 
 ### The asset contract (2026-09-30)

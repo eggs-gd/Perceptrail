@@ -3,9 +3,13 @@
     import {tick, untrack} from 'svelte';
     import {MediaQuery} from 'svelte/reactivity';
     import ItemView from "./components/ItemView.svelte";
+    import GalleryTools from "./components/GalleryTools.svelte";
+    import SidePanel from "./components/SidePanel.svelte";
     import type {LayoutItem} from "$lib/stores";
-    import {updateLayout} from "$lib/workers";
+    import {setOrder, updateLayout} from "$lib/workers";
+    import {orderApplied, perceptors} from "./perceptors.svelte";
     import type {LayoutSize} from "$lib/stores";
+    import {layoutDb} from "$lib/stores";
     import {type AnchorState, findAnchor, watchSize, watchWindow, type WindowSnapshot} from "./layoutWindow";
 
     interface Props {
@@ -13,12 +17,15 @@
         /** Target row height, px */
         rowHeight?: number;
         openItem: (item: LayoutItem) => void,
+        /** The item open in the viewer (its order); undefined: the viewer is closed */
+        viewing?: number;
     }
 
     let {
         gutter = 8,
         rowHeight = 220,
-        openItem
+        openItem,
+        viewing,
     }: Props = $props();
 
     /** Width available to the gallery (bound to the container) */
@@ -33,7 +40,7 @@
     let height = $state(0);
 
     // Gallery top in document coordinates; the gallery is laid out from y = 0
-    let containerTop = 0;
+    let containerTop = $state(0);
     const anchorState: AnchorState = {appliedRev: -1};
 
     // The window moves in steps of half a viewport: scrolling inside a step does not
@@ -52,26 +59,74 @@
         const targetRowHeight = rowHeight;
         if (!width) return;
         untrack(() => {
-            if (!anchorState.pending) {
-                // The parent, not the container: the container itself may be mid-animation
-                if (containerEl?.parentElement) {
-                    containerTop = containerEl.parentElement.getBoundingClientRect().top + window.scrollY;
-                }
-                const atTop = window.scrollY - containerTop <= 1;
-                const atBottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
-                anchorState.pending = findAnchor(
-                    images,
-                    {top: window.scrollY - containerTop, height: window.innerHeight, width},
-                    atTop ? 'top' : atBottom ? 'bottom' : null,
-                );
-            }
+            if (!anchorState.pending) anchorState.pending = anchorOnScreen(width);
             updateLayout(width, targetRowHeight, anchorState.pending?.guid);
+        });
+    });
+
+    /** What to keep in place: the page's edge at an edge, else the photo in the middle */
+    function anchorOnScreen(width: number) {
+        // The parent, not the container: the container itself may be mid-animation
+        if (containerEl?.parentElement) {
+            containerTop = containerEl.parentElement.getBoundingClientRect().top + window.scrollY;
+        }
+        const atTop = window.scrollY - containerTop <= 1;
+        const atBottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+        return findAnchor(
+            images,
+            {top: window.scrollY - containerTop, height: window.innerHeight, width},
+            atTop ? 'top' : atBottom ? 'bottom' : null,
+        );
+    }
+
+    // A perceptor switch: the sheet is rearranged around the photo the user is at,
+    // kept in place like a resize keeps it — the photo in the middle of the screen,
+    // or the one the viewer was showing (then centred)
+    $effect(() => {
+        const request = perceptors.request;
+        if (!request) return;
+        untrack(() => {
+            anchorState.pending = request.anchor
+                ? {mode: 'center', guid: request.anchor, ratio: 0.5}
+                : anchorOnScreen(screenWidth);
+            switching = true;
+            setOrder(request.perceptor, anchorState.pending?.guid).then((ok) => {
+                // Not applied: no switch relayout comes (a resize must not take its wave)
+                if (!ok && request.seq === perceptors.request?.seq) switching = false;
+                orderApplied(request, ok);
+            });
         });
     });
 
     // A scroll that is not ours (anchor correction) is the user's: drop the anchor,
     // the next resize anchors whatever is on screen then
     let programmaticScrollY: number | undefined;
+
+    // The viewer may have stepped far away (arrows): when it closes, the gallery shows
+    // the item it closed on — scrolled to the middle if it is not on screen. By guid:
+    // closing into another perceptor changes the order (that switch centres it itself).
+    let lastViewed: string | undefined;
+    $effect(() => {
+        const order = viewing;
+        if (order !== undefined) {
+            layoutDb.items.where('order').equals(order).first().then((item) => {
+                if (item && viewing === order) lastViewed = item.guid;
+            });
+        } else if (lastViewed !== undefined) {
+            const guid = lastViewed;
+            lastViewed = undefined;
+            if (anchorState.pending?.guid !== guid) reveal(guid);
+        }
+    });
+
+    async function reveal(guid: string) {
+        const item = await layoutDb.items.get(guid);
+        if (!item || !containerEl?.parentElement) return;
+        const top = containerEl.parentElement.getBoundingClientRect().top + window.scrollY + item.y;
+        if (top >= window.scrollY && top + item.h <= window.scrollY + window.innerHeight) return;
+        programmaticScrollY = Math.max(0, top - (window.innerHeight - item.h) / 2);
+        window.scrollTo({top: programmaticScrollY, behavior: 'instant'});
+    }
 
     function onScroll() {
         if (programmaticScrollY !== undefined && Math.abs(window.scrollY - programmaticScrollY) <= 2) return;
@@ -115,6 +170,9 @@
         const snapshot = latestWindow;
         const meta = snapshot?.meta;
         const relayout = meta !== undefined && meta.rev !== lastRev;
+        // The relayout of a perceptor switch: the new photos come in with the wave too
+        const appear = relayout && switching;
+        if (appear) switching = false;
         // Tiles mounted by a relayout appear in place at once: fading them in from 0
         // left the screen nearly white when widening (the shorter layout brings in many
         // photos that were not rendered). New photos from the stream still fade in.
@@ -146,8 +204,11 @@
         }
         if (meta) lastRev = meta.rev;
 
-        animateTiles(first, delta, relayout ? waveOrigin() : undefined);
+        animateTiles(first, delta, relayout ? waveOrigin() : undefined, appear);
     }
+
+    /** A perceptor switch is on its way: its relayout brings the new photos in by the wave */
+    let switching = false;
 
     // Tiles move to their new place with these durations (Web Animations, FLIP)
     const MOVE_MS = 500;
@@ -247,9 +308,11 @@
      * FLIP per tile: from where it is on screen now to its new place. `delta` is the
      * scroll correction just applied — the start is shifted by it so nothing jumps on
      * screen. A tile waiting for its turn in the wave stays exactly where it was
-     * (fill: backwards). New tiles have no start and just fade in.
+     * (fill: backwards). New tiles have no start: after a perceptor switch (appear)
+     * they fade in by the same wave, from the anchor outwards — one style for every
+     * rearrangement; otherwise they are just there.
      */
-    function animateTiles(first: Map<string, Box>, delta: number, origin: WaveOrigin | undefined) {
+    function animateTiles(first: Map<string, Box>, delta: number, origin: WaveOrigin | undefined, appear = false) {
         if (!containerEl || first.size === 0) return;
         const byGuid = new Map(images.map((i) => [i.guid, i]));
         const delays = origin ? waveDelays(origin, first, delta) : undefined;
@@ -257,7 +320,15 @@
         for (const el of containerEl.querySelectorAll<HTMLElement>('[data-guid]')) {
             const from = first.get(el.dataset.guid!);
             const to = byGuid.get(el.dataset.guid!);
-            if (!from || !to) continue;
+            if (!to) continue;
+            if (!from) {
+                if (appear) {
+                    moves.get(el)?.forEach((a) => a.cancel());
+                    moves.set(el, [el.animate([{opacity: 0}, {opacity: 1}],
+                        {duration: FADE_MS, delay: delays?.get(to.guid) ?? 0, easing: 'ease', fill: 'backwards'})]);
+                }
+                continue;
+            }
             const fromY = from.y + delta;
             if (Math.abs(from.x - to.x) < 0.5 && Math.abs(fromY - to.y) < 0.5
                 && Math.abs(from.w - to.w) < 0.5 && Math.abs(from.h - to.h) < 0.5) continue;
@@ -288,7 +359,9 @@
 
 <svelte:window bind:scrollY bind:innerHeight onscroll={onScroll}/>
 
-<div class="masonry" bind:clientWidth={screenWidth}>
+<!-- The pinned side panel takes its width from the photos (a resize: the photo in
+     the middle stays in place); unpinned it shows over them while scrolling -->
+<div class="masonry" class:pinned={perceptors.pinned} bind:clientWidth={screenWidth}>
     <div class={['container', !screenWidth && 'hidden']} bind:this={containerEl} style:height="{height}px">
         {#each images as itm (itm.guid)}
             <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
@@ -304,6 +377,10 @@
         {/each}
     </div>
 </div>
+{#if viewing === undefined}
+    <GalleryTools/>
+    <SidePanel {height} top={containerTop} {scrollY} {innerHeight} pinned={perceptors.pinned}/>
+{/if}
 
 <style>
     .masonry {
@@ -311,6 +388,11 @@
         /* We anchor the view ourselves (resize). Browser scroll anchoring would adjust
            scrollY on its own, which reads as a user scroll and drops our anchor. */
         overflow-anchor: none;
+    }
+
+    /* The pinned side panel's width (SidePanel) */
+    .masonry.pinned {
+        margin-right: 4.5rem;
     }
 
     .container {

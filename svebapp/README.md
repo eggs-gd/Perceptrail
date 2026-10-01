@@ -29,15 +29,23 @@ gontroller /items (NDJSON, one item at a time)
 wsync (worker) ── put ──► itemsDb (Dexie "items")
    │  Dexie hooks: create / update / delete, sync-start / sync-done
    ▼  MessageChannel (worker → worker)
-wlayout (worker)   all photos in memory, synchronous layout → x, y, w, h
-   │  writes layoutDb: a full relayout = ONE transaction (items + meta),
+wlayout (worker)   all photos in memory, in the active perceptor's order
+   │  (GET /p/:name/order: guids + sections), synchronous layout → x, y, w, h
+   │  writes layoutDb: a full relayout = ONE transaction (items + meta + sections),
    │  a streamed photo = one small transaction
    ▼
-layoutDb (Dexie "layout": items by y/order, meta {rev, height, anchor})
+layoutDb (Dexie "layout": items by y/order, meta {rev, height, anchor}, sections)
    │  liveQuery over the VISIBLE WINDOW only (layoutWindow.ts)
    ▼
-Gallery.svelte     renders the window: absolutely positioned tiles, keyed by guid
+Gallery.svelte     renders the window: absolutely positioned tiles, keyed by guid;
+                   GalleryTools (perceptor buttons, panel pin), SidePanel (sections)
 ```
+
+Perceptors ([Perceptors.puml](../_sb/puml/Perceptors.puml)) — every perceptor is a
+view of the sheet: `GET /perceptors` gives a button per perceptor (`lib/gallery/perceptors.svelte.ts` keeps the active one and
+the pinned panel per browser). A switch is carried out like a resize: the photo in
+the middle of the screen (or the viewer's photo, centred) is the anchor the relayout
+keeps in place.
 
 - `lib/workers/proxy.ts` — creates the workers, `loadFromServer()`,
   `updateLayout(screenWidth, rowHeight, anchor?)`.

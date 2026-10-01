@@ -70,6 +70,23 @@ export interface LayoutMeta {
     anchor?: {guid: string, y: number, h: number};
 }
 
+/** A mark of the side panel: where a section of the active perceptor starts */
+export interface SectionMark {
+    /** 0: the coarsest (a year); deeper levels are shown when there is room */
+    level: number;
+    label: string;
+    /** The section's first item and its top in the gallery, px */
+    guid: string;
+    order: number;
+    y: number;
+}
+
+/** The side panel's marks for the current layout (written with it) */
+export interface LayoutSections {
+    key: 'sections';
+    marks: SectionMark[];
+}
+
 /** Gallery size, updated with every batch of streamed photos; separate subscription */
 export interface LayoutSize {
     key: 'size';

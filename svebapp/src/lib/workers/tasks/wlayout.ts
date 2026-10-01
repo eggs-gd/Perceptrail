@@ -1,16 +1,22 @@
 import {
     type MessageFromSync,
+    type OrderEntry,
+    type OrderPayload,
+    type OrderResult,
     type UpdateLayoutPayload,
     type WorkerMessage,
 } from "./types";
 import {
     type Item,
     LAYOUT_META_KEY,
+    LAYOUT_SECTIONS_KEY,
     LAYOUT_SIZE_KEY,
     layoutDb,
     type LayoutItem,
     type LayoutMeta,
+    type LayoutSections,
     type LayoutSize,
+    type SectionMark,
 } from "$lib/stores";
 import {getLogger} from "$lib/logger";
 
@@ -27,11 +33,29 @@ let viewport: UpdateLayoutPayload | null = null;
 let relayoutTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
- * Every item streamed so far, in stream (id) order. Kept in memory so a relayout
- * is one synchronous computation; the result goes to layoutDb, where the page
- * reads the visible window with liveQuery (Workers.puml).
+ * Every item streamed so far, in sheet order. Kept in memory so a relayout is one
+ * synchronous computation; the result goes to layoutDb, where the page reads the
+ * visible window with liveQuery (Workers.puml).
  */
 let items: Item[] = [];
+
+/**
+ * The sheet's order from the active perceptor (/p/:name/order): rank per guid and
+ * the side panel's sections. Items it does not list yet (streamed after it) keep
+ * their stream order after it; before any order the stream order is the sheet
+ * (/items comes newest first, the default view).
+ */
+let rank = new Map<string, number>();
+let sections: OrderEntry[] = [];
+let arrival = new Map<string, number>();
+const UNRANKED = 1e9;
+
+function sheetKey(item: Item): number {
+    return rank.get(item.guid) ?? UNRANKED + (arrival.get(item.guid) ?? 0);
+}
+
+/** Where every placed item is (its top and sheet position): the sections' marks */
+let placed = new Map<string, {y: number, order: number}>();
 
 /** Incremental layout state for the current viewport */
 interface LayoutState {
@@ -79,8 +103,58 @@ self.onmessage = function (msg: { data: WorkerMessage<any, any> }) {
         }
         viewport = {screenWidth: p.screenWidth, rowHeight: p.rowHeight, anchor: p.anchor};
         scheduleRelayout();
+    } else if (task === 'order') {
+        const p = payload as OrderPayload;
+        applyOrder(p).then(
+            () => postMessage({task: 'order', id: p.id, ok: true} satisfies OrderResult),
+            (error) => {
+                if (error?.name !== 'AbortError') logger.error('order failed', error);
+                postMessage({task: 'order', id: p.id, ok: false} satisfies OrderResult);
+            },
+        );
     }
 };
+
+/** The order being fetched: a newer one aborts it (its response must not land later) */
+let orderFetch: AbortController | undefined;
+
+/**
+ * A perceptor's order: the items are re-sorted and laid out again around the
+ * anchor (the photo the user is at stays in view, the rest is rearranged). Only the
+ * latest request is applied; a failure leaves the sheet as it was.
+ */
+async function applyOrder({url, anchor}: OrderPayload) {
+    orderFetch?.abort();
+    const fetching = orderFetch = new AbortController();
+    const response = await fetch(url, {signal: fetching.signal});
+    if (!response.ok) throw new Error(`${url}: ${response.status}`);
+    const text = await response.text();
+    fetching.signal.throwIfAborted(); // a newer request came while reading
+    const entries: OrderEntry[] = text
+        .split('\n')
+        .filter((line) => line.trim())
+        .map((line) => JSON.parse(line));
+
+    rank = new Map(entries.map((e, i) => [e.guid, i]));
+    sections = entries.filter((e) => e.section);
+    items.sort((a, b) => sheetKey(a) - sheetKey(b));
+    if (viewport) viewport = {...viewport, anchor};
+    queueRelayout();
+}
+
+/** The side panel's marks: the sections whose first item is placed */
+function sectionsRecord(): LayoutSections {
+    const marks: SectionMark[] = [];
+    for (const e of sections) {
+        const at = placed.get(e.guid);
+        if (at) marks.push({level: e.section!.level, label: e.section!.label, guid: e.guid, ...at});
+    }
+    return {key: LAYOUT_SECTIONS_KEY, marks};
+}
+
+function remember(rows: LayoutItem[]) {
+    for (const itm of rows) placed.set(itm.guid, {y: itm.y, order: itm.order});
+}
 
 function onItemsDbMessage(event: MessageEvent<MessageFromSync>) {
     const {action, item} = event.data;
@@ -88,15 +162,17 @@ function onItemsDbMessage(event: MessageEvent<MessageFromSync>) {
     switch (action) {
         case 'sync-start':
             items = [];
+            arrival = new Map();
             queueRelayout();
             return;
         case 'create': {
+            arrival.set(item!.guid, arrival.size);
             const last = items[items.length - 1];
-            if (!last || item!.id > last.id) {
+            if (!last || sheetKey(item!) > sheetKey(last)) {
                 items.push(item!);
                 append(item!);
             } else {
-                // Out of stream order: put it in place and lay out everything again
+                // Not at the end of the sheet: put it in place and lay out everything again
                 insertSorted(item!);
                 scheduleRelayout();
             }
@@ -117,7 +193,8 @@ function onItemsDbMessage(event: MessageEvent<MessageFromSync>) {
 }
 
 function insertSorted(item: Item) {
-    const i = items.findIndex((itm) => itm.id > item.id);
+    const key = sheetKey(item);
+    const i = items.findIndex((itm) => sheetKey(itm) > key);
     if (i < 0) items.push(item);
     else items.splice(i, 0, item);
 }
@@ -156,6 +233,8 @@ function writeRelayout(): Promise<unknown> {
         all.push(...place(items[i], i, vp));
     }
     all.push(...placeOpenRow(vp));
+    placed = new Map();
+    remember(all);
 
     const anchor = vp.anchor ? all.find((itm) => itm.guid === vp.anchor) : undefined;
     meta = {
@@ -169,12 +248,13 @@ function writeRelayout(): Promise<unknown> {
     const rows = all.map((itm) => ({...itm}));
     const layoutRecord = {...meta};
     const sizeRecord = currentSize(vp);
+    const sectionsRec = sectionsRecord();
 
     logger.debug('relayout', {items: rows.length, width: vp.screenWidth});
     return layoutDb.transaction('rw', layoutDb.items, layoutDb.meta, async () => {
         await layoutDb.items.clear();
         await layoutDb.items.bulkPut(rows);
-        await layoutDb.meta.bulkPut([layoutRecord, sizeRecord]);
+        await layoutDb.meta.bulkPut([layoutRecord, sizeRecord, sectionsRec]);
     });
 }
 
@@ -206,9 +286,13 @@ function flushAppends() {
     const rows = [...pendingRows.values()];
     pendingRows = new Map();
     const sizeRecord = currentSize(viewport);
+    // Streamed items may start sections (the order came before them)
+    const before = placed.size;
+    remember(rows);
+    const sectionsRec = sections.length && placed.size !== before ? sectionsRecord() : undefined;
     enqueue(() => layoutDb.transaction('rw', layoutDb.items, layoutDb.meta, async () => {
         await layoutDb.items.bulkPut(rows);
-        await layoutDb.meta.put(sizeRecord);
+        await layoutDb.meta.bulkPut(sectionsRec ? [sizeRecord, sectionsRec] : [sizeRecord]);
     }));
 }
 

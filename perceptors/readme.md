@@ -24,6 +24,11 @@ func (p *geoPerceptor) ProcessingMode() api.ProcessingMode { return api.SingleIt
 func (p *geoPerceptor) NewProcessor(chin <-chan api.RawItemR, chout chan<- api.RawItemR,
     logger *l.Logger) chain.Processor { … }
 
+// Navigation — every perceptor is a view of the gallery's sheet
+func (p *geoPerceptor) View() api.View { return api.View{Title: "Place", Icon: geoIcon, Help: "…"} }
+func (p *geoPerceptor) Order(ctx context.Context, anchor string,
+    items []api.ItemDataProvider) ([]api.Entry, error) { … }
+
 var Perceptor api.Perceptor = &geoPerceptor{}
 
 func main() {}
@@ -34,6 +39,12 @@ func main() {}
 - `ProcessingMode`: `SingleItem` or `ItemGroup` (groups are not implemented on the
   server side yet).
 - `NewProcessor` returns a `perceplib/chain` step (usually `chain.NewDecorator`).
+- `View` + `Order`: **navigation is a base requirement** — the perceptor's button in
+  the gallery (title, an SVG icon drawn as a mask, help) and every item in its order
+  (`items` come newest first), with sections for the side panel. Absolute (date,
+  size, place) or relative (`View.Relative`: a two-sided trail from `anchor` — faces,
+  colour). Config `perceptors.<name>.client: false` keeps the button away, `enabled:
+  false` does not run it. See [`Perceptors.puml`](../_sb/puml/Perceptors.puml).
 
 ## Building
 
@@ -51,8 +62,8 @@ Host and plugin must be built with **the same Go** and **the same versions** of
 
 | Plugin | Status |
 |---|---|
-| `exif_geo` | loads; `Decorate` writes nothing yet (nowhere to — see perceptor data storage in the roadmap) |
-| `ml_color` | loads; `NewProcessor` returns `nil` |
+| `exif_geo` | loads; `Decorate` writes nothing yet (nowhere to — see perceptor data storage in the roadmap); its view: every photo "place not known yet" |
+| `ml_color` | loads; `NewProcessor` returns `nil`; its view (relative): "not analysed yet" |
 | `ml_faces` | empty `main.go`, no `Perceptor` symbol |
 | `ml_objects` | empty `main.go`, no `Perceptor` symbol |
 
