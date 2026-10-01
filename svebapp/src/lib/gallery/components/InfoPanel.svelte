@@ -2,7 +2,6 @@
     import {PUBLIC_API_PATH} from '$env/static/public';
     import type {Asset, Rendition} from '$lib/stores';
     import {iconMask} from '../perceptors.svelte';
-    import {toggleViewerPref, viewerPrefs} from './viewerPrefs.svelte';
 
     interface Props {
         guid: string;
@@ -68,14 +67,6 @@
 <aside class="panel" onclick={(e) => e.stopPropagation()}>
     <header>
         <span>Info</span>
-        <button class:on={viewerPrefs.infoPinned} aria-pressed={viewerPrefs.infoPinned}
-                title={viewerPrefs.infoPinned ? 'Stays open' : 'Keep it open'}
-                aria-label="Keep the panel open" onclick={() => toggleViewerPref('infoPinned')}>
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M9 4h6l-1 6 3 3H7l3-3zM12 13v7" fill="none" stroke="currentColor" stroke-width="1.6"
-                      stroke-linejoin="round" stroke-linecap="round"/>
-            </svg>
-        </button>
         <button title="Close" aria-label="Close the panel" onclick={onclose}>
             <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -132,13 +123,8 @@
         cursor: pointer;
     }
 
-    header button:hover,
-    header button.on {
+    header button:hover {
         color: #fff;
-    }
-
-    header button.on {
-        border-color: rgb(255 255 255 / 0.6);
     }
 
     header svg {

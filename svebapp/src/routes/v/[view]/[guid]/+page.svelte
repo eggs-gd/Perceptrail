@@ -29,17 +29,9 @@
     let item = $derived(itemQuery.current);
     let index = $derived(item?.order ?? 0);
 
-    // The info panel: opened by its button, or kept open (pinned) photo to photo
-    let infoOpen = $state(false);
-    let showInfo = $derived(infoOpen || viewerPrefs.infoPinned);
-    function toggleInfo() {
-        if (showInfo) {
-            infoOpen = false;
-            if (viewerPrefs.infoPinned) toggleViewerPref('infoPinned');
-        } else {
-            infoOpen = true;
-        }
-    }
+    // The info panel: its button is a switch kept like the others (photo to photo,
+    // between visits)
+    const toggleInfo = () => toggleViewerPref('infoOpen');
 
     // The Original switch is per item: the next one opens with its preview again
     let originalFor = $state<string | null>(null);
@@ -125,9 +117,9 @@
     <ViewerTools asset={item.asset} {showOriginal}
                  ontoggleoriginal={() => (originalFor = showOriginal ? null : item!.guid)}
                  onperceptor={pickView}
-                 infoOpen={showInfo} ontoggleinfo={toggleInfo}/>
+                 infoOpen={viewerPrefs.infoOpen} ontoggleinfo={toggleInfo}/>
 {/if}
-{#if showInfo}
+{#if viewerPrefs.infoOpen}
     <InfoPanel {guid} asset={item?.asset} onclose={toggleInfo}/>
 {/if}
 

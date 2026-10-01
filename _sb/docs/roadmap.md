@@ -235,8 +235,9 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
       their photos are placed). Keep the synced items between loads (sync the
       changes), or fetch the linked photo first.
 
-- [x] **Item info panel** in the viewer (PR #18): a toolbar toggle, can be pinned open
-      (kept in the browser). Its content comes from the perceptors: each one gives what it knows
+- [x] **Item info panel** in the viewer (PR #18): a toolbar switch, kept like the
+      other viewer switches (open photo to photo and between visits, until switched
+      off — a separate pin inside the panel was not obvious and is gone). Its content comes from the perceptors: each one gives what it knows
       about the item — a base requirement next to navigation (`Perceptor.Info(item)` →
       fields with labels and values; `GET /items/:guid/info` → per perceptor: its title,
       icon and fields). Today: date (the date, its zone and where it came from), size
