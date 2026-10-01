@@ -256,6 +256,12 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
   is the viewed photo with ratio 0.5 (centred). Closing the viewer then must not
   "reveal" the photo by its old position — the gallery skips it when that photo is
   the pending anchor.
+- **Every rearrangement uses the wave** (decided: the wave is the product's style). A
+  switch first replaced the screen at once — it reused the resize relayout, where new
+  tiles appear without a fade (a fade from 0 left the screen empty when widening),
+  and on a switch almost every tile is new. Now the switch's relayout fades the new
+  tiles in by the same wave as the moves: from the anchor outwards, row by row,
+  within 500 ms; the anchor and shared tiles move as on a resize.
 - A perceptor's icon is SVG from a plugin: shown as a CSS `mask-image` — no script in
   it runs, and the button's colour paints it (`currentColor` does not reach an
   `<img>`).

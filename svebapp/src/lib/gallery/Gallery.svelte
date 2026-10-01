@@ -89,6 +89,7 @@
             anchorState.pending = request.anchor
                 ? {mode: 'center', guid: request.anchor, ratio: 0.5}
                 : anchorOnScreen(screenWidth);
+            switching = true;
             setOrder(request.perceptor, anchorState.pending?.guid);
         });
     });
@@ -165,6 +166,9 @@
         const snapshot = latestWindow;
         const meta = snapshot?.meta;
         const relayout = meta !== undefined && meta.rev !== lastRev;
+        // The relayout of a perceptor switch: the new photos come in with the wave too
+        const appear = relayout && switching;
+        if (appear) switching = false;
         // Tiles mounted by a relayout appear in place at once: fading them in from 0
         // left the screen nearly white when widening (the shorter layout brings in many
         // photos that were not rendered). New photos from the stream still fade in.
@@ -196,8 +200,11 @@
         }
         if (meta) lastRev = meta.rev;
 
-        animateTiles(first, delta, relayout ? waveOrigin() : undefined);
+        animateTiles(first, delta, relayout ? waveOrigin() : undefined, appear);
     }
+
+    /** A perceptor switch is on its way: its relayout brings the new photos in by the wave */
+    let switching = false;
 
     // Tiles move to their new place with these durations (Web Animations, FLIP)
     const MOVE_MS = 500;
@@ -297,9 +304,11 @@
      * FLIP per tile: from where it is on screen now to its new place. `delta` is the
      * scroll correction just applied — the start is shifted by it so nothing jumps on
      * screen. A tile waiting for its turn in the wave stays exactly where it was
-     * (fill: backwards). New tiles have no start and just fade in.
+     * (fill: backwards). New tiles have no start: after a perceptor switch (appear)
+     * they fade in by the same wave, from the anchor outwards — one style for every
+     * rearrangement; otherwise they are just there.
      */
-    function animateTiles(first: Map<string, Box>, delta: number, origin: WaveOrigin | undefined) {
+    function animateTiles(first: Map<string, Box>, delta: number, origin: WaveOrigin | undefined, appear = false) {
         if (!containerEl || first.size === 0) return;
         const byGuid = new Map(images.map((i) => [i.guid, i]));
         const delays = origin ? waveDelays(origin, first, delta) : undefined;
@@ -307,7 +316,15 @@
         for (const el of containerEl.querySelectorAll<HTMLElement>('[data-guid]')) {
             const from = first.get(el.dataset.guid!);
             const to = byGuid.get(el.dataset.guid!);
-            if (!from || !to) continue;
+            if (!to) continue;
+            if (!from) {
+                if (appear) {
+                    moves.get(el)?.forEach((a) => a.cancel());
+                    moves.set(el, [el.animate([{opacity: 0}, {opacity: 1}],
+                        {duration: FADE_MS, delay: delays?.get(to.guid) ?? 0, easing: 'ease', fill: 'backwards'})]);
+                }
+                continue;
+            }
             const fromY = from.y + delta;
             if (Math.abs(from.x - to.x) < 0.5 && Math.abs(fromY - to.y) < 0.5
                 && Math.abs(from.w - to.w) < 0.5 && Math.abs(from.h - to.h) < 0.5) continue;
