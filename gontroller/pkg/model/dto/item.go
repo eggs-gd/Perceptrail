@@ -55,7 +55,7 @@ type ItemDto struct {
 	// client API derives it from the roles of the files
 	Kind string
 
-	Date time.Time // CreationDate of asset: the instant (the DB returns it in UTC)
+	Date time.Time `gorm:"index"` // CreationDate of asset: the instant (the DB returns it in UTC); the default sheet's order
 	// Local zone of the shot, minutes east of UTC: sqlite and Postgres timestamptz
 	// drop the zone of Date, so it is kept separately
 	DateOffset int
@@ -80,6 +80,22 @@ type ItemDto struct {
 func (ItemDto) TableName() string {
 	return "items"
 }
+
+// The item as plugins read it (api.ItemDataProvider): navigators get the library
+// as these
+
+func (i *ItemDto) GetGuid() string { return i.Guid }
+
+// GetDate returns the date in the local zone of the shot; no date: the zero time
+func (i *ItemDto) GetDate() time.Time {
+	if i.DateSource == "" {
+		return i.Date
+	}
+	return i.Date.In(time.FixedZone("", i.DateOffset*60))
+}
+
+func (i *ItemDto) GetSize() api.Size  { return i.Size }
+func (i *ItemDto) GetRatio() api.Size { return i.Ratio }
 
 // type Tag struct {
 // 	ID        uint   `gorm:"primaryKey"`

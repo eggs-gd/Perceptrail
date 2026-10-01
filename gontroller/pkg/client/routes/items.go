@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
+	"slices"
 	"time"
 
 	l "github.com/eggs-gd/perceplib/logger"
@@ -93,5 +94,5 @@ func streamClientItems(w http.ResponseWriter) error {
 // shown: the client gets items it can display — Visible (a cheap preview) and Ready;
 // Waiting (nothing viewable yet) and New stay hidden
 func shown(item *dto.ItemDto) bool {
-	return item.State == dto.Visible || item.State == dto.Ready
+	return slices.Contains(shownStates, item.State)
 }

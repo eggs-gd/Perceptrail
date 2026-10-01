@@ -129,10 +129,7 @@ func (r *RawItem) GetGuid() string {
 
 // GetDate returns the date in the local zone of the shot
 func (r *RawItem) GetDate() time.Time {
-	if r.Item.DateSource == "" {
-		return r.Item.Date
-	}
-	return r.Item.Date.In(time.FixedZone("", r.Item.DateOffset*60))
+	return r.Item.GetDate()
 }
 
 func (r *RawItem) GetSize() api.Size {
