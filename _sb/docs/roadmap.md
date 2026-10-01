@@ -77,7 +77,7 @@ Target architecture — the diagrams in [`../puml`](../puml).
 
 ## Next
 
-One PR per feature (its steps are commits); the roadmap is updated in that PR.
+One PR per feature (its steps are commits); docs are updated in that PR (AGENTS.md).
 
 ### Import chain — open
 

@@ -49,6 +49,10 @@ No symlinks (Windows).
 - Open the PR as a **draft** as soon as the branch has its first commit (the work
   is visible, CI runs on every push); mark it **ready for review** only when the
   feature is done.
+- Docs go in the same PR as the feature, never in a follow-up: before the PR is
+  ready, `_sb/docs/roadmap.md` reflects what the branch did (steps checked, finished
+  sections moved to Done, what is still open), `_sb/docs/findings.md` has what was
+  learned, and the diagrams / module READMEs match the code.
 - Version: one for the whole monorepo, **derived from git history** — nothing to bump
   or commit per PR, so parallel PRs never race. The root [`VERSION`](VERSION) holds
   only `MAJOR.MINOR`; `PATCH` = first-parent commits since `VERSION` last changed
