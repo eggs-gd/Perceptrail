@@ -69,10 +69,25 @@ export async function loadPerceptors() {
     if (first) switchPerceptor(first.name);
 }
 
-/** The sheet in another (or the same) perceptor's order, around a photo */
+/**
+ * The sheet in another (or the same) perceptor's order, around a photo. The button
+ * lights up (and is kept) once the order is applied — see orderApplied
+ */
 export function switchPerceptor(name: string, anchor?: string) {
-    perceptors.active = name;
     perceptors.request = {perceptor: name, anchor, seq: (perceptors.request?.seq ?? 0) + 1};
+}
+
+/**
+ * The gallery applied (or failed) a switch: only the latest request counts; a failed
+ * one leaves the previous perceptor active — the sheet is still in its order
+ */
+export function orderApplied(request: SwitchRequest, ok: boolean) {
+    if (request.seq !== perceptors.request?.seq) return;
+    if (!ok) {
+        logger.error('perceptor order not applied', request.perceptor);
+        return;
+    }
+    perceptors.active = request.perceptor;
     save();
 }
 

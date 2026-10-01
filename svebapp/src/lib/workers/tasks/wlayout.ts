@@ -2,6 +2,7 @@ import {
     type MessageFromSync,
     type OrderEntry,
     type OrderPayload,
+    type OrderResult,
     type UpdateLayoutPayload,
     type WorkerMessage,
 } from "./types";
@@ -103,18 +104,33 @@ self.onmessage = function (msg: { data: WorkerMessage<any, any> }) {
         viewport = {screenWidth: p.screenWidth, rowHeight: p.rowHeight, anchor: p.anchor};
         scheduleRelayout();
     } else if (task === 'order') {
-        applyOrder(payload as OrderPayload).catch((error) => logger.error('order failed', error));
+        const p = payload as OrderPayload;
+        applyOrder(p).then(
+            () => postMessage({task: 'order', id: p.id, ok: true} satisfies OrderResult),
+            (error) => {
+                if (error?.name !== 'AbortError') logger.error('order failed', error);
+                postMessage({task: 'order', id: p.id, ok: false} satisfies OrderResult);
+            },
+        );
     }
 };
 
+/** The order being fetched: a newer one aborts it (its response must not land later) */
+let orderFetch: AbortController | undefined;
+
 /**
  * A perceptor's order: the items are re-sorted and laid out again around the
- * anchor (the photo the user is at stays in view, the rest is rearranged)
+ * anchor (the photo the user is at stays in view, the rest is rearranged). Only the
+ * latest request is applied; a failure leaves the sheet as it was.
  */
 async function applyOrder({url, anchor}: OrderPayload) {
-    const response = await fetch(url);
+    orderFetch?.abort();
+    const fetching = orderFetch = new AbortController();
+    const response = await fetch(url, {signal: fetching.signal});
     if (!response.ok) throw new Error(`${url}: ${response.status}`);
-    const entries: OrderEntry[] = (await response.text())
+    const text = await response.text();
+    fetching.signal.throwIfAborted(); // a newer request came while reading
+    const entries: OrderEntry[] = text
         .split('\n')
         .filter((line) => line.trim())
         .map((line) => JSON.parse(line));

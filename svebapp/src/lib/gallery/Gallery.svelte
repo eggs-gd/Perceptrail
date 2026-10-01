@@ -7,7 +7,7 @@
     import SidePanel from "./components/SidePanel.svelte";
     import type {LayoutItem} from "$lib/stores";
     import {setOrder, updateLayout} from "$lib/workers";
-    import {perceptors} from "./perceptors.svelte";
+    import {orderApplied, perceptors} from "./perceptors.svelte";
     import type {LayoutSize} from "$lib/stores";
     import {layoutDb} from "$lib/stores";
     import {type AnchorState, findAnchor, watchSize, watchWindow, type WindowSnapshot} from "./layoutWindow";
@@ -90,7 +90,11 @@
                 ? {mode: 'center', guid: request.anchor, ratio: 0.5}
                 : anchorOnScreen(screenWidth);
             switching = true;
-            setOrder(request.perceptor, anchorState.pending?.guid);
+            setOrder(request.perceptor, anchorState.pending?.guid).then((ok) => {
+                // Not applied: no switch relayout comes (a resize must not take its wave)
+                if (!ok && request.seq === perceptors.request?.seq) switching = false;
+                orderApplied(request, ok);
+            });
         });
     });
 
