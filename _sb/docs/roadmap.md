@@ -225,11 +225,27 @@ Don't rush — a stable core first.
   ones ignore the anchor; relative ones (faces, objects, similar) build a
   **two-sided trail** from it: from the anchor to the nearest unseen photo, then the
   nearest to that, in both directions. Next:
-  - [ ] **Geo**: (lat, lon) on a Hilbert curve (one dimension that keeps
-        near places near; a plain longitude puts Krakow next to Cape Town), sections
-        country → city. Needs perceptor data storage (below) — `ItemDataProvider`
-        has no GPS.
-  - [ ] Relative perceptors (the trail) with the first ML perceptor.
+  - [ ] **Perceptor data storage + geo** (first: the data comes from EXIF and the
+        Photos DB, no pixels — the simplest test of the storage). Storage: a
+        perceptor writes its own values per item (`item_attrs`, or a table per
+        kind — vectors need their own) without changing `ItemDto`; `Order` reads
+        them. Geo: (lat, lon) on a Hilbert curve (one dimension that keeps near
+        places near; a plain longitude puts Krakow next to Cape Town), sections
+        country → city.
+  - [ ] **Colour — deterministic, no ML** (`ml_color` → `color`). Needs pixels for
+        perceptors: the item's cheap preview (always a browser image — JPEG/PNG/
+        WebP, so no HEIC/RAW decoding), scaled to ~32×32 (~10–20 ms per photo, once
+        per photo). Per photo: a colour histogram in a perceptual space (OKLab /
+        CIELAB, ~64 bins), 2–3 dominant colours (median cut — deterministic, unlike
+        k-means), mean lightness and chroma (greys apart). Views (one order per
+        perceptor, so two perceptors if both):
+        - **rainbow** (absolute): by the dominant hue around the circle, sections
+          named by the colours actually present; greys apart, dark → light;
+        - **similar colours** (relative): the trail by histogram distance (ties by
+          guid).
+        To decide: rainbow, trail or both.
+  - [ ] Relative perceptors (the trail) with the first ML perceptor (faces): the
+        trail mechanism shared with the colour trail.
   - [ ] A stable link to a photo: the viewer's `/N` is a position in the current
         sheet and changes with the perceptor.
 - UI slots (`item-panel`, `view`) — a perceptor can bring its own UI (map, face
