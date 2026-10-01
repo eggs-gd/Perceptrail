@@ -230,7 +230,9 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
   months for the date — "12 MP" then "4032×3024", "3 min", "45 s" — not fixed bands;
   the one fixed label per perceptor is "no value" ("No date", "Unknown size", "No
   length"). On the real library: 35 megapixel sections (1 707 exact sizes below
-  them, panoramas mostly), 65 lengths.; the config decides which ones the client gets
+  them, panoramas mostly), 65 lengths.
+- A "videos only" filter button was considered and is not needed: the Length view
+  puts every video first, longest to shortest — the slice does what the filter would.; the config decides which ones the client gets
   (`perceptors.<name>.client`, next to `enabled`).
 - **A perceptor's point is a way through the library** (decided): the user always
   sees the whole endless sheet, ordered by the active perceptor around the photo
