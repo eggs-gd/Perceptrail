@@ -331,6 +331,12 @@ Design: roadmap "Perceptor data"; diagram [`Perceptor data.puml`](../puml/Percep
   - **Geo sections from the time zone** of the place (tzf, already in the core for
     dates): real places without a geocoder dataset — "Europe" → "Kyiv". Country
     names need an offline geocoder (roadmap).
+  - **Every city in one piece**: by the curve alone a city came back several times
+    (the curve zigzags through a region — Tirane ×3, Kyiv ×2 on the dev library).
+    Now regions and cities are ordered by their first point on the curve (near ones
+    stay near), photos within a city by the curve: each city and region is one span
+    of the sheet (Athens → Tirane → Skopje → Podgorica → Zagreb → Budapest →
+    Bucharest → Kyiv → Minsk).
   - **A plugin's dependencies must match the host's exactly** — tzf brought older
     `golang.org/x/sync` / testify into `exif_geo`; aligned by hand. GPS parsing moved
     into `perceplib` (`api.Coordinates`), shared by the core's date and geo.

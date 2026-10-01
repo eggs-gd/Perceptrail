@@ -16,7 +16,7 @@ import (
 // The sheet by place: the coordinates on a Hilbert curve — one dimension that keeps
 // near places near (a plain longitude would put Krakow next to Cape Town). Sections
 // are the real places, from the time zone there: its region, then its city
-// ("Europe", "Kyiv"). Photos without a place go last.
+// ("Europe", "Kyiv"), each in one piece. Photos without a place go last.
 
 const geoIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg>`
 
@@ -35,10 +35,10 @@ const hilbertOrder = 16
 
 func (p *geoPerceptor) Order(ctx context.Context, _ string, items []api.ItemDataProvider) ([]api.Entry, error) {
 	type placed struct {
-		guid string
-		d    uint64
-		zone string
-		at   int
+		guid         string
+		d            uint64
+		region, city string
+		at           int
 	}
 	var located []placed
 	var nowhere []string
@@ -48,30 +48,49 @@ func (p *geoPerceptor) Order(ctx context.Context, _ string, items []api.ItemData
 			nowhere = append(nowhere, it.GetGuid())
 			continue
 		}
-		located = append(located, placed{it.GetGuid(), hilbert(loc), zoneName(loc), i})
+		r, c := splitZone(zoneName(loc))
+		located = append(located, placed{it.GetGuid(), hilbert(loc), r, c, i})
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	slices.SortStableFunc(located, func(a, b placed) int {
-		if c := cmp.Compare(a.d, b.d); c != 0 {
-			return c
+
+	// Every city in one piece, every region too: a region's and a city's place on the
+	// curve is its first photo's, so near regions and near cities stay near; within a
+	// city, by the curve (near spots together), the same spot newest first. Sorting by
+	// the curve alone made a city come back several times (the curve zigzags).
+	regionAt, cityAt := map[string]uint64{}, map[[2]string]uint64{}
+	for _, p := range located {
+		if d, ok := regionAt[p.region]; !ok || p.d < d {
+			regionAt[p.region] = p.d
 		}
-		return cmp.Compare(a.at, b.at) // the same spot: newest first
+		key := [2]string{p.region, p.city}
+		if d, ok := cityAt[key]; !ok || p.d < d {
+			cityAt[key] = p.d
+		}
+	}
+	slices.SortStableFunc(located, func(a, b placed) int {
+		return cmp.Or(
+			cmp.Compare(regionAt[a.region], regionAt[b.region]),
+			cmp.Compare(a.region, b.region),
+			cmp.Compare(cityAt[[2]string{a.region, a.city}], cityAt[[2]string{b.region, b.city}]),
+			cmp.Compare(a.city, b.city),
+			cmp.Compare(a.d, b.d),
+			cmp.Compare(a.at, b.at),
+		)
 	})
 
 	out := make([]api.Entry, 0, len(items))
 	region, city := "", ""
 	for _, p := range located {
 		e := api.Entry{Guid: p.guid}
-		r, c := splitZone(p.zone)
 		switch {
-		case r != region:
-			e.Section = &api.Section{Level: 0, Label: r}
-		case c != city:
-			e.Section = &api.Section{Level: 1, Label: c}
+		case p.region != region:
+			e.Section = &api.Section{Level: 0, Label: p.region}
+		case p.city != city:
+			e.Section = &api.Section{Level: 1, Label: p.city}
 		}
-		region, city = r, c
+		region, city = p.region, p.city
 		out = append(out, e)
 	}
 	for i, guid := range nowhere {
