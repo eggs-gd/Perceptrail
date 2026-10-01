@@ -71,3 +71,6 @@ func (p *datePerceptor) Order(ctx context.Context, _ string, items []api.ItemDat
 	}
 	return out, nil
 }
+
+// Schema: nothing of its own to keep — the core's item has it
+func (p *datePerceptor) Schema() api.Schema { return api.Schema{} }

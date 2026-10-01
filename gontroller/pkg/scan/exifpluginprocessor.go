@@ -57,7 +57,19 @@ func (fd *closer) Decorate(in exif_core.RawItemRW) (*dto.ItemDto, error) {
 	if rawItem.Item.PreviewPath != "" {
 		rawItem.Item.State = dto.Visible
 	}
-	return itemsProxy.UpdateItem(rawItem.Item)
+	item, err := itemsProxy.UpdateItem(rawItem.Item)
+	if err != nil {
+		return nil, err
+	}
+	// The perceptors' values go with the item: a row in each import perceptor's
+	// storage — its value, or "processed, nothing found" (no GPS)
+	for _, st := range plugins.Pm.ImportStores() {
+		v, _ := rawItem.StoreValues(st.Name())
+		if err := st.Save(item.Guid, v); err != nil {
+			return nil, fmt.Errorf("perceptor %s: %w", st.Name(), err)
+		}
+	}
+	return item, nil
 }
 
 func (fd *closer) Stop() {}

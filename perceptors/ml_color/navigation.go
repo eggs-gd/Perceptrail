@@ -31,3 +31,6 @@ func (p *colorPerceptor) Order(ctx context.Context, _ string, items []api.ItemDa
 	}
 	return out, ctx.Err()
 }
+
+// Schema: nothing kept yet (the processor is a stub)
+func (p *colorPerceptor) Schema() api.Schema { return api.Schema{} }

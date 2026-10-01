@@ -136,6 +136,10 @@ func (r *RawItem) GetDuration() float64 {
 	return r.Item.Duration
 }
 
+// The perceptors' values ride on the item (committed by the closer)
+func (r *RawItem) StoreValues(store string) (api.Values, bool) { return r.Item.StoreValues(store) }
+func (r *RawItem) SetStoreValues(store string, v api.Values)   { r.Item.SetStoreValues(store, v) }
+
 func (r *RawItem) GetSize() api.Size {
 	return r.Item.Size
 }

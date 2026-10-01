@@ -24,7 +24,7 @@ import (
 // shown items: newest first with its sections
 func TestPerceptorsRoutes(t *testing.T) {
 	e := echo.New()
-	RegisterPerceptorsRoutes(e, []api.Perceptor{date.Perceptor, size.Perceptor},
+	RegisterPerceptorsRoutes(e, []api.Perceptor{date.Perceptor, size.Perceptor}, nil,
 		l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
 
 	at := func(s string) time.Time { v, _ := time.Parse(time.RFC3339, s); return v }

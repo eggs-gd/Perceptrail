@@ -21,6 +21,8 @@ type ItemsApi interface {
 	ValidateKeyed(key string, main *dto.FileDto, meta api.RawExif) (*dto.ItemDto, error)
 
 	GetAllItems() ([]*dto.ItemDto, error)
+	// GetAllGuids: the GUIDs of every item (deleted ones excluded)
+	GetAllGuids() ([]string, error)
 	// StreamAllItems walks items newest first (the default sheet: date) without
 	// loading the full table into memory; every item comes with its files (one query
 	// per page)
@@ -41,6 +43,11 @@ type ItemsApi interface {
 
 	// DeleteItem marks the item Deleted and soft-deletes it (hidden from queries)
 	DeleteItem(item *dto.ItemDto) error
+}
+
+func (p *proxy) GetAllGuids() ([]string, error) {
+	var guids []string
+	return guids, p.db.Model(&dto.ItemDto{}).Pluck("guid", &guids).Error
 }
 
 func (p *proxy) GetAllItems() ([]*dto.ItemDto, error) {
