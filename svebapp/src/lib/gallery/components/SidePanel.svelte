@@ -38,13 +38,21 @@
 
     // Labels that fit: every coarsest one that does not touch the previous, deeper ones
     // only where there is room around them
+    // A section that starts with its parent (a year's first month, a region's first
+    // city) shares the parent's point: its label goes just under the parent's, when
+    // there is room there.
     let shown = $derived.by(() => {
         const out: (SectionMark & {at: number})[] = [];
+        const free = (at: number) => out.every((o) => Math.abs(o.at - at) >= MIN_GAP);
         for (const level of [0, 1, 2]) {
             for (const m of marks) {
                 if (m.level !== level) continue;
                 const at = scale.markAt(m);
-                if (out.every((o) => Math.abs(o.at - at) >= MIN_GAP)) out.push({...m, at});
+                if (free(at)) {
+                    out.push({...m, at});
+                } else if (level > 0 && out.some((o) => o.level < level && Math.abs(o.at - at) < 1) && free(at + MIN_GAP)) {
+                    out.push({...m, at: at + MIN_GAP});
+                }
             }
         }
         return out.sort((a, b) => a.at - b.at);

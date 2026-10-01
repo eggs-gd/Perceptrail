@@ -227,8 +227,9 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 - [ ] **A direct link to a photo waits for the sync**: every page load starts the
       `/items` sync from zero (itemsDb is cleared), and the viewer shows a photo once
       the stream reaches it and the layout places it — up to tens of seconds on a big
-      library. Keep the synced items between loads (sync the changes), or fetch the
-      linked photo first.
+      library; the side panel's marks come in the same way (some are missing until
+      their photos are placed). Keep the synced items between loads (sync the
+      changes), or fetch the linked photo first.
 
 - [x] **Item info panel** in the viewer (PR #18): a toolbar toggle, can be pinned open
       (kept in the browser). Its content comes from the perceptors: each one gives what it knows
@@ -252,11 +253,9 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
       to the first. A switch is a history entry: Back returns to the previous view
       around the same photo. The URL is the state (the view is no longer kept in the
       browser's storage).
-- [ ] Side panel: the first section of a deeper level (the first month of a year, the
-      first city of a region) sits at the same point as its parent's label — shown
-      only in the tip. Show it next to / under the parent's label.
-- [ ] Side panel during the sync after a reload: the marks come in as the photos are
-      placed, so for a while some are missing.
+- [x] Side panel: the first section of a deeper level (the first month of a year, the
+      first city of a region) sits at the same point as its parent's label — its
+      label now goes just under the parent's when there is room (PR #18).
 - [ ] Optimal (Dijkstra) layout for an already loaded gallery — optional.
 
 ## Later: the perceptor platform
