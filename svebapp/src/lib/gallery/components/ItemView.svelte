@@ -61,12 +61,16 @@
         });
     };
 
-    // The viewer: the image at its own pixel size, fitted into the screen — never
-    // stretched. srcset makes an <img> as wide as `sizes` (100vw), so the box is sized
-    // here from the image the asset has. Unknown size: the image's natural size.
+    // The viewer: the image at its own pixel size, fitted into the screen — stretched
+    // only if the user switched that on. srcset makes an <img> as wide as `sizes`
+    // (100vw), so the box is sized here from the image the asset has. Unknown size:
+    // the image's natural size.
     let shown = $derived(asset && mode === 'view' ? (original ?? biggestImage(asset)) : undefined);
     let fit = $derived(shown?.w && shown.h
-        ? {width: `min(${shown.w}px, 100vw, calc(100vh * ${shown.w} / ${shown.h}))`, ratio: `${shown.w} / ${shown.h}`}
+        ? {
+            width: `min(${viewerPrefs.stretchSmall ? '' : `${shown.w}px, `}100vw, calc(100vh * ${shown.w} / ${shown.h}))`,
+            ratio: `${shown.w} / ${shown.h}`,
+        }
         : undefined);
 </script>
 

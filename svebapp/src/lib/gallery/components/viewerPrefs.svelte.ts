@@ -8,6 +8,8 @@ interface ViewerPrefs {
     autoplayLive: boolean;
     /** Start a video when it opens */
     autoplayVideo: boolean;
+    /** Stretch an image smaller than the screen to fit it (off: its own size at most) */
+    stretchSmall: boolean;
 }
 
 function load(): Partial<ViewerPrefs> {
@@ -23,6 +25,7 @@ const saved = load();
 export const viewerPrefs: ViewerPrefs = $state({
     autoplayLive: saved.autoplayLive ?? true,
     autoplayVideo: saved.autoplayVideo ?? true,
+    stretchSmall: saved.stretchSmall ?? false,
 });
 
 export function toggleViewerPref(key: keyof ViewerPrefs) {

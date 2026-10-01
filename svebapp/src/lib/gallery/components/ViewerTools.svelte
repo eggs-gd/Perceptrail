@@ -1,6 +1,6 @@
 <script lang="ts">
     import type {Asset} from '$lib/stores';
-    import {assetUrl, canShowImage, originalImage, playableVideos} from './asset';
+    import {assetUrl, canShowImage, hasImage, originalImage, playableVideos} from './asset';
     import {toggleViewerPref, viewerPrefs} from './viewerPrefs.svelte';
 
     interface Props {
@@ -20,10 +20,13 @@
     let video = $derived(asset.kind === 'video' && playable);
     let image = $derived(video ? undefined : originalImage(asset));
     let other = $derived(!video && !image ? asset.original : null);
+    // An image is shown (not a playing video): its size can be stretched
+    let still = $derived(!video && hasImage(asset));
 
     const tooltips = {
         live: () => (viewerPrefs.autoplayLive ? 'Live Photo plays on open' : 'Live Photo does not play on open'),
         video: () => (viewerPrefs.autoplayVideo ? 'Video plays on open' : 'Video does not play on open'),
+        stretch: () => (viewerPrefs.stretchSmall ? 'Small images fill the screen' : 'Small images at their own size'),
     };
 </script>
 
@@ -63,6 +66,16 @@
                 <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
                 <path d="M10 8.2v7.6l6-3.8z" fill="currentColor"/>
                 {@render slash(viewerPrefs.autoplayVideo)}
+            </svg>
+        </button>
+    {/if}
+    {#if still}
+        <button class="tool" class:on={viewerPrefs.stretchSmall} title={tooltips.stretch()}
+                aria-label={tooltips.stretch()} aria-pressed={viewerPrefs.stretchSmall}
+                onclick={() => toggleViewerPref('stretchSmall')}>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5" fill="none" stroke="currentColor"
+                      stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
         </button>
     {/if}
