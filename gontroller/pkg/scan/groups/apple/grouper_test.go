@@ -200,6 +200,31 @@ func TestGrouper(t *testing.T) {
 	}
 }
 
+// A DB that cannot be read groups nothing and holds every file of the library:
+// the walk must not take its assets for gone
+func TestGrouperUnreadableLibrary(t *testing.T) {
+	root := t.TempDir()
+	bundle := makeLibrary(t, root, fixture())
+	if err := os.WriteFile(filepath.Join(bundle, "database", "Photos.sqlite"), []byte("not a database"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	g := NewDecorator(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	groups, marker := walk(t, g, root, nil)
+	if len(groups) != 0 {
+		t.Errorf("groups %v, want none", groups)
+	}
+	walked := 0
+	filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			walked++
+		}
+		return nil
+	})
+	if len(marker.Held) != walked {
+		t.Errorf("held %d files, want all %d walked", len(marker.Held), walked)
+	}
+}
+
 func TestBundleRoot(t *testing.T) {
 	if got := BundleRoot("/Pictures/Photos Library.photoslibrary/originals/A/x.heic"); got != "/Pictures/Photos Library.photoslibrary" {
 		t.Errorf("got %q", got)

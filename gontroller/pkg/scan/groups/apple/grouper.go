@@ -65,14 +65,20 @@ func (g *Grouper) Decorate(ev flow.FileEvent) (flow.FileGroup, error) {
 	if !ok {
 		var err error
 		if lib, err = loadLibrary(root); err != nil {
-			g.logger.Error("Photos library not loaded", l.String("library", root), l.Error(err))
-			lib = &library{byPath: map[string]*asset{}} // nothing groups this walk
+			// Nothing groups this walk, and its files are held: a DB that cannot be read
+			// says nothing about which assets are gone
+			g.logger.Error("Photos library not loaded: its files are held until it loads", l.String("library", root), l.Error(err))
+			lib = &library{byPath: map[string]*asset{}, failed: true}
 		} else {
 			g.logger.Info("Photos library loaded", l.String("library", root), l.Int("assets", len(lib.assets)))
 		}
 		g.libs[root] = lib
 	}
 
+	if lib.failed {
+		lib.held = append(lib.held, ev.Entry.Path)
+		return flow.FileGroup{}, chain.ErrSkippedItem
+	}
 	a, ok := lib.byPath[ev.Entry.Path]
 	if !ok || a.sent {
 		return flow.FileGroup{}, chain.ErrSkippedItem // not an asset file (caches, DB, …)
@@ -101,11 +107,13 @@ func BundleRoot(path string) string {
 type library struct {
 	assets []*asset
 	byPath map[string]*asset
+	failed bool     // the DB did not load
+	held   []string // a failed library's files, as walked
 }
 
-// pending: the files of groups that did not go out
+// pending: the files of groups that did not go out; all of a failed library's
 func (lib *library) pending() []string {
-	var held []string
+	held := lib.held
 	for _, a := range lib.assets {
 		if a.sent || len(a.arrived) == 0 {
 			continue
