@@ -1,6 +1,6 @@
 # Roadmap
 
-Status as of 2026-10-01. Details and reasons — [findings.md](findings.md).
+Status as of 2026-10-01 (PR #17). Details and reasons — [findings.md](findings.md).
 Target architecture — the diagrams in [`../puml`](../puml).
 
 ## Done
@@ -80,6 +80,15 @@ Target architecture — the diagrams in [`../puml`](../puml).
   scrolling, pinned it takes its width from them). Viewer: ← → step through the
   sheet, Escape / a click close it (to the gallery even when `/N` was opened
   directly), the gallery shows the photo it closed on.
+- Perceptor data (PR #17): a perceptor declares its data as a struct
+  (`api.NewStore[T]`, typed `Put` / `Get`); the core keeps it — SQLite, a file per
+  perceptor in `data_dir/perceptors/` (Postgres: not yet). Values are committed with
+  the item; an item a perceptor has no row for is processed again; gone items are
+  pruned after a walk. Geo is its first user: coordinates from EXIF or the Photos DB,
+  the sheet on a Hilbert curve with every city and region in one piece, sections
+  region → city from the time zone. A photo may start a path of sections; the side
+  panel's scale is by sections, √ of their photos, at every level
+  ([`Perceptor data.puml`](../puml/Perceptor%20data.puml)).
 
 ## Releases
 
