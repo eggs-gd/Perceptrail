@@ -13,9 +13,8 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// Navigators: the perceptors that give the gallery its views of the library. The
-// client draws a button per navigator, asks one for the order of the sheet and
-// lays it out itself.
+// Perceptors are the gallery's ways through the library: the client draws a button
+// per perceptor, asks one for the order of the sheet and lays it out itself.
 
 type clientPerceptor struct {
 	Name     string `json:"name"`
@@ -35,39 +34,35 @@ type clientSection struct {
 	Label string `json:"label"`
 }
 
-// navigators: the loaded perceptors that navigate, core first (the default view)
-var navigators []api.Navigator
+// perceptors: the ones the client is given, core first (the first is the default
+// view)
+var perceptors []api.Perceptor
 
-// RegisterPerceptorsRoutes: the navigators among the loaded perceptors (the plugin
-// manager passes them in: routes cannot import it, app imports client)
-func RegisterPerceptorsRoutes(e *echo.Echo, perceptors []api.Perceptor, logger *l.Logger) {
+// RegisterPerceptorsRoutes: list is what the client is given (the plugin manager
+// passes it in — config `client`; routes cannot import it, app imports client)
+func RegisterPerceptorsRoutes(e *echo.Echo, list []api.Perceptor, logger *l.Logger) {
 	if itemsProxy == nil {
 		itemsProxy = model.NewProxy(logger)
 	}
-	navigators = nil
-	for _, p := range perceptors {
-		if n, ok := p.(api.Navigator); ok {
-			navigators = append(navigators, n)
-		}
-	}
+	perceptors = list
 	e.GET("/perceptors", getPerceptors)
 	e.GET("/p/:name/order", getOrder)
 }
 
 func getPerceptors(c echo.Context) error {
 	out := []clientPerceptor{}
-	for _, n := range navigators {
+	for _, n := range perceptors {
 		v := n.View()
 		out = append(out, clientPerceptor{Name: n.Name(), Title: v.Title, Icon: v.Icon, Help: v.Help, Relative: v.Relative})
 	}
 	return c.JSON(http.StatusOK, out)
 }
 
-// getOrder streams the sheet in the navigator's order, one entry per line (ndjson),
+// getOrder streams the sheet in the perceptor's order, one entry per line (ndjson),
 // over the items the client is shown
 func getOrder(c echo.Context) error {
-	var nav api.Navigator
-	for _, n := range navigators {
+	var nav api.Perceptor
+	for _, n := range perceptors {
 		if n.Name() == c.Param("name") {
 			nav = n
 		}

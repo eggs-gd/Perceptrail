@@ -81,7 +81,7 @@ func (ItemDto) TableName() string {
 	return "items"
 }
 
-// The item as plugins read it (api.ItemDataProvider): navigators get the library
+// The item as plugins read it (api.ItemDataProvider): perceptors get the library
 // as these
 
 func (i *ItemDto) GetGuid() string { return i.Guid }
@@ -94,8 +94,9 @@ func (i *ItemDto) GetDate() time.Time {
 	return i.Date.In(time.FixedZone("", i.DateOffset*60))
 }
 
-func (i *ItemDto) GetSize() api.Size  { return i.Size }
-func (i *ItemDto) GetRatio() api.Size { return i.Ratio }
+func (i *ItemDto) GetSize() api.Size    { return i.Size }
+func (i *ItemDto) GetRatio() api.Size   { return i.Ratio }
+func (i *ItemDto) GetDuration() float64 { return i.Duration }
 
 // type Tag struct {
 // 	ID        uint   `gorm:"primaryKey"`

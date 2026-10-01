@@ -52,8 +52,8 @@ packages — see [findings](../_sb/docs/findings.md#go-plugins-2026-09-28).
 | Method | Path | Returns |
 |---|---|---|
 | GET | `/items` | All shown items as an NDJSON stream, newest first (`id, guid, date, mimeType, width, height, asset`; `width/height` is the reduced aspect ratio) |
-| GET | `/perceptors` | The navigators: `name, title, icon (SVG), help, relative` — a button each |
-| GET | `/p/:name/order?anchor=` | The sheet in that navigator's order, NDJSON `{guid, section?: {level, label}}` |
+| GET | `/perceptors` | The perceptors given to the client (config `perceptors.<name>.client`): `name, title, icon (SVG), help, relative` — a button each |
+| GET | `/p/:name/order?anchor=` | The sheet in that perceptor's order, NDJSON `{guid, section?: {level, label}}` |
 | GET | `/assets/:guid` | The original file of an item |
 
 ## Import pipeline

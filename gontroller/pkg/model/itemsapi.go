@@ -25,8 +25,9 @@ type ItemsApi interface {
 	// loading the full table into memory; every item comes with its files (one query
 	// per page)
 	StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) error
-	// GetItemsInStates: the items in these states, with what navigators read (guid,
-	// date and its zone, size) — not the whole rows
+	// GetItemsInStates: the items in these states, newest first, with what
+	// perceptors read to order them (guid, date and its zone, size, duration) — not
+	// the whole rows
 	GetItemsInStates(states ...dto.ItemState) ([]*dto.ItemDto, error)
 	GetItemByGuid(guid string) (*dto.ItemDto, error)
 	GetItemByPath(path string) (*dto.ItemDto, error)
@@ -93,8 +94,8 @@ func (p *proxy) StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) erro
 
 func (p *proxy) GetItemsInStates(states ...dto.ItemState) ([]*dto.ItemDto, error) {
 	var items []*dto.ItemDto
-	return items, p.db.Select("id", "guid", "date", "date_offset", "date_source", "size_w", "size_h", "ratio_w", "ratio_h").
-		Where("state IN ?", states).Find(&items).Error
+	return items, p.db.Select("id", "guid", "date", "date_offset", "date_source", "size_w", "size_h", "ratio_w", "ratio_h", "duration").
+		Where("state IN ?", states).Order("date DESC, id DESC").Find(&items).Error
 }
 
 func (p *proxy) GetItemByGuid(guid string) (*dto.ItemDto, error) {

@@ -79,7 +79,7 @@
         );
     }
 
-    // A navigator switch: the sheet is rearranged around the photo the user is at,
+    // A perceptor switch: the sheet is rearranged around the photo the user is at,
     // kept in place like a resize keeps it — the photo in the middle of the screen,
     // or the one the viewer was showing (then centred)
     $effect(() => {
@@ -99,7 +99,7 @@
 
     // The viewer may have stepped far away (arrows): when it closes, the gallery shows
     // the item it closed on — scrolled to the middle if it is not on screen. By guid:
-    // closing into another navigator changes the order (that switch centres it itself).
+    // closing into another perceptor changes the order (that switch centres it itself).
     let lastViewed: string | undefined;
     $effect(() => {
         const order = viewing;

@@ -30,7 +30,7 @@ func TestOrder(t *testing.T) {
 		item("sep", "2026-09-15T08:00:00Z", 0),
 		item("sep2", "2026-09-20T08:00:00Z", 0),
 	}
-	got, err := Perceptor.(api.Navigator).Order(context.Background(), "", items)
+	got, err := Perceptor.Order(context.Background(), "", items)
 	if err != nil {
 		t.Fatal(err)
 	}

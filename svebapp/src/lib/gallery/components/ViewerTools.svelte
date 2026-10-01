@@ -9,7 +9,7 @@
         /** The original is shown in place of the preview */
         showOriginal: boolean;
         ontoggleoriginal: () => void;
-        /** A navigator was picked: to the sheet in its order, around this photo */
+        /** A perceptor was picked: to the sheet in its order, around this photo */
         onperceptor: (name: string) => void;
     }
 

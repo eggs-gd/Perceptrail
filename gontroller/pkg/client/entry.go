@@ -19,7 +19,7 @@ type webService struct {
 }
 
 // NewWebService checks cfg (see ServerConfig) and fills its defaults. perceptors:
-// the loaded ones — the navigators among them get the /perceptors routes.
+// the ones the client is given (/perceptors, /p/:name/order).
 func NewWebService(cfg ServerConfig, perceptors []api.Perceptor, logger *l.Logger) (*webService, error) {
 	cfg, err := cfg.withDefaults()
 	if err != nil {

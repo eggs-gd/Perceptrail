@@ -2,7 +2,7 @@
     import PerceptorButtons from './PerceptorButtons.svelte';
     import {perceptors, switchPerceptor, togglePinned} from '../perceptors.svelte';
 
-    // The gallery's toolbar: the navigators (the sheet's views) and the side panel's pin
+    // The gallery's toolbar: the perceptors (the sheet's views) and the side panel's pin
     let pinTitle = $derived(perceptors.pinned ? 'Side panel: always shown' : 'Side panel: shown while scrolling');
 </script>
 

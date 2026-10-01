@@ -1,5 +1,5 @@
 @startuml Perceptors navigation
-' Navigators: perceptors that give the endless sheet its order. The server orders,
+' Every perceptor is a view of the endless sheet: its order. The server orders,
 ' the client lays out (the layout depends on the window width). Sections ride in the
 ' order stream; the side panel places them by the layout.
 
@@ -9,7 +9,7 @@ participant "SidePanel" as Panel
 participant "wlayout\n(worker)" as Layout
 database "layoutDb" as LDB
 participant "gontroller\nAPI" as API
-participant "Navigator\n(perceptor)" as Nav
+participant "Perceptor" as Nav
 database "DB" as DB
 
 == Start ==
@@ -17,7 +17,7 @@ Page -> API: GET /perceptors
 API -> Nav: View()
 API --> Page: [{name, title, icon (SVG), help, relative}]
 note right of Page: buttons: gallery toolbar\nand viewer toolbar;\nthe icon is a CSS mask\n(no script runs)
-Page -> Layout: order(saved navigator, else date)
+Page -> Layout: order(saved perceptor, else date)
 Layout -> API: GET /p/:name/order?anchor=
 API -> DB: shown items (Visible, Ready)
 API -> Nav: Order(anchor, items)
@@ -29,7 +29,7 @@ LDB --> Page: visible window (liveQuery)
 LDB --> Panel: section marks
 
 == Switch in the gallery ==
-User -> Page: navigator button
+User -> Page: perceptor button
 Page -> Page: anchor = photo in the middle
 Page -> Layout: order(name, anchor)
 Layout -> API: GET /p/:name/order?anchor=
@@ -38,7 +38,7 @@ Layout -> LDB: relayout, meta.anchor = new position
 LDB --> Page: window + scrollTo: the anchor stays in place
 
 == Switch from the viewer ==
-User -> Page: navigator button (in the viewer)
+User -> Page: perceptor button (in the viewer)
 Page -> Page: anchor = the viewed photo (centred)
 Page -> Layout: order(name, anchor)
 Page -> Page: close the viewer

@@ -16,7 +16,7 @@
     // of side effects (it also runs on the server and on every navigation).
     onMount(() => {
         loadFromServer();
-        // The sheet's order: the saved navigator, else the date (the stream itself
+        // The sheet's order: the saved perceptor, else the date (the stream itself
         // comes newest first, so the photos show before the order arrives)
         loadPerceptors();
     });

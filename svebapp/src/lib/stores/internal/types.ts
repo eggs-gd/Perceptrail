@@ -70,7 +70,7 @@ export interface LayoutMeta {
     anchor?: {guid: string, y: number, h: number};
 }
 
-/** A mark of the side panel: where a section of the active navigator starts */
+/** A mark of the side panel: where a section of the active perceptor starts */
 export interface SectionMark {
     /** 0: the coarsest (a year); deeper levels are shown when there is room */
     level: number;

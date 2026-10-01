@@ -39,7 +39,7 @@ let relayoutTimer: ReturnType<typeof setTimeout> | null = null;
 let items: Item[] = [];
 
 /**
- * The sheet's order from the active navigator (/p/:name/order): rank per guid and
+ * The sheet's order from the active perceptor (/p/:name/order): rank per guid and
  * the side panel's sections. Items it does not list yet (streamed after it) keep
  * their stream order after it; before any order the stream order is the sheet
  * (/items comes newest first, the default view).
@@ -108,7 +108,7 @@ self.onmessage = function (msg: { data: WorkerMessage<any, any> }) {
 };
 
 /**
- * A navigator's order: the items are re-sorted and laid out again around the
+ * A perceptor's order: the items are re-sorted and laid out again around the
  * anchor (the photo the user is at stays in view, the rest is rearranged)
  */
 async function applyOrder({url, anchor}: OrderPayload) {

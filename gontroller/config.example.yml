@@ -10,6 +10,17 @@ path: "/Users/me/Pictures/"
 plugins:
   - ../.build/plugins/exif_geo.so
 
+# Per perceptor (core: exif_date, exif_size, exif_duration; plugins by their name).
+# Every perceptor is a view of the sheet (a button in the gallery). Not listed: it
+# runs and is shown.
+#   enabled: false  - not run at all (not shown either)
+#   client: false   - runs, but the gallery gets no button for it
+# perceptors:
+#   exif_size:
+#     client: false
+#   exif_duration:
+#     client: false
+
 # Database and caches (thumbnails). Default: the directory of this file
 # data_dir: .
 

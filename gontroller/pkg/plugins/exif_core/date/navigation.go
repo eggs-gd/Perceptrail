@@ -10,7 +10,7 @@ import (
 	"github.com/eggs-gd/perceplib/api"
 )
 
-// The date is the first navigator and the default sheet: newest first, sections by
+// The date is the first perceptor and the default sheet: newest first, sections by
 // year and month in the zone of the shot (a photo taken on 31 December in Kyiv is
 // in December, wherever the server is). Items without a date go last.
 
@@ -71,5 +71,3 @@ func (p *datePerceptor) Order(ctx context.Context, _ string, items []api.ItemDat
 	}
 	return out, nil
 }
-
-var _ api.Navigator = (*datePerceptor)(nil)

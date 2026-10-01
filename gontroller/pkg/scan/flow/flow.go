@@ -132,6 +132,10 @@ func (r *RawItem) GetDate() time.Time {
 	return r.Item.GetDate()
 }
 
+func (r *RawItem) GetDuration() float64 {
+	return r.Item.Duration
+}
+
 func (r *RawItem) GetSize() api.Size {
 	return r.Item.Size
 }

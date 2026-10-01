@@ -2,14 +2,14 @@
     import {iconMask, perceptors} from '../perceptors.svelte';
 
     interface Props {
-        /** A navigator was picked (the active one too: back to the sheet around the photo) */
+        /** A perceptor was picked (the active one too: back to the sheet around the photo) */
         onpick: (name: string) => void;
     }
 
     let {onpick}: Props = $props();
 </script>
 
-<!-- One button per navigator: its icon (a mask — the button's colour paints it, an SVG
+<!-- One button per perceptor: its icon (a mask — the button's colour paints it, an SVG
      from a plugin cannot run anything), its title and help as the tooltip -->
 {#each perceptors.list as p (p.name)}
     <button class="tool" class:on={perceptors.active === p.name}

@@ -20,6 +20,8 @@ type ItemDataProvider interface {
 	GetDate() time.Time
 	GetSize() Size
 	GetRatio() Size
+	// GetDuration: a video's length, seconds; 0: not a video or unknown
+	GetDuration() float64
 }
 
 type ItemDataEditor interface {

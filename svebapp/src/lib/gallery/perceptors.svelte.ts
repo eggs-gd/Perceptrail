@@ -1,5 +1,5 @@
-// The navigators (perceptors that give the sheet its order) and the gallery's
-// choices about them: the active one and the pinned side panel, kept per browser.
+// The perceptors — each gives the sheet its order (a view of the library) — and the
+// gallery's choices about them: the active one and the pinned side panel, kept per browser.
 import {PUBLIC_API_PATH} from '$env/static/public';
 import {getLogger} from '$lib/logger';
 
@@ -41,7 +41,7 @@ const saved = load();
 
 export const perceptors = $state({
     list: [] as PerceptorView[],
-    /** The navigator the sheet is in; '' until the list is loaded */
+    /** The perceptor the sheet is in; '' until the list is loaded */
     active: '',
     /** The side panel is always shown and takes its width from the photos */
     pinned: saved.pinned ?? false,
@@ -56,7 +56,7 @@ function save() {
     }
 }
 
-/** Loads the navigators and puts the sheet into the saved one (else the first: date) */
+/** Loads the perceptors and puts the sheet into the saved one (else the first: date) */
 export async function loadPerceptors() {
     try {
         const response = await fetch(`${PUBLIC_API_PATH}/perceptors`);
@@ -69,7 +69,7 @@ export async function loadPerceptors() {
     if (first) switchPerceptor(first.name);
 }
 
-/** The sheet in another (or the same) navigator's order, around a photo */
+/** The sheet in another (or the same) perceptor's order, around a photo */
 export function switchPerceptor(name: string, anchor?: string) {
     perceptors.active = name;
     perceptors.request = {perceptor: name, anchor, seq: (perceptors.request?.seq ?? 0) + 1};

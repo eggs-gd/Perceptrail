@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"perceptrail/gontroller/pkg/client"
 	"perceptrail/gontroller/pkg/model"
+	"perceptrail/gontroller/pkg/plugins/settings"
 	"time"
 
 	l "github.com/eggs-gd/perceplib/logger"
@@ -22,6 +23,8 @@ type Config struct {
 	Path string `yaml:"path"`
 	// Plugin files (.so)
 	Plugins []string `yaml:"plugins"`
+	// Per perceptor (core and plugins, by name): run it, give it to the client
+	Perceptors settings.Perceptors `yaml:"perceptors"`
 	// Runtime data: database, caches. Default: the config file's directory
 	DataDir string `yaml:"data_dir"`
 	// ExifTool executable. Default: "exiftool" from PATH

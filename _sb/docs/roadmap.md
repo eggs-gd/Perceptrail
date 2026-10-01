@@ -65,15 +65,17 @@ Target architecture — the diagrams in [`../puml`](../puml).
   (iCloud only, Live Photo / video, length); a video with no image is its own tile.
   Viewer: icon toolbar — Original/download (tested on open), autoplay for Live
   Photos and videos, stretch small images; switches kept per browser.
-- Navigation (PR #16): **navigators** — perceptors that give the endless sheet its
-  order ([`Perceptors.puml`](../puml/Perceptors.puml)). `perceplib` `Navigator`:
-  `View()` (title, SVG icon, help, relative) + `Order(anchor, items)` → entries with
-  sections (level, label). The date is the first one and the default sheet (newest
-  first, sections year → month in the zone of the shot); `/items` streams newest
-  first. API `GET /perceptors`, `GET /p/:name/order?anchor=`. The client lays out
+- Navigation (PR #16): **every perceptor is a view of the endless sheet** — its
+  order ([`Perceptors.puml`](../puml/Perceptors.puml)). The base `perceplib`
+  `Perceptor` has `View()` (title, SVG icon, help, relative) + `Order(anchor,
+  items)` → entries with sections (level, label). The date is the default sheet
+  (newest first, sections year → month in the zone of the shot); size (megapixels)
+  and length (videos) are views too; the stubs geo and colour say they have no data
+  yet. Config `perceptors.<name>`: `enabled` (run it), `client` (give it a button).
+  `/items` streams newest first. API `GET /perceptors`, `GET /p/:name/order?anchor=`. The client lays out
   the order (layout stays client-side: it depends on the window); a switch keeps the
   photo the user is at in place and rearranges the rest — from the viewer, the
-  viewed photo, centred. Navigator buttons in the gallery toolbar and in the viewer;
+  viewed photo, centred. Perceptor buttons in the gallery toolbar and in the viewer;
   a side panel with the sections (scrubber; unpinned it shows over the photos while
   scrolling, pinned it takes its width from them). Viewer: ← → step through the
   sheet, Escape / a click close it (to the gallery even when `/N` was opened
@@ -218,18 +220,18 @@ Don't rush — a stable core first.
   consumes Processed Item, runs ML plugins, returns metadata.
 - Storage for perceptor data (e.g. `item_attrs(item_id, perceptor, key, value)`), so
   a plugin writes its own data without changing `ItemDto`.
-- Navigators (decided, the date is done): every navigator gives the sheet an order
-  — no filters, the project is one endless sheet in different slices. Absolute
+- Navigation is a base requirement of a perceptor (decided): every perceptor gives
+  the sheet an order — no filters, the project is one endless sheet in different slices. Absolute
   ones ignore the anchor; relative ones (faces, objects, similar) build a
   **two-sided trail** from it: from the anchor to the nearest unseen photo, then the
   nearest to that, in both directions. Next:
-  - [ ] **Geo navigator**: (lat, lon) on a Hilbert curve (one dimension that keeps
+  - [ ] **Geo**: (lat, lon) on a Hilbert curve (one dimension that keeps
         near places near; a plain longitude puts Krakow next to Cape Town), sections
         country → city. Needs perceptor data storage (below) — `ItemDataProvider`
         has no GPS.
-  - [ ] Relative navigators (the trail) with the first ML perceptor.
+  - [ ] Relative perceptors (the trail) with the first ML perceptor.
   - [ ] A stable link to a photo: the viewer's `/N` is a position in the current
-        sheet and changes with the navigator.
+        sheet and changes with the perceptor.
 - UI slots (`item-panel`, `view`) — a perceptor can bring its own UI (map, face
   management).
 - `ItemGroup` processing mode (series, Live Photo, clusters, duplicates).

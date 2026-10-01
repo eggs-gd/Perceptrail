@@ -69,9 +69,9 @@ export const updateLayout = (screenWidth: number, rowHeight: number, anchor?: st
 }
 
 /**
- * The sheet in a navigator's order (GET /p/:name/order): the layout worker fetches
+ * The sheet in a perceptor's order (GET /p/:name/order): the layout worker fetches
  * it and lays everything out again; anchor: the photo to keep in view (a relative
- * navigator also builds its trail from it)
+ * perceptor also builds its trail from it)
  */
 export const setOrder = (perceptor: string, anchor?: string) => {
     const query = anchor ? `?anchor=${encodeURIComponent(anchor)}` : '';

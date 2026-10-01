@@ -20,8 +20,8 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// The date navigator over the shown items: newest first with its sections; a
-// perceptor that does not navigate gets no button
+// The perceptors the client is given, each with its view; the date's order over the
+// shown items: newest first with its sections
 func TestPerceptorsRoutes(t *testing.T) {
 	e := echo.New()
 	RegisterPerceptorsRoutes(e, []api.Perceptor{date.Perceptor, size.Perceptor},
@@ -44,8 +44,9 @@ func TestPerceptorsRoutes(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &views); err != nil {
 		t.Fatal(err)
 	}
-	if len(views) != 1 || views[0].Name != date.Perceptor.Name() || views[0].Title != "Date" || !strings.HasPrefix(views[0].Icon, "<svg") {
-		t.Fatalf("perceptors %+v, want only the date navigator", views)
+	if len(views) != 2 || views[0].Name != date.Perceptor.Name() || views[0].Title != "Date" ||
+		views[1].Title != "Size" || !strings.HasPrefix(views[0].Icon, "<svg") {
+		t.Fatalf("perceptors %+v, want date, then size", views)
 	}
 
 	rec = httptest.NewRecorder()
@@ -76,6 +77,6 @@ func TestPerceptorsRoutes(t *testing.T) {
 	rec = httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/p/nope/order", nil))
 	if rec.Code != http.StatusNotFound {
-		t.Errorf("unknown navigator: %d", rec.Code)
+		t.Errorf("unknown perceptor: %d", rec.Code)
 	}
 }

@@ -60,13 +60,33 @@ func (pm *pluginManager) LoadPlugins(ctx app.AppContext) error {
 		return err
 	}
 
-	// Combine all plugins
-	pm.plugins = append(corePlugins, externalPlugins...)
+	// Combine all plugins; the ones switched off in the config do not run
+	cfg := ctx.Config().Perceptors
+	pm.plugins = nil
+	for _, p := range append(corePlugins, externalPlugins...) {
+		if !cfg.Enabled(p.Name()) {
+			pm.logger.Info("Perceptor disabled", l.String("name", p.Name()))
+			continue
+		}
+		pm.plugins = append(pm.plugins, p)
+	}
 	pm.loaded = true
 
 	pm.logger.Info("Loaded plugins", l.Any("core", len(corePlugins)), l.Any("external", len(externalPlugins)), l.Any("total", len(pm.plugins)))
 
 	return nil
+}
+
+// ClientPerceptors: the loaded perceptors whose view the client is given (config
+// `client`), core first — the first is the gallery's default view
+func (pm *pluginManager) ClientPerceptors() []api.Perceptor {
+	var out []api.Perceptor
+	for _, p := range pm.GetPlugins() {
+		if pm.ctx.Config().Perceptors.Client(p.Name()) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func (pm *pluginManager) loadExternalPlugins() ([]api.Perceptor, error) {

@@ -47,7 +47,7 @@ export interface UpdateLayoutPayload {
     anchor?: string;
 }
 
-/** The sheet's order from a navigator (GET /p/:name/order), kept around the anchor */
+/** The sheet's order from a perceptor (GET /p/:name/order), kept around the anchor */
 export interface OrderPayload {
     url: string;
     /** guid to keep in view: the relayout reports where it moved */

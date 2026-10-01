@@ -217,27 +217,32 @@ compose with `derived`. The current message protocol is a deviation from this de
 
 ---
 
-## Navigation: navigators and the sheet
+## Navigation: perceptors and the sheet
 
-### Navigators give the sheet its order (2026-10-01)
+### Every perceptor gives the sheet its order (2026-10-01)
 
 Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
 
+- **Navigation is a base requirement of a perceptor, not a kind of it** (decided):
+  `View`/`Order` are in the base interface; if a split is ever needed it is added
+  then. Every perceptor gives an honest view (size by megapixels, videos by length;
+  stubs without data say so); the config decides which ones the client gets
+  (`perceptors.<name>.client`, next to `enabled`).
 - **A perceptor's point is a way through the library** (decided): the user always
-  sees the whole endless sheet, ordered by the active navigator around the photo
-  they are at. **No filters** — one sheet in different slices. Absolute navigators
+  sees the whole endless sheet, ordered by the active perceptor around the photo
+  they are at. **No filters** — one sheet in different slices. Absolute perceptors
   (date, geo) ignore the anchor; relative ones (faces, objects, similar) build a
   **two-sided trail**: from the anchor to the nearest unseen photo, then the nearest
   to that, both ways — a distance is a ring around the photo, not a line; the trail
   makes a line where neighbours are really alike (the name: Perceptrail).
-- **The server orders, the client lays out** (decided). Navigators are Go plugins on
+- **The server orders, the client lays out** (decided). Perceptors are Go plugins on
   the server — ordering on the client would mean writing each one twice; embeddings
   do not fit a browser (2 KB per photo × 100k) and need a nearest-neighbour index.
   The layout stays in the client's worker: it depends on the window width (a
   server-side layout was considered earlier and moved to the client for that).
 - **Sections ride in the order stream** (`{guid, section?: {level, label}}` on the
   first item of a section), not a separate list: the panel's positions come from the
-  layout (the client's), and a relative navigator's sections depend on the anchor.
+  layout (the client's), and a relative perceptor's sections depend on the anchor.
 - **Geo is not one axis**: west → east puts Krakow next to Cape Town. A Hilbert curve
   maps (lat, lon) to one number that keeps near places mostly near (planned).
 - A switch reuses the resize anchor: the worker relays out with `anchor`, the window
@@ -245,7 +250,7 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
   is the viewed photo with ratio 0.5 (centred). Closing the viewer then must not
   "reveal" the photo by its old position — the gallery skips it when that photo is
   the pending anchor.
-- A navigator's icon is SVG from a plugin: shown as a CSS `mask-image` — no script in
+- A perceptor's icon is SVG from a plugin: shown as a CSS `mask-image` — no script in
   it runs, and the button's colour paints it (`currentColor` does not reach an
   `<img>`).
 - `routes` cannot import the plugin manager (`app` imports `client` for its config):

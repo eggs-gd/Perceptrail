@@ -15,7 +15,7 @@
 
     let {height, top, scrollY, innerHeight, pinned}: Props = $props();
 
-    // The side panel: the active navigator's sections along the whole sheet (years and
+    // The side panel: the active perceptor's sections along the whole sheet (years and
     // months for the date), where the view is, and a scrubber — press or drag to jump
 
     const MIN_GAP = 16;        // px between shown labels
