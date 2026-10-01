@@ -277,7 +277,9 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
   of Tirane share y = 0) have shares of their own but no height on the sheet: a
   label is placed at its share's start (not at `toTrack(y)`, which put them all at
   one point and the region's label at the start of the last one), marks are ordered
-  and assigned to shares by photo, not by y. Linear within a section, so scrubbing stays smooth; the view marker gets
+  and assigned to shares by photo, not by y. The tip under the pointer the same: by
+  each section's share on the track — by y every earlier city of such a row showed
+  the last one's name (Codex review). Linear within a section, so scrubbing stays smooth; the view marker gets
   taller where photos are sparse. Considered next: a magnifier around the pointer
   (like the macOS Dock) for very large libraries.
 - **Every rearrangement uses the wave** (decided: the wave is the product's style). A
@@ -336,6 +338,9 @@ Design: roadmap "Perceptor data"; diagram [`Perceptor data.puml`](../puml/Percep
     every import perceptor's store — a new perceptor or a changed schema takes one
     pass over the library, while the items stay shown (marking them Dirty would hide
     them until processed).
+  - **`rows.Err()` after reading a store**: an SQLite error mid-read only ends
+    `Next()` — without the check `Load` returned a partial map as if whole, and the
+    sheet came out quietly wrong (Codex review).
   - **Deletions are pruned after a complete walk** (the store's guids against the
     items), not hooked into every delete path.
   - **Geo sections from the time zone** of the place (tzf, already in the core for
