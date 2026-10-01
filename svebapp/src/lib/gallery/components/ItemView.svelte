@@ -57,7 +57,8 @@
         : undefined);
 </script>
 
-{#if asset && mode === 'view' && videos.length}
+<!-- The viewer plays a video; a Live Photo is a photo there (its motion is the tile's hover) -->
+{#if asset && mode === 'view' && videos.length && asset.kind !== 'live'}
     {@const poster = fallbackImage(asset)}
     <video controls autoplay playsinline poster={poster && assetUrl(poster)}
            onclick={(e) => e.stopPropagation()}>
