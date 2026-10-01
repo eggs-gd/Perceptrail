@@ -19,6 +19,13 @@
 <!-- What moves and what is only in iCloud is marked; a local photo has no mark -->
 {#if asset.kind !== 'photo' || cloud}
     <span class="badge" {title} aria-label={title}>
+        <!-- The cloud first, then the kind and a video's length -->
+        {#if cloud}
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 18.5h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.6 9.1 4.7 4.7 0 0 0 7 18.5z"
+                      fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+            </svg>
+        {/if}
         {#if asset.kind !== 'photo'}
             <svg viewBox="0 0 24 24" aria-hidden="true">
                 {#if asset.kind === 'live'}
@@ -34,12 +41,6 @@
         {/if}
         {#if asset.kind === 'video' && asset.duration}
             <span class="duration">{formatDuration(asset.duration)}</span>
-        {/if}
-        {#if cloud}
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M7 18.5h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.6 9.1 4.7 4.7 0 0 0 7 18.5z"
-                      fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-            </svg>
         {/if}
     </span>
 {/if}
