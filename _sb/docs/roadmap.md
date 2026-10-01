@@ -219,11 +219,13 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 
 - [ ] **Views and photos have URLs** (with "a stable link to a photo"): today a view is
       a button and an in-memory switch, the viewer is `/N` (a position in the current
-      sheet). Proposed: `/` — the default view (date); `/v/<perceptor>` — the sheet in
-      that view, `?at=<guid>` — around that photo (a link to "geo around this photo",
-      a reload keeps the place); `/v/<perceptor>/<guid>` — the viewer on that photo,
-      ← → walking that view. A switch is a history entry: Back returns to the previous
-      view around the same photo.
+      sheet). Proposed — the same for every view, the date included (it is a
+      perceptor like the others, no special base navigation): `/v/<perceptor>` — the
+      sheet in that view, `?at=<guid>` — around that photo (a link to "geo around this
+      photo", a reload keeps the place); `/v/<perceptor>/<guid>` — the viewer on that
+      photo, ← → walking that view. `/` redirects to `/v/exif_date`, so the default
+      view is visible in the URL too. A switch is a history entry: Back returns to the
+      previous view around the same photo.
 
 - [ ] Side panel: the first section of a deeper level (the first month of a year, the
       first city of a region) sits at the same point as its parent's label — shown
