@@ -39,6 +39,12 @@ func main() {}
 - `ProcessingMode`: `SingleItem` or `ItemGroup` (groups are not implemented on the
   server side yet).
 - `NewProcessor` returns a `perceplib/chain` step (usually `chain.NewDecorator`).
+- `Schema`: what the perceptor keeps per item — the `Schema()` of a typed
+  `api.NewStore[T]` (T is a struct; `Put(item, T)` in the processor, `Get(item)` in
+  `Order`), or the zero `api.Schema{}` for nothing. The core keeps the storage (SQLite:
+  `data_dir/perceptors/<store>.db`). Put T in a package of its own so other
+  perceptors can read it (see `exif_geo/places`). The plugin's dependencies must match
+  the host's versions exactly (`go list -m all` in both).
 - `View` + `Order`: **navigation is a base requirement** — the perceptor's button in
   the gallery (title, an SVG icon drawn as a mask, help) and every item in its order
   (`items` come newest first), with sections for the side panel. Absolute (date,
@@ -62,7 +68,7 @@ Host and plugin must be built with **the same Go** and **the same versions** of
 
 | Plugin | Status |
 |---|---|
-| `exif_geo` | loads; `Decorate` writes nothing yet (nowhere to — see perceptor data storage in the roadmap); its view: every photo "place not known yet" |
+| `exif_geo` | keeps the coordinates (`places.Places`, a `Store[Location]` — importable by other perceptors); its view: the sheet on a Hilbert curve, sections region → city from the time zone of the place |
 | `ml_color` | loads; `NewProcessor` returns `nil`; its view (relative): "not analysed yet" |
 | `ml_faces` | empty `main.go`, no `Perceptor` symbol |
 | `ml_objects` | empty `main.go`, no `Perceptor` symbol |

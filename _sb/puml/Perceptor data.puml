@@ -14,14 +14,14 @@ Core -> P: Schema()
 P -> S: Places.Schema()
 S --> Core: name, version, fields\n(from T by reflection)
 Core -> PDB: create / migrate\n(sqlite: perceptors/geo.db,\npostgres: schema perceptor_geo)
-note right of Core: a new schema version:\nrebuild, queue the items again
+note right of Core: a changed schema:\nthe values go, the items\nare processed again
 
 == Import (Single) ==
 Chain -> P: Decorate(item)
 P -> S: Places.Put(item, Location{...})
 S -> S: the value rides on the item
 Chain -> DB: item
-Chain -> PDB: the perceptor's values\n(guid, version, pass)
+Chain -> PDB: the perceptor's values\n(guid; none: has = 0)
 
 == Order ==
 Core -> PDB: values for the shown guids
@@ -31,8 +31,11 @@ S --> P: Location, ok
 P --> Core: entries (guid, section?)
 
 == Deletion ==
-Core -> DB: item deleted
-Core -> PDB: delete its rows\n(every perceptor)
+Core -> DB: items deleted (a complete walk)
+Core -> PDB: prune rows of gone items\n(every perceptor)
+
+== Processed again ==
+note over Core, PDB: the files gate asks every import perceptor's storage Has(guid):\nno row (a new perceptor, a changed schema) -> the group is processed again
 
 == Later: Group ==
 note over P, PDB: a pass over the library (or what changed), not the import chain:\nGroup(items) -> Trips.Put(Trip{...}, guids) -> groups + "photo -> group"\nin the perceptor's storage; Order gives the sheet by groups (sections)

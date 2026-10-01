@@ -305,6 +305,24 @@ Design: roadmap "Perceptor data"; diagram [`Perceptor data.puml`](../puml/Percep
 - **Groups** (`ProcessingMode` Group — clusters, albums, journeys) are data of
   another shape: groups of photos with data of their own, decided over the library,
   not per photo in the import chain. Designed (roadmap), not in work.
+- Implemented (PR #17) for Single, with geo. Non-obvious on the way:
+  - **"Nothing found" is a row** (`has = 0`): an item without GPS must not count as
+    "not processed by geo", or every walk would send it through exiftool again.
+  - **Processed again by asking the store**: the files gate checks `Has(guid)` in
+    every import perceptor's store — a new perceptor or a changed schema takes one
+    pass over the library, while the items stay shown (marking them Dirty would hide
+    them until processed).
+  - **Deletions are pruned after a complete walk** (the store's guids against the
+    items), not hooked into every delete path.
+  - **Geo sections from the time zone** of the place (tzf, already in the core for
+    dates): real places without a geocoder dataset — "Europe" → "Kyiv". Country
+    names need an offline geocoder (roadmap).
+  - **A plugin's dependencies must match the host's exactly** — tzf brought older
+    `golang.org/x/sync` / testify into `exif_geo`; aligned by hand. GPS parsing moved
+    into `perceplib` (`api.Coordinates`), shared by the core's date and geo.
+  - On the dev library from an agent's shell only the 575 generic items went through
+    (the Photos library is unreadable there): 12 with a place, 4 of them shown (8
+    are Waiting HEIC/HEVC).
 
 ## Backend: gontroller, plugins, exiftool
 

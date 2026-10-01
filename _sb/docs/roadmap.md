@@ -225,11 +225,12 @@ Don't rush — a stable core first.
   ones ignore the anchor; relative ones (faces, objects, similar) build a
   **two-sided trail** from it: from the anchor to the nearest unseen photo, then the
   nearest to that, in both directions. Next:
-  - [ ] **Perceptor data storage + geo** (first: the data comes from EXIF and the
-        Photos DB, no pixels — the simplest test of the storage; design: "Perceptor
-        data" below). Geo: (lat, lon) on a Hilbert curve (one dimension that keeps near
-        places near; a plain longitude puts Krakow next to Cape Town), sections
-        country → city.
+  - [x] **Perceptor data storage + geo** (PR #17; design: "Perceptor data" below).
+        Geo keeps the coordinates (EXIF or the Photos DB's record); the sheet on a
+        Hilbert curve (a plain longitude puts Krakow next to Cape Town); sections
+        from the time zone of the place — region → city ("Europe", "Kyiv").
+  - [ ] Geo sections by country / city names (needs a geocoder dataset, e.g.
+        Natural Earth / GeoNames offline) instead of the time zone's.
   - [ ] **Colour — deterministic, no ML** (`ml_color` → `color`). Needs pixels for
         perceptors: the item's cheap preview (always a browser image — JPEG/PNG/
         WebP, so no HEIC/RAW decoding), scaled to ~32×32 (~10–20 ms per photo, once
@@ -250,7 +251,7 @@ Don't rush — a stable core first.
   management).
 - Reprocessing on plugin version change; fsnotify instead of the periodic walk.
 
-### Perceptor data (design, decided 2026-10-01)
+### Perceptor data (decided 2026-10-01; Single done in PR #17)
 
 Diagram: [`Perceptor data.puml`](../puml/Perceptor%20data.puml). Why not the other
 ways — findings, "Perceptor data: the core keeps it".
@@ -285,11 +286,14 @@ ways — findings, "Perceptor data: the core keeps it".
   it at the end (the closer), together with the item.
 - **Reading**: the core loads the perceptor's values for the items it passes to
   `Order` (by guid).
-- **Rows**: keyed by the item's GUID (stable across moves; Apple: the asset UUID) +
-  the schema version + the pass (cheap / full, see "Two stages").
-- **Kept by the core**: an item deleted → its rows in every perceptor's storage go;
-  a schema version changed → the perceptor's data is rebuilt and its items are queued
-  for it again.
+- **Rows**: keyed by the item's GUID (stable across moves; Apple: the asset UUID);
+  `has = 0` records "processed, nothing found" (no GPS), so such an item is not
+  processed again on every walk. The pass (cheap / full) comes with the expensive
+  stage (see "Two stages").
+- **Kept by the core**: rows of gone items are pruned after every complete walk; a
+  changed schema (version or fields) drops the perceptor's values, and the files
+  gate processes an item again while an import perceptor has no row for it (new
+  perceptors and schema changes take one pass over the library).
 - **Physically**: SQLite — a file per perceptor, `data_dir/perceptors/<name>.db`
   (SQLite has one writer per file: an ML perceptor writing embeddings does not block
   the import; a perceptor's data is reset by deleting its file; no `ATTACH` — the
