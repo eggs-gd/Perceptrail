@@ -8,27 +8,33 @@
 
     let {asset}: Props = $props();
 
-    const TITLES: Record<AssetKind, string> = {photo: '', live: 'Live Photo', video: 'Video'};
+    const TITLES: Record<AssetKind, string> = {photo: 'Photo', live: 'Live Photo', video: 'Video'};
 
-    // Its video is only in iCloud: hover shows a few frames at best, nothing plays
-    let cloud = $derived(asset.kind !== 'photo' && !hasLocalVideo(asset));
+    // Only in iCloud: a photo whose original is not here (we show Photos' preview), a
+    // video or a Live Photo whose video is not here (it does not play)
+    let cloud = $derived(asset.kind === 'photo' ? !asset.original : !hasLocalVideo(asset));
     let title = $derived(TITLES[asset.kind] + (cloud ? ' (in iCloud only)' : ''));
 </script>
 
-<!-- A moving asset is marked on the tile; a photo has no mark -->
-{#if asset.kind !== 'photo'}
-    <span class="badge kind" {title} aria-label={title}>
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-            {#if asset.kind === 'live'}
-                <!-- Live Photo: a dot in a ring in a dashed ring -->
-                <circle cx="12" cy="12" r="3" fill="currentColor"/>
-                <circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
-                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"
-                        stroke-dasharray="1.6 2.4"/>
-            {:else}
-                <path d="M8 5.5v13l11-6.5z" fill="currentColor"/>
-            {/if}
-        </svg>
+<!-- What moves and what is only in iCloud is marked; a local photo has no mark -->
+{#if asset.kind !== 'photo' || cloud}
+    <span class="badge" {title} aria-label={title}>
+        {#if asset.kind !== 'photo'}
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                {#if asset.kind === 'live'}
+                    <!-- Live Photo: a dot in a ring in a dashed ring -->
+                    <circle cx="12" cy="12" r="3" fill="currentColor"/>
+                    <circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+                    <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"
+                            stroke-dasharray="1.6 2.4"/>
+                {:else}
+                    <path d="M8 5.5v13l11-6.5z" fill="currentColor"/>
+                {/if}
+            </svg>
+        {/if}
+        {#if asset.kind === 'video' && asset.duration}
+            <span class="duration">{formatDuration(asset.duration)}</span>
+        {/if}
         {#if cloud}
             <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M7 18.5h10.5a4 4 0 0 0 .6-7.95A6 6 0 0 0 6.6 9.1 4.7 4.7 0 0 0 7 18.5z"
@@ -36,14 +42,13 @@
             </svg>
         {/if}
     </span>
-    {#if asset.kind === 'video' && asset.duration}
-        <span class="badge duration">{formatDuration(asset.duration)}</span>
-    {/if}
 {/if}
 
 <style>
     .badge {
         position: absolute;
+        top: 6px;
+        left: 6px;
         display: flex;
         align-items: center;
         gap: 2px;
@@ -54,15 +59,8 @@
         pointer-events: none;
     }
 
-    .kind {
-        top: 6px;
-        left: 6px;
-    }
-
     .duration {
-        right: 6px;
-        bottom: 6px;
-        padding: 1px 6px;
+        padding: 0 2px;
         font: 600 11px/16px system-ui, sans-serif;
         font-variant-numeric: tabular-nums;
     }
