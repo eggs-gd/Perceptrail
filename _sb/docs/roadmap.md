@@ -270,10 +270,12 @@ process with the database and the files can take work.
 
 **Photos** — libvips on the CPU (a GPU gives nothing here); HEIC via libheif, RAW via
 its embedded preview (or libraw).
-- **Sizes: an array in the config**, long side px. Default `[400, 800, 1600, 2560,
-  3840]`: tiles are ~400 CSS px — 800 on Retina; the viewer is pixel-perfect on the
-  screens we use (a 2K 32" — 2560×1440, a MacBook 16" — 3456×2234). `srcset` picks
-  the size and the density.
+- **Sizes: an array in the config**, long side px — the system takes any array.
+  Default `[400, 1600]` to start with (tiles, the viewer); previews, not copies of the
+  original: ~3840 is close to the original itself. Worth trying later: 800 (tiles
+  are ~400 CSS px — 800 on Retina) and 2560 (pixel-perfect on a 2K 32"; a MacBook
+  16" is 3456×2234). `srcset` picks the size and the density; the original stays
+  behind the viewer's Original switch.
 - **Format: one, chosen in the config** — `webp` (default) or `avif`:
 
   | | WebP | AVIF |

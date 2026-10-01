@@ -370,9 +370,11 @@ Design: roadmap "Expensive stage".
 - **One codec, one image format, chosen in the config** — not arrays. Arrays let the
   browser pick (the asset contract is ready for it) but cost N× disk and transcode
   time; a later feature of its own.
-- **Sizes for pixel-perfect screens**: 1600 px for the viewer is less than a 2K 32"
-  (2560) or a MacBook 16" (3456); tiles need 800 on Retina. Default
-  `[400, 800, 1600, 2560, 3840]`, in the config.
+- **Sizes: any array in the config, `[400, 1600]` to start with.** 1600 px is less
+  than a 2K 32" (2560) or a MacBook 16" (3456), and tiles would want 800 on Retina —
+  but ~3840 is close to the original itself: we make previews, not copies; the
+  original stays behind the viewer's Original switch. Larger sizes are a config
+  experiment, the system must take any array.
 - **How others split it**: Immich — one server image does API, previews and ffmpeg,
   the same image can run as workers (env), ML in its own container; PhotoPrism,
   Jellyfin — monoliths, ffmpeg as a subprocess; LibrePhotos — backend + queue
