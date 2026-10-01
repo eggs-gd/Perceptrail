@@ -18,6 +18,7 @@ const dateIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fi
 
 func (p *datePerceptor) View() api.View {
 	return api.View{
+		Slug:  "date",
 		Title: "Date",
 		Icon:  dateIcon,
 		Help:  "Every photo by the date it was taken, newest first. The panel on the right jumps to a year or a month.",

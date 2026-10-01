@@ -11,11 +11,11 @@
 
 <!-- One button per perceptor: its icon (a mask — the button's colour paints it, an SVG
      from a plugin cannot run anything), its title and help as the tooltip -->
-{#each perceptors.list as p (p.name)}
-    <button class="tool" class:on={perceptors.active === p.name}
+{#each perceptors.list as p (p.slug)}
+    <button class="tool" class:on={perceptors.active === p.slug}
             title={p.help ? `${p.title}: ${p.help}` : p.title} aria-label={p.title}
-            aria-pressed={perceptors.active === p.name}
-            onclick={(e) => { e.stopPropagation(); onpick(p.name); }}>
+            aria-pressed={perceptors.active === p.slug}
+            onclick={(e) => { e.stopPropagation(); onpick(p.slug); }}>
         <span class="icon" style:mask-image={iconMask(p.icon)} style:-webkit-mask-image={iconMask(p.icon)}></span>
     </button>
 {/each}

@@ -3,21 +3,24 @@
     import Gallery from "$lib/gallery/Gallery.svelte";
     import type {LayoutItem} from "$lib/stores";
     import {loadFromServer} from "$lib/workers";
-    import {loadPerceptors} from "$lib/gallery/perceptors.svelte";
+    import {loadPerceptors, photoHref} from "$lib/gallery/perceptors.svelte";
     import {goto} from "$app/navigation";
     import {page} from "$app/state";
     import {onMount} from "svelte";
 
     let {children} = $props();
 
-    let viewingItem = $derived(page.params.index != null);
+    // /v/<view> — the sheet in a view; /v/<view>/<guid> — the viewer on a photo
+    let view = $derived(page.params.view);
+    let viewing = $derived(page.params.guid);
+    let viewingItem = $derived(viewing != null);
 
     // Start the sync once, in the browser. Not in a load function: load must stay free
     // of side effects (it also runs on the server and on every navigation).
     onMount(() => {
         loadFromServer();
-        // The sheet's order: the saved perceptor, else the date (the stream itself
-        // comes newest first, so the photos show before the order arrives)
+        // The views; the URL says which one the sheet is in (the stream itself comes
+        // newest first, so the photos show before the order arrives)
         loadPerceptors();
     });
 
@@ -29,13 +32,14 @@
     });
 
     function openItem(item: LayoutItem) {
-        goto("/" + item.order, {noScroll: true, state: {fromGallery: true}});
+        if (!view) return;
+        goto(photoHref(view, item.guid), {noScroll: true, state: {fromGallery: true}});
     }
 </script>
 
 <main class={{viewing: viewingItem}}>
-    <!-- Stays mounted under / and /[index] so gallery doesn't remount -->
-    <Gallery {openItem} viewing={viewingItem ? Number(page.params.index) : undefined}/>
+    <!-- Stays mounted under /v/<view> and /v/<view>/<guid> so the gallery doesn't remount -->
+    <Gallery {openItem} {view} {viewing}/>
     {@render children()}
 </main>
 

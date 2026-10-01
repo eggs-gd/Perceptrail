@@ -44,13 +44,13 @@ func TestPerceptorsRoutes(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &views); err != nil {
 		t.Fatal(err)
 	}
-	if len(views) != 2 || views[0].Name != date.Perceptor.Name() || views[0].Title != "Date" ||
+	if len(views) != 2 || views[0].Slug != "date" || views[0].Title != "Date" ||
 		views[1].Title != "Size" || !strings.HasPrefix(views[0].Icon, "<svg") {
 		t.Fatalf("perceptors %+v, want date, then size", views)
 	}
 
 	rec = httptest.NewRecorder()
-	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/p/"+date.Perceptor.Name()+"/order", nil))
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/p/date/order", nil))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("order: %d", rec.Code)
 	}
@@ -78,5 +78,21 @@ func TestPerceptorsRoutes(t *testing.T) {
 	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/p/nope/order", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("unknown perceptor: %d", rec.Code)
+	}
+}
+
+// A view is reached by its slug: a taken one is not given to the client
+func TestPerceptorsSlugTaken(t *testing.T) {
+	e := echo.New()
+	RegisterPerceptorsRoutes(e, []api.Perceptor{date.Perceptor, date.Perceptor, size.Perceptor}, nil,
+		l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/perceptors", nil))
+	var views []clientPerceptor
+	if err := json.Unmarshal(rec.Body.Bytes(), &views); err != nil {
+		t.Fatal(err)
+	}
+	if len(views) != 2 || views[0].Slug != "date" || views[1].Slug != "size" {
+		t.Errorf("views %+v, want date once, then size", views)
 	}
 }

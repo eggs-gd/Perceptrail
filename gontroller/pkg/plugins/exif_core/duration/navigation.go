@@ -17,6 +17,7 @@ const lengthIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" 
 
 func (p *durationPerceptor) View() api.View {
 	return api.View{
+		Slug:  "length",
 		Title: "Length",
 		Icon:  lengthIcon,
 		Help:  "Videos by their length, the longest first; photos follow.",

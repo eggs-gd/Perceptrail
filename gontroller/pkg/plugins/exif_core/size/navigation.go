@@ -16,6 +16,7 @@ const sizeIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fi
 
 func (p *sizePerceptor) View() api.View {
 	return api.View{
+		Slug:  "size",
 		Title: "Size",
 		Icon:  sizeIcon,
 		Help:  "Every photo by its resolution, the biggest first. The panel jumps by megapixels.",

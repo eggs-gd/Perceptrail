@@ -7,7 +7,10 @@
     import SidePanel from "./components/SidePanel.svelte";
     import type {LayoutItem} from "$lib/stores";
     import {setOrder, updateLayout} from "$lib/workers";
-    import {orderApplied, perceptors} from "./perceptors.svelte";
+    import {nextRequest, orderApplied, perceptors, viewHref} from "./perceptors.svelte";
+    import {goto, replaceState} from "$app/navigation";
+    import {page} from "$app/state";
+    import type {Anchor} from "./layoutWindow";
     import type {LayoutSize} from "$lib/stores";
     import {layoutDb} from "$lib/stores";
     import {type AnchorState, findAnchor, watchSize, watchWindow, type WindowSnapshot} from "./layoutWindow";
@@ -17,14 +20,17 @@
         /** Target row height, px */
         rowHeight?: number;
         openItem: (item: LayoutItem) => void,
-        /** The item open in the viewer (its order); undefined: the viewer is closed */
-        viewing?: number;
+        /** The view the URL asks for (/v/<slug>); undefined: none yet */
+        view?: string;
+        /** The photo open in the viewer (its guid); undefined: the viewer is closed */
+        viewing?: string;
     }
 
     let {
         gutter = 8,
         rowHeight = 220,
         openItem,
+        view,
         viewing,
     }: Props = $props();
 
@@ -80,39 +86,74 @@
         );
     }
 
-    // A perceptor switch: the sheet is rearranged around the photo the user is at,
-    // kept in place like a resize keeps it — the photo in the middle of the screen,
-    // or the one the viewer was showing (then centred)
+    // The view is the URL's (/v/<slug>?at=<guid>): the sheet is rearranged around
+    // the photo the user is at, kept in place like a resize keeps it. A button here
+    // goes to the URL with the photo in the middle as ?at (its place on screen kept);
+    // a link, a reload, Back or the viewer's button: ?at (or the viewed photo) is
+    // centred. An unknown view goes to the first one.
+    let requestedView = '';
+    let switchAnchor: Anchor | undefined;
+
+    export function switchView(slug: string) {
+        switchAnchor = anchorOnScreen(screenWidth);
+        goto(viewHref(slug, switchAnchor?.guid), {noScroll: true, keepFocus: true});
+    }
+
     $effect(() => {
-        const request = perceptors.request;
-        if (!request) return;
+        const slug = view;
+        const list = perceptors.list;
+        if (!slug || list.length === 0) return;
         untrack(() => {
-            anchorState.pending = request.anchor
-                ? {mode: 'center', guid: request.anchor, ratio: 0.5}
-                : anchorOnScreen(screenWidth);
+            if (!list.some((p) => p.slug === slug)) {
+                goto(viewHref(list[0].slug), {replaceState: true});
+                return;
+            }
+            if (slug === requestedView) return;
+            requestedView = slug;
+            // From the address bar, not page.url: ?at is updated by a shallow
+            // replaceState, and Back to such an entry gives page.url without it
+            const at = new URL(location.href).searchParams.get('at') ?? viewing;
+            anchorState.pending = switchAnchor?.guid && switchAnchor.guid === at
+                ? switchAnchor
+                : at ? {mode: 'center', guid: at, ratio: 0.5} : anchorOnScreen(screenWidth);
+            switchAnchor = undefined;
             switching = true;
-            setOrder(request.perceptor, anchorState.pending?.guid).then((ok) => {
-                // Not applied: no switch relayout comes (a resize must not take its wave)
-                if (!ok && request.seq === perceptors.request?.seq) switching = false;
-                orderApplied(request, ok);
+            const request = nextRequest(slug);
+            setOrder(slug, anchorState.pending?.guid).then((ok) => {
+                if (orderApplied(request, ok) || request.seq !== perceptors.request?.seq) return;
+                // Not applied: no switch relayout comes (a resize must not take its
+                // wave), and the URL goes back to the view the sheet is in
+                switching = false;
+                requestedView = perceptors.active;
+                if (perceptors.active) goto(viewHref(perceptors.active), {replaceState: true});
             });
         });
     });
+
+    // Where the user is goes into the URL (?at=, a quiet replace once the scroll
+    // settles): a reload or a shared link opens the sheet around the same photo
+    let atTimer: ReturnType<typeof setTimeout> | undefined;
+    function keepPlace() {
+        clearTimeout(atTimer);
+        atTimer = setTimeout(() => {
+            if (viewing !== undefined || !view || view !== perceptors.active) return;
+            const a = anchorOnScreen(screenWidth);
+            const href = viewHref(view, a?.guid);
+            if (href !== location.pathname + location.search) replaceState(href, page.state);
+        }, 400);
+    }
 
     // A scroll that is not ours (anchor correction) is the user's: drop the anchor,
     // the next resize anchors whatever is on screen then
     let programmaticScrollY: number | undefined;
 
     // The viewer may have stepped far away (arrows): when it closes, the gallery shows
-    // the item it closed on — scrolled to the middle if it is not on screen. By guid:
-    // closing into another perceptor changes the order (that switch centres it itself).
+    // the item it closed on — scrolled to the middle if it is not on screen (closing
+    // into another view: that switch centres it itself)
     let lastViewed: string | undefined;
     $effect(() => {
-        const order = viewing;
-        if (order !== undefined) {
-            layoutDb.items.where('order').equals(order).first().then((item) => {
-                if (item && viewing === order) lastViewed = item.guid;
-            });
+        if (viewing !== undefined) {
+            lastViewed = viewing;
         } else if (lastViewed !== undefined) {
             const guid = lastViewed;
             lastViewed = undefined;
@@ -130,6 +171,10 @@
     }
 
     function onScroll() {
+        keepPlace();
+        // A switch is on its way: a scroll now is the router's (Back restores the old
+        // entry's scroll), not the user's — the anchor must survive it
+        if (switching) return;
         if (programmaticScrollY !== undefined && Math.abs(window.scrollY - programmaticScrollY) <= 2) return;
         programmaticScrollY = undefined;
         anchorState.pending = undefined;
@@ -380,7 +425,7 @@
     </div>
 </div>
 {#if viewing === undefined}
-    <GalleryTools/>
+    <GalleryTools onpick={switchView}/>
     <SidePanel {height} {count} top={containerTop} {scrollY} {innerHeight} pinned={perceptors.pinned}/>
 {/if}
 

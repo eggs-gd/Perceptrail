@@ -1,13 +1,20 @@
 <script lang="ts">
     import PerceptorButtons from './PerceptorButtons.svelte';
-    import {perceptors, switchPerceptor, togglePinned} from '../perceptors.svelte';
+    import {perceptors, togglePinned} from '../perceptors.svelte';
+
+    interface Props {
+        /** A view was picked (the gallery keeps the photo in the middle in place) */
+        onpick: (slug: string) => void;
+    }
+
+    let {onpick}: Props = $props();
 
     // The gallery's toolbar: the perceptors (the sheet's views) and the side panel's pin
     let pinTitle = $derived(perceptors.pinned ? 'Side panel: always shown' : 'Side panel: shown while scrolling');
 </script>
 
 <div class="tools" role="toolbar">
-    <PerceptorButtons onpick={(name) => switchPerceptor(name)}/>
+    <PerceptorButtons {onpick}/>
     <button class="tool" class:on={perceptors.pinned} title={pinTitle} aria-label={pinTitle}
             aria-pressed={perceptors.pinned} onclick={togglePinned}>
         <svg viewBox="0 0 24 24" aria-hidden="true">

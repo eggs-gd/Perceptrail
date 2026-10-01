@@ -60,7 +60,9 @@ keeps in place.
   snapshot); `watchSize()`; `findAnchor()`.
 - `lib/gallery/Gallery.svelte` — tracks scroll, subscribes to the window, applies at
   most one snapshot per frame, captures the anchor on resize, the "wave" animation.
-- `routes/[index=itemIndex]` — the viewer reads its item from `layoutDb` by `order`.
+- `routes/v/[view]` — the sheet in a view (the gallery itself lives in `+layout.svelte`;
+  it reads the view and `?at=` from the URL); `routes/v/[view]/[guid]` — the viewer, its
+  item from `layoutDb` by guid, ← → by `order`; `/` redirects to `/v/date`.
 - `lib/workers/layout/` — **unused**: the original optimal masonry layout with
   Dijkstra. `dijkstra.js` is third-party MIT code under `@ts-nocheck`.
 

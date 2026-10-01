@@ -14,6 +14,9 @@ package api
 // View: what the client shows for a perceptor — a button in the toolbars and a
 // help text
 type View struct {
+	// Slug: the view's name in URLs (/v/date) — public, unique among the
+	// perceptors; not the plugin's name (an inside detail)
+	Slug  string
 	Title string
 	// SVG markup, 24×24 viewBox, currentColor; the client shows it as a mask (no
 	// scripts run)

@@ -246,19 +246,15 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
       false` — runs, the client does not get it), **hidden by the client** (the user's
       toggle in the menu, kept in the browser).
 
-- [ ] **Views and photos have URLs** (with "a stable link to a photo"): today a view is
-      a button and an in-memory switch, the viewer is `/N` (a position in the current
-      sheet). Proposed — the same for every view, the date included (it is a
-      perceptor like the others, no special base navigation): `/v/<view>` — the sheet
-      in that view, `?at=<guid>` — around that photo (a link to "places around this
-      photo", a reload keeps the place); `/v/<view>/<guid>` — the viewer on that
-      photo, ← → walking that view. `<view>` is a public slug of the perceptor's own
-      (`api.View`: `date`, `size`, `length`, `place`, `colour`), not its plugin name
-      (`exif_date` is an inside detail); the core checks the slugs are unique. `/`
-      redirects to `/v/date`, so the default view is visible in the URL too. A switch
-      is a history entry: Back returns to the previous view around the same photo; the
-      view no longer needs to be kept in the browser's storage — the URL is the state.
-
+- [x] **Views and photos have URLs** (PR #18): `/v/<view>` — the sheet in a view,
+      `?at=<guid>` — around that photo (kept up to date as you scroll: a reload or a
+      shared link opens the same place); `/v/<view>/<guid>` — the viewer on a photo,
+      ← → walking that view. `<view>` is the perceptor's public slug (`api.View.Slug`:
+      `date`, `size`, `length`, `place`, `colour`; unique — a taken one is not given to
+      the client), not its plugin name. `/` redirects to `/v/date`; an unknown view goes
+      to the first. A switch is a history entry: Back returns to the previous view
+      around the same photo. The URL is the state (the view is no longer kept in the
+      browser's storage).
 - [ ] Side panel: the first section of a deeper level (the first month of a year, the
       first city of a region) sits at the same point as its parent's label — shown
       only in the tip. Show it next to / under the parent's label.
@@ -303,8 +299,7 @@ Don't rush — a stable core first.
         To decide: rainbow, trail or both.
   - [ ] Relative perceptors (the trail) with the first ML perceptor (faces): the
         trail mechanism shared with the colour trail.
-  - [ ] A stable link to a photo: the viewer's `/N` is a position in the current
-        sheet and changes with the perceptor.
+  - [x] A stable link to a photo — `/v/<view>/<guid>` (see Frontend).
 - UI slots (`item-panel`, `view`) — a perceptor can bring its own UI (map, face
   management).
 - Reprocessing on plugin version change; fsnotify instead of the periodic walk.

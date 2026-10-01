@@ -22,6 +22,7 @@ const geoIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fil
 
 func (p *geoPerceptor) View() api.View {
 	return api.View{
+		Slug:  "place",
 		Title: "Place",
 		Icon:  geoIcon,
 		Help:  "Photos by where they were taken: near places next to each other. The panel jumps by region and city.",

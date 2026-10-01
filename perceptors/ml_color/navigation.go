@@ -14,6 +14,7 @@ const colorIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" f
 
 func (p *colorPerceptor) View() api.View {
 	return api.View{
+		Slug:     "colour",
 		Title:    "Colour",
 		Icon:     colorIcon,
 		Help:     "A trail through photos of similar colour (not ready yet: nothing is analysed).",

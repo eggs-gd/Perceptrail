@@ -288,6 +288,16 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
   and on a switch almost every tile is new. Now the switch's relayout fades the new
   tiles in by the same wave as the moves: from the anchor outwards, row by row,
   within 500 ms; the anchor and shared tiles move as on a resize.
+- **Views live in the URL** (`/v/<view>?at=<guid>`, `/v/<view>/<guid>`). Two traps on
+  the way:
+  - `?at` is kept up to date with a shallow `replaceState`; Back to such an entry gives
+    `page.url` **without** it (the URL of the original navigation) while the address
+    bar has it — `?at` is read from `location`.
+  - Back restores the entry's scroll (the router), which looked like the user's
+    scroll and dropped the switch's anchor: while a switch is on its way, scroll
+    events do not drop it. Buttons navigate with `noScroll`.
+  - In a hidden browser pane no scroll events fire: tiles measured in the DOM are
+    stale — check positions against `layoutDb` instead.
 - A perceptor's icon is SVG from a plugin: shown as a CSS `mask-image` — no script in
   it runs, and the button's colour paints it (`currentColor` does not reach an
   `<img>`).

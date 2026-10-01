@@ -17,7 +17,7 @@ import (
 // per perceptor, asks one for the order of the sheet and lays it out itself.
 
 type clientPerceptor struct {
-	Name     string `json:"name"`
+	Slug     string `json:"slug"` // the view's name in URLs; the plugin's name stays inside
 	Title    string `json:"title"`
 	Icon     string `json:"icon"` // SVG markup
 	Help     string `json:"help"`
@@ -49,17 +49,29 @@ func RegisterPerceptorsRoutes(e *echo.Echo, list []api.Perceptor, values ValuesL
 	if itemsProxy == nil {
 		itemsProxy = model.NewProxy(logger)
 	}
-	perceptors = list
+	// A view is reached by its slug: an empty or a taken one is not reachable
+	perceptors = nil
+	taken := map[string]string{}
+	for _, p := range list {
+		slug := p.View().Slug
+		if other, dup := taken[slug]; slug == "" || dup {
+			logger.Error("Perceptor view not given to the client: no slug, or taken",
+				l.String("perceptor", p.Name()), l.String("slug", slug), l.String("taken by", other))
+			continue
+		}
+		taken[slug] = p.Name()
+		perceptors = append(perceptors, p)
+	}
 	loadValues = values
 	e.GET("/perceptors", getPerceptors)
-	e.GET("/p/:name/order", getOrder)
+	e.GET("/p/:view/order", getOrder)
 }
 
 func getPerceptors(c echo.Context) error {
 	out := []clientPerceptor{}
 	for _, n := range perceptors {
 		v := n.View()
-		out = append(out, clientPerceptor{Name: n.Name(), Title: v.Title, Icon: v.Icon, Help: v.Help, Relative: v.Relative})
+		out = append(out, clientPerceptor{Slug: v.Slug, Title: v.Title, Icon: v.Icon, Help: v.Help, Relative: v.Relative})
 	}
 	return c.JSON(http.StatusOK, out)
 }
@@ -69,7 +81,7 @@ func getPerceptors(c echo.Context) error {
 func getOrder(c echo.Context) error {
 	var nav api.Perceptor
 	for _, n := range perceptors {
-		if n.Name() == c.Param("name") {
+		if n.View().Slug == c.Param("view") {
 			nav = n
 		}
 	}
