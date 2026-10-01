@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/plugins"
 	"perceptrail/gontroller/pkg/scan/flow"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -163,8 +164,44 @@ func (g *filesGate) needsProcessing(files []*dto.FileDto, key, metaHash string) 
 	if err != nil {
 		return errors.Is(err, gorm.ErrRecordNotFound)
 	}
-	// The source's metadata changed (a date corrected in Photos), the files did not
-	return !cheapStageDone(item) || item.MetaHash != metaHash
+	// The source's metadata changed (a date corrected in Photos), the files did not;
+	// or a perceptor has not processed it (new, or its schema changed)
+	return !cheapStageDone(item) || item.MetaHash != metaHash || g.perceptorMissing(item.Guid)
+}
+
+// perceptorMissing: an import perceptor has no row for the item
+func (g *filesGate) perceptorMissing(guid string) bool {
+	for _, st := range plugins.Pm.ImportStores() {
+		if has, err := st.Has(guid); err == nil && !has {
+			return true
+		}
+	}
+	return false
+}
+
+// pruneStores: the perceptors' rows of items that are gone
+func (g *filesGate) pruneStores() {
+	stores := plugins.Pm.Stores()
+	if len(stores) == 0 {
+		return
+	}
+	guids, err := itemsProxy.GetAllGuids()
+	if err != nil {
+		g.logger.Error("Perceptor storage: can't read items", l.Error(err))
+		return
+	}
+	keep := make(map[string]bool, len(guids))
+	for _, guid := range guids {
+		keep[guid] = true
+	}
+	for _, st := range stores {
+		n, err := st.Prune(func(guid string) bool { return keep[guid] })
+		if err != nil {
+			g.logger.Error("Perceptor storage: prune failed", l.String("store", st.Name()), l.Error(err))
+		} else if n > 0 {
+			g.logger.Info("Perceptor storage: pruned", l.String("store", st.Name()), l.Int("rows", n))
+		}
+	}
 }
 
 // cheapStageDone: the item went through the cheap stage (Visible, Waiting) or is
@@ -247,6 +284,7 @@ func (g *filesGate) finalizeWalk(result flow.WalkResult, held []string) {
 		}
 	}
 	g.logger.Info("Deletions", l.Int("files", len(gone)), l.Int("items", deletedItems), l.Int("dirty", dirtyItems))
+	g.pruneStores()
 }
 
 // goneFiles keeps the stale files that belong to this root and were not hidden by

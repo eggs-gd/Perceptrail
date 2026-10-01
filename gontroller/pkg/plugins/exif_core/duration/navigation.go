@@ -43,3 +43,6 @@ func length(seconds float64) string {
 	}
 	return fmt.Sprintf("%.1f s", seconds)
 }
+
+// Schema: nothing of its own to keep — the core's item has it
+func (p *durationPerceptor) Schema() api.Schema { return api.Schema{} }

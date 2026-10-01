@@ -63,6 +63,10 @@ type ItemDto struct {
 	DateZone   string // how DateOffset was found: tag, gps, coords, file, server (assumed)
 	Path       string // Source path
 
+	// The perceptors' values for this item, by store (not a column: each perceptor's
+	// storage keeps them — committed with the item, loaded for Order)
+	values map[string]api.Values `gorm:"-"`
+
 	Size  api.Size `gorm:"embedded;embeddedPrefix:size_"`
 	Ratio api.Size `gorm:"embedded;embeddedPrefix:ratio_"`
 
@@ -97,6 +101,18 @@ func (i *ItemDto) GetDate() time.Time {
 func (i *ItemDto) GetSize() api.Size    { return i.Size }
 func (i *ItemDto) GetRatio() api.Size   { return i.Ratio }
 func (i *ItemDto) GetDuration() float64 { return i.Duration }
+
+func (i *ItemDto) StoreValues(store string) (api.Values, bool) {
+	v, ok := i.values[store]
+	return v, ok
+}
+
+func (i *ItemDto) SetStoreValues(store string, v api.Values) {
+	if i.values == nil {
+		i.values = map[string]api.Values{}
+	}
+	i.values[store] = v
+}
 
 // type Tag struct {
 // 	ID        uint   `gorm:"primaryKey"`

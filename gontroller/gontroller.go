@@ -42,7 +42,7 @@ func main() {
 	}
 
 	svc.AddService(scan.NewImporterService(ctx))
-	web, err := client.NewWebService(ctx.Config().Server, plugins.Pm.ClientPerceptors(), ctx.Logger(string(app.LogHTTP)))
+	web, err := client.NewWebService(ctx.Config().Server, plugins.Pm.ClientPerceptors(), plugins.Pm.LoadValues, ctx.Logger(string(app.LogHTTP)))
 	if err != nil {
 		log.Fatalf("Server: %v", err)
 	}

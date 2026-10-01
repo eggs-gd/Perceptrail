@@ -34,6 +34,9 @@ type Perceptor interface {
 	ProcessingMode() ProcessingMode
 
 	View() View
+	// Schema: what the perceptor keeps per item (a Store[T]'s Schema); the zero
+	// Schema keeps nothing
+	Schema() Schema
 	// Order: every item of items (they come newest first), in sheet order. anchor:
 	// the item the user is at ("" for none) — a relative perceptor starts from it.
 	Order(ctx context.Context, anchor string, items []ItemDataProvider) ([]Entry, error)

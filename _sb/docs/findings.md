@@ -246,6 +246,11 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
   do not fit a browser (2 KB per photo × 100k) and need a nearest-neighbour index.
   The layout stays in the client's worker: it depends on the window width (a
   server-side layout was considered earlier and moved to the client for that).
+- **A photo may start several sections — a path** (`sections: [{level, label}]`,
+  coarsest first): a year starts its first month too, a region its first city. With
+  one section per photo the first month of a year and the first city of a region had
+  no mark of their own (the tip said "Europe", not "Athens Europe"). A perceptor may
+  give a whole path of tags or a single one.
 - **Sections ride in the order stream** (`{guid, section?: {level, label}}` on the
   first item of a section), not a separate list: the panel's positions come from the
   layout (the client's), and a relative perceptor's sections depend on the anchor.
@@ -256,6 +261,27 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
   is the viewed photo with ratio 0.5 (centred). Closing the viewer then must not
   "reveal" the photo by its old position — the gallery skips it when that photo is
   the pending anchor.
+- **The side panel's scale is by sections, √ of their photos** (decided). Linear by
+  the sheet's height, a big "no value" section (two thirds of a library without a
+  place) took two thirds of the panel and the real places' labels did not fit. A
+  fixed small share for it (10%) was rejected — it flips the problem: two thirds of
+  the library in a tenth of the scale. Now every coarsest section gets a share by √
+  of its photo count (and room for its label when that fits), **at every level**:
+  the sections share their parent's part of the track the same way (years, then
+  months; regions, then cities). "no value" is not special, just big. 30 places × 30
+  photos + 6 000 without: "no value" 87% → 32% of the panel. Only the top level was
+  not enough: on the dev library geo has two regions ("Europe", "No place"), and Kyiv
+  (3 047 photos) took the whole of Europe — the other cities sat in its first 12 px;
+  split by √ inside the region too they spread over 0–111 px.
+  Sections that start in one row (a few photos each — Sofia, Athens and the start
+  of Tirane share y = 0) have shares of their own but no height on the sheet: a
+  label is placed at its share's start (not at `toTrack(y)`, which put them all at
+  one point and the region's label at the start of the last one), marks are ordered
+  and assigned to shares by photo, not by y. The tip under the pointer the same: by
+  each section's share on the track — by y every earlier city of such a row showed
+  the last one's name (Codex review). Linear within a section, so scrubbing stays smooth; the view marker gets
+  taller where photos are sparse. Considered next: a magnifier around the pointer
+  (like the macOS Dock) for very large libraries.
 - **Every rearrangement uses the wave** (decided: the wave is the product's style). A
   switch first replaced the screen at once — it reused the resize relayout, where new
   tiles appear without a fade (a fade from 0 left the screen empty when widening),
@@ -277,6 +303,61 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
 - Testing on a second server started from an agent's shell: macOS does not let that
   process read `Photos Library.photoslibrary` (privacy), so Apple files are 404
   there while the user's server serves them.
+
+### Perceptor data: the core keeps it (2026-10-01, design)
+
+Design: roadmap "Perceptor data"; diagram [`Perceptor data.puml`](../puml/Perceptor%20data.puml).
+
+- **Rejected: every perceptor opens a database of its own.** A perceptor is a `.so`
+  in our process: its own database means a driver inside the plugin — `go-sqlite3`
+  is cgo, and Go plugins already need identical versions of everything; two copies of
+  a cgo driver in one process is asking for trouble. Every plugin would also need the
+  data dir and, for Postgres, the credentials. And the core would not know about the
+  data: a deleted photo would leave rows behind, a new plugin version would not know
+  what to recompute.
+- **Rejected: an API for plugins to create tables** — the same, one step removed:
+  SQL in plugins, the core blind to the data.
+- **Decided: the plugin declares, the core keeps.** The core creates, migrates and
+  maintains the storage (deletions, schema versions), and picks the place by driver.
+- **SQLite: a file per perceptor**, not everything in the main database: ML
+  perceptors (embeddings) would bloat it; SQLite has one writer per file, so a
+  perceptor writing does not block the import; a perceptor's data is reset by
+  deleting its file. No `ATTACH` (default limit 10, per connection — awkward with
+  GORM's pool): the core reads a perceptor's values by a list of guids. Postgres:
+  one database, a schema per perceptor.
+- **Typed API, not `SetValue("lat", …)`**: string keys and `any` stuck out of the
+  plugin API. A plugin declares a struct (`api.NewStore[Location]`) and gets `Put` /
+  `Get` of that type; the untyped exchange stays between `perceplib` and the core.
+- **Groups** (`ProcessingMode` Group — clusters, albums, journeys) are data of
+  another shape: groups of photos with data of their own, decided over the library,
+  not per photo in the import chain. Designed (roadmap), not in work.
+- Implemented (PR #17) for Single, with geo. Non-obvious on the way:
+  - **"Nothing found" is a row** (`has = 0`): an item without GPS must not count as
+    "not processed by geo", or every walk would send it through exiftool again.
+  - **Processed again by asking the store**: the files gate checks `Has(guid)` in
+    every import perceptor's store — a new perceptor or a changed schema takes one
+    pass over the library, while the items stay shown (marking them Dirty would hide
+    them until processed).
+  - **`rows.Err()` after reading a store**: an SQLite error mid-read only ends
+    `Next()` — without the check `Load` returned a partial map as if whole, and the
+    sheet came out quietly wrong (Codex review).
+  - **Deletions are pruned after a complete walk** (the store's guids against the
+    items), not hooked into every delete path.
+  - **Geo sections from the time zone** of the place (tzf, already in the core for
+    dates): real places without a geocoder dataset — "Europe" → "Kyiv". Country
+    names need an offline geocoder (roadmap).
+  - **Every city in one piece**: by the curve alone a city came back several times
+    (the curve zigzags through a region — Tirane ×3, Kyiv ×2 on the dev library).
+    Now regions and cities are ordered by their first point on the curve (near ones
+    stay near), photos within a city by the curve: each city and region is one span
+    of the sheet (Athens → Tirane → Skopje → Podgorica → Zagreb → Budapest →
+    Bucharest → Kyiv → Minsk).
+  - **A plugin's dependencies must match the host's exactly** — tzf brought older
+    `golang.org/x/sync` / testify into `exif_geo`; aligned by hand. GPS parsing moved
+    into `perceplib` (`api.Coordinates`), shared by the core's date and geo.
+  - On the dev library from an agent's shell only the 575 generic items went through
+    (the Photos library is unreadable there): 12 with a place, 4 of them shown (8
+    are Waiting HEIC/HEVC).
 
 ## Backend: gontroller, plugins, exiftool
 

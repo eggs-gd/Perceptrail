@@ -24,7 +24,7 @@ import (
 // shown items: newest first with its sections
 func TestPerceptorsRoutes(t *testing.T) {
 	e := echo.New()
-	RegisterPerceptorsRoutes(e, []api.Perceptor{date.Perceptor, size.Perceptor},
+	RegisterPerceptorsRoutes(e, []api.Perceptor{date.Perceptor, size.Perceptor}, nil,
 		l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
 
 	at := func(s string) time.Time { v, _ := time.Parse(time.RFC3339, s); return v }
@@ -65,12 +65,12 @@ func TestPerceptorsRoutes(t *testing.T) {
 			continue // items of other tests
 		}
 		s := ""
-		if en.Section != nil {
-			s = "|" + en.Section.Label
+		for _, sec := range en.Sections {
+			s += "|" + sec.Label
 		}
 		got = append(got, en.Guid+s)
 	}
-	if want := "nav-new|2026 nav-old|2025"; strings.Join(got, " ") != want {
+	if want := "nav-new|2026|September nav-old|2025|March"; strings.Join(got, " ") != want {
 		t.Errorf("order %q, want %q", strings.Join(got, " "), want)
 	}
 

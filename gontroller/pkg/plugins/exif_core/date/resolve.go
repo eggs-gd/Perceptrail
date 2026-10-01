@@ -2,7 +2,6 @@ package date
 
 import (
 	"math"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -219,42 +218,6 @@ func gpsTime(exif api.ExifProvider) (time.Time, bool) {
 	return t, ok
 }
 
-// Coordinates as exiftool prints them: 50 deg 27' 12.34" N
-var dmsRe = regexp.MustCompile(`(\d+(?:\.\d+)?) deg (\d+(?:\.\d+)?)' (\d+(?:\.\d+)?)"(?: ([NSEW]))?`)
-
-// coords returns latitude and longitude from GPSLatitude/GPSLongitude or the
-// QuickTime GPSCoordinates
-func coords(exif api.ExifProvider) (lat, lng float64, ok bool) {
-	if c := exif.GetExif("GPSCoordinates"); c != "" {
-		m := dmsRe.FindAllStringSubmatch(c, 2)
-		if len(m) == 2 {
-			return dms(m[0], exif.GetExif("GPSLatitudeRef")), dms(m[1], exif.GetExif("GPSLongitudeRef")), true
-		}
-	}
-	la := dmsRe.FindStringSubmatch(exif.GetExif("GPSLatitude"))
-	lo := dmsRe.FindStringSubmatch(exif.GetExif("GPSLongitude"))
-	if la == nil || lo == nil {
-		return 0, 0, false
-	}
-	return dms(la, exif.GetExif("GPSLatitudeRef")), dms(lo, exif.GetExif("GPSLongitudeRef")), true
-}
-
-// dms converts a dmsRe match to degrees; the direction comes from the value or the Ref tag
-func dms(m []string, ref string) float64 {
-	d, _ := strconv.ParseFloat(m[1], 64)
-	min, _ := strconv.ParseFloat(m[2], 64)
-	sec, _ := strconv.ParseFloat(m[3], 64)
-	v := d + min/60 + sec/3600
-	dir := m[4]
-	if dir == "" && ref != "" {
-		dir = ref[:1] // "North", "South", "East", "West"
-	}
-	if dir == "S" || dir == "W" {
-		v = -v
-	}
-	return v
-}
-
 var (
 	finderOnce sync.Once
 	finder     tzf.F
@@ -263,7 +226,7 @@ var (
 // coordsZone is the IANA zone at the GPS coordinates, nil if unknown. The zone
 // dictionary is loaded on first use.
 func coordsZone(exif api.ExifProvider) *time.Location {
-	lat, lng, ok := coords(exif)
+	lat, lng, ok := api.Coordinates(exif)
 	if !ok || math.Abs(lat) > 90 || math.Abs(lng) > 180 || (lat == 0 && lng == 0) {
 		return nil
 	}

@@ -22,11 +22,12 @@ type View struct {
 	Relative bool
 }
 
-// Entry: one item of the sheet. Section is set on the first item of a section
-// (the side panel's marks).
+// Entry: one item of the sheet. Sections: the sections this item starts, coarsest
+// first — a path ("2026", "January") or a single tag; none inside a section. The
+// side panel's marks.
 type Entry struct {
-	Guid    string
-	Section *Section
+	Guid     string
+	Sections []Section
 }
 
 // Section: a mark on the side panel. Level 0 is the coarsest (a year, a country);

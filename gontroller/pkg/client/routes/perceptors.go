@@ -25,8 +25,8 @@ type clientPerceptor struct {
 }
 
 type clientEntry struct {
-	Guid    string         `json:"guid"`
-	Section *clientSection `json:"section,omitempty"`
+	Guid     string          `json:"guid"`
+	Sections []clientSection `json:"sections,omitempty"` // started here, coarsest first
 }
 
 type clientSection struct {
@@ -38,13 +38,19 @@ type clientSection struct {
 // view)
 var perceptors []api.Perceptor
 
+// ValuesLoader: a perceptor's stored values for these items (store name, by guid)
+type ValuesLoader func(perceptor string, guids []string) (string, map[string]api.Values, error)
+
+var loadValues ValuesLoader
+
 // RegisterPerceptorsRoutes: list is what the client is given (the plugin manager
 // passes it in — config `client`; routes cannot import it, app imports client)
-func RegisterPerceptorsRoutes(e *echo.Echo, list []api.Perceptor, logger *l.Logger) {
+func RegisterPerceptorsRoutes(e *echo.Echo, list []api.Perceptor, values ValuesLoader, logger *l.Logger) {
 	if itemsProxy == nil {
 		itemsProxy = model.NewProxy(logger)
 	}
 	perceptors = list
+	loadValues = values
 	e.GET("/perceptors", getPerceptors)
 	e.GET("/p/:name/order", getOrder)
 }
@@ -76,8 +82,22 @@ func getOrder(c echo.Context) error {
 		return err
 	}
 	in := make([]api.ItemDataProvider, len(items))
+	guids := make([]string, len(items))
 	for i, it := range items {
 		in[i] = it
+		guids[i] = it.Guid
+	}
+	// The perceptor's own values ride on the items it orders
+	if loadValues != nil {
+		store, values, err := loadValues(nav.Name(), guids)
+		if err != nil {
+			return err
+		}
+		for _, it := range items {
+			if v, ok := values[it.Guid]; ok {
+				it.SetStoreValues(store, v)
+			}
+		}
 	}
 	entries, err := nav.Order(c.Request().Context(), c.QueryParam("anchor"), in)
 	if err != nil {
@@ -91,8 +111,8 @@ func getOrder(c echo.Context) error {
 	enc := json.NewEncoder(w)
 	for _, e := range entries {
 		out := clientEntry{Guid: e.Guid}
-		if e.Section != nil {
-			out.Section = &clientSection{Level: e.Section.Level, Label: e.Section.Label}
+		for _, s := range e.Sections {
+			out.Sections = append(out.Sections, clientSection{Level: s.Level, Label: s.Label})
 		}
 		if err := enc.Encode(out); err != nil {
 			return err

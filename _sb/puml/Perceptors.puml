@@ -21,7 +21,7 @@ Page -> Layout: order(saved perceptor, else date)
 Layout -> API: GET /p/:name/order?anchor=
 API -> DB: shown items (Visible, Ready)
 API -> Nav: Order(anchor, items)
-Nav --> API: entries (guid, section?)
+Nav --> API: entries (guid, sections?)
 API --> Layout: ndjson
 note over Layout: /items streams newest first,\nso photos show before the order;\nunlisted items follow it
 Layout -> LDB: items (x, y, order) + meta + sections (y)

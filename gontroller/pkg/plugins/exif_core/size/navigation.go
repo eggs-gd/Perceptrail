@@ -45,3 +45,6 @@ func megapixels(mp float64) string {
 	}
 	return fmt.Sprintf("%.1f MP", mp)
 }
+
+// Schema: nothing of its own to keep — the core's item has it
+func (p *sizePerceptor) Schema() api.Schema { return api.Schema{} }

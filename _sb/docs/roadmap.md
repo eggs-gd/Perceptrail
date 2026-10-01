@@ -1,6 +1,6 @@
 # Roadmap
 
-Status as of 2026-10-01. Details and reasons — [findings.md](findings.md).
+Status as of 2026-10-01 (PR #17). Details and reasons — [findings.md](findings.md).
 Target architecture — the diagrams in [`../puml`](../puml).
 
 ## Done
@@ -80,6 +80,15 @@ Target architecture — the diagrams in [`../puml`](../puml).
   scrolling, pinned it takes its width from them). Viewer: ← → step through the
   sheet, Escape / a click close it (to the gallery even when `/N` was opened
   directly), the gallery shows the photo it closed on.
+- Perceptor data (PR #17): a perceptor declares its data as a struct
+  (`api.NewStore[T]`, typed `Put` / `Get`); the core keeps it — SQLite, a file per
+  perceptor in `data_dir/perceptors/` (Postgres: not yet). Values are committed with
+  the item; an item a perceptor has no row for is processed again; gone items are
+  pruned after a walk. Geo is its first user: coordinates from EXIF or the Photos DB,
+  the sheet on a Hilbert curve with every city and region in one piece, sections
+  region → city from the time zone. A photo may start a path of sections; the side
+  panel's scale is by sections, √ of their photos, at every level
+  ([`Perceptor data.puml`](../puml/Perceptor%20data.puml)).
 
 ## Releases
 
@@ -218,20 +227,19 @@ Don't rush — a stable core first.
   `/items?since=` + tombstones as a fallback.
 - ML as a separate service (goMLer) per [`ML Flow.puml`](../puml/ML%20Flow.puml):
   consumes Processed Item, runs ML plugins, returns metadata.
-- Storage for perceptor data (e.g. `item_attrs(item_id, perceptor, key, value)`), so
-  a plugin writes its own data without changing `ItemDto`.
+- Perceptor data: the core keeps it, a perceptor only declares it — see "Perceptor
+  data" below.
 - Navigation is a base requirement of a perceptor (decided): every perceptor gives
   the sheet an order — no filters, the project is one endless sheet in different slices. Absolute
   ones ignore the anchor; relative ones (faces, objects, similar) build a
   **two-sided trail** from it: from the anchor to the nearest unseen photo, then the
   nearest to that, in both directions. Next:
-  - [ ] **Perceptor data storage + geo** (first: the data comes from EXIF and the
-        Photos DB, no pixels — the simplest test of the storage). Storage: a
-        perceptor writes its own values per item (`item_attrs`, or a table per
-        kind — vectors need their own) without changing `ItemDto`; `Order` reads
-        them. Geo: (lat, lon) on a Hilbert curve (one dimension that keeps near
-        places near; a plain longitude puts Krakow next to Cape Town), sections
-        country → city.
+  - [x] **Perceptor data storage + geo** (PR #17; design: "Perceptor data" below).
+        Geo keeps the coordinates (EXIF or the Photos DB's record); the sheet on a
+        Hilbert curve (a plain longitude puts Krakow next to Cape Town); sections
+        from the time zone of the place — region → city ("Europe", "Kyiv").
+  - [ ] Geo sections by country / city names (needs a geocoder dataset, e.g.
+        Natural Earth / GeoNames offline) instead of the time zone's.
   - [ ] **Colour — deterministic, no ML** (`ml_color` → `color`). Needs pixels for
         perceptors: the item's cheap preview (always a browser image — JPEG/PNG/
         WebP, so no HEIC/RAW decoding), scaled to ~32×32 (~10–20 ms per photo, once
@@ -250,8 +258,84 @@ Don't rush — a stable core first.
         sheet and changes with the perceptor.
 - UI slots (`item-panel`, `view`) — a perceptor can bring its own UI (map, face
   management).
-- `ItemGroup` processing mode (series, Live Photo, clusters, duplicates).
 - Reprocessing on plugin version change; fsnotify instead of the periodic walk.
+
+### Perceptor data (decided 2026-10-01; Single done in PR #17)
+
+Diagram: [`Perceptor data.puml`](../puml/Perceptor%20data.puml). Why not the other
+ways — findings, "Perceptor data: the core keeps it".
+
+**Per-item values (`ProcessingMode` Single) — next, with geo:**
+
+- A perceptor **declares** its data as a Go struct; the core creates, migrates and
+  maintains the storage. The plugin never sees SQL or a driver.
+  ```go
+  // a package of the plugin's own (not main): another perceptor may read it
+  type Location struct {
+      Lat float64
+      Lon float64
+  }
+
+  var Places = api.NewStore[Location]("geo", 1) // name, schema version
+
+  func (p *geoPerceptor) Schema() api.Schema { return Places.Schema() }
+
+  // the processor (Decorate): put the value on the item
+  Places.Put(in, Location{Lat: lat, Lon: lon})
+
+  // Order: read the values the core loaded for the items
+  loc, ok := Places.Get(it)
+  ```
+- **Typed API**: `Store[T]` with `Put(item, T)` / `Get(item) (T, bool)` — no string
+  keys or `any` outside `perceplib` (a `SetValue("lat", …)` was rejected: untyped and
+  too generic). Columns come from T's fields by reflection, once, at registration:
+  `float64`, `int64`, `string`, `bool`, `time.Time`, `[]float32` (a vector; its size
+  from a tag, `perceptor:"dim=512"`).
+- **Writing**: `Put` only puts the value on the item in the chain; the core commits
+  it at the end (the closer), together with the item.
+- **Reading**: the core loads the perceptor's values for the items it passes to
+  `Order` (by guid).
+- **Rows**: keyed by the item's GUID (stable across moves; Apple: the asset UUID);
+  `has = 0` records "processed, nothing found" (no GPS), so such an item is not
+  processed again on every walk. The pass (cheap / full) comes with the expensive
+  stage (see "Two stages").
+- **Kept by the core**: rows of gone items are pruned after every complete walk; a
+  changed schema (version or fields) drops the perceptor's values, and the files
+  gate processes an item again while an import perceptor has no row for it (new
+  perceptors and schema changes take one pass over the library).
+- **Physically**: SQLite — a file per perceptor, `data_dir/perceptors/<name>.db`
+  (SQLite has one writer per file: an ML perceptor writing embeddings does not block
+  the import; a perceptor's data is reset by deleting its file; no `ATTACH` — the
+  core reads by a list of guids, no cross-file joins). Postgres — one database, a
+  schema per perceptor (`perceptor_geo`): one backup, the same split.
+- **Vectors** (embeddings, colour histograms): stored as blobs; the trail's nearest
+  neighbours from an in-memory index (HNSW) built at load — later `sqlite-vec` /
+  `pgvector`. `Vector` is a kind of its own so the backend can change without the
+  plugins knowing.
+- **Reading another perceptor's data**: the struct lives in an importable package
+  of that perceptor, and a reader declares the dependency (journeys need geo).
+
+**Groups (`ProcessingMode` Group) — later, not in work yet:**
+
+- Single perceptors work photo by photo (all of today's). Group perceptors produce
+  **groups of photos with data of their own**: face clusters, album suggestions,
+  journeys (by time and place), series, duplicates.
+- Typed the same way: the group's data is a struct (a journey: title, period,
+  place); storage — a table of groups and one of "photo → group", kept by the core
+  under the same rules (deletions, schema version), in the perceptor's file / schema.
+  ```go
+  var Trips = api.NewGroups[Trip]("journey", 1)
+
+  func (p *journeyPerceptor) Group(ctx context.Context, items []api.ItemDataProvider) error {
+      // … cluster by time and place (reads geo.Places)
+      Trips.Put(Trip{…}, guids)
+  }
+  ```
+- **Not in the import chain**: a group cannot be decided one photo at a time. A pass
+  of its own over the library (or what changed) after the import — the expensive
+  queue as DB state (see "Two stages").
+- **Groups are sections**: a group perceptor's `Order` gives the sheet by its groups
+  ("Lviv, May 2025"), photos in each by time; the side panel is the list of groups.
 
 ### Core vs. perceptors
 
