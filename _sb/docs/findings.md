@@ -272,7 +272,12 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
   photos + 6 000 without: "no value" 87% → 32% of the panel. Only the top level was
   not enough: on the dev library geo has two regions ("Europe", "No place"), and Kyiv
   (3 047 photos) took the whole of Europe — the other cities sat in its first 12 px;
-  split by √ inside the region too they spread over 0–111 px. Linear within a section, so scrubbing stays smooth; the view marker gets
+  split by √ inside the region too they spread over 0–111 px.
+  Sections that start in one row (a few photos each — Sofia, Athens and the start
+  of Tirane share y = 0) have shares of their own but no height on the sheet: a
+  label is placed at its share's start (not at `toTrack(y)`, which put them all at
+  one point and the region's label at the start of the last one), marks are ordered
+  and assigned to shares by photo, not by y. Linear within a section, so scrubbing stays smooth; the view marker gets
   taller where photos are sparse. Considered next: a magnifier around the pointer
   (like the macOS Dock) for very large libraries.
 - **Every rearrangement uses the wave** (decided: the wave is the product's style). A

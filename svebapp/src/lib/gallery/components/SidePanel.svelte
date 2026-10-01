@@ -43,7 +43,7 @@
         for (const level of [0, 1, 2]) {
             for (const m of marks) {
                 if (m.level !== level) continue;
-                const at = toTrack(m.y);
+                const at = scale.markAt(m);
                 if (out.every((o) => Math.abs(o.at - at) >= MIN_GAP)) out.push({...m, at});
             }
         }

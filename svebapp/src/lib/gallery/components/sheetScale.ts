@@ -25,6 +25,12 @@ interface Segment {
 export interface SheetScale {
     toTrack(y: number): number;
     toSheet(t: number): number;
+    /**
+     * Where a section's label goes: the start of its share. Not toTrack(y): sections
+     * that start in the same row (a few photos each) share one y but have shares of
+     * their own.
+     */
+    markAt(m: SectionMark): number;
 }
 
 /** A part of the sheet: from y0 to y1, photos [o0, o1) */
@@ -41,18 +47,24 @@ interface Span {
  */
 export function sheetScale(marks: SectionMark[], height: number, count: number, track: number, minShare: number): SheetScale {
     if (!height || !track) {
-        return {toTrack: () => 0, toSheet: () => 0};
+        return {toTrack: () => 0, toSheet: () => 0, markAt: () => 0};
     }
     const byLevel = new Map<number, SectionMark[]>();
     for (const m of marks) (byLevel.get(m.level) ?? byLevel.set(m.level, []).get(m.level)!).push(m);
-    for (const list of byLevel.values()) list.sort((a, b) => a.y - b.y);
+    // By photo, not y: several sections may start in one row
+    for (const list of byLevel.values()) list.sort((a, b) => a.order - b.order);
     const deepest = Math.max(-1, ...byLevel.keys());
 
     const segments: Segment[] = [];
+    const markStart = new Map<string, number>();
+    const markKey = (m: SectionMark) => `${m.guid}:${m.level}`;
     split({y0: 0, y1: height, o0: 0, o1: count}, 0, track, 0);
     return {
+        markAt: (m) => markStart.get(markKey(m)) ?? 0,
+        // ≤: a section without height of its own (it starts and ends in one row)
+        // keeps the y at its start — y 0 is the top of the track
         toTrack(y) {
-            const s = segments.find((g) => y < g.y1) ?? segments[segments.length - 1];
+            const s = segments.find((g) => y <= g.y1) ?? segments[segments.length - 1];
             return within(Math.min(Math.max(y, s.y0), s.y1), s.y0, s.y1, s.t0, s.t1);
         },
         toSheet(p) {
@@ -67,18 +79,18 @@ export function sheetScale(marks: SectionMark[], height: number, count: number, 
             segments.push({y0: span.y0, y1: span.y1, t0, t1});
             return;
         }
-        const starts = (byLevel.get(level) ?? []).filter((m) => m.y >= span.y0 && m.y < span.y1);
+        const starts = (byLevel.get(level) ?? []).filter((m) => m.order >= span.o0 && m.order < span.o1);
         if (starts.length === 0) {
             split(span, t0, t1, level + 1);
             return;
         }
         // From one section's first photo to the next one's; a head before the first
         // mark (the rest of a parent section) is a part of its own
-        const parts: Span[] = [];
-        if (starts[0].y > span.y0) parts.push({y0: span.y0, y1: starts[0].y, o0: span.o0, o1: starts[0].order});
+        const parts: (Span & {mark?: SectionMark})[] = [];
+        if (starts[0].order > span.o0) parts.push({y0: span.y0, y1: starts[0].y, o0: span.o0, o1: starts[0].order});
         starts.forEach((m, i) => {
             const next = starts[i + 1];
-            parts.push({y0: m.y, y1: next ? next.y : span.y1, o0: m.order, o1: next ? next.order : span.o1});
+            parts.push({y0: m.y, y1: next ? next.y : span.y1, o0: m.order, o1: next ? next.order : span.o1, mark: m});
         });
 
         const room = t1 - t0;
@@ -89,6 +101,7 @@ export function sheetScale(marks: SectionMark[], height: number, count: number, 
         let t = t0;
         parts.forEach((p, i) => {
             const share = floor + (free * weights[i]) / total;
+            if (p.mark) markStart.set(markKey(p.mark), t);
             split(p, t, t + share, level + 1);
             t += share;
         });
