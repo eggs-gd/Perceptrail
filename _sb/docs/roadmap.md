@@ -209,6 +209,22 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 
 ## Deployment (first release)
 
+- [ ] **Debug / release mode in the config** (`mode: debug | release`; release in the
+      image, debug in the dev config). The server gives it to the client (with the
+      version, e.g. `GET /app`), so one client build serves both. What it switches —
+      the dev crutches found so far:
+      - server log level: always Debug today (`SetLogLevel` is commented out in
+        `main`) — every SQL statement is logged (GORM trace); release: Info, no SQL;
+      - Echo's request log (`middleware.Logger`): a JSON line per HTTP request, every
+        tile image included — debug only;
+      - `fswalker`: several Info lines per file (see "Core — service");
+      - client: the 1 px green border around every tile (`Gallery.svelte`);
+      - client logger without levels: every debug / info goes to the console (worker
+        `Inited`, `relayout` per resize, `Task result`, `Rest data saved`) — release:
+        warnings and errors;
+      - client: "Can't render item N: guid" shown on a tile — release: a neutral
+        placeholder.
+
 - [ ] Dockerfile (with 0.2.0): CGO (sqlite, libvips), jellyfin-ffmpeg, exiftool from a
       `dist-*` release, fix `CMD` (`--config /data/config.yml`, `/data` as a volume =
       what `.var/` is in dev). A base compose that runs anywhere (software encoding)
