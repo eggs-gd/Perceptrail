@@ -261,9 +261,13 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
   place) took two thirds of the panel and the real places' labels did not fit. A
   fixed small share for it (10%) was rejected — it flips the problem: two thirds of
   the library in a tenth of the scale. Now every coarsest section gets a share by √
-  of its photo count (and room for its label when that fits); "no value" is not
-  special, just big. 30 places × 30 photos + 6 000 without: "no value" 87% → 32% of
-  the panel. Linear within a section, so scrubbing stays smooth; the view marker gets
+  of its photo count (and room for its label when that fits), **at every level**:
+  the sections share their parent's part of the track the same way (years, then
+  months; regions, then cities). "no value" is not special, just big. 30 places × 30
+  photos + 6 000 without: "no value" 87% → 32% of the panel. Only the top level was
+  not enough: on the dev library geo has two regions ("Europe", "No place"), and Kyiv
+  (3 047 photos) took the whole of Europe — the other cities sat in its first 12 px;
+  split by √ inside the region too they spread over 0–111 px. Linear within a section, so scrubbing stays smooth; the view marker gets
   taller where photos are sparse. Considered next: a magnifier around the pointer
   (like the macOS Dock) for very large libraries.
 - **Every rearrangement uses the wave** (decided: the wave is the product's style). A
