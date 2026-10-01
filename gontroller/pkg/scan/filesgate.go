@@ -42,7 +42,7 @@ func (g *filesGate) Decorate(in flow.FileGroup) (flow.FileGroup, error) {
 	out, err := g.pass(in.Files, in.Key, in.MetaHash)
 	if err == nil {
 		out.Key, out.Show = in.Key, stored(in.Show, out.Files)
-		out.Meta, out.MetaHash = in.Meta, in.MetaHash
+		out.Meta, out.MetaHash, out.Kind = in.Meta, in.MetaHash, in.Kind
 		g.progress.passed()
 	}
 	if in.Done != nil {

@@ -79,15 +79,17 @@ func dms(v float64, pos, neg string) string {
 	return fmt.Sprintf("%.0f deg %.0f' %.2f\" %s", d, m, s, dir)
 }
 
-// hashRecord: changes when the DB metadata changes (a date corrected in Photos),
-// so the gate processes a group whose files did not change
-func hashRecord(r api.RawExif) string {
+// hashRecord: changes when the DB metadata changes (a date corrected in Photos,
+// live switched off), so the gate processes a group whose files did not change
+func hashRecord(r api.RawExif, kind string) string {
 	keys := make([]string, 0, len(r))
 	for k := range r {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 	h := sha256.New()
+	h.Write([]byte(kind))
+	h.Write([]byte{0})
 	for _, k := range keys {
 		h.Write([]byte(k))
 		h.Write([]byte{0})

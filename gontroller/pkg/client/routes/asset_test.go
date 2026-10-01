@@ -57,6 +57,30 @@ func TestClientAssetByRoles(t *testing.T) {
 	}
 }
 
+// The kind: the source's word first (an Apple Live Photo's original is its video),
+// else by the roles
+func TestClientAssetKind(t *testing.T) {
+	file := func(role, mime string) *dto.FileDto {
+		f := &dto.FileDto{Role: role}
+		f.MimeType = mime
+		return f
+	}
+	for _, c := range []struct {
+		name, stored string
+		files        []*dto.FileDto
+		want         string
+	}{
+		{"photo", "", []*dto.FileDto{file(dto.RoleOriginal, "image/heic")}, dto.KindPhoto},
+		{"generic live", "", []*dto.FileDto{file(dto.RoleOriginal, "image/heic"), file(dto.RoleMotion, "video/quicktime")}, dto.KindLive},
+		{"video", "", []*dto.FileDto{file(dto.RoleOriginal, "video/mp4"), file(dto.RoleStill, "image/jpeg")}, dto.KindVideo},
+		{"apple live", dto.KindLive, []*dto.FileDto{file(dto.RoleOriginal, "video/quicktime"), file(dto.RoleStill, "image/heic")}, dto.KindLive},
+	} {
+		if got := toClientAsset(&dto.ItemDto{Guid: "G", Kind: c.stored}, c.files).Kind; got != c.want {
+			t.Errorf("%s: %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
 // A file is served only for its own asset
 func TestAssetFileOnlyOfItsAsset(t *testing.T) {
 	dir := t.TempDir()

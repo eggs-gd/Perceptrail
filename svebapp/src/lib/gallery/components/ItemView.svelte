@@ -5,6 +5,7 @@
     import Video from "./Video.svelte";
     import Picture from "./Picture.svelte";
     import Motion from "./Motion.svelte";
+    import KindBadge from "./KindBadge.svelte";
     import {assetUrl, fallbackImage, hasImage, originalViewable, playableVideos} from "./asset";
 
     interface Props {
@@ -43,6 +44,9 @@
         <Picture {asset} {sizes} alt={item.guid} width={item.width} height={item.height}/>
         {#if mode === 'tile' && hovered && hasMotion}
             <div class="motion"><Motion {asset}/></div>
+        {:else if mode === 'tile' && asset.kind}
+            <!-- What moves is marked; the mark steps aside while it moves -->
+            <KindBadge kind={asset.kind}/>
         {/if}
         {#if mode === 'view' && asset.original}
             <!-- The browser opens what it can show (HEIC in Safari); the rest downloads -->

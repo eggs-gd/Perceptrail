@@ -232,6 +232,15 @@ compose with `derived`. The current message protocol is a deviation from this de
 - Hover: a playable video, else Apple's video frames as a flip-book — turned by an
   attachment on the `<img>` (no component state per frame). Viewer: `sizes=100vw`,
   "Original" opens what the browser shows and downloads the rest (HEIC in Chrome).
+- **The asset's kind (photo / live / video) marks moving tiles** (2026-10-01). Roles
+  cannot tell an Apple Live Photo from a video: in both the original is the `.mov`
+  (the source) and a photo is a still. The Photos DB says it: `ZKIND` 1 = video,
+  `ZPLAYBACKSTYLE` 3 = a Live Photo with live on (`ZKINDSUBTYPE` 2 with style 1 =
+  live switched off: a still in Photos). The real library: 351 live, 766 videos.
+  `ZKINDSUBTYPE` 101 is not slo-mo here (Android screen recordings carry it), 103
+  = screen recording — not used. Stored on the item (`Kind`) from a keyed source
+  and in the meta hash (the gate reprocesses Apple assets once); generic items get
+  it from the roles in the API (a video original = video, motion = live).
 - **Blank tiles were `loading="lazy"`**, measured on the real library: the gallery
   renders a window with a margin (1 viewport above, 2 below) exactly so images load
   before they scroll in — lazy loading held that margin back. A scroll pass: 37

@@ -10,7 +10,11 @@ export interface Rendition {
 }
 
 /** Every file of an asset, by role: the client decides what to show when */
+export type AssetKind = 'photo' | 'live' | 'video';
+
 export interface Asset {
+    /** What the asset is: the tile marks the moving ones */
+    kind: AssetKind;
     /** The source; may not be viewable (HEIC, RAW, HEVC). null: not local (iCloud) */
     original: Rendition | null;
     /** The user's edit, smallest first */

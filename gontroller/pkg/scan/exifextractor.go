@@ -47,7 +47,7 @@ func NewExifExtractor(count int, pool *exiftoolPool, chin <-chan flow.FileGroup,
 // Exif: exiftool returned nothing). The item itself comes from the validator.
 func (e *exifExtractor) Decorate(g flow.FileGroup) (*flow.RawItem, error) {
 	files := g.Files
-	out := &flow.RawItem{Files: files, Exif: make([]api.RawExif, len(files)), Key: g.Key, Show: g.Show, Meta: g.Meta, MetaHash: g.MetaHash}
+	out := &flow.RawItem{Files: files, Exif: make([]api.RawExif, len(files)), Key: g.Key, Show: g.Show, Meta: g.Meta, MetaHash: g.MetaHash, Kind: g.Kind}
 	found := false
 	for i, f := range files {
 		if g.Key != "" && i > 0 {

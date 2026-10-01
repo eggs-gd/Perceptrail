@@ -37,7 +37,9 @@ type FileGroup struct {
 	// EXIF; MetaHash tells the gate it changed while the files did not
 	Meta     api.RawExif
 	MetaHash string
-	Done     *WalkResult
+	// What the asset is (dto.Kind*), when the source says it
+	Kind string
+	Done *WalkResult
 	// With the marker: files the grouper saw but held back (their group did not
 	// complete in this walk) — not "gone" for the deletions
 	Held []string
@@ -81,6 +83,7 @@ type RawItem struct {
 	Show     []*dto.FileDto // FileGroup.Show
 	Meta     api.RawExif    // FileGroup.Meta: GetExif reads it first
 	MetaHash string
+	Kind     string // FileGroup.Kind
 }
 
 // IsMedia: there is something to show — the main file; in a keyed group any file

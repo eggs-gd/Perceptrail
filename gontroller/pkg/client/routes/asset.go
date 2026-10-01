@@ -8,6 +8,7 @@ import (
 	_ "image/png"
 	"os"
 	"sort"
+	"strings"
 
 	"perceptrail/gontroller/pkg/model/dto"
 
@@ -28,6 +29,7 @@ type rendition struct {
 }
 
 type clientAsset struct {
+	Kind string `json:"kind"` // photo, live, video: the tile marks moving ones
 	// The source; may not be viewable (HEIC, RAW, HEVC). A video original is the
 	// asset's motion too.
 	Original *rendition  `json:"original"`
@@ -71,7 +73,22 @@ func toClientAsset(item *dto.ItemDto, files []*dto.FileDto) clientAsset {
 	}
 	bySize(a.Edit)
 	bySize(a.Stills)
+	a.Kind = assetKind(item, a)
 	return a
+}
+
+// assetKind: what the source said (Apple Photos), else by the roles — a video
+// original is a video, a photo with motion is a Live Photo
+func assetKind(item *dto.ItemDto, a clientAsset) string {
+	switch {
+	case item.Kind != "":
+		return item.Kind
+	case a.Original != nil && strings.HasPrefix(a.Original.Mime, "video/"):
+		return dto.KindVideo
+	case len(a.Motion) > 0:
+		return dto.KindLive
+	}
+	return dto.KindPhoto
 }
 
 func headerSize(path string) (int, int) {

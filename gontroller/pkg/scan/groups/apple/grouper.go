@@ -121,6 +121,7 @@ type asset struct {
 	uuid     string
 	meta     api.RawExif // the DB's metadata (wins over the files' EXIF)
 	metaHash string
+	kind     string      // dto.Kind*
 	files    []candidate // on disk at load time, in group order: the main file first
 	show     []string    // what to show first, best first
 	arrived  map[string]*dto.FileDto
@@ -133,7 +134,7 @@ type candidate struct {
 }
 
 func (a *asset) group() flow.FileGroup {
-	g := flow.FileGroup{Key: a.uuid, Meta: a.meta, MetaHash: a.metaHash}
+	g := flow.FileGroup{Key: a.uuid, Meta: a.meta, MetaHash: a.metaHash, Kind: a.kind}
 	for _, c := range a.files {
 		f := a.arrived[c.path]
 		f.Role = c.role.fileRole()
@@ -235,7 +236,8 @@ func loadLibrary(root string) (*library, error) {
 			continue
 		}
 		meta := r.meta.record()
-		a := &asset{uuid: r.uuid, arrived: map[string]*dto.FileDto{}, meta: meta, metaHash: hashRecord(meta)}
+		a := &asset{uuid: r.uuid, arrived: map[string]*dto.FileDto{}, meta: meta, kind: r.kind(),
+			metaHash: hashRecord(meta, r.kind())}
 		byRole := map[role]string{}
 		for _, c := range candidates(root, r.uuid, r.dir, r.filename) {
 			if info, err := os.Stat(c.path); err == nil && !info.IsDir() {
@@ -264,6 +266,19 @@ type assetRow struct {
 	uuid, dir, filename string
 	trashed, hidden     bool
 	meta                assetMeta
+	// ZKIND: 0 photo, 1 video; ZPLAYBACKSTYLE: 3 a Live Photo (live on). A Live
+	// Photo with live switched off is a still in Photos (ZKINDSUBTYPE 2, style 1).
+	zkind, playback int
+}
+
+func (r assetRow) kind() string {
+	switch {
+	case r.zkind == 1:
+		return dto.KindVideo
+	case r.playback == 3:
+		return dto.KindLive
+	}
+	return dto.KindPhoto
 }
 
 func readAssets(root string) ([]assetRow, error) {
@@ -289,7 +304,7 @@ func readAssets(root string) ([]assetRow, error) {
 	// CAST: ZDATECREATED is declared TIMESTAMP; a whole-second value is stored as an
 	// integer, which the driver would turn into a time.Time
 	rs, err := db.Query(`SELECT a.ZUUID, ifnull(a.ZDIRECTORY,''), ifnull(a.ZFILENAME,''),
-		ifnull(a.ZTRASHEDSTATE,0), ifnull(a.ZHIDDEN,0),
+		ifnull(a.ZTRASHEDSTATE,0), ifnull(a.ZHIDDEN,0), ifnull(a.ZKIND,0), ifnull(a.ZPLAYBACKSTYLE,0),
 		CAST(a.ZDATECREATED AS REAL), a.ZWIDTH, a.ZHEIGHT, a.ZLATITUDE, a.ZLONGITUDE, x.ZTIMEZONEOFFSET
 		FROM ZASSET a LEFT JOIN ZADDITIONALASSETATTRIBUTES x ON x.ZASSET = a.Z_PK`)
 	if err != nil {
@@ -301,7 +316,7 @@ func readAssets(root string) ([]assetRow, error) {
 		var r assetRow
 		var trashed, hidden int
 		m := &r.meta
-		if err := rs.Scan(&r.uuid, &r.dir, &r.filename, &trashed, &hidden,
+		if err := rs.Scan(&r.uuid, &r.dir, &r.filename, &trashed, &hidden, &r.zkind, &r.playback,
 			&m.created, &m.width, &m.height, &m.lat, &m.lon, &m.tzOffset); err != nil {
 			return nil, err
 		}

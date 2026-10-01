@@ -27,6 +27,7 @@ const (
 type fixtureAsset struct {
 	uuid, dir, filename string
 	trashed             bool
+	zkind, playback     int
 	files               []string // relative to the bundle
 }
 
@@ -45,7 +46,7 @@ func makeLibrary(t *testing.T, root string, assets []fixtureAsset) string {
 	defer db.Close()
 	if _, err := db.Exec(`CREATE TABLE ZASSET (Z_PK INTEGER PRIMARY KEY, ZUUID VARCHAR,
 		ZDIRECTORY VARCHAR, ZFILENAME VARCHAR, ZTRASHEDSTATE INTEGER, ZHIDDEN INTEGER,
-		ZDATECREATED TIMESTAMP, ZWIDTH INTEGER, ZHEIGHT INTEGER, ZLATITUDE FLOAT, ZLONGITUDE FLOAT);
+		ZKIND INTEGER, ZPLAYBACKSTYLE INTEGER, ZDATECREATED TIMESTAMP, ZWIDTH INTEGER, ZHEIGHT INTEGER, ZLATITUDE FLOAT, ZLONGITUDE FLOAT);
 		CREATE TABLE ZADDITIONALASSETATTRIBUTES (Z_PK INTEGER PRIMARY KEY, ZASSET INTEGER,
 		ZTIMEZONEOFFSET INTEGER)`); err != nil {
 		t.Fatal(err)
@@ -55,9 +56,9 @@ func makeLibrary(t *testing.T, root string, assets []fixtureAsset) string {
 		if a.trashed {
 			tr = 1
 		}
-		res, err := db.Exec(`INSERT INTO ZASSET (ZUUID, ZDIRECTORY, ZFILENAME, ZTRASHEDSTATE, ZHIDDEN,
-			ZDATECREATED, ZWIDTH, ZHEIGHT, ZLATITUDE, ZLONGITUDE) VALUES (?,?,?,?,0, 758992569.5, 3024, 4032, 50.4293, -30.5381)`,
-			a.uuid, a.dir, a.filename, tr)
+		res, err := db.Exec(`INSERT INTO ZASSET (ZUUID, ZDIRECTORY, ZFILENAME, ZTRASHEDSTATE, ZHIDDEN, ZKIND, ZPLAYBACKSTYLE,
+			ZDATECREATED, ZWIDTH, ZHEIGHT, ZLATITUDE, ZLONGITUDE) VALUES (?,?,?,?,0,?,?, 758992569.5, 3024, 4032, 50.4293, -30.5381)`,
+			a.uuid, a.dir, a.filename, tr, a.zkind, a.playback)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -96,7 +97,7 @@ func fixture() []fixtureAsset {
 			"resources/derivatives/B/" + cloudOnly + "_1_105_c.jpeg",
 			"resources/derivatives/masters/B/" + cloudOnly + "_4_5005_c.jpeg",
 		}},
-		{uuid: live, dir: "C", filename: live + ".heic", files: []string{
+		{uuid: live, dir: "C", filename: live + ".heic", playback: 3, files: []string{
 			"originals/C/" + live + ".heic",
 			"originals/C/" + live + "_3.mov",
 			"resources/derivatives/C/" + live + "_1_102_o.jpeg",
@@ -233,6 +234,12 @@ func TestMetaRecord(t *testing.T) {
 	}
 	if groups[edited].MetaHash == "" {
 		t.Error("no meta hash")
+	}
+	if k := groups[edited].Kind; k != dto.KindPhoto {
+		t.Errorf("edited: kind %q, want photo", k)
+	}
+	if k := groups[live].Kind; k != dto.KindLive {
+		t.Errorf("live: kind %q, want live", k)
 	}
 }
 
