@@ -217,6 +217,11 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 
 ## Frontend
 
+- [ ] Side panel: the first section of a deeper level (the first month of a year, the
+      first city of a region) sits at the same point as its parent's label — shown
+      only in the tip. Show it next to / under the parent's label.
+- [ ] Side panel during the sync after a reload: the marks come in as the photos are
+      placed, so for a while some are missing.
 - [ ] Optimal (Dijkstra) layout for an already loaded gallery — optional.
 
 ## Later: the perceptor platform
