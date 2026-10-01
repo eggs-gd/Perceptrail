@@ -1,6 +1,8 @@
 <script lang="ts">
     import ItemView from "$lib/gallery/components/ItemView.svelte";
     import ViewerTools from "$lib/gallery/components/ViewerTools.svelte";
+    import InfoPanel from "$lib/gallery/components/InfoPanel.svelte";
+    import {toggleViewerPref, viewerPrefs} from "$lib/gallery/components/viewerPrefs.svelte";
     import {photoHref, viewHref} from "$lib/gallery/perceptors.svelte";
     import {page} from '$app/state';
     import {goto} from '$app/navigation';
@@ -26,6 +28,18 @@
     });
     let item = $derived(itemQuery.current);
     let index = $derived(item?.order ?? 0);
+
+    // The info panel: opened by its button, or kept open (pinned) photo to photo
+    let infoOpen = $state(false);
+    let showInfo = $derived(infoOpen || viewerPrefs.infoPinned);
+    function toggleInfo() {
+        if (showInfo) {
+            infoOpen = false;
+            if (viewerPrefs.infoPinned) toggleViewerPref('infoPinned');
+        } else {
+            infoOpen = true;
+        }
+    }
 
     // The Original switch is per item: the next one opens with its preview again
     let originalFor = $state<string | null>(null);
@@ -110,7 +124,11 @@
 {#if item?.asset}
     <ViewerTools asset={item.asset} {showOriginal}
                  ontoggleoriginal={() => (originalFor = showOriginal ? null : item!.guid)}
-                 onperceptor={pickView}/>
+                 onperceptor={pickView}
+                 infoOpen={showInfo} ontoggleinfo={toggleInfo}/>
+{/if}
+{#if showInfo}
+    <InfoPanel {guid} asset={item?.asset} onclose={toggleInfo}/>
 {/if}
 
 <style>

@@ -65,6 +65,7 @@ func RegisterPerceptorsRoutes(e *echo.Echo, list []api.Perceptor, values ValuesL
 	loadValues = values
 	e.GET("/perceptors", getPerceptors)
 	e.GET("/p/:view/order", getOrder)
+	e.GET("/items/:guid/info", getInfo)
 }
 
 func getPerceptors(c echo.Context) error {
@@ -131,6 +132,50 @@ func getOrder(c echo.Context) error {
 		}
 	}
 	return nil
+}
+
+type clientInfo struct {
+	Slug  string       `json:"slug"`
+	Title string       `json:"title"`
+	Icon  string       `json:"icon"`
+	Facts []clientFact `json:"facts"`
+}
+
+type clientFact struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+// getInfo: what every perceptor knows about one item (the viewer's info panel), each
+// with its own values loaded; a perceptor that says nothing is left out
+func getInfo(c echo.Context) error {
+	item, err := itemsProxy.GetItemByGuid(c.Param("guid"))
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound)
+	}
+	out := []clientInfo{}
+	for _, p := range perceptors {
+		if loadValues != nil {
+			store, values, err := loadValues(p.Name(), []string{item.Guid})
+			if err != nil {
+				return err
+			}
+			if v, ok := values[item.Guid]; ok {
+				item.SetStoreValues(store, v)
+			}
+		}
+		facts := p.Info(item)
+		if len(facts) == 0 {
+			continue
+		}
+		v := p.View()
+		info := clientInfo{Slug: v.Slug, Title: v.Title, Icon: v.Icon}
+		for _, f := range facts {
+			info.Facts = append(info.Facts, clientFact{Label: f.Label, Value: f.Value})
+		}
+		out = append(out, info)
+	}
+	return c.JSON(http.StatusOK, out)
 }
 
 // shownStates: what the client is shown (see shown)

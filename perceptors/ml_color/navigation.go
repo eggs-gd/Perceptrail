@@ -35,3 +35,6 @@ func (p *colorPerceptor) Order(ctx context.Context, _ string, items []api.ItemDa
 
 // Schema: nothing kept yet (the processor is a stub)
 func (p *colorPerceptor) Schema() api.Schema { return api.Schema{} }
+
+// Info: nothing yet (nothing is analysed)
+func (p *colorPerceptor) Info(api.ItemDataProvider) []api.Fact { return nil }

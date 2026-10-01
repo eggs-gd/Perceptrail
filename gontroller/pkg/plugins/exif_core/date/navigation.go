@@ -75,3 +75,12 @@ func (p *datePerceptor) Order(ctx context.Context, _ string, items []api.ItemDat
 
 // Schema: nothing of its own to keep — the core's item has it
 func (p *datePerceptor) Schema() api.Schema { return api.Schema{} }
+
+// Info: when the photo was taken, in the zone of the shot
+func (p *datePerceptor) Info(item api.ItemDataProvider) []api.Fact {
+	at := item.GetDate()
+	if at.IsZero() {
+		return []api.Fact{{Label: "Taken", Value: "unknown"}}
+	}
+	return []api.Fact{{Label: "Taken", Value: at.Format("2 Jan 2006, 15:04 -07:00")}}
+}

@@ -96,3 +96,29 @@ func TestPerceptorsSlugTaken(t *testing.T) {
 		t.Errorf("views %+v, want date once, then size", views)
 	}
 }
+
+// The info panel: what each perceptor knows about one item; one that says nothing is
+// left out (Size: an item without a size)
+func TestPerceptorsInfo(t *testing.T) {
+	e := echo.New()
+	RegisterPerceptorsRoutes(e, []api.Perceptor{date.Perceptor, size.Perceptor}, nil,
+		l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	at, _ := time.Parse(time.RFC3339, "2025-09-14T05:00:00Z")
+	if _, err := itemsProxy.UpdateItem(&dto.ItemDto{Guid: "info-1", State: dto.Visible, Date: at, DateSource: "tag", DateOffset: 180}); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/items/info-1/info", nil))
+	var info []clientInfo
+	if err := json.Unmarshal(rec.Body.Bytes(), &info); err != nil {
+		t.Fatal(err)
+	}
+	if len(info) != 1 || info[0].Slug != "date" || info[0].Facts[0].Value != "14 Sep 2025, 08:00 +03:00" {
+		t.Errorf("info %+v, want the date only, in the shot's zone", info)
+	}
+	rec = httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/items/nope/info", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("unknown item: %d", rec.Code)
+	}
+}

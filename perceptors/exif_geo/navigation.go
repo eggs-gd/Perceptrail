@@ -3,6 +3,7 @@ package main
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -164,4 +165,22 @@ func splitZone(zone string) (region, city string) {
 		return zone, ""
 	}
 	return parts[0], strings.ReplaceAll(parts[len(parts)-1], "_", " ")
+}
+
+// Info: where the photo was taken — the place (from the time zone there) and the
+// coordinates
+func (p *geoPerceptor) Info(item api.ItemDataProvider) []api.Fact {
+	loc, ok := places.Places.Get(item)
+	if !ok {
+		return []api.Fact{{Label: "Place", Value: "unknown"}}
+	}
+	region, city := splitZone(zoneName(loc))
+	place := region
+	if city != "" {
+		place = city + ", " + region
+	}
+	return []api.Fact{
+		{Label: "Place", Value: place},
+		{Label: "Coordinates", Value: fmt.Sprintf("%.5f, %.5f", loc.Lat, loc.Lon)},
+	}
 }

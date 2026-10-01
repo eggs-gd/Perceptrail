@@ -25,6 +25,12 @@ type View struct {
 	Relative bool
 }
 
+// Fact: one line of the viewer's info panel — "Taken: 14 Sep 2025, 08:00 +03:00"
+type Fact struct {
+	Label string
+	Value string
+}
+
 // Entry: one item of the sheet. Sections: the sections this item starts, coarsest
 // first — a path ("2026", "January") or a single tag; none inside a section. The
 // side panel's marks.

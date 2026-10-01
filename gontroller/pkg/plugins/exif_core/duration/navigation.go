@@ -47,3 +47,13 @@ func length(seconds float64) string {
 
 // Schema: nothing of its own to keep — the core's item has it
 func (p *durationPerceptor) Schema() api.Schema { return api.Schema{} }
+
+// Info: a video's length (m:ss)
+func (p *durationPerceptor) Info(item api.ItemDataProvider) []api.Fact {
+	d := item.GetDuration()
+	if d <= 0 {
+		return nil
+	}
+	s := int(d + 0.5)
+	return []api.Fact{{Label: "Length", Value: fmt.Sprintf("%d:%02d", s/60, s%60)}}
+}

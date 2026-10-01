@@ -53,6 +53,8 @@ packages — see [findings](../_sb/docs/findings.md#go-plugins-2026-09-28).
 |---|---|---|
 | GET | `/items` | All shown items as an NDJSON stream, newest first (`id, guid, date, mimeType, width, height, asset`; `width/height` is the reduced aspect ratio) |
 | GET | `/perceptors` | The perceptors given to the client (config `perceptors.<name>.client`): `slug (the view in URLs), title, icon (SVG), help, relative` — a button each |
+| GET | `/items/:guid/info` | What each perceptor knows about the item (the viewer's info panel): `[{slug, title, icon, facts: [{label, value}]}]` |
+| GET | `/app` | The server's `version` and `mode` (debug / release) |
 | GET | `/p/:view/order?anchor=` | The sheet in that perceptor's order, NDJSON `{guid, sections?: [{level, label}]}` — the sections this photo starts, coarsest first (a path or one tag) |
 | GET | `/assets/:guid` | The original file of an item |
 

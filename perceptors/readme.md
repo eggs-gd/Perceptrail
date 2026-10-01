@@ -45,6 +45,9 @@ func main() {}
   `data_dir/perceptors/<store>.db`). Put T in a package of its own so other
   perceptors can read it (see `exif_geo/places`). The plugin's dependencies must match
   the host's versions exactly (`go list -m all` in both).
+- `Info(item)`: what the perceptor knows about one item, for the viewer's info panel —
+  facts `{Label, Value}` (its stored values are loaded, as for `Order`); none: it says
+  nothing about this item.
 - `View` + `Order`: **navigation is a base requirement** — the perceptor's button in
   the gallery (title, an SVG icon drawn as a mask, help) and every item in its order
   (`items` come newest first), with sections for the side panel. Absolute (date,

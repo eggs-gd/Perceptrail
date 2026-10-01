@@ -37,6 +37,9 @@ type Perceptor interface {
 	// Schema: what the perceptor keeps per item (a Store[T]'s Schema); the zero
 	// Schema keeps nothing
 	Schema() Schema
+	// Info: what the perceptor knows about one item, for the viewer's info panel
+	// (its values loaded, as for Order); none: the perceptor says nothing about it
+	Info(item ItemDataProvider) []Fact
 	// Order: every item of items (they come newest first), in sheet order. anchor:
 	// the item the user is at ("" for none) — a relative perceptor starts from it.
 	Order(ctx context.Context, anchor string, items []ItemDataProvider) ([]Entry, error)

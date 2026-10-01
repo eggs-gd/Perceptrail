@@ -49,3 +49,12 @@ func megapixels(mp float64) string {
 
 // Schema: nothing of its own to keep — the core's item has it
 func (p *sizePerceptor) Schema() api.Schema { return api.Schema{} }
+
+// Info: the size in pixels and megapixels
+func (p *sizePerceptor) Info(item api.ItemDataProvider) []api.Fact {
+	s := item.GetSize()
+	if s.W == 0 || s.H == 0 {
+		return nil
+	}
+	return []api.Fact{{Label: "Size", Value: fmt.Sprintf("%d × %d, %.1f MP", s.W, s.H, float64(s.W)*float64(s.H)/1e6)}}
+}
