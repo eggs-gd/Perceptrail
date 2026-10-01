@@ -26,6 +26,7 @@ type assetMeta struct {
 	width, height sql.NullInt64   // ZASSET.ZWIDTH/ZHEIGHT: already oriented
 	lat, lon      sql.NullFloat64 // ZASSET.ZLATITUDE/ZLONGITUDE: -180 = none
 	tzOffset      sql.NullInt64   // ZADDITIONALASSETATTRIBUTES.ZTIMEZONEOFFSET, seconds east
+	duration      sql.NullFloat64 // ZASSET.ZDURATION, seconds: a video (a cloud-only one too)
 }
 
 // record: the asset's metadata as exiftool would print it (-s2, no groups)
@@ -55,6 +56,9 @@ func (m assetMeta) record() api.RawExif {
 	if m.lat.Valid && m.lon.Valid && m.lat.Float64 != -180 && m.lon.Float64 != -180 {
 		r["GPSLatitude"] = []byte(dms(m.lat.Float64, "N", "S"))
 		r["GPSLongitude"] = []byte(dms(m.lon.Float64, "E", "W"))
+	}
+	if m.duration.Float64 > 0 {
+		r["Duration"] = []byte(fmt.Sprintf("%.2f s", m.duration.Float64))
 	}
 	return r
 }

@@ -46,7 +46,7 @@
             <div class="motion"><Motion {asset}/></div>
         {:else if mode === 'tile' && asset.kind}
             <!-- What moves is marked; the mark steps aside while it moves -->
-            <KindBadge kind={asset.kind}/>
+            <KindBadge {asset}/>
         {/if}
         {#if mode === 'view' && asset.original}
             <!-- The browser opens what it can show (HEIC in Safari); the rest downloads -->

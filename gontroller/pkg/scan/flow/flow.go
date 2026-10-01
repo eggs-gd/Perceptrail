@@ -156,6 +156,10 @@ func (r *RawItem) SetDateInfo(date time.Time, source, zone string) {
 	r.Item.DateZone = zone
 }
 
+func (r *RawItem) SetDuration(seconds float64) {
+	r.Item.Duration = seconds
+}
+
 func (r *RawItem) SetSize(size api.Size) {
 	r.Item.Size = size
 }

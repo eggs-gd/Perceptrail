@@ -29,7 +29,8 @@ type rendition struct {
 }
 
 type clientAsset struct {
-	Kind string `json:"kind"` // photo, live, video: the tile marks moving ones
+	Kind     string  `json:"kind"`               // photo, live, video: the tile marks moving ones
+	Duration float64 `json:"duration,omitempty"` // a video's length, seconds
 	// The source; may not be viewable (HEIC, RAW, HEVC). A video original is the
 	// asset's motion too.
 	Original *rendition  `json:"original"`
@@ -73,7 +74,7 @@ func toClientAsset(item *dto.ItemDto, files []*dto.FileDto) clientAsset {
 	}
 	bySize(a.Edit)
 	bySize(a.Stills)
-	a.Kind = assetKind(item, a)
+	a.Kind, a.Duration = assetKind(item, a), item.Duration
 	return a
 }
 

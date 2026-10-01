@@ -70,6 +70,22 @@ export function videoSources(asset: Asset): VideoSource[] {
     return videos.map((r) => ({src: assetUrl(r), type: videoType(r)}));
 }
 
+/**
+ * Is the asset's video here (its motion, or a video original) — not only in the
+ * cloud (an iCloud library keeps just stills and a few frames of it)
+ */
+export function hasLocalVideo(asset: Asset): boolean {
+    return asset.motion.length > 0 || !!asset.original?.mime.startsWith('video/');
+}
+
+/** 24 → 0:24, 83 → 1:23, 3723 → 1:02:03 */
+export function formatDuration(seconds: number): string {
+    const s = Math.round(seconds);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60;
+    return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
+}
+
 /** Only the videos this browser says it can play (none on the server) */
 export function playableVideos(asset: Asset): VideoSource[] {
     if (typeof document === 'undefined') return [];

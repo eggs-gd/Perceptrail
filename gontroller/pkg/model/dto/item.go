@@ -49,6 +49,8 @@ type ItemDto struct {
 	PreviewMime string
 	// Hash of the source's own metadata (Apple Photos DB) this item was built from
 	MetaHash string
+	// A video's length, seconds; 0: not a video or unknown
+	Duration float64
 	// What the asset is (Kind*) when the source says it (Apple Photos); "": the
 	// client API derives it from the roles of the files
 	Kind string

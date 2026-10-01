@@ -15,6 +15,8 @@ export type AssetKind = 'photo' | 'live' | 'video';
 export interface Asset {
     /** What the asset is: the tile marks the moving ones */
     kind: AssetKind;
+    /** A video's length, seconds */
+    duration?: number;
     /** The source; may not be viewable (HEIC, RAW, HEVC). null: not local (iCloud) */
     original: Rendition | null;
     /** The user's edit, smallest first */

@@ -241,6 +241,13 @@ compose with `derived`. The current message protocol is a deviation from this de
   = screen recording — not used. Stored on the item (`Kind`) from a keyed source
   and in the meta hash (the gate reprocesses Apple assets once); generic items get
   it from the roles in the API (a video original = video, motion = live).
+- **Most videos of an iCloud library are not local** (2026-10-01): 766 of 770 —
+  the `.mov` is only in iCloud; Photos keeps stills and 0–10 scrubbing frames
+  (`cvt/`), so hover shows a flip-book or nothing and the viewer plays nothing; a
+  transcode has no source. The tile marks it (a cloud next to the kind) and shows
+  the length (`ZDURATION`, written to the meta record as exiftool's `Duration`; the
+  core `exif_duration` plugin reads it for every source). A real video needs
+  "Download Originals" in Photos, or a macOS helper (backlog).
 - **Blank tiles were `loading="lazy"`**, measured on the real library: the gallery
   renders a window with a margin (1 viewport above, 2 below) exactly so images load
   before they scroll in — lazy loading held that margin back. A scroll pass: 37

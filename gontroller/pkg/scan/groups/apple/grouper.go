@@ -305,7 +305,7 @@ func readAssets(root string) ([]assetRow, error) {
 	// integer, which the driver would turn into a time.Time
 	rs, err := db.Query(`SELECT a.ZUUID, ifnull(a.ZDIRECTORY,''), ifnull(a.ZFILENAME,''),
 		ifnull(a.ZTRASHEDSTATE,0), ifnull(a.ZHIDDEN,0), ifnull(a.ZKIND,0), ifnull(a.ZPLAYBACKSTYLE,0),
-		CAST(a.ZDATECREATED AS REAL), a.ZWIDTH, a.ZHEIGHT, a.ZLATITUDE, a.ZLONGITUDE, x.ZTIMEZONEOFFSET
+		CAST(a.ZDATECREATED AS REAL), a.ZWIDTH, a.ZHEIGHT, a.ZLATITUDE, a.ZLONGITUDE, x.ZTIMEZONEOFFSET, a.ZDURATION
 		FROM ZASSET a LEFT JOIN ZADDITIONALASSETATTRIBUTES x ON x.ZASSET = a.Z_PK`)
 	if err != nil {
 		return nil, err
@@ -317,7 +317,7 @@ func readAssets(root string) ([]assetRow, error) {
 		var trashed, hidden int
 		m := &r.meta
 		if err := rs.Scan(&r.uuid, &r.dir, &r.filename, &trashed, &hidden, &r.zkind, &r.playback,
-			&m.created, &m.width, &m.height, &m.lat, &m.lon, &m.tzOffset); err != nil {
+			&m.created, &m.width, &m.height, &m.lat, &m.lon, &m.tzOffset, &m.duration); err != nil {
 			return nil, err
 		}
 		r.trashed, r.hidden = trashed != 0, hidden != 0
