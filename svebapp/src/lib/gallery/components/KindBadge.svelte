@@ -4,9 +4,11 @@
 
     interface Props {
         asset: Asset;
+        /** A video's length, seconds: the asset's, unless the caller knows better */
+        duration?: number;
     }
 
-    let {asset}: Props = $props();
+    let {asset, duration = asset.duration}: Props = $props();
 
     const TITLES: Record<AssetKind, string> = {photo: 'Photo', live: 'Live Photo', video: 'Video'};
 
@@ -39,8 +41,8 @@
                 {/if}
             </svg>
         {/if}
-        {#if asset.kind === 'video' && asset.duration}
-            <span class="duration">{formatDuration(asset.duration)}</span>
+        {#if asset.kind === 'video' && duration}
+            <span class="duration">{formatDuration(duration)}</span>
         {/if}
     </span>
 {/if}

@@ -1,5 +1,6 @@
 <script lang="ts">
     import {type Item} from '$lib/stores'
+    import type {Attachment} from 'svelte/attachments';
 
     import Img from "./Img.svelte";
     import Video from "./Video.svelte";
@@ -26,6 +27,17 @@
     let videos = $derived(asset ? playableVideos(asset) : []);
     let hasMotion = $derived(videos.length > 0 || (asset?.frames.length ?? 0) > 1);
     let hovered = $state(false);
+
+    // A video with no image (a plain .mp4 in a folder): the tile is the video itself,
+    // paused on its first frame and played on hover. #t: Safari paints no frame of a
+    // paused video until it is asked for a time. Its length comes from the file
+    // when the server has none (an item processed before durations existed).
+    let fileDuration = $state<number>();
+    // Re-runs when hovered changes: plays on hover, pauses after
+    const playOnHover: Attachment<HTMLVideoElement> = (video) => {
+        if (hovered) video.play().catch(() => {});
+        else video.pause();
+    };
 
     // The viewer's Original switch: the original in place of the preview. Only an
     // image is tried — the browser tells by loading it (HEIC: Safari yes, Chrome no);
@@ -74,6 +86,21 @@
             {/if}
         {/if}
     </div>
+{:else if asset && mode === 'tile' && videos.length}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="asset"
+         onmouseenter={() => (hovered = true)}
+         onmouseleave={() => (hovered = false)}>
+        <video class="tile-video" {@attach playOnHover} muted loop playsinline preload="metadata"
+               onloadedmetadata={(e) => (fileDuration = e.currentTarget.duration)}>
+            {#each videos as video (video.src)}
+                <source src="{video.src}#t=0.1" type={video.type}>
+            {/each}
+        </video>
+        {#if !hovered}
+            <KindBadge {asset} duration={asset.duration || fileDuration}/>
+        {/if}
+    </div>
 {:else if item.previewMime.startsWith("image")}
     <!-- From an older server (no asset): the default preview -->
     <Img item={item}/>
@@ -90,6 +117,13 @@
         position: relative;
         width: 100%;
         height: 100%;
+    }
+
+    .tile-video {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
     }
 
     .motion {
