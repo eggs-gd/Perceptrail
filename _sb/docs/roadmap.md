@@ -202,8 +202,12 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 
 ## Core — service (gontroller)
 
-- [ ] Unreadable/broken files still become items (0×0): exiftool returns File tags
-      even for garbage. Decide how to mark them (ignored? error state?).
+- [x] Broken files (PR #18): a generic group whose main file exiftool reports as broken
+      (`Error`: "File format error", "File is empty") or an image with no size at all
+      (a JPEG cut after its header) is not an item; its files are ignored until one
+      changes (no retry on every walk); a photo that gets corrupted loses its item.
+      Apple assets are not judged by their file. A group exiftool returns nothing for
+      at all is still retried (that may be a passing failure).
 - [x] Fewer Info logs in `fswalker` — none per file since the import chain (C1).
 - [ ] `TestLoadExternalPlugins` should load real `.so` files.
 

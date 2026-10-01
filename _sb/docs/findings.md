@@ -400,6 +400,20 @@ Design: roadmap "Expensive stage".
 
 ## Backend: gontroller, plugins, exiftool
 
+### Broken files (2026-10-01)
+
+- exiftool reads a broken file and says so: garbage and empty files give only the
+  File tags plus `Error` ("File format error", "File is empty"); a JPEG cut after its
+  header gives FileType / MIMEType but no size at all, with a `Warning`. Those are the
+  signals: such a main file is not an item, and its files are ignored (`LinkedTo =
+  "-"`) — the gate skips them until a file's size or mtime changes, then they are
+  processed again. Before, they became 0×0 items or failed every walk.
+- A group exiftool returns nothing for (a timeout, a crash) is still an error and is
+  retried — it may pass. Apple assets are not judged by their file (the DB is the
+  truth and the derivatives may be fine).
+- The test's fake exiftool now returns a size, like a real image (with the new rule a
+  sizeless image is broken).
+
 ### The asset contract (2026-09-30)
 
 - **The client gets the whole asset once and decides** (decision): files by role
