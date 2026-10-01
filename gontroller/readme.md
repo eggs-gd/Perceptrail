@@ -51,7 +51,9 @@ packages — see [findings](../_sb/docs/findings.md#go-plugins-2026-09-28).
 
 | Method | Path | Returns |
 |---|---|---|
-| GET | `/items` | All items as an NDJSON stream (`id, guid, date, mimeType, width, height`; `width/height` is the reduced aspect ratio) |
+| GET | `/items` | All shown items as an NDJSON stream, newest first (`id, guid, date, mimeType, width, height, asset`; `width/height` is the reduced aspect ratio) |
+| GET | `/perceptors` | The navigators: `name, title, icon (SVG), help, relative` — a button each |
+| GET | `/p/:name/order?anchor=` | The sheet in that navigator's order, NDJSON `{guid, section?: {level, label}}` |
 | GET | `/assets/:guid` | The original file of an item |
 
 ## Import pipeline
@@ -80,7 +82,7 @@ Item states (`dto.ItemState`): `New → Dirty → Processing → Ready`, `Delete
 | `pkg/scan` | import steps: `fswalker`, `exifextractor`, `exifpluginprocessor` |
 | `pkg/plugins` | plugin manager (core + `.so`), `exif_core/{date,size}` |
 | `pkg/model` | SQLite via GORM, `ItemsApi`/`FilesApi`, DTOs |
-| `pkg/client` | Echo, `/items` and `/assets` routes |
+| `pkg/client` | Echo, `/items`, `/assets`, `/perceptors` and `/p/:name/order` routes |
 | `pkg/transcoder` | thumbnail stub (needs libvips) |
 
 ## Worth knowing
