@@ -226,7 +226,11 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
 - **Navigation is a base requirement of a perceptor, not a kind of it** (decided):
   `View`/`Order` are in the base interface; if a split is ever needed it is added
   then. Every perceptor gives an honest view (size by megapixels, videos by length;
-  stubs without data say so); the config decides which ones the client gets
+  stubs without data say so). **Sections come from the real values**, like years and
+  months for the date — "12 MP" then "4032×3024", "3 min", "45 s" — not fixed bands;
+  the one fixed label per perceptor is "no value" ("No date", "Unknown size", "No
+  length"). On the real library: 35 megapixel sections (1 707 exact sizes below
+  them, panoramas mostly), 65 lengths.; the config decides which ones the client gets
   (`perceptors.<name>.client`, next to `enabled`).
 - **A perceptor's point is a way through the library** (decided): the user always
   sees the whole endless sheet, ordered by the active perceptor around the photo
