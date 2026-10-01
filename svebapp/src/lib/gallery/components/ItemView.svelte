@@ -6,7 +6,7 @@
     import Picture from "./Picture.svelte";
     import Motion from "./Motion.svelte";
     import KindBadge from "./KindBadge.svelte";
-    import {assetUrl, fallbackImage, hasImage, originalViewable, playableVideos} from "./asset";
+    import {assetUrl, fallbackImage, hasImage, playableVideos} from "./asset";
 
     interface Props {
         item: Item;
@@ -26,6 +26,15 @@
     let videos = $derived(asset ? playableVideos(asset) : []);
     let hasMotion = $derived(videos.length > 0 || (asset?.frames.length ?? 0) > 1);
     let hovered = $state(false);
+
+    // The viewer's Original switch: the original in place of the preview. Only an
+    // image is tried — the browser tells by loading it (HEIC: Safari yes, Chrome no);
+    // what it cannot show (that HEIC, RAW, a video it cannot play) is downloaded.
+    // Keyed by the item: the next item opens with its preview again.
+    let originalFor = $state<string | null>(null);
+    let failedFor = $state<string | null>(null);
+    let showOriginal = $derived(originalFor === item.guid);
+    let originalIsImage = $derived(!!asset?.original?.mime.startsWith('image/') && failedFor !== item.guid);
 </script>
 
 {#if asset && mode === 'view' && videos.length}
@@ -41,7 +50,12 @@
     <div class="asset"
          onmouseenter={() => (hovered = true)}
          onmouseleave={() => (hovered = false)}>
-        <Picture {asset} {sizes} alt={item.guid} width={item.width} height={item.height}/>
+        {#if showOriginal && asset.original}
+            <img class="original-image" src={assetUrl(asset.original)} alt={item.guid}
+                 onerror={() => { failedFor = item.guid; originalFor = null; }}>
+        {:else}
+            <Picture {asset} {sizes} alt={item.guid} width={item.width} height={item.height}/>
+        {/if}
         {#if mode === 'tile' && hovered && hasMotion}
             <div class="motion"><Motion {asset}/></div>
         {:else if mode === 'tile' && asset.kind}
@@ -49,12 +63,15 @@
             <KindBadge {asset}/>
         {/if}
         {#if mode === 'view' && asset.original}
-            <!-- The browser opens what it can show (HEIC in Safari); the rest downloads -->
-            <a class="original"
-               href={assetUrl(asset.original)}
-               target="_blank" rel="noopener"
-               download={originalViewable(asset) ? undefined : ''}
-               onclick={(e) => e.stopPropagation()}>Original</a>
+            {#if originalIsImage}
+                <button class="original" class:on={showOriginal}
+                        onclick={(e) => { e.stopPropagation(); originalFor = showOriginal ? null : item.guid; }}>
+                    Original
+                </button>
+            {:else}
+                <a class="original" href={assetUrl(asset.original)} download
+                   onclick={(e) => e.stopPropagation()}>Download original</a>
+            {/if}
         {/if}
     </div>
 {:else if item.previewMime.startsWith("image")}
@@ -80,6 +97,13 @@
         inset: 0;
     }
 
+    .original-image {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+    }
+
     .original {
         position: fixed;
         right: 1rem;
@@ -88,8 +112,15 @@
         border-radius: 0.3rem;
         background: rgb(0 0 0 / 0.6);
         color: #fff;
+        border: 1px solid transparent;
         font: 0.9rem system-ui, sans-serif;
         text-decoration: none;
+        cursor: pointer;
+    }
+
+    .original.on {
+        border-color: #fff;
+        background: rgb(255 255 255 / 0.25);
     }
 
     video {

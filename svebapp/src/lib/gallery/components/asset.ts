@@ -97,13 +97,3 @@ function videoType(r: Rendition): string {
     const mime = r.mime === 'video/quicktime' ? 'video/mp4' : r.mime;
     return r.codec ? `${mime}; codecs="${r.codec}"` : mime;
 }
-
-/** Can the browser show the original itself (else it is downloaded) */
-export function originalViewable(asset: Asset): boolean {
-    const o = asset.original;
-    if (!o) return false;
-    if (o.mime.startsWith('video/')) {
-        return typeof document !== 'undefined' && document.createElement('video').canPlayType(videoType(o)) !== '';
-    }
-    return VIEWABLE_IMAGES.has(o.mime);
-}

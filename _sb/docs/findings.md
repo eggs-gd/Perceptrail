@@ -248,6 +248,16 @@ compose with `derived`. The current message protocol is a deviation from this de
   the length (`ZDURATION`, written to the meta record as exiftool's `Duration`; the
   core `exif_duration` plugin reads it for every source). A real video needs
   "Download Originals" in Photos, or a macOS helper (backlog).
+- **Photos' "Optimize Mac Storage" previews look good but are not originals**
+  (2026-10-01): 3 528 of 5 866 photos have no local original. Their biggest local
+  file is 480 px (1 627 of them), 1536×2048 (`_1_102_o`, 985) or full size for
+  screenshots (2622/1206 px, ~360 — still a JPEG, the PNG original is in iCloud);
+  the originals are mostly 4032 (12 MP) or 5712 (24 MP) on the long side. E.g.
+  IMG_4654.HEIC: 3024×4032, 2.4 MB in iCloud; local 1536×2048 JPEG.
+- **Original in the viewer is a switch** (2026-10-01): the original image replaces
+  the preview in place; the browser decides by loading it (HEIC shows in Safari,
+  fails in Chrome) — on an error the button becomes "Download original". A video or
+  RAW original is downloaded.
 - **Blank tiles were `loading="lazy"`**, measured on the real library: the gallery
   renders a window with a margin (1 viewport above, 2 below) exactly so images load
   before they scroll in — lazy loading held that margin back. A scroll pass: 37
