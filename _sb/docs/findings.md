@@ -359,6 +359,33 @@ Design: roadmap "Perceptor data"; diagram [`Perceptor data.puml`](../puml/Percep
     (the Photos library is unreadable there): 12 with a place, 4 of them shown (8
     are Waiting HEIC/HEVC).
 
+### Transcode: decisions before the code (2026-10-01, design)
+
+Design: roadmap "Expensive stage".
+
+- **No release without the transcode** (decided): a release is a Docker image someone
+  installs; without the transcode HEIC does not show in Chrome, iPhone HEVC video does
+  not play, big originals slow the grid. 0.2.0 = transcode + Docker (the earlier bar,
+  "the first perceptor end to end", was met by geo and is not enough).
+- **One codec, one image format, chosen in the config** — not arrays. Arrays let the
+  browser pick (the asset contract is ready for it) but cost N× disk and transcode
+  time; a later feature of its own.
+- **Sizes for pixel-perfect screens**: 1600 px for the viewer is less than a 2K 32"
+  (2560) or a MacBook 16" (3456); tiles need 800 on Retina. Default
+  `[400, 800, 1600, 2560, 3840]`, in the config.
+- **How others split it**: Immich — one server image does API, previews and ffmpeg,
+  the same image can run as workers (env), ML in its own container; PhotoPrism,
+  Jellyfin — monoliths, ffmpeg as a subprocess; LibrePhotos — backend + queue
+  workers. Common ground: previews and transcode in the core, ML apart. Ours: in
+  gontroller by default, roles later from the same binary — the DB-state queue makes
+  that free.
+- **Hardware on the dev box**: i5-13500T (Raptor Lake, UHD 770) — QSV encodes and
+  decodes H.264 / HEVC 8/10 bit, decodes AV1, does not encode it. Docker on a Mac has
+  no GPU: VideoToolbox only in a native binary.
+- **jellyfin-ffmpeg** in the image rather than our own build: every hardware backend
+  and HDR tone mapping (iPhone HLG / Dolby Vision would come out washed out in H.264
+  without it).
+
 ## Backend: gontroller, plugins, exiftool
 
 ### The asset contract (2026-09-30)

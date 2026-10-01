@@ -92,9 +92,11 @@ Target architecture — the diagrams in [`../puml`](../puml).
 
 ## Releases
 
-- **0.2.0** — when the first perceptor works end to end (e.g. a primitive geo). Until
-  then everything stays in `develop`.
-- **First public release** — includes Docker.
+- **0.2.0 — the first release**: transcode (photos and video, hardware video
+  encoding) and Docker. A release means an image someone installs; without the
+  transcode the system is not complete (HEIC in Chrome, iPhone HEVC video, big
+  originals in the grid). The first perceptor end to end (geo, PR #17) is no longer
+  the bar. Until then everything stays in `develop`.
 
 ## Next
 
@@ -139,14 +141,10 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 
 ### Then
 
-- [ ] Thumbnails on the server: libvips via `bimg` (needs `brew install vips`), 400 px
-      for tiles, 1600 px for the viewer, WebP; `/assets/:guid?size=…` falls back to the
-      original; regenerated for `Dirty`, dropped for `Deleted`. Fixes blank tiles
-      (decoding originals) and HEIC in Chrome/Firefox. Transcoders take the whole
-      asset (group), not a file. Video: web previews are always downscaled (even a
-      browser-playable H.264 can be 4K); codecs (H.264 / HEVC / AV1 support) decided
-      then. Motion previews for videos and Live Photos: a short muted clip (or GIF)
-      that plays on mouseover in the gallery, the poster otherwise.
+- [ ] **The expensive stage: previews and transcode** — design below ("Expensive
+      stage"). Regenerated for `Dirty`, dropped for `Deleted`. Transcoders take the
+      whole asset (group), not a file. Motion previews for videos and Live Photos: a
+      short muted clip that plays on mouseover, the poster otherwise.
 
       **Two-stage readiness** (decided): show what we can as early as possible, but
       never content the browser cannot show.
@@ -192,7 +190,8 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
         face; on our previews part of them moves out into clusters of their own.
         Per item and perceptor we store the pass done (and the perceptor version).
         Order comes from the stages: every new item gets its cheap pass first.
-- [ ] First perceptor end to end (primitive geo: map, markers) → release 0.2.0.
+- [x] First perceptor end to end — geo (PR #17): its data, its view of the sheet.
+- [ ] Geo on a map (markers) — a perceptor UI slot (see "Later").
 
 ## Core — product (gontroller)
 
@@ -210,8 +209,11 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 
 ## Deployment (first release)
 
-- [ ] Dockerfile: CGO (sqlite, libvips), exiftool from a `dist-*` release, fix `CMD`
-      (`--config /data/config.yml`, `/data` as a volume = what `.var/` is in dev).
+- [ ] Dockerfile (with 0.2.0): CGO (sqlite, libvips), jellyfin-ffmpeg, exiftool from a
+      `dist-*` release, fix `CMD` (`--config /data/config.yml`, `/data` as a volume =
+      what `.var/` is in dev). A base compose that runs anywhere (software encoding)
+      + an override per accelerator (`hwaccel.qsv.yml`: `/dev/dri` and the `render`
+      group; `hwaccel.nvenc.yml`: NVIDIA Container Toolkit).
 
 ## Frontend
 
@@ -259,6 +261,66 @@ Don't rush — a stable core first.
 - UI slots (`item-panel`, `view`) — a perceptor can bring its own UI (map, face
   management).
 - Reprocessing on plugin version change; fsnotify instead of the periodic walk.
+
+### Expensive stage: previews and transcode (design, 2026-10-01)
+
+The transcode belongs to the core (as in Immich, PhotoPrism, Jellyfin: previews and
+ffmpeg in the server; ML apart — gomler). Its queue is DB state ("Two stages"), so any
+process with the database and the files can take work.
+
+**Photos** — libvips on the CPU (a GPU gives nothing here); HEIC via libheif, RAW via
+its embedded preview (or libraw).
+- **Sizes: an array in the config**, long side px. Default `[400, 800, 1600, 2560,
+  3840]`: tiles are ~400 CSS px — 800 on Retina; the viewer is pixel-perfect on the
+  screens we use (a 2K 32" — 2560×1440, a MacBook 16" — 3456×2234). `srcset` picks
+  the size and the density.
+- **Format: one, chosen in the config** — `webp` (default) or `avif`:
+
+  | | WebP | AVIF |
+  |---|---|---|
+  | size at the same quality | base | ~20–30% smaller |
+  | gradients (sky, skin) | banding possible | cleaner |
+  | depth, HDR | 8 bit, no HDR | 10–12 bit, HDR, wide gamut (iPhone Display P3) |
+  | encoding | fast | 5–10× slower on the CPU |
+  | browsers | all | all current (Safari 16+) |
+
+**Video** — ffmpeg (**jellyfin-ffmpeg**: every hardware backend and HDR tone mapping
+in one build, as Immich does).
+- **Codec: one, chosen in the config** (`h264` default — plays everywhere; `hevc`,
+  `av1`). The core maps it to the accelerator's encoder (`h264` → `h264_qsv` /
+  `h264_vaapi` / `h264_nvenc` / `h264_videotoolbox` / `libx264`).
+- **Accelerator in the config**: `auto | none | qsv | vaapi | nvenc | videotoolbox`.
+  At start a probe (a few frames of `testsrc`) checks it; a failure is logged and the
+  software encoder is used.
+- **The whole chain on the GPU** — decode → scale → encode without copying frames to
+  the CPU (`-hwaccel qsv -hwaccel_output_format qsv`, `scale_qsv`): that is where the
+  speed comes from.
+- **HDR → SDR tone mapping** — iPhone video is HLG / Dolby Vision HEVC: without it an
+  H.264 copy comes out washed out (`vpp_qsv` / `tonemap_opencl` / `libplacebo`). To
+  be checked on real iPhone videos.
+- Outputs: the viewer's video (sizes from the config, like photos), a short muted
+  hover clip, a poster.
+- **Hardware**:
+
+  | | encode | decode | in Docker |
+  |---|---|---|---|
+  | Intel QSV / VAAPI (dev box: i5-13500T, UHD 770) | H.264, HEVC 8/10 bit; AV1 only on Arc / Core Ultra | + AV1 | `/dev/dri`, `render` group |
+  | NVIDIA NVENC | H.264, HEVC; AV1 on Ada+ | + AV1 | NVIDIA Container Toolkit |
+  | AMD VAAPI | H.264, HEVC | | `/dev/dri` |
+  | Apple VideoToolbox | H.264, HEVC | | no: Docker on a Mac has no GPU — run the binary natively |
+
+  On the dev box AV1 encoding is software only (SVT-AV1, slow): `h264` / `hevc` there.
+
+**Where it runs**: in gontroller by default — one compose, one process. The same
+binary may later run in roles (`role: transcoder`, as Immich's workers) on a GPU box,
+taking work from the same DB queue; nothing extra to design for it — the queue is
+already DB state.
+
+- [ ] **Later: several codecs / formats at once** (`codecs: [h264, av1]`, `formats:
+      [avif, webp]`) — the asset contract already sends each rendition with its codec
+      and `<picture>` / `<source type>` lets the browser pick the best it plays. But
+      each one is another encode: N× the disk and the transcode time, so it is a
+      choice of its own, not the default.
 
 ### Perceptor data (decided 2026-10-01; Single done in PR #17)
 
