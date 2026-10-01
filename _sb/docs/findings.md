@@ -278,6 +278,34 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
   process read `Photos Library.photoslibrary` (privacy), so Apple files are 404
   there while the user's server serves them.
 
+### Perceptor data: the core keeps it (2026-10-01, design)
+
+Design: roadmap "Perceptor data"; diagram [`Perceptor data.puml`](../puml/Perceptor%20data.puml).
+
+- **Rejected: every perceptor opens a database of its own.** A perceptor is a `.so`
+  in our process: its own database means a driver inside the plugin — `go-sqlite3`
+  is cgo, and Go plugins already need identical versions of everything; two copies of
+  a cgo driver in one process is asking for trouble. Every plugin would also need the
+  data dir and, for Postgres, the credentials. And the core would not know about the
+  data: a deleted photo would leave rows behind, a new plugin version would not know
+  what to recompute.
+- **Rejected: an API for plugins to create tables** — the same, one step removed:
+  SQL in plugins, the core blind to the data.
+- **Decided: the plugin declares, the core keeps.** The core creates, migrates and
+  maintains the storage (deletions, schema versions), and picks the place by driver.
+- **SQLite: a file per perceptor**, not everything in the main database: ML
+  perceptors (embeddings) would bloat it; SQLite has one writer per file, so a
+  perceptor writing does not block the import; a perceptor's data is reset by
+  deleting its file. No `ATTACH` (default limit 10, per connection — awkward with
+  GORM's pool): the core reads a perceptor's values by a list of guids. Postgres:
+  one database, a schema per perceptor.
+- **Typed API, not `SetValue("lat", …)`**: string keys and `any` stuck out of the
+  plugin API. A plugin declares a struct (`api.NewStore[Location]`) and gets `Put` /
+  `Get` of that type; the untyped exchange stays between `perceplib` and the core.
+- **Groups** (`ProcessingMode` Group — clusters, albums, journeys) are data of
+  another shape: groups of photos with data of their own, decided over the library,
+  not per photo in the import chain. Designed (roadmap), not in work.
+
 ## Backend: gontroller, plugins, exiftool
 
 ### The asset contract (2026-09-30)
