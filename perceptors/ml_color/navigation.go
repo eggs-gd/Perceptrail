@@ -27,7 +27,7 @@ func (p *colorPerceptor) Order(ctx context.Context, _ string, items []api.ItemDa
 		out[i].Guid = it.GetGuid()
 	}
 	if len(out) > 0 {
-		out[0].Section = &api.Section{Level: 0, Label: "Not analysed yet"}
+		out[0].Sections = []api.Section{{Level: 0, Label: "Not analysed yet"}}
 	}
 	return out, ctx.Err()
 }

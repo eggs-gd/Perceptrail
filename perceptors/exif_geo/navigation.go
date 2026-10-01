@@ -86,9 +86,12 @@ func (p *geoPerceptor) Order(ctx context.Context, _ string, items []api.ItemData
 		e := api.Entry{Guid: p.guid}
 		switch {
 		case p.region != region:
-			e.Section = &api.Section{Level: 0, Label: p.region}
+			e.Sections = []api.Section{{Level: 0, Label: p.region}}
+			if p.city != "" {
+				e.Sections = append(e.Sections, api.Section{Level: 1, Label: p.city})
+			}
 		case p.city != city:
-			e.Section = &api.Section{Level: 1, Label: p.city}
+			e.Sections = []api.Section{{Level: 1, Label: p.city}}
 		}
 		region, city = p.region, p.city
 		out = append(out, e)
@@ -96,7 +99,7 @@ func (p *geoPerceptor) Order(ctx context.Context, _ string, items []api.ItemData
 	for i, guid := range nowhere {
 		e := api.Entry{Guid: guid}
 		if i == 0 {
-			e.Section = &api.Section{Level: 0, Label: "No place"}
+			e.Sections = []api.Section{{Level: 0, Label: "No place"}}
 		}
 		out = append(out, e)
 	}

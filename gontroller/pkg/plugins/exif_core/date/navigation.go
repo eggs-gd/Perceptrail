@@ -59,14 +59,14 @@ func (p *datePerceptor) Order(ctx context.Context, _ string, items []api.ItemDat
 		case d.at.IsZero():
 			if !undated {
 				undated = true
-				out[i].Section = &api.Section{Level: 0, Label: "No date"}
+				out[i].Sections = []api.Section{{Level: 0, Label: "No date"}}
 			}
 		case d.at.Year() != year:
 			year, month = d.at.Year(), d.at.Month()
-			out[i].Section = &api.Section{Level: 0, Label: fmt.Sprint(year)}
+			out[i].Sections = []api.Section{{Level: 0, Label: fmt.Sprint(year)}, {Level: 1, Label: month.String()}}
 		case d.at.Month() != month:
 			month = d.at.Month()
-			out[i].Section = &api.Section{Level: 1, Label: month.String()}
+			out[i].Sections = []api.Section{{Level: 1, Label: month.String()}}
 		}
 	}
 	return out, nil

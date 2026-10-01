@@ -36,13 +36,13 @@ func TestOrder(t *testing.T) {
 	}
 	want := []struct {
 		guid    string
-		section string // "level:label", "" = none
+		section string // "level:label …" started here (a year starts its month too), "" = none
 	}{
-		{"sep2", "0:2026"},
+		{"sep2", "0:2026 1:September"},
 		{"sep", ""},
 		{"ny", "1:January"},
-		{"nye", "0:2025"},
-		{"old", "0:2024"},
+		{"nye", "0:2025 1:December"},
+		{"old", "0:2024 1:May"},
 		{"nodate", "0:No date"},
 	}
 	if len(got) != len(want) {
@@ -50,8 +50,11 @@ func TestOrder(t *testing.T) {
 	}
 	for i, w := range want {
 		s := ""
-		if got[i].Section != nil {
-			s = string(rune('0'+got[i].Section.Level)) + ":" + got[i].Section.Label
+		for _, sec := range got[i].Sections {
+			if s != "" {
+				s += " "
+			}
+			s += string(rune('0'+sec.Level)) + ":" + sec.Label
 		}
 		if got[i].Guid != w.guid || s != w.section {
 			t.Errorf("%d: %s %q, want %s %q", i, got[i].Guid, s, w.guid, w.section)

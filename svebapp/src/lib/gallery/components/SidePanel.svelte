@@ -113,7 +113,7 @@
          onpointerleave={() => { if (!dragging) pointerY = undefined; }}
          bind:clientHeight={trackHeight}>
         <div class="view" style:top="{viewTop}px" style:height="{viewHeight}px"></div>
-        {#each shown as m (m.guid)}
+        {#each shown as m (`${m.guid}:${m.level}`)}
             <span class={['mark', `level${m.level}`]} style:top="{m.at}px">{m.label}</span>
         {/each}
         {#if pointerY !== undefined}

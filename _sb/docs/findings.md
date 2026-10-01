@@ -246,6 +246,11 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
   do not fit a browser (2 KB per photo × 100k) and need a nearest-neighbour index.
   The layout stays in the client's worker: it depends on the window width (a
   server-side layout was considered earlier and moved to the client for that).
+- **A photo may start several sections — a path** (`sections: [{level, label}]`,
+  coarsest first): a year starts its first month too, a region its first city. With
+  one section per photo the first month of a year and the first city of a region had
+  no mark of their own (the tip said "Europe", not "Athens Europe"). A perceptor may
+  give a whole path of tags or a single one.
 - **Sections ride in the order stream** (`{guid, section?: {level, label}}` on the
   first item of a section), not a separate list: the panel's positions come from the
   layout (the client's), and a relative perceptor's sections depend on the anchor.

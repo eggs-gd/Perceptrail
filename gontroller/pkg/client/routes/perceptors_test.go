@@ -65,12 +65,12 @@ func TestPerceptorsRoutes(t *testing.T) {
 			continue // items of other tests
 		}
 		s := ""
-		if en.Section != nil {
-			s = "|" + en.Section.Label
+		for _, sec := range en.Sections {
+			s += "|" + sec.Label
 		}
 		got = append(got, en.Guid+s)
 	}
-	if want := "nav-new|2026 nav-old|2025"; strings.Join(got, " ") != want {
+	if want := "nav-new|2026|September nav-old|2025|March"; strings.Join(got, " ") != want {
 		t.Errorf("order %q, want %q", strings.Join(got, " "), want)
 	}
 

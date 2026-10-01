@@ -88,20 +88,21 @@ func TestOrderCitiesInOnePiece(t *testing.T) {
 	last := ""
 	var labels []string
 	for _, e := range got {
-		if e.Section != nil {
-			if seen[e.Section.Label] {
-				t.Errorf("%s comes back: %v", e.Section.Label, labels)
+		for _, sec := range e.Sections {
+			if seen[sec.Label] {
+				t.Errorf("%s comes back: %v", sec.Label, labels)
 			}
-			seen[e.Section.Label] = true
-			labels = append(labels, e.Section.Label)
+			seen[sec.Label] = true
+			labels = append(labels, sec.Label)
 		}
 		last = e.Guid
 	}
 	if last != "nowhere" {
 		t.Errorf("no place is not last: %s", last)
 	}
-	for _, city := range []string{"Kyiv", "Tirane", "Podgorica", "Minsk"} {
-		if !seen[city] && !seen["Europe"] {
+	// Every city has its own mark — the region's first one too (a path: region, city)
+	for _, city := range []string{"Europe", "Kyiv", "Tirane", "Podgorica", "Minsk", "No place"} {
+		if !seen[city] {
 			t.Errorf("no section for %s: %v", city, labels)
 		}
 	}

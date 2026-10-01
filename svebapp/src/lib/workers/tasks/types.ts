@@ -59,7 +59,8 @@ export interface OrderPayload {
 /** One line of /p/:name/order */
 export interface OrderEntry {
     guid: string;
-    section?: {level: number, label: string};
+    /** The sections this item starts, coarsest first (a path, or one tag) */
+    sections?: {level: number, label: string}[];
 }
 
 export type InitMessage = WorkerMessage<'init', MessagePort[]>;

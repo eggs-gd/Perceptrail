@@ -20,11 +20,12 @@ func TestOrderByValue(t *testing.T) {
 			return []string{fmt.Sprintf("%d min", int(v/60)), fmt.Sprintf("%d s", int(v))}
 		}, "No length")
 
-	want := []string{"b|0:2 min", "a|1:125 s", "c|0:1 min", "c2", "photo|0:No length"}
+	// A new coarse section starts its finer one too (a path)
+	want := []string{"b|0:2 min|1:130 s", "a|1:125 s", "c|0:1 min|1:61 s", "c2", "photo|0:No length"}
 	for i, w := range want {
 		s := got[i].Guid
-		if got[i].Section != nil {
-			s += fmt.Sprintf("|%d:%s", got[i].Section.Level, got[i].Section.Label)
+		for _, sec := range got[i].Sections {
+			s += fmt.Sprintf("|%d:%s", sec.Level, sec.Label)
 		}
 		if s != w {
 			t.Errorf("%d: %q, want %q", i, s, w)

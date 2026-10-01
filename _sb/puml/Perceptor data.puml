@@ -28,7 +28,7 @@ Core -> PDB: values for the shown guids
 Core -> P: Order(anchor, items)
 P -> S: Places.Get(item)
 S --> P: Location, ok
-P --> Core: entries (guid, section?)
+P --> Core: entries (guid, sections?)
 
 == Deletion ==
 Core -> DB: items deleted (a complete walk)

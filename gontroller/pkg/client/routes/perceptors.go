@@ -25,8 +25,8 @@ type clientPerceptor struct {
 }
 
 type clientEntry struct {
-	Guid    string         `json:"guid"`
-	Section *clientSection `json:"section,omitempty"`
+	Guid     string          `json:"guid"`
+	Sections []clientSection `json:"sections,omitempty"` // started here, coarsest first
 }
 
 type clientSection struct {
@@ -111,8 +111,8 @@ func getOrder(c echo.Context) error {
 	enc := json.NewEncoder(w)
 	for _, e := range entries {
 		out := clientEntry{Guid: e.Guid}
-		if e.Section != nil {
-			out.Section = &clientSection{Level: e.Section.Level, Label: e.Section.Label}
+		for _, s := range e.Sections {
+			out.Sections = append(out.Sections, clientSection{Level: s.Level, Label: s.Label})
 		}
 		if err := enc.Encode(out); err != nil {
 			return err

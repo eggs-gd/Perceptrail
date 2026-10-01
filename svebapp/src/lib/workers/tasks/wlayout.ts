@@ -136,7 +136,7 @@ async function applyOrder({url, anchor}: OrderPayload) {
         .map((line) => JSON.parse(line));
 
     rank = new Map(entries.map((e, i) => [e.guid, i]));
-    sections = entries.filter((e) => e.section);
+    sections = entries.filter((e) => e.sections?.length);
     items.sort((a, b) => sheetKey(a) - sheetKey(b));
     if (viewport) viewport = {...viewport, anchor};
     queueRelayout();
@@ -147,7 +147,8 @@ function sectionsRecord(): LayoutSections {
     const marks: SectionMark[] = [];
     for (const e of sections) {
         const at = placed.get(e.guid);
-        if (at) marks.push({level: e.section!.level, label: e.section!.label, guid: e.guid, ...at});
+        if (!at) continue;
+        for (const s of e.sections!) marks.push({level: s.level, label: s.label, guid: e.guid, ...at});
     }
     return {key: LAYOUT_SECTIONS_KEY, marks};
 }
