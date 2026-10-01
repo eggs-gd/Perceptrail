@@ -298,6 +298,20 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
     events do not drop it. Buttons navigate with `noScroll`.
   - In a hidden browser pane no scroll events fire: tiles measured in the DOM are
     stale — check positions against `layoutDb` instead.
+- **Why every load looked like a fresh database** (Dexie was there all along): the
+  sync cleared itemsDb at its start, and the layout worker dropped all items on
+  `sync-start` — a direct link waited for the stream to reach its photo. Now the
+  items are kept and synced by a delta (`/items?since=` + tombstones, an epoch for
+  the database). Traps on the way:
+  - SQLite keeps times as text with the writer's offset (`…+03:00`, fractional parts
+    of any length; some `deleted_at` with no zone at all): compared as text they lie.
+    `julianday()` compares them; deletions are asked a day earlier (a tombstone too
+    many is harmless).
+  - A test that opened the `items` IndexedDB and never closed it blocked Dexie's
+    upgrade to the new version — every later open waited. Close connections opened
+    by hand.
+  - A refresh of the order after a sync must not run during a switch: it aborts the
+    switch's request, which then counts as failed.
 - A perceptor's icon is SVG from a plugin: shown as a CSS `mask-image` — no script in
   it runs, and the button's colour paints it (`currentColor` does not reach an
   `<img>`).

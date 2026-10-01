@@ -6,7 +6,8 @@
     import GalleryTools from "./components/GalleryTools.svelte";
     import SidePanel from "./components/SidePanel.svelte";
     import type {LayoutItem} from "$lib/stores";
-    import {setOrder, updateLayout} from "$lib/workers";
+    import {onSynced, setOrder, updateLayout} from "$lib/workers";
+    import {onMount} from "svelte";
     import {nextRequest, orderApplied, perceptors, viewHref} from "./perceptors.svelte";
     import {debug} from "$lib/app.svelte";
     import {goto, replaceState} from "$app/navigation";
@@ -130,6 +131,17 @@
             });
         });
     });
+
+    // The items changed on the server (a sync brought something): the view's order is
+    // asked again around the photo on screen — new photos take their place in it (no
+    // wave: nothing was picked; a kept order that did not change lays nothing out)
+    onMount(() => onSynced((changed) => {
+        // Not during a switch: its order is on the way (asking again would abort it)
+        if (changed === 0 || switching || !view || view !== perceptors.active) return;
+        const a = anchorOnScreen(screenWidth);
+        if (!anchorState.pending) anchorState.pending = a;
+        setOrder(view, anchorState.pending?.guid);
+    }));
 
     // Where the user is goes into the URL (?at=, a quiet replace once the scroll
     // settles): a reload or a shared link opens the sheet around the same photo

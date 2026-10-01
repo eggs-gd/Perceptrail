@@ -228,12 +228,15 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 
 ## Frontend
 
-- [ ] **A direct link to a photo waits for the sync**: every page load starts the
-      `/items` sync from zero (itemsDb is cleared), and the viewer shows a photo once
-      the stream reaches it and the layout places it — up to tens of seconds on a big
-      library; the side panel's marks come in the same way (some are missing until
-      their photos are placed). Keep the synced items between loads (sync the
-      changes), or fetch the linked photo first.
+- [x] **Kept items, a delta sync** (PR #18): a direct link and the side panel's marks
+      waited for a sync from zero on every load (itemsDb was cleared). The items are
+      kept between visits; `/items?since=<cursor>` brings only what changed — changed
+      items, and `{guid, removed}` for the deleted or hidden ones; the server's epoch
+      (its database) decides when a full sync is needed. The layout starts from the kept
+      items and the view's kept order (then the server's, applied only if it differs).
+      Refreshed on the page's own moments: the start, coming back to the tab, every
+      navigation (at most every 5 s). A reload: tiles and marks in ~0.2 s, a direct
+      link ~0.3 s; an empty delta is 0 bytes instead of 3.5 MB.
 
 - [x] **Item info panel** in the viewer (PR #18): a toolbar switch, kept like the
       other viewer switches (open photo to photo and between visits, until switched
@@ -269,8 +272,9 @@ Don't rush — a stable core first.
 
 - Server → client events (New / Updated / Processed Item) as designed in
   [`Client flow.puml`](../puml/Client%20flow.puml) (MQTT): the client draws a
-  preloader, fixes the grid, then the thumbnail. Until then — incremental
-  `/items?since=` + tombstones as a fallback.
+  preloader, fixes the grid, then the thumbnail. The delta itself is there
+  (`/items?since=` + tombstones, PR #18): the client refreshes on its own moments
+  today; a push would carry the same delta.
 - ML as a separate service (goMLer) per [`ML Flow.puml`](../puml/ML%20Flow.puml):
   consumes Processed Item, runs ML plugins, returns metadata.
 - Perceptor data: the core keeps it, a perceptor only declares it — see "Perceptor

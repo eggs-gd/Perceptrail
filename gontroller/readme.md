@@ -51,7 +51,8 @@ packages — see [findings](../_sb/docs/findings.md#go-plugins-2026-09-28).
 
 | Method | Path | Returns |
 |---|---|---|
-| GET | `/items` | All shown items as an NDJSON stream, newest first (`id, guid, date, mimeType, width, height, asset`; `width/height` is the reduced aspect ratio) |
+| GET | `/items` | All shown items as an NDJSON stream, newest first (`id, guid, date, mimeType, width, height, asset`; `width/height` is the reduced aspect ratio). Headers `X-Sync-Epoch` (this database) and `X-Sync-Cursor` |
+| GET | `/items?since=<cursor>` | The delta: changed shown items as above, `{guid, removed: true}` for deleted or hidden ones |
 | GET | `/perceptors` | The perceptors given to the client (config `perceptors.<name>.client`): `slug (the view in URLs), title, icon (SVG), help, relative` — a button each |
 | GET | `/items/:guid/info` | What each perceptor knows about the item (the viewer's info panel): `[{slug, title, icon, facts: [{label, value}]}]` |
 | GET | `/app` | The server's `version` and `mode` (debug / release) |

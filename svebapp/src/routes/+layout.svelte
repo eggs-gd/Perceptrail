@@ -2,7 +2,8 @@
     import "../app.css";
     import Gallery from "$lib/gallery/Gallery.svelte";
     import type {LayoutItem} from "$lib/stores";
-    import {loadFromServer, setWorkersMode} from "$lib/workers";
+    import {loadFromServer, refreshFromServer, setWorkersMode} from "$lib/workers";
+    import {afterNavigate} from "$app/navigation";
     import {loadApp} from "$lib/app.svelte";
     import {loadPerceptors, photoHref} from "$lib/gallery/perceptors.svelte";
     import {goto} from "$app/navigation";
@@ -24,7 +25,14 @@
         // The views; the URL says which one the sheet is in (the stream itself comes
         // newest first, so the photos show before the order arrives)
         loadPerceptors();
+        // What changed on the server: on coming back to the tab, on every navigation
+        const onVisible = () => {
+            if (document.visibilityState === 'visible') refreshFromServer();
+        };
+        document.addEventListener('visibilitychange', onVisible);
+        return () => document.removeEventListener('visibilitychange', onVisible);
     });
+    afterNavigate(() => refreshFromServer());
 
     $effect(() => {
         document.body.style.overflow = viewingItem ? 'hidden' : '';

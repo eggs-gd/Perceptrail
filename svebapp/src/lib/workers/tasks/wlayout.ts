@@ -11,8 +11,10 @@ import {
     LAYOUT_META_KEY,
     LAYOUT_SECTIONS_KEY,
     LAYOUT_SIZE_KEY,
+    itemsDb,
     layoutDb,
     type LayoutItem,
+    type LayoutOrder,
     type LayoutMeta,
     type LayoutSections,
     type LayoutSize,
@@ -53,6 +55,23 @@ const UNRANKED = 1e9;
 function sheetKey(item: Item): number {
     return rank.get(item.guid) ?? UNRANKED + (arrival.get(item.guid) ?? 0);
 }
+
+/**
+ * The items are kept between visits (itemsDb): they are loaded at start, so the sheet
+ * shows without the network — the sync brings only what changed. Messages from the
+ * sync before that are held and replayed.
+ */
+let loaded = false;
+let held: MessageEvent<MessageFromSync>[] = [];
+itemsDb.items.toArray().then((list) => {
+    items = list.sort((a, b) => sheetKey(a) - sheetKey(b) || +new Date(b.date) - +new Date(a.date));
+    list.forEach((itm, i) => arrival.set(itm.guid, i));
+    loaded = true;
+    logger.debug('loaded', {items: items.length});
+    if (viewport) queueRelayout();
+    for (const event of held) onItemsDbMessage(event);
+    held = [];
+});
 
 /** Where every placed item is (its top and sheet position): the sections' marks */
 let placed = new Map<string, {y: number, order: number}>();
@@ -122,12 +141,18 @@ let orderFetch: AbortController | undefined;
 
 /**
  * A perceptor's order: the items are re-sorted and laid out again around the
- * anchor (the photo the user is at stays in view, the rest is rearranged). Only the
- * latest request is applied; a failure leaves the sheet as it was.
+ * anchor (the photo the user is at stays in view, the rest is rearranged). The
+ * view's last order (kept) is applied at once, the server's when it comes — only if
+ * it differs. Only the latest request is applied; a failure leaves the sheet as it was.
  */
-async function applyOrder({url, anchor}: OrderPayload) {
+async function applyOrder({view, url, anchor}: OrderPayload) {
     orderFetch?.abort();
     const fetching = orderFetch = new AbortController();
+    const key = `order:${view}` as const;
+    const cached = await layoutDb.meta.get(key) as LayoutOrder | undefined;
+    fetching.signal.throwIfAborted();
+    if (cached) useOrder(cached.entries, anchor);
+
     const response = await fetch(url, {signal: fetching.signal});
     if (!response.ok) throw new Error(`${url}: ${response.status}`);
     const text = await response.text();
@@ -136,7 +161,12 @@ async function applyOrder({url, anchor}: OrderPayload) {
         .split('\n')
         .filter((line) => line.trim())
         .map((line) => JSON.parse(line));
+    if (cached && JSON.stringify(cached.entries) === JSON.stringify(entries)) return;
+    useOrder(entries, anchor);
+    enqueue(() => layoutDb.meta.put({key, entries} as LayoutOrder));
+}
 
+function useOrder(entries: OrderEntry[], anchor: string | undefined) {
     rank = new Map(entries.map((e, i) => [e.guid, i]));
     sections = entries.filter((e) => e.sections?.length);
     items.sort((a, b) => sheetKey(a) - sheetKey(b));
@@ -160,6 +190,10 @@ function remember(rows: LayoutItem[]) {
 }
 
 function onItemsDbMessage(event: MessageEvent<MessageFromSync>) {
+    if (!loaded) {
+        held.push(event);
+        return;
+    }
     const {action, item} = event.data;
 
     switch (action) {
@@ -182,10 +216,25 @@ function onItemsDbMessage(event: MessageEvent<MessageFromSync>) {
             return;
         }
         case 'update': {
-            // An already placed item changed size: everything after it moves
             const i = items.findIndex((itm) => itm.guid === item!.guid);
+            const prev = i >= 0 ? items[i] : undefined;
             if (i >= 0) items[i] = item!;
-            scheduleRelayout();
+            if (!prev || prev.width !== item!.width || prev.height !== item!.height) {
+                // Its size changed: everything after it moves
+                scheduleRelayout();
+                return;
+            }
+            // Same size (a new preview, a new date…): its row is patched in place
+            const changed = item!;
+            enqueue(async () => {
+                const row = await layoutDb.items.get(changed.guid);
+                if (!row) return;
+                await layoutDb.items.put({
+                    ...row, ...changed,
+                    order: row.order, row: row.row, scale: row.scale,
+                    x: row.x, y: row.y, w: row.w, h: row.h, bottom: row.bottom,
+                });
+            });
             return;
         }
         case 'delete':
@@ -228,7 +277,8 @@ function queueRelayout() {
  */
 function writeRelayout(): Promise<unknown> {
     state = freshState();
-    if (!viewport) return Promise.resolve();
+    // Not before the kept items are loaded: the layout of the last visit stays shown
+    if (!viewport || !loaded) return Promise.resolve();
     const vp = viewport;
 
     const all: LayoutItem[] = [];

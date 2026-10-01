@@ -23,11 +23,11 @@ The original design of [Workers.puml](../_sb/puml/Workers.puml): workers write t
 IndexedDB, the page subscribes with `liveQuery` — no worker → UI messages.
 
 ```
-gontroller /items (NDJSON, one item at a time)
+gontroller /items (NDJSON, one item at a time; ?since=<cursor>: only the changes)
    │
    ▼
-wsync (worker) ── put ──► itemsDb (Dexie "items")
-   │  Dexie hooks: create / update / delete, sync-start / sync-done
+wsync (worker) ── put / delete ──► itemsDb (Dexie "items", kept between visits)
+   │  Dexie hooks: create / update / delete; sync-start / sync-done on a full sync
    ▼  MessageChannel (worker → worker)
 wlayout (worker)   all photos in memory, in the active perceptor's order
    │  (GET /p/:name/order: guids + sections), synchronous layout → x, y, w, h
@@ -49,7 +49,13 @@ keeps in place.
 
 - `lib/workers/proxy.ts` — creates the workers, `loadFromServer()`,
   `updateLayout(screenWidth, rowHeight, anchor?)`.
-- `lib/workers/tasks/wsync.ts` — clears `itemsDb`, reads the NDJSON stream, writes items.
+- `lib/workers/tasks/wsync.ts` — the delta sync: with a cursor from the same server
+  database (its epoch) asks `/items?since=`, applies puts and removals; otherwise
+  clears `itemsDb` and takes everything. Refreshes come from `refreshFromServer()`
+  (proxy): the start, coming back to the tab, every navigation, at most every 5 s.
+- `lib/workers/tasks/wlayout.ts` (start) — loads the kept items and the view's kept
+  order (`layoutDb.meta` `order:<view>`), so the sheet shows without the network; a
+  change that keeps an item's size patches its row in place.
 - `lib/workers/tasks/wlayout.ts` — row layout (greedy: fits → into the row;
   overflow < ½ of the photo → close the row without it; otherwise add it and shrink
   the row; the last row stays at the target height). All layoutDb writes go through
