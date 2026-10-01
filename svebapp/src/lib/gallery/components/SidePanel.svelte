@@ -90,46 +90,58 @@
 
 <svelte:window {onscroll}/>
 
-<!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class={['panel', pinned && 'pinned', visible && 'visible']}
-     onpointerdown={(e) => {
-         dragging = true;
-         e.currentTarget.setPointerCapture(e.pointerId);
-         jump(e.clientY, e.currentTarget);
-     }}
-     onpointermove={(e) => {
-         pointerY = e.clientY - e.currentTarget.getBoundingClientRect().top;
-         if (dragging) jump(e.clientY, e.currentTarget);
-     }}
-     onpointerup={() => (dragging = false)}
-     onpointercancel={() => (dragging = false)}
-     onpointerleave={() => { if (!dragging) pointerY = undefined; }}
-     bind:clientHeight={trackHeight}>
-    <div class="view" style:top="{viewTop}px" style:height="{viewHeight}px"></div>
-    {#each shown as m (m.guid)}
-        <span class={['mark', `level${m.level}`]} style:top="{m.at}px">{m.label}</span>
-    {/each}
-    {#if pointerY !== undefined}
-        <div class="pointer" style:top="{pointerY}px">
-            {#if hovered}<span class="tip">{hovered}</span>{/if}
-        </div>
-    {/if}
+<!-- The shade covers the whole height; the track (the sheet's scale) sits inside it,
+     below the toolbar -->
+<div class={['panel', pinned && 'pinned', visible && 'visible']}>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="track"
+         onpointerdown={(e) => {
+             dragging = true;
+             e.currentTarget.setPointerCapture(e.pointerId);
+             jump(e.clientY, e.currentTarget);
+         }}
+         onpointermove={(e) => {
+             pointerY = e.clientY - e.currentTarget.getBoundingClientRect().top;
+             if (dragging) jump(e.clientY, e.currentTarget);
+         }}
+         onpointerup={() => (dragging = false)}
+         onpointercancel={() => (dragging = false)}
+         onpointerleave={() => { if (!dragging) pointerY = undefined; }}
+         bind:clientHeight={trackHeight}>
+        <div class="view" style:top="{viewTop}px" style:height="{viewHeight}px"></div>
+        {#each shown as m (m.guid)}
+            <span class={['mark', `level${m.level}`]} style:top="{m.at}px">{m.label}</span>
+        {/each}
+        {#if pointerY !== undefined}
+            <div class="pointer" style:top="{pointerY}px">
+                {#if hovered}<span class="tip">{hovered}</span>{/if}
+            </div>
+        {/if}
+    </div>
 </div>
 
 <style>
     .panel {
         position: fixed;
-        top: 4.5rem;
+        top: 0;
         right: 0;
-        bottom: 1rem;
+        bottom: 0;
         z-index: 1;
         width: 4.5rem;
-        cursor: ns-resize;
-        touch-action: none;
-        user-select: none;
         opacity: 0;
         pointer-events: none;
         transition: opacity 200ms;
+    }
+
+    .track {
+        position: absolute;
+        top: 4.5rem;
+        right: 0;
+        bottom: 1rem;
+        left: 0;
+        cursor: ns-resize;
+        touch-action: none;
+        user-select: none;
     }
 
     .panel.visible {
