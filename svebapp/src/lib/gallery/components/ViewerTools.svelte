@@ -2,15 +2,18 @@
     import type {Asset} from '$lib/stores';
     import {assetUrl, canShowImage, hasImage, originalImage, playableVideos} from './asset';
     import {toggleViewerPref, viewerPrefs} from './viewerPrefs.svelte';
+    import PerceptorButtons from './PerceptorButtons.svelte';
 
     interface Props {
         asset: Asset;
         /** The original is shown in place of the preview */
         showOriginal: boolean;
         ontoggleoriginal: () => void;
+        /** A navigator was picked: to the sheet in its order, around this photo */
+        onperceptor: (name: string) => void;
     }
 
-    let {asset, showOriginal, ontoggleoriginal}: Props = $props();
+    let {asset, showOriginal, ontoggleoriginal, onperceptor}: Props = $props();
 
     // What the viewer can do with this asset decides the buttons
     let playable = $derived(playableVideos(asset).length > 0);
@@ -47,6 +50,8 @@
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div class="tools" role="toolbar" tabindex="-1" onclick={(e) => e.stopPropagation()}>
+    <PerceptorButtons onpick={onperceptor}/>
+    <span class="divider"></span>
     {#if live}
         <button class="tool" class:on={viewerPrefs.autoplayLive} title={tooltips.live()} aria-label={tooltips.live()}
                 aria-pressed={viewerPrefs.autoplayLive} onclick={() => toggleViewerPref('autoplayLive')}>
@@ -132,6 +137,12 @@
     .tool.on {
         border-color: rgb(255 255 255 / 0.8);
         color: #fff;
+    }
+
+    .divider {
+        width: 1px;
+        margin: 0.3rem 0.1rem;
+        background: rgb(255 255 255 / 0.3);
     }
 
     svg {

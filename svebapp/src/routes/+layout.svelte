@@ -3,6 +3,7 @@
     import Gallery from "$lib/gallery/Gallery.svelte";
     import type {LayoutItem} from "$lib/stores";
     import {loadFromServer} from "$lib/workers";
+    import {loadPerceptors} from "$lib/gallery/perceptors.svelte";
     import {goto} from "$app/navigation";
     import {page} from "$app/state";
     import {onMount} from "svelte";
@@ -13,7 +14,12 @@
 
     // Start the sync once, in the browser. Not in a load function: load must stay free
     // of side effects (it also runs on the server and on every navigation).
-    onMount(loadFromServer);
+    onMount(() => {
+        loadFromServer();
+        // The sheet's order: the saved navigator, else the date (the stream itself
+        // comes newest first, so the photos show before the order arrives)
+        loadPerceptors();
+    });
 
     $effect(() => {
         document.body.style.overflow = viewingItem ? 'hidden' : '';

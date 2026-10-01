@@ -1,6 +1,7 @@
 <script lang="ts">
     import ItemView from "$lib/gallery/components/ItemView.svelte";
     import ViewerTools from "$lib/gallery/components/ViewerTools.svelte";
+    import {switchPerceptor} from "$lib/gallery/perceptors.svelte";
     import {page} from '$app/state';
     import {goto} from '$app/navigation';
     import {layoutDb} from "$lib/stores";
@@ -98,7 +99,8 @@
 <!-- Outside the zoomed stage: a transform would make the toolbar scale and move -->
 {#if item?.asset}
     <ViewerTools asset={item.asset} {showOriginal}
-                 ontoggleoriginal={() => (originalFor = showOriginal ? null : item!.guid)}/>
+                 ontoggleoriginal={() => (originalFor = showOriginal ? null : item!.guid)}
+                 onperceptor={(name) => { switchPerceptor(name, item!.guid); close(); }}/>
 {/if}
 
 <style>

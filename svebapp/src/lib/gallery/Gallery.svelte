@@ -3,8 +3,11 @@
     import {tick, untrack} from 'svelte';
     import {MediaQuery} from 'svelte/reactivity';
     import ItemView from "./components/ItemView.svelte";
+    import GalleryTools from "./components/GalleryTools.svelte";
+    import SidePanel from "./components/SidePanel.svelte";
     import type {LayoutItem} from "$lib/stores";
-    import {updateLayout} from "$lib/workers";
+    import {setOrder, updateLayout} from "$lib/workers";
+    import {perceptors} from "./perceptors.svelte";
     import type {LayoutSize} from "$lib/stores";
     import {layoutDb} from "$lib/stores";
     import {type AnchorState, findAnchor, watchSize, watchWindow, type WindowSnapshot} from "./layoutWindow";
@@ -37,7 +40,7 @@
     let height = $state(0);
 
     // Gallery top in document coordinates; the gallery is laid out from y = 0
-    let containerTop = 0;
+    let containerTop = $state(0);
     const anchorState: AnchorState = {appliedRev: -1};
 
     // The window moves in steps of half a viewport: scrolling inside a step does not
@@ -56,20 +59,37 @@
         const targetRowHeight = rowHeight;
         if (!width) return;
         untrack(() => {
-            if (!anchorState.pending) {
-                // The parent, not the container: the container itself may be mid-animation
-                if (containerEl?.parentElement) {
-                    containerTop = containerEl.parentElement.getBoundingClientRect().top + window.scrollY;
-                }
-                const atTop = window.scrollY - containerTop <= 1;
-                const atBottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
-                anchorState.pending = findAnchor(
-                    images,
-                    {top: window.scrollY - containerTop, height: window.innerHeight, width},
-                    atTop ? 'top' : atBottom ? 'bottom' : null,
-                );
-            }
+            if (!anchorState.pending) anchorState.pending = anchorOnScreen(width);
             updateLayout(width, targetRowHeight, anchorState.pending?.guid);
+        });
+    });
+
+    /** What to keep in place: the page's edge at an edge, else the photo in the middle */
+    function anchorOnScreen(width: number) {
+        // The parent, not the container: the container itself may be mid-animation
+        if (containerEl?.parentElement) {
+            containerTop = containerEl.parentElement.getBoundingClientRect().top + window.scrollY;
+        }
+        const atTop = window.scrollY - containerTop <= 1;
+        const atBottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+        return findAnchor(
+            images,
+            {top: window.scrollY - containerTop, height: window.innerHeight, width},
+            atTop ? 'top' : atBottom ? 'bottom' : null,
+        );
+    }
+
+    // A navigator switch: the sheet is rearranged around the photo the user is at,
+    // kept in place like a resize keeps it — the photo in the middle of the screen,
+    // or the one the viewer was showing (then centred)
+    $effect(() => {
+        const request = perceptors.request;
+        if (!request) return;
+        untrack(() => {
+            anchorState.pending = request.anchor
+                ? {mode: 'center', guid: request.anchor, ratio: 0.5}
+                : anchorOnScreen(screenWidth);
+            setOrder(request.perceptor, anchorState.pending?.guid);
         });
     });
 
@@ -78,19 +98,24 @@
     let programmaticScrollY: number | undefined;
 
     // The viewer may have stepped far away (arrows): when it closes, the gallery shows
-    // the item it closed on — scrolled to the middle if it is not on screen
-    let lastViewed: number | undefined;
+    // the item it closed on — scrolled to the middle if it is not on screen. By guid:
+    // closing into another navigator changes the order (that switch centres it itself).
+    let lastViewed: string | undefined;
     $effect(() => {
-        if (viewing !== undefined) {
-            lastViewed = viewing;
+        const order = viewing;
+        if (order !== undefined) {
+            layoutDb.items.where('order').equals(order).first().then((item) => {
+                if (item && viewing === order) lastViewed = item.guid;
+            });
         } else if (lastViewed !== undefined) {
-            reveal(lastViewed);
+            const guid = lastViewed;
             lastViewed = undefined;
+            if (anchorState.pending?.guid !== guid) reveal(guid);
         }
     });
 
-    async function reveal(order: number) {
-        const item = await layoutDb.items.where('order').equals(order).first();
+    async function reveal(guid: string) {
+        const item = await layoutDb.items.get(guid);
         if (!item || !containerEl?.parentElement) return;
         const top = containerEl.parentElement.getBoundingClientRect().top + window.scrollY + item.y;
         if (top >= window.scrollY && top + item.h <= window.scrollY + window.innerHeight) return;
@@ -313,7 +338,9 @@
 
 <svelte:window bind:scrollY bind:innerHeight onscroll={onScroll}/>
 
-<div class="masonry" bind:clientWidth={screenWidth}>
+<!-- The pinned side panel takes its width from the photos (a resize: the photo in
+     the middle stays in place); unpinned it shows over them while scrolling -->
+<div class="masonry" class:pinned={perceptors.pinned} bind:clientWidth={screenWidth}>
     <div class={['container', !screenWidth && 'hidden']} bind:this={containerEl} style:height="{height}px">
         {#each images as itm (itm.guid)}
             <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
@@ -329,6 +356,10 @@
         {/each}
     </div>
 </div>
+{#if viewing === undefined}
+    <GalleryTools/>
+    <SidePanel {height} top={containerTop} {scrollY} {innerHeight} pinned={perceptors.pinned}/>
+{/if}
 
 <style>
     .masonry {
@@ -336,6 +367,11 @@
         /* We anchor the view ourselves (resize). Browser scroll anchoring would adjust
            scrollY on its own, which reads as a user scroll and drops our anchor. */
         overflow-anchor: none;
+    }
+
+    /* The pinned side panel's width (SidePanel) */
+    .masonry.pinned {
+        margin-right: 4.5rem;
     }
 
     .container {

@@ -1,4 +1,4 @@
-import type {InitMessage, StartSyncMessage, UpdateLayoutMessage} from "./tasks/types";
+import type {InitMessage, OrderMessage, StartSyncMessage, UpdateLayoutMessage} from "./tasks/types";
 import UpdateDbWorker from './tasks/wsync?worker';
 import UpdateLayoutWorker from './tasks/wlayout?worker';
 import {browser} from "$app/environment";
@@ -65,5 +65,19 @@ export const updateLayout = (screenWidth: number, rowHeight: number, anchor?: st
         task: 'update',
         payload: {screenWidth, rowHeight, anchor},
     }
+    workers?.workerLayout.postMessage(msg);
+}
+
+/**
+ * The sheet in a navigator's order (GET /p/:name/order): the layout worker fetches
+ * it and lays everything out again; anchor: the photo to keep in view (a relative
+ * navigator also builds its trail from it)
+ */
+export const setOrder = (perceptor: string, anchor?: string) => {
+    const query = anchor ? `?anchor=${encodeURIComponent(anchor)}` : '';
+    const msg: OrderMessage = {
+        task: 'order',
+        payload: {url: `${PUBLIC_API_PATH}/p/${encodeURIComponent(perceptor)}/order${query}`, anchor},
+    };
     workers?.workerLayout.postMessage(msg);
 }
