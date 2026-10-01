@@ -7,7 +7,8 @@
     import Picture from "./Picture.svelte";
     import Motion from "./Motion.svelte";
     import KindBadge from "./KindBadge.svelte";
-    import {assetUrl, biggestImage, fallbackImage, hasImage, playableVideos} from "./asset";
+    import {assetUrl, biggestImage, fallbackImage, hasImage, originalImage, playableVideos} from "./asset";
+    import {viewerPrefs} from "./viewerPrefs.svelte";
 
     interface Props {
         item: Item;
@@ -16,9 +17,11 @@
         mode?: 'tile' | 'view';
         /** How wide it is shown: the browser picks the size of the image by it */
         sizes?: string;
+        /** The viewer: show the original image in place of the preview (ViewerTools) */
+        showOriginal?: boolean;
     }
 
-    let {item, index, mode = 'tile', sizes = '100vw'}: Props = $props();
+    let {item, index, mode = 'tile', sizes = '100vw', showOriginal = false}: Props = $props();
 
     // The client decides what to show: the asset has every file by role
     let asset = $derived(item.asset);
@@ -39,19 +42,29 @@
         else video.pause();
     };
 
-    // The viewer's Original switch: the original in place of the preview. Only an
-    // image is tried — the browser tells by loading it (HEIC: Safari yes, Chrome no);
-    // what it cannot show (that HEIC, RAW, a video it cannot play) is downloaded.
-    // Keyed by the item: the next item opens with its preview again.
-    let originalFor = $state<string | null>(null);
-    let failedFor = $state<string | null>(null);
-    let showOriginal = $derived(originalFor === item.guid);
-    let originalIsImage = $derived(!!asset?.original?.mime.startsWith('image/') && failedFor !== item.guid);
+    // The viewer's Original switch (the buttons are ViewerTools): the original image
+    // in place of the preview
+    let original = $derived(mode === 'view' && showOriginal && asset ? originalImage(asset) : undefined);
+
+    // A Live Photo in the viewer: its motion plays over the photo once when it opens
+    // (if autoplay is on) and again on hover, then the photo is back. With sound: the
+    // click that opened the viewer allows it; if not, muted.
+    let liveVideos = $derived(mode === 'view' && asset?.kind === 'live' ? videos : []);
+    let liveDone = $state<string | null>(null);   // the item whose autoplay has ended
+    let liveReplay = $state<string | null>(null); // the item hovered to play again
+    let livePlaying = $derived(liveVideos.length > 0 && (liveReplay === item.guid
+        || (viewerPrefs.autoplayLive && liveDone !== item.guid)));
+    const playLive: Attachment<HTMLVideoElement> = (video) => {
+        video.play().catch(() => {
+            video.muted = true;
+            video.play().catch(() => {});
+        });
+    };
 
     // The viewer: the image at its own pixel size, fitted into the screen — never
     // stretched. srcset makes an <img> as wide as `sizes` (100vw), so the box is sized
     // here from the image the asset has. Unknown size: the image's natural size.
-    let shown = $derived(asset && mode === 'view' ? (showOriginal ? asset.original : biggestImage(asset)) : undefined);
+    let shown = $derived(asset && mode === 'view' ? (original ?? biggestImage(asset)) : undefined);
     let fit = $derived(shown?.w && shown.h
         ? {width: `min(${shown.w}px, 100vw, calc(100vh * ${shown.w} / ${shown.h}))`, ratio: `${shown.w} / ${shown.h}`}
         : undefined);
@@ -60,7 +73,7 @@
 <!-- The viewer plays a video; a Live Photo is a photo there (its motion is the tile's hover) -->
 {#if asset && mode === 'view' && videos.length && asset.kind !== 'live'}
     {@const poster = fallbackImage(asset)}
-    <video controls autoplay playsinline poster={poster && assetUrl(poster)}
+    <video controls autoplay={viewerPrefs.autoplayVideo} playsinline poster={poster && assetUrl(poster)}
            onclick={(e) => e.stopPropagation()}>
         {#each videos as video (video.src)}
             <source src={video.src} type={video.type}>
@@ -73,11 +86,10 @@
          class:natural={mode === 'view' && !fit}
          style:width={fit?.width}
          style:aspect-ratio={fit?.ratio}
-         onmouseenter={() => (hovered = true)}
+         onmouseenter={() => { hovered = true; if (mode === 'view') liveReplay = item.guid; }}
          onmouseleave={() => (hovered = false)}>
-        {#if showOriginal && asset.original}
-            <img class="original-image" src={assetUrl(asset.original)} alt={item.guid}
-                 onerror={() => { failedFor = item.guid; originalFor = null; }}>
+        {#if original}
+            <img class="original-image" src={assetUrl(original)} alt={item.guid}>
         {:else}
             <Picture {asset} {sizes} alt={item.guid} width={item.width} height={item.height}/>
         {/if}
@@ -87,16 +99,13 @@
             <!-- What moves is marked; the mark steps aside while it moves -->
             <KindBadge {asset}/>
         {/if}
-        {#if mode === 'view' && asset.original}
-            {#if originalIsImage}
-                <button class="original" class:on={showOriginal}
-                        onclick={(e) => { e.stopPropagation(); originalFor = showOriginal ? null : item.guid; }}>
-                    Original
-                </button>
-            {:else}
-                <a class="original" href={assetUrl(asset.original)} download
-                   onclick={(e) => e.stopPropagation()}>Download original</a>
-            {/if}
+        {#if livePlaying}
+            <video class="live" {@attach playLive} playsinline
+                   onended={() => { liveDone = item.guid; liveReplay = null; }}>
+                {#each liveVideos as video (video.src)}
+                    <source src={video.src} type={video.type}>
+                {/each}
+            </video>
         {/if}
     </div>
 {:else if asset && mode === 'tile' && videos.length}
@@ -169,23 +178,12 @@
         object-fit: contain;
     }
 
-    .original {
-        position: fixed;
-        right: 1rem;
-        bottom: 1rem;
-        padding: 0.4rem 0.8rem;
-        border-radius: 0.3rem;
-        background: rgb(0 0 0 / 0.6);
-        color: #fff;
-        border: 1px solid transparent;
-        font: 0.9rem system-ui, sans-serif;
-        text-decoration: none;
-        cursor: pointer;
-    }
-
-    .original.on {
-        border-color: #fff;
-        background: rgb(255 255 255 / 0.25);
+    .live {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
     }
 
     video {

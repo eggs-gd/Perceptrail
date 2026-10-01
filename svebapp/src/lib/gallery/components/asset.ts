@@ -109,3 +109,37 @@ function videoType(r: Rendition): string {
     const mime = r.mime === 'video/quicktime' ? 'video/mp4' : r.mime;
     return r.codec ? `${mime}; codecs="${r.codec}"` : mime;
 }
+
+/** Can this browser play the video (none on the server) */
+export function canPlayVideo(r: Rendition): boolean {
+    return typeof document !== 'undefined' && document.createElement('video').canPlayType(videoType(r)) !== '';
+}
+
+/**
+ * The image the viewer's Original switch shows: the original if it is an image; a
+ * Live Photo whose original is its video (Apple): its biggest photo
+ */
+export function originalImage(asset: Asset): Rendition | undefined {
+    if (asset.original?.mime.startsWith('image/')) return asset.original;
+    if (asset.kind === 'live') return [...asset.stills].sort((a, b) => (b.w ?? 0) - (a.w ?? 0))[0];
+    return undefined;
+}
+
+// Formats a browser may or may not show (HEIC: Safari yes, Chrome no): tested once
+// per type by decoding a real file; anything else not viewable (RAW) is never shown
+const MAYBE_VIEWABLE = new Set(['image/heic', 'image/heif', 'image/jxl', 'image/tiff', 'image/bmp']);
+const shownByType = new Map<string, Promise<boolean>>();
+
+/** Does this browser show the image: known formats at once, the rest tested once per type */
+export function canShowImage(r: Rendition): Promise<boolean> {
+    if (VIEWABLE_IMAGES.has(r.mime)) return Promise.resolve(true);
+    if (!MAYBE_VIEWABLE.has(r.mime) || typeof Image === 'undefined') return Promise.resolve(false);
+    let shown = shownByType.get(r.mime);
+    if (!shown) {
+        const img = new Image();
+        img.src = assetUrl(r);
+        shown = img.decode().then(() => true, () => false);
+        shownByType.set(r.mime, shown);
+    }
+    return shown;
+}
