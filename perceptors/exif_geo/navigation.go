@@ -1,15 +1,22 @@
 package main
 
 import (
+	"cmp"
 	"context"
+	"slices"
+	"strings"
+	"sync"
+
+	"perceptrail/perseptors/exif_geo/places"
 
 	"github.com/eggs-gd/perceplib/api"
+	"github.com/ringsaturn/tzf"
 )
 
-// The sheet by place. Planned: (lat, lon) on a Hilbert curve — one dimension that
-// keeps near places near — with sections by country and city. The perceptor does
-// not keep the coordinates yet (no perceptor data storage), so for now every photo
-// is "place not known yet", in the incoming order (newest first).
+// The sheet by place: the coordinates on a Hilbert curve — one dimension that keeps
+// near places near (a plain longitude would put Krakow next to Cape Town). Sections
+// are the real places, from the time zone there: its region, then its city
+// ("Europe", "Kyiv"). Photos without a place go last.
 
 const geoIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg>`
 
@@ -17,17 +24,121 @@ func (p *geoPerceptor) View() api.View {
 	return api.View{
 		Title: "Place",
 		Icon:  geoIcon,
-		Help:  "Photos by where they were taken (not ready yet: places are not stored).",
+		Help:  "Photos by where they were taken: near places next to each other. The panel jumps by region and city.",
 	}
 }
 
+func (p *geoPerceptor) Schema() api.Schema { return places.Places.Schema() }
+
+// hilbertOrder: the curve's resolution, 2^16 × 2^16 cells (~300 m at the equator)
+const hilbertOrder = 16
+
 func (p *geoPerceptor) Order(ctx context.Context, _ string, items []api.ItemDataProvider) ([]api.Entry, error) {
-	out := make([]api.Entry, len(items))
+	type placed struct {
+		guid string
+		d    uint64
+		zone string
+		at   int
+	}
+	var located []placed
+	var nowhere []string
 	for i, it := range items {
-		out[i].Guid = it.GetGuid()
+		loc, ok := places.Places.Get(it)
+		if !ok {
+			nowhere = append(nowhere, it.GetGuid())
+			continue
+		}
+		located = append(located, placed{it.GetGuid(), hilbert(loc), zoneName(loc), i})
 	}
-	if len(out) > 0 {
-		out[0].Section = &api.Section{Level: 0, Label: "Place not known yet"}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-	return out, ctx.Err()
+	slices.SortStableFunc(located, func(a, b placed) int {
+		if c := cmp.Compare(a.d, b.d); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.at, b.at) // the same spot: newest first
+	})
+
+	out := make([]api.Entry, 0, len(items))
+	region, city := "", ""
+	for _, p := range located {
+		e := api.Entry{Guid: p.guid}
+		r, c := splitZone(p.zone)
+		switch {
+		case r != region:
+			e.Section = &api.Section{Level: 0, Label: r}
+		case c != city:
+			e.Section = &api.Section{Level: 1, Label: c}
+		}
+		region, city = r, c
+		out = append(out, e)
+	}
+	for i, guid := range nowhere {
+		e := api.Entry{Guid: guid}
+		if i == 0 {
+			e.Section = &api.Section{Level: 0, Label: "No place"}
+		}
+		out = append(out, e)
+	}
+	return out, nil
+}
+
+// hilbert: the position of (lat, lon) along a Hilbert curve over the whole globe
+// (xy2d — the standard algorithm)
+func hilbert(loc places.Location) uint64 {
+	const n = 1 << hilbertOrder
+	x := uint64((loc.Lon + 180) / 360 * (n - 1))
+	y := uint64((loc.Lat + 90) / 180 * (n - 1))
+	var d uint64
+	for s := uint64(n / 2); s > 0; s /= 2 {
+		var rx, ry uint64
+		if x&s > 0 {
+			rx = 1
+		}
+		if y&s > 0 {
+			ry = 1
+		}
+		d += s * s * ((3 * rx) ^ ry)
+		// Rotate the quadrant so the curve stays continuous
+		if ry == 0 {
+			if rx == 1 {
+				x, y = n-1-x, n-1-y
+			}
+			x, y = y, x
+		}
+	}
+	return d
+}
+
+var (
+	finderOnce sync.Once
+	finder     tzf.F
+)
+
+// zoneName: the IANA zone at the place ("Europe/Kyiv"), "" if unknown
+func zoneName(loc places.Location) string {
+	finderOnce.Do(func() {
+		if f, err := tzf.NewDefaultFinder(); err == nil {
+			finder = f
+		}
+	})
+	if finder == nil {
+		return ""
+	}
+	return finder.GetTimezoneName(loc.Lon, loc.Lat)
+}
+
+// splitZone: "Europe/Kyiv" → "Europe", "Kyiv"; "America/Argentina/Buenos_Aires" →
+// "America", "Buenos Aires"; a zone without a region (the sea: "Etc/GMT+3") →
+// "Etc/GMT+3" as both
+func splitZone(zone string) (region, city string) {
+	if zone == "" {
+		return "Unknown zone", ""
+	}
+	parts := strings.Split(zone, "/")
+	if len(parts) < 2 || parts[0] == "Etc" {
+		return zone, ""
+	}
+	return parts[0], strings.ReplaceAll(parts[len(parts)-1], "_", " ")
 }
