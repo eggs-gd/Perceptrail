@@ -1,6 +1,8 @@
 package scan
 
 import (
+	"image"
+	"image/jpeg"
 	"perceptrail/gontroller/pkg/model"
 
 	l "github.com/eggs-gd/perceplib/logger"
@@ -68,8 +70,9 @@ func TestSourceBecomesMain(t *testing.T) {
 	}
 }
 
-// A move is recognised and needs no work: it does not reach the plugins
-func TestMovedSkipsTranscode(t *testing.T) {
+// A move keeps the item (its GUID); the cheap stage runs again for it, so its
+// preview follows the file
+func TestMovedKeepsItemAndPreview(t *testing.T) {
 	root := t.TempDir()
 	a := filepath.Join(root, "a.jpg")
 	write(t, a, "moving")
@@ -83,10 +86,8 @@ func TestMovedSkipsTranscode(t *testing.T) {
 	if err := os.Rename(a, moved); err != nil {
 		t.Fatal(err)
 	}
-	if got := scan(t, root); len(got) != 0 {
-		t.Errorf("a moved file was processed again: %v", got)
-	}
-	if item := itemAt(t, moved); item.Guid != guid || item.State != dto.Ready {
+	scan(t, root)
+	if item := itemAt(t, moved); item.Guid != guid || item.State != dto.Visible || item.PreviewPath != moved {
 		t.Errorf("moved: %+v", item)
 	}
 }
@@ -129,7 +130,7 @@ func TestFormerMainGone(t *testing.T) {
 	}
 	scan(t, root)
 	assertNoItem(t, rawGuid)
-	if item := itemAt(t, jpeg); item.State != dto.Ready {
+	if item := itemAt(t, jpeg); item.State != dto.Visible {
 		t.Errorf("the JPEG is not an item after one walk: %+v", item)
 	}
 }
@@ -162,5 +163,79 @@ func TestReclassifyIgnored(t *testing.T) {
 	scan(t, root)
 	if item := itemAt(t, clip); item.MimeType != "video/quicktime" {
 		t.Errorf("the video is still not an item: %+v", item)
+	}
+}
+
+// Roles of a generic group: the source is the original, a photo next to it a
+// still, a video next to a photo motion, .xmp metadata
+func TestGenericRoles(t *testing.T) {
+	file := func(name string, size int64) *dto.FileDto {
+		return &dto.FileDto{ItemEntry: dto.ItemEntry{Path: "/lib/" + name, Name: name, Size: size}}
+	}
+	g, _ := mimeStep{}.Decorate(&flow.RawItem{
+		Files: []*dto.FileDto{file("D.JPG", 5000), file("D.xmp", 10), file("D.NEF", 30000), file("D.MOV", 900)},
+		Exif:  make([]api.RawExif, 4),
+	})
+	want := map[string]string{"D.NEF": dto.RoleOriginal, "D.JPG": dto.RoleStill, "D.xmp": dto.RoleMeta}
+	for _, f := range g.Files {
+		if w, ok := want[f.Name]; ok && f.Role != w {
+			t.Errorf("%s: role %q, want %q", f.Name, f.Role, w)
+		}
+	}
+	lp, _ := mimeStep{}.Decorate(&flow.RawItem{
+		Files: []*dto.FileDto{file("L.HEIC", 2000), file("L.MOV", 3000)},
+		Exif:  make([]api.RawExif, 2),
+	})
+	if lp.Files[0].Name != "L.MOV" || lp.Files[0].Role != dto.RoleOriginal || lp.Files[1].Role != dto.RoleStill {
+		t.Errorf("Live Photo: %s %s / %s %s", lp.Files[0].Name, lp.Files[0].Role, lp.Files[1].Name, lp.Files[1].Role)
+	}
+}
+
+// Sizes: images from their header, the main file from the source's metadata
+func TestSetSizes(t *testing.T) {
+	dir := t.TempDir()
+	still := filepath.Join(dir, "s.jpg")
+	out, err := os.Create(still)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := jpeg.Encode(out, image.NewRGBA(image.Rect(0, 0, 64, 48)), nil); err != nil {
+		t.Fatal(err)
+	}
+	out.Close()
+
+	it := &flow.RawItem{
+		Files: []*dto.FileDto{
+			{Role: dto.RoleOriginal, ItemEntry: dto.ItemEntry{Path: filepath.Join(dir, "o.heic")}},
+			{Role: dto.RoleStill, ItemEntry: dto.ItemEntry{Path: still}},
+		},
+		Exif: []api.RawExif{{"ImageWidth": []byte("4032"), "ImageHeight": []byte("3024")}, nil},
+		Meta: api.RawExif{"ImageWidth": []byte("3024"), "ImageHeight": []byte("4032")},
+	}
+	setSizes(it)
+	if f := it.Files[0]; f.Width != 3024 || f.Height != 4032 {
+		t.Errorf("main %dx%d, want the source's 3024x4032", f.Width, f.Height)
+	}
+	if f := it.Files[1]; f.Width != 64 || f.Height != 48 {
+		t.Errorf("still %dx%d, want 64x48 from the header", f.Width, f.Height)
+	}
+}
+
+// A derivative standing in for a cloud-only original has its own size, not the
+// original's from the metadata
+func TestSetSizesDerivativeAsMain(t *testing.T) {
+	dir := t.TempDir()
+	still := filepath.Join(dir, "d.jpg")
+	out, _ := os.Create(still)
+	jpeg.Encode(out, image.NewRGBA(image.Rect(0, 0, 32, 24)), nil)
+	out.Close()
+	it := &flow.RawItem{
+		Files: []*dto.FileDto{{Role: dto.RoleStill, ItemEntry: dto.ItemEntry{Path: still}}},
+		Exif:  []api.RawExif{nil},
+		Meta:  api.RawExif{"ImageWidth": []byte("4032"), "ImageHeight": []byte("3024")},
+	}
+	setSizes(it)
+	if f := it.Files[0]; f.Width != 32 || f.Height != 24 {
+		t.Errorf("%dx%d, want the derivative's 32x24", f.Width, f.Height)
 	}
 }

@@ -21,9 +21,8 @@ const (
 	Branches // how many; the files gate waits for the end-of-walk marker from each
 )
 
-// appleEnabled routes files inside *.photoslibrary to the Apple Photos grouper.
-// Off until that grouper exists: the library goes to generic, as before.
-const appleEnabled = false
+// appleEnabled routes files inside *.photoslibrary to the Apple Photos grouper
+const appleEnabled = true
 
 type SourceSwitch struct{}
 

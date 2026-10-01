@@ -26,7 +26,23 @@ type FileEvent struct {
 // which may come together with its last group.
 type FileGroup struct {
 	Files []*dto.FileDto
-	Done  *WalkResult
+	// Set by a grouper that knows the asset (Apple Photos: the asset UUID): the
+	// item's GUID, and Files[0] is the main file as the grouper decided — mime
+	// does not re-rank. "" (generic): the GUID of the main file, mime ranks.
+	Key string
+	// What to show first, best first (a keyed group; e.g. the edit before the
+	// original); nil: the cheap preview decides by itself
+	Show []*dto.FileDto
+	// Metadata from the source itself (the Apple Photos DB): wins over the files'
+	// EXIF; MetaHash tells the gate it changed while the files did not
+	Meta     api.RawExif
+	MetaHash string
+	// What the asset is (dto.Kind*), when the source says it
+	Kind string
+	Done *WalkResult
+	// With the marker: files the grouper saw but held back (their group did not
+	// complete in this walk) — not "gone" for the deletions
+	Held []string
 }
 
 // WalkResult describes a finished walk; it rides in the end-of-walk marker.
@@ -59,14 +75,23 @@ const (
 // exif fills Files and Exif, mime fills Kinds and puts the main file first, the
 // validator sets Item.
 type RawItem struct {
-	Item  *dto.ItemDto
-	Exif  []api.RawExif
-	Files []*dto.FileDto
-	Kinds []MediaKind
+	Item     *dto.ItemDto
+	Exif     []api.RawExif
+	Files    []*dto.FileDto
+	Kinds    []MediaKind
+	Key      string         // FileGroup.Key
+	Show     []*dto.FileDto // FileGroup.Show
+	Meta     api.RawExif    // FileGroup.Meta: GetExif reads it first
+	MetaHash string
+	Kind     string // FileGroup.Kind
 }
 
-// IsMedia: the main file is something to show
+// IsMedia: there is something to show — the main file; in a keyed group any file
+// (an Apple asset whose original is broken still has Apple's derivatives)
 func (r *RawItem) IsMedia() bool {
+	if r.Key != "" {
+		return r.HasKind(KindImage) || r.HasKind(KindRaw) || r.HasKind(KindVideo)
+	}
 	switch r.Kinds[0] {
 	case KindImage, KindRaw, KindVideo:
 		return true
@@ -86,6 +111,9 @@ func (r *RawItem) HasKind(k MediaKind) bool {
 
 // ExifProvider implementation
 func (r *RawItem) GetExif(key string) string {
+	if v, ok := r.Meta[key]; ok {
+		return string(v)
+	}
 	for _, e := range r.Exif {
 		if bytes, ok := e[key]; ok {
 			return string(bytes)
@@ -126,6 +154,10 @@ func (r *RawItem) SetDateInfo(date time.Time, source, zone string) {
 	r.Item.DateOffset = offset / 60
 	r.Item.DateSource = source
 	r.Item.DateZone = zone
+}
+
+func (r *RawItem) SetDuration(seconds float64) {
+	r.Item.Duration = seconds
 }
 
 func (r *RawItem) SetSize(size api.Size) {

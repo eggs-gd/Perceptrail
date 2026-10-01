@@ -16,10 +16,14 @@ type ItemsApi interface {
 	// - full hash gate
 	//GetShortHash(rawExif t.RawExif, fileSizeBytes uint64) string
 	ValidateFile(item *dto.FileDto, meta api.RawExif) (*dto.ItemDto, Outcome, error)
+	// ValidateKeyed: the item of a group whose source knows its identity (an Apple
+	// Photos asset UUID); found by the key — restored if deleted — or created
+	ValidateKeyed(key string, main *dto.FileDto, meta api.RawExif) (*dto.ItemDto, error)
 
 	GetAllItems() ([]*dto.ItemDto, error)
-	// StreamAllItems walks items via a DB cursor without loading the full table into memory.
-	StreamAllItems(fn func(*dto.ItemDto) error) error
+	// StreamAllItems walks items via a DB cursor without loading the full table into
+	// memory; every item comes with its files (one query per page)
+	StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) error
 	GetItemByGuid(guid string) (*dto.ItemDto, error)
 	GetItemByPath(path string) (*dto.ItemDto, error)
 	GetItemByHash(hash string) (*dto.ItemDto, error)
@@ -39,7 +43,7 @@ func (p *proxy) GetAllItems() ([]*dto.ItemDto, error) {
 	return items, p.db.Find(&items).Error
 }
 
-func (p *proxy) StreamAllItems(fn func(*dto.ItemDto) error) error {
+func (p *proxy) StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) error {
 	const pageSize = 32
 	var lastID uint
 
@@ -56,8 +60,21 @@ func (p *proxy) StreamAllItems(fn func(*dto.ItemDto) error) error {
 			return nil
 		}
 
+		guids := make([]string, len(batch))
 		for i := range batch {
-			if err := fn(&batch[i]); err != nil {
+			guids[i] = batch[i].Guid
+		}
+		var files []*dto.FileDto
+		if err := p.db.Where("linked_to IN ?", guids).Order("id").Find(&files).Error; err != nil {
+			return err
+		}
+		byItem := map[string][]*dto.FileDto{}
+		for _, f := range files {
+			byItem[f.LinkedTo] = append(byItem[f.LinkedTo], f)
+		}
+
+		for i := range batch {
+			if err := fn(&batch[i], byItem[batch[i].Guid]); err != nil {
 				return err
 			}
 			lastID = batch[i].ID

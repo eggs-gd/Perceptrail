@@ -17,12 +17,7 @@ control "exif\n(N workers)" as Exif
 control "mime" as Mime
 control "validator" as Validator #LightGreen
 
-box "transcode (switch by kind)" #LightYellow
-control "switch" as Transcode
-control "photo" as TPhoto
-control "video" as TVideo
-control "Live Photo" as TLive
-end box
+control "cheap preview" as Preview #LightYellow
 
 control "plugins\n(core, then external)" as Plugins
 database "DB" as DB
@@ -62,30 +57,17 @@ Mime -> Mime: kind of every file\n(exif FileType/MIMEType, own extension table,\
 Mime -> Validator: ranked group
 
 Validator -> DB: hash of the main file:\nsame / changed / moved / duplicate
-alt moved and outputs for the GUID complete
-    Validator -> DB: Ready
-    Validator ->x Validator: done, no transcode
-else
-    Validator -> Transcode: item (GUID)
-end
+Validator -> Preview: item (GUID) + group
 
-alt photo
-    Transcode -> TPhoto: item
-    TPhoto -> Plugins: item + thumbnails
-else video
-    Transcode -> TVideo: item
-    TVideo -> Plugins: item + poster, preview
-else Live Photo
-    Transcode -> TLive: item
-    TLive -> Plugins: item + thumbnails, motion
-end
-
+Preview -> Preview: what the browser shows now, no transcode:\nthe main file (JPEG, PNG, ...; H.264 video) /\nthe biggest viewable derivative / an embedded preview\n(exiftool -b into the cache); any size counts
+Preview -> Plugins: item + preview ("" = nothing yet)
 Plugins -> Closer: item + metadata
-Closer -> DB: item Ready
+Closer -> DB: Visible (a preview) or Waiting (none)
 note right of Closer
-The client gets the item
-with its thumbnails: later,
-but it renders at once
+The client gets Visible (and Ready)
+items at once. Ready comes later from
+the expensive chain (transcode, fed
+from the DB; roadmap: thumbnails)
 end note
 
 == end of walk ==

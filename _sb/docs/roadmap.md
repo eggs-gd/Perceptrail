@@ -105,6 +105,43 @@ hid inside the exif step, so groups and MIME were decided before EXIF was known.
       as ready previews — saves a transcode; Live Photo pairs checked by
       `ContentIdentifier` (today by name); `animated` kind.
 
+### Cheap stage: show what exists (with the Apple Photos grouper)
+
+One PR (`feature/cheap-stage`). Photo and video transcode are the next milestones.
+
+- [x] **S1. Visible / Waiting and the cheap preview** for generic groups: the main
+      file if the browser shows it (JPEG, PNG, WebP, AVIF…; H.264 video), else the
+      biggest viewable derivative, else an embedded preview (`exiftool -b` into
+      `cache/previews/<guid>/`). HEIC (no extractable preview in HEIF) and HEVC wait.
+      `/items`: Visible + Ready, `previewMime`; `/assets/:guid`: the preview.
+- [x] **S2. Minimal Apple grouper**: asset links from a copy of the DB, one group
+      per asset (trashed skipped), files ordered by what to show first (render →
+      ~2000 px → ~1000 px → master → `.THM`); a group key = the asset UUID as the
+      item's GUID (a changing main file — derivative, then the downloaded original —
+      keeps the item); `appleEnabled = true`.
+- [x] **S3. Minimal DB metadata** as a virtual exif record with exiftool's tag names
+      (`DateTimeOriginal`, `OffsetTimeOriginal`, `ImageWidth`, GPS…): date + zone,
+      dimensions, GPS — the plugins work unchanged; required for cloud-only assets.
+- [x] **S4. Tests**: a fixture library (grouper, the whole chain, DB metadata).
+- [x] **S5. Roles and sizes of the asset's files** (decided: the client gets the
+      whole asset once and decides what to show when). Role per file: `original`
+      (the source), `edit`, `still` (a viewable image, any size), `motion` (a Live
+      Photo's video), `frames` (Apple's video frames: a flip-book), `meta` (.xmp,
+      .aae). Apple: from the grouper; generic: from mime. Sizes: images from their
+      header (JPEG, PNG, GIF, WebP), the main file from its metadata (the Photos DB
+      first: already oriented).
+- [x] **S6. The asset contract in the API**: `/items` sends each asset by roles
+      (original, edit, stills, motion, frames — url, mime, size, video codec; files
+      fetched per page, not per item); `/assets/:guid/:id` serves a file of that asset
+      only, `/assets/:guid/embedded` the extracted embedded preview. `PreviewPath`
+      stays as the default preview (Visible, `/assets/:guid`). A cloud-only asset has
+      no `original` (the derivative standing in keeps its own size).
+- [x] **S7. The client decides**: the tile — `<picture>`/`srcset` from stills or the
+      edit (the browser picks the size and the format: HEIC in Safari, JPEG
+      elsewhere); hover — motion, or Apple's frames as a flip-book; click — the
+      biggest still; "show the original" — open it, or download when the browser
+      cannot show it.
+
 ### Dates and time zones
 
 D1–D3 done (PR #13), see Done.
@@ -113,37 +150,62 @@ D1–D3 done (PR #13), see Done.
       normalise dates the same way, the API needs no separate zone. Sorting/grouping
       the gallery by date is separate (it makes all of this visible).
 
-### Photos library (`*.photoslibrary`) as its own source — separate milestone
+### Apple Photos library (`*.photoslibrary`) — its own milestone
 
-The bundle is not a folder of photos: 30 311 files, of them 18 154 `database/search`,
-8 989 `resources/caches`, 1 780 `originals/<0-F>/<UUID>.<ext>` (no original names),
-1 143 `resources/derivatives`. Yet 1 844 of 2 413 gallery items come from it. The
-truth is in `database/Photos.sqlite`: original filename, date + time zone
-(`ZADDITIONALASSETATTRIBUTES.ZTIMEZONEOFFSET/ZTIMEZONENAME`), GPS, Live Photo pairs,
-edits, trashed/hidden, favourites, albums. Name-based grouping does not apply.
-Private Apple format: the schema changes between macOS versions (osxphotos is the
-reference); reading needs Full Disk Access for the process (TCC).
+A library is a database plus files named by asset UUID, not a folder of photos. The
+truth is in `database/Photos.sqlite`; findings: "Apple Photos library: spike". The
+grouper plugs into the import chain as the `groups/apple` branch (today a stub,
+`groups.appleEnabled = false`). We only read — the DB and the files — never write.
 
-- [ ] **P0. Spike.** Read-only `Photos.sqlite` (`mode=ro`, the library may be open in
-      Photos) on this macOS: map asset UUID → files (original, Live Photo video,
-      edited render, `.aae`), date/zone, GPS, kind, trashed/hidden, cloud-only
-      originals (Optimize Mac Storage: no local original). Findings entry; decide the
-      supported macOS range.
-- [ ] **P1. Source step.** The walker meets a `*.photoslibrary` directory →
-      `SkipDir` and hands it to a library reader that emits the same groups
-      (`[]FileDto`) into the chain: one group per asset — main original + Live Photo
-      video / edited render as sidecars; the GUID from the asset UUID (stable).
-      Everything else in the bundle is not scanned. Trashed assets are not emitted
-      (→ `Deleted` via V2). Cloud-only: skip (or a derivative as a fallback — decide
-      in P0).
-- [ ] Links from the DB: the grouper states the source (main file), derivatives are
-      linked to it (never items of their own); mime does not re-rank such a group.
-- [ ] **P2. Library metadata.** The asset's DB attributes join the group as a
-      virtual metadata record (e.g. `Photos:*` tags next to exiftool's), so the core
-      plugins use them: the zone from the library comes first in D3, the original
-      filename, favourite/hidden.
-- [ ] **P3. Tests** on a fixture library (minimal `Photos.sqlite` + files).
-- Later: albums, people (`ZPERSON`/faces) → perceptors.
+- [x] **P0. Spike** (2026-09-30, on a copy of the dev library's DB + a file list):
+      every file maps to a known asset; the layout and the local coverage are in
+      findings.
+- [ ] **P1. Grouper.** The first file of a library loads the asset links from the DB —
+      from a copy (`Photos.sqlite` + `-wal`/`-shm` into a temp dir, then read):
+      Photos may have it open and write it, and the library may be a network share
+      or a copy (SQLite with WAL over SMB is unsafe); files arrive, a group
+      goes out when all its local files are in (or at the end-of-walk marker). One
+      group = one asset (GUID from the asset UUID): the original is the source (main
+      file), the rest is linked to it (render, derivatives, Live Photo video, posters).
+      The grouper states the main file; mime does not re-rank such a group. Trashed
+      assets are not sent (their items go via deletions). `appleEnabled = true`, the
+      generic `originals/`-only rule for libraries goes.
+- [ ] **P2. What an asset shows** (decided):
+      - **cloud-only assets are items** (Optimize Mac Storage: no local original);
+        their preview is Apple's best derivative; metadata from the DB;
+      - **an edited photo shows its edit** (the render; its JPEG derivative when the
+        render is HEIC); the original stays the source;
+      - **any size counts** — even the small `masters` thumbnail makes it Visible.
+- [ ] **P3. Transcode: only the gaps.** Apple's derivatives are good JPEGs (~2000 and
+      ~1000 px) — an asset with one is Ready from it, no transcode. Transcode only
+      when the best derivative is below our size and the original is local, or when
+      it is not browser-viewable (a HEIC render without its JPEG). Cloud-only: the
+      best derivative is final. Videos (no local originals here): the `.THM` poster;
+      the `cvt/…_tNNNN.jpeg` frames can play as a flip-book motion preview — no
+      transcode. Apple's derivatives are a cache Photos may purge: we point at them,
+      never copy; a vanished file falls back to the next best on the next walk.
+- [ ] **P4. Library metadata** from the DB into the group as a virtual metadata record
+      (e.g. `Photos:*` tags next to exiftool's) for the core plugins: date + zone
+      (`ZTIMEZONEOFFSET`/`ZTIMEZONENAME` first in the date chain), GPS, dimensions,
+      the original filename, favourite. Needed at once for cloud-only assets (no exif).
+- [ ] **P5. Tests** on a fixture library (a minimal `Photos.sqlite` with the columns we
+      read + files per the layout), including a Live Photo (its video is not local in
+      the dev library: `<UUID>_3.mov` per osxphotos, unverified) and cloud-only assets.
+- [ ] **Later: "show the original" for cloud-only assets.** We never write to the
+      library — we ask Photos to download the original (PhotoKit, network access
+      allowed); the next walk sees the original and reprocesses the group. PhotoKit
+      exists only on the Mac that owns the library, in a user session — not in Docker
+      (even on the same Mac), not on a NAS reading a share or a copy, not for an
+      archived library. So it is an optional capability: a small macOS agent
+      (launchd + a Swift helper) next to Photos, called by the server; the UI shows
+      the button only when that agent is reachable; the grouper works on any copy
+      without it. Needs the Photos privacy permission (not Full Disk Access). First a
+      spike: does a PhotoKit request leave the original local in the library, or only
+      hand the data to the caller? (AppleScript export copies the file out — not
+      wanted.) Photos may purge the original again (Optimize Mac Storage): then the
+      asset falls back to its derivative.
+- Supported schema: `ZASSET` (macOS 11+); older (`ZGENERICASSET`) — not planned.
+- Later: albums, people (`ZPERSON` / `ZDETECTEDFACE`) → perceptors.
 
 ### Then
 

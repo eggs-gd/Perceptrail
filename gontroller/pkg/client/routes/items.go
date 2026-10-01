@@ -20,8 +20,11 @@ type clientItem struct {
 	Guid     string    `json:"guid"`
 	Date     time.Time `json:"date"`
 	MimeType string    `json:"mimeType"`
-	Width    int16     `json:"width"`
-	Height   int16     `json:"height"`
+	// What /assets/:guid serves by default (an image or a playable video)
+	PreviewMime string      `json:"previewMime"`
+	Width       int16       `json:"width"`
+	Height      int16       `json:"height"`
+	Asset       clientAsset `json:"asset"` // every file of the asset, by role
 }
 
 func RegisterItemsRoutes(segment string, e *echo.Echo, logger *l.Logger) {
@@ -38,12 +41,18 @@ func getItems(c echo.Context) error {
 	return streamClientItems(c.Response().Writer)
 }
 
-func toClientItem(dbItem *dto.ItemDto) clientItem {
+func toClientItem(dbItem *dto.ItemDto, files []*dto.FileDto) clientItem {
 	item := clientItem{
 		Id:       dbItem.ID,
 		Guid:     dbItem.Guid,
 		Date:     dbItem.Date,
 		MimeType: dbItem.MimeType,
+		// Items shown before the cheap stage existed have no preview: the original
+		PreviewMime: dbItem.PreviewMime,
+		Asset:       toClientAsset(dbItem, files),
+	}
+	if item.PreviewMime == "" {
+		item.PreviewMime = dbItem.MimeType
 	}
 
 	if dbItem.Ratio.H == 0 || dbItem.Ratio.W == 0 {
@@ -69,11 +78,20 @@ func streamClientItems(w http.ResponseWriter) error {
 
 	encoder := json.NewEncoder(w)
 
-	return itemsProxy.StreamAllItems(func(dbItem *dto.ItemDto) error {
-		if err := encoder.Encode(toClientItem(dbItem)); err != nil {
+	return itemsProxy.StreamAllItems(func(dbItem *dto.ItemDto, files []*dto.FileDto) error {
+		if !shown(dbItem) {
+			return nil
+		}
+		if err := encoder.Encode(toClientItem(dbItem, files)); err != nil {
 			return err
 		}
 		flusher.Flush()
 		return nil
 	})
+}
+
+// shown: the client gets items it can display — Visible (a cheap preview) and Ready;
+// Waiting (nothing viewable yet) and New stay hidden
+func shown(item *dto.ItemDto) bool {
+	return item.State == dto.Visible || item.State == dto.Ready
 }

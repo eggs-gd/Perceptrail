@@ -10,10 +10,6 @@ import (
 	"perceptrail/gontroller/pkg/scan/groups"
 	"perceptrail/gontroller/pkg/scan/groups/apple"
 	"perceptrail/gontroller/pkg/scan/groups/generic"
-	"perceptrail/gontroller/pkg/scan/transcode"
-	"perceptrail/gontroller/pkg/scan/transcode/livephoto"
-	"perceptrail/gontroller/pkg/scan/transcode/photo"
-	"perceptrail/gontroller/pkg/scan/transcode/video"
 	"time"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -33,16 +29,20 @@ var itemsProxy model.ItemsApi
 // Exit: -> FileGroup
 //
 // Enter: FileGroup ->
-// - files gate: only new / changed / not Ready groups go on; deletions after the walk
+// - files gate: only new / changed / unfinished groups go on; deletions after the walk
 // - exif: exiftool for every file of the group, in parallel
 // - mime: the kind of every file; the main file is the source (RAW > video > image)
 // - validator: the item — same / changed / moved (keeps its GUID) / new
 // Exit: -> RawItem (the item with its whole group)
 //
 // Enter: RawItem ->
-// - transcode switch (photo | video | Live Photo): outputs for the whole asset
-// - plugins (date, size, perceptors), closer: the item is Ready
+// - cheap preview: what the browser can show right now (the original, a derivative,
+//   an embedded preview) — no transcode
+// - plugins (date, size, perceptors), closer: Visible (a preview) or Waiting (none)
 // Exit: -> ItemDto
+//
+// Later, a chain of its own (roadmap: thumbnails): transcode switch (photo | video |
+// Live Photo) fed from the DB -> Ready. Its packages (transcode/…) are not wired yet.
 //
 // Not obvious:
 // - The end-of-walk marker goes through the groupers (they flush their last
@@ -51,8 +51,10 @@ var itemsProxy model.ItemsApi
 //   unreadable directory: an unmounted drive must not wipe the library.
 // - The chain is async: deletions may run before a moved file is validated, so the
 //   validator restores deleted items by hash.
-// - Apple Photos is off: its library goes to generic, which reads only originals/
-//   (a derivative must never become an item).
+// - An Apple Photos library is grouped by its DB: the groups are formed up front
+//   (the files that exist), so each file still closes at most one group; a group
+//   that could not complete (a file vanished mid-walk) is held back, its files are
+//   not "gone". The asset UUID is the item's GUID (the key), whatever the main file.
 // - The walk repeats: rescan after the last group of the previous walk is done
 //   (not after the walk — processing takes longer), so walks never overlap.
 
@@ -125,14 +127,10 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	exifed := make(chan *flow.RawItem)
 	// mime -> validator: + Kinds, the main file first
 	ranked := make(chan *flow.RawItem)
-	// validator -> transcode switch: + Item (the GUID); not media and moved-and-done
-	// items do not get here
+	// validator -> cheap preview: + Item (the GUID); not media does not get here
 	validated := make(chan *flow.RawItem)
-	// transcode switch -> its transcoder: the same, split by the kind of the asset
-	toPhoto, toVideo, toLivePhoto := make(chan *flow.RawItem), make(chan *flow.RawItem), make(chan *flow.RawItem)
-	// transcoders -> plugins: the item with its outputs (stubs: passed on as is);
-	// all transcoders write here
-	transcoded := make(chan *flow.RawItem)
+	// cheap preview -> plugins: + Item.PreviewPath/PreviewMime ("" = nothing yet)
+	previewed := make(chan *flow.RawItem)
 	// closer -> nobody yet: finished items, drained in Start (later: events to the
 	// client); buffered so the closer does not wait for the drain
 	items := make(chan *dto.ItemDto, 1000)
@@ -144,25 +142,22 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	// Files -> whole assets, a grouper per source
 	importChain.AddStep(groups.NewSourceSwitch(files, toGeneric, toApple))
 	importChain.AddStep(generic.NewGrouper(toGeneric, grouped))
-	importChain.AddStep(apple.NewGrouper(toApple, grouped))
+	importChain.AddStep(apple.NewGrouper(toApple, grouped, logger))
 
 	// Assets -> items: only what needs work, then metadata, kinds, identity
 	importChain.AddStep(NewFilesGate(groups.Branches, progress, grouped, stored, logger))
 
 	// The rest reports to errProcessing: progress counts the groups in flight
 	processing := chain.NewChainProcessor(errProcessing)
-	processing.AddStep(NewExifExtractor(exifWorkers, stored, exifed, errProcessing, logger))
+	exiftool := newExiftoolPool(exifWorkers, logger)
+	processing.AddStep(NewExifExtractor(exifWorkers, exiftool, stored, exifed, errProcessing, logger))
 	processing.AddStep(NewMimeRanker(exifed, ranked))
 	processing.AddStep(NewValidator(ranked, validated, logger))
 
-	// Outputs (thumbnails, previews) per kind of asset
-	processing.AddStep(transcode.NewSwitch(validated, toPhoto, toVideo, toLivePhoto))
-	processing.AddStep(photo.NewTranscoder(toPhoto, transcoded))
-	processing.AddStep(video.NewTranscoder(toVideo, transcoded))
-	processing.AddStep(livephoto.NewTranscoder(toLivePhoto, transcoded))
-
-	// Metadata plugins and perceptors, then the item is Ready
-	processing.AddStep(NewExifPluginProcessor(transcoded, items, errProcessing, logger))
+	// Show what exists (no transcode), then metadata plugins and perceptors; the
+	// closer: Visible or Waiting
+	processing.AddStep(NewCheapPreview(exiftool, ctx.Config().CacheDir(), validated, previewed, logger))
+	processing.AddStep(NewExifPluginProcessor(previewed, items, errProcessing, logger))
 
 	// After its steps: AddStep hands the sub-chain the outer error channel, its
 	// steps keep errProcessing

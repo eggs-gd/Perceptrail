@@ -7,6 +7,7 @@ import (
 
 	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/plugins/exif_core/date"
+	"perceptrail/gontroller/pkg/plugins/exif_core/duration"
 	"perceptrail/gontroller/pkg/plugins/exif_core/size"
 
 	"github.com/eggs-gd/perceplib/api"
@@ -49,6 +50,7 @@ func (pm *pluginManager) LoadPlugins(ctx app.AppContext) error {
 	corePlugins := []api.Perceptor{
 		date.Perceptor,
 		size.Perceptor,
+		duration.Perceptor,
 	}
 
 	// Load external plugins

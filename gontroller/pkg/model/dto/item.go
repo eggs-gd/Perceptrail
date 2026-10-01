@@ -16,6 +16,16 @@ const (
 	Processing                  // transcoding in progress but real size is veryfied
 	Ready                       // all done
 	Deleted                     // Deleted
+	// Values are stored: new states go at the end
+	Visible // the cheap stage found something the browser shows (Preview*); transcode later
+	Waiting // nothing to show without a transcode: hidden until the expensive stage
+)
+
+// Kinds of an asset: the gallery marks moving ones on the tile
+const (
+	KindPhoto = "photo"
+	KindLive  = "live" // a photo with a short video (Live Photo)
+	KindVideo = "video"
 )
 
 type ItemDto struct {
@@ -31,6 +41,19 @@ type ItemDto struct {
 	// HashFull  string    `gorm:"index"` // Hash of whole file, make sense only if hashfull is chiper than transode. As an option enable for CPU setups
 	MimeType string    `gorm:"index"` //
 	State    ItemState `gorm:"index"` // Current state of item
+
+	// What the client is shown until our own previews exist: a file of the group
+	// the browser can show (the original, a derivative) or an extracted embedded
+	// preview in the cache. "" = nothing (Waiting)
+	PreviewPath string
+	PreviewMime string
+	// Hash of the source's own metadata (Apple Photos DB) this item was built from
+	MetaHash string
+	// A video's length, seconds; 0: not a video or unknown
+	Duration float64
+	// What the asset is (Kind*) when the source says it (Apple Photos); "": the
+	// client API derives it from the roles of the files
+	Kind string
 
 	Date time.Time // CreationDate of asset: the instant (the DB returns it in UTC)
 	// Local zone of the shot, minutes east of UTC: sqlite and Postgres timestamptz

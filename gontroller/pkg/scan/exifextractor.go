@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"perceptrail/gontroller/pkg/scan/flow"
 	"slices"
-	"sync"
-	"time"
 
 	"github.com/eggs-gd/go-exiftool"
 
@@ -19,11 +17,6 @@ import (
 // ranks the group from this metadata), so every file gets the full set; the main
 // file's set is what the short hash is computed from, as before.
 
-// One file must not block an exiftool worker forever (broken or huge files)
-const exiftoolTimeout = 2 * time.Minute
-
-var commonArgs []string = []string{}
-
 // exiftool -all --ExifToolVersion -s2 ./_D3A9906.JPG
 var allTags []string = []string{
 	"-all",
@@ -34,25 +27,13 @@ var allTags []string = []string{
 type exifExtractor struct {
 	logger  *l.Logger
 	extract func(path string) (api.RawExif, error)
-
-	workers  []*exiftool.Server
-	freeCh   chan *exiftool.Server
-	stopOnce sync.Once
+	pool    *exiftoolPool
 }
 
-// NewExifExtractor starts count exiftool processes and count steps on the same
-// channels: groups are independent, so they are read in parallel.
-func NewExifExtractor(count int, chin <-chan flow.FileGroup, chout chan<- *flow.RawItem, errch chan error, logger *l.Logger) chain.Processor {
-	e := &exifExtractor{logger: logger, freeCh: make(chan *exiftool.Server, count)}
-	for i := 0; i < count; i++ {
-		et, err := exiftool.NewServer(commonArgs...)
-		if err != nil {
-			logger.Panic("exiftool: can't start", l.Error(err))
-		}
-		et.SetTimeout(exiftoolTimeout)
-		e.workers = append(e.workers, et)
-		e.freeCh <- et
-	}
+// NewExifExtractor: count steps on the same channels, sharing the exiftool pool
+// (groups are independent, so they are read in parallel)
+func NewExifExtractor(count int, pool *exiftoolPool, chin <-chan flow.FileGroup, chout chan<- *flow.RawItem, errch chan error, logger *l.Logger) chain.Processor {
+	e := &exifExtractor{logger: logger, pool: pool}
 	e.extract = e.exiftool
 
 	workers := chain.NewChainProcessor(errch)
@@ -66,9 +47,12 @@ func NewExifExtractor(count int, chin <-chan flow.FileGroup, chout chan<- *flow.
 // Exif: exiftool returned nothing). The item itself comes from the validator.
 func (e *exifExtractor) Decorate(g flow.FileGroup) (*flow.RawItem, error) {
 	files := g.Files
-	out := &flow.RawItem{Files: files, Exif: make([]api.RawExif, len(files))}
+	out := &flow.RawItem{Files: files, Exif: make([]api.RawExif, len(files)), Key: g.Key, Show: g.Show, Meta: g.Meta, MetaHash: g.MetaHash, Kind: g.Kind}
 	found := false
 	for i, f := range files {
+		if g.Key != "" && i > 0 {
+			break // a keyed group: the grouper knows the files, only the main one is read
+		}
 		res, err := e.extract(f.Path)
 		if len(res) == 0 {
 			// Nothing usable: mime falls back to the extension for this file; the
@@ -90,10 +74,7 @@ func (e *exifExtractor) Decorate(g flow.FileGroup) (*flow.RawItem, error) {
 }
 
 func (e *exifExtractor) exiftool(path string) (api.RawExif, error) {
-	et := <-e.freeCh
-	out, err := et.Command(slices.Concat(allTags, []string{path})...)
-	e.freeCh <- et
-
+	out, err := e.pool.Command(slices.Concat(allTags, []string{path})...)
 	res := map[string][]byte{}
 	if len(out) > 0 {
 		if uerr := exiftool.Unmarshal(out, res); uerr != nil && err == nil {
@@ -103,11 +84,8 @@ func (e *exifExtractor) exiftool(path string) (api.RawExif, error) {
 	return api.RawExif(res), err
 }
 
-// Stop: every parallel step calls it; the processes are closed once
 func (e *exifExtractor) Stop() {
-	e.stopOnce.Do(func() {
-		for _, et := range e.workers {
-			et.Close()
-		}
-	})
+	if e.pool != nil {
+		e.pool.Close()
+	}
 }

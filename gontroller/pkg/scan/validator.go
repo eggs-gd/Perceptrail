@@ -3,8 +3,6 @@ package scan
 import (
 	"fmt"
 
-	"perceptrail/gontroller/pkg/model"
-	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/scan/flow"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -16,19 +14,14 @@ import (
 // main file, then same / changed / moved / duplicate -> the item.
 type validator struct {
 	logger *l.Logger
-	// outputsComplete: everything the transcoder makes for the item exists
-	outputsComplete func(guid string) bool
 }
-
-// No transcoder yet: there is nothing to regenerate
-func noOutputs(string) bool { return true }
 
 func NewValidator(chin <-chan *flow.RawItem, chout chan<- *flow.RawItem, logger *l.Logger) chain.Processor {
 	return chain.NewDecorator(chin, chout, newValidator(logger))
 }
 
 func newValidator(logger *l.Logger) *validator {
-	return &validator{logger: logger, outputsComplete: noOutputs}
+	return &validator{logger: logger}
 }
 
 // Decorate sets the item of the group (ranked by mime: the main file first)
@@ -48,6 +41,10 @@ func (v *validator) Decorate(g *flow.RawItem) (*flow.RawItem, error) {
 		return nil, fmt.Errorf("no metadata for the main file %s", main.Path)
 	}
 
+	if g.Key != "" {
+		return v.keyed(g)
+	}
+
 	for _, f := range g.Files {
 		f.LinkTo(main)
 	}
@@ -65,20 +62,41 @@ func (v *validator) Decorate(g *flow.RawItem) (*flow.RawItem, error) {
 		return nil, err
 	}
 
-	item, outcome, err := itemsProxy.ValidateFile(main, g.Exif[0])
+	// Moved items go on too: the cheap stage is cheap, and their preview path
+	// changed with them. Skipping outputs that already exist is the expensive
+	// stage's business.
+	item, _, err := itemsProxy.ValidateFile(main, g.Exif[0])
 	if err != nil {
 		return nil, err
 	}
 
-	if outcome == model.OutcomeMoved && v.outputsComplete(item.Guid) {
-		// Same content at another path: nothing to transcode or extract again
-		item.State = dto.Ready
-		if _, err := itemsProxy.UpdateItem(item); err != nil {
-			return nil, err
-		}
-		return nil, chain.ErrSkippedItem
-	}
+	g.Item = item
+	return g, nil
+}
 
+// keyed: the source knows the identity (an Apple Photos asset UUID): the item's
+// GUID is the key, every file links to it, whatever the main file is
+func (v *validator) keyed(g *flow.RawItem) (*flow.RawItem, error) {
+	for _, f := range g.Files {
+		// An item of the file's own from before (the generic grouper read the
+		// library's originals): the asset's item replaces it
+		if f.GUID != g.Key {
+			if old, err := itemsProxy.GetItemByGuid(f.GUID); err == nil {
+				if err := itemsProxy.DeleteItem(old); err != nil {
+					return nil, err
+				}
+			}
+		}
+		f.LinkToItem(g.Key)
+	}
+	if _, err := filesProxy.UpdateFiles(g.Files); err != nil {
+		return nil, err
+	}
+	item, err := itemsProxy.ValidateKeyed(g.Key, g.Files[0], g.Exif[0])
+	if err != nil {
+		return nil, err
+	}
+	item.MetaHash, item.Kind = g.MetaHash, g.Kind // saved by the closer
 	g.Item = item
 	return g, nil
 }

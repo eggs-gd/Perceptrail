@@ -1,5 +1,6 @@
 <script lang="ts">
     import ItemView from "$lib/gallery/components/ItemView.svelte";
+    import ViewerTools from "$lib/gallery/components/ViewerTools.svelte";
     import {page} from '$app/state';
     import {layoutDb} from "$lib/stores";
     // Not re-exported from $lib/stores: the workers import that, this is page-only (svelte/reactivity)
@@ -20,6 +21,10 @@
         return new LiveQuery(() => layoutDb.items.where('order').equals(order).first());
     });
     let item = $derived(itemQuery.current);
+
+    // The Original switch is per item: the next one opens with its preview again
+    let originalFor = $state<string | null>(null);
+    let showOriginal = $derived(!!item && originalFor === item.guid);
 
     // Zoom is remembered per item, so switching items starts at 1× again
     let zoomState = $state({guid: '', value: 1});
@@ -44,10 +49,15 @@
      onclick={() => history.back()}>
     {#if item}
         <div class="stage" style:transform="scale({zoom})">
-            <ItemView {item} {index}/>
+            <ItemView {item} {index} mode="view" sizes="100vw" {showOriginal}/>
         </div>
     {/if}
 </div>
+<!-- Outside the zoomed stage: a transform would make the toolbar scale and move -->
+{#if item?.asset}
+    <ViewerTools asset={item.asset} {showOriginal}
+                 ontoggleoriginal={() => (originalFor = showOriginal ? null : item!.guid)}/>
+{/if}
 
 <style>
     .viewer {

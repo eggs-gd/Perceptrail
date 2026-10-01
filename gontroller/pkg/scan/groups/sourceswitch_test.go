@@ -10,8 +10,12 @@ import (
 func TestSourceSwitch(t *testing.T) {
 	lib := flow.FileEvent{Entry: dto.ItemEntry{Path: "/Pictures/Photos Library.photoslibrary/originals/A/x.heic"}}
 	got, _ := SourceSwitch{}.Switch(lib)
-	if _, ok := got[BranchGeneric]; !ok || len(got) != 1 {
-		t.Errorf("with the Apple Photos grouper off the library goes to generic, got %v", got)
+	if _, ok := got[BranchApple]; !ok || len(got) != 1 {
+		t.Errorf("a Photos library goes to the apple grouper, got %v", got)
+	}
+	plain, _ := SourceSwitch{}.Switch(flow.FileEvent{Entry: dto.ItemEntry{Path: "/Pictures/a.jpg"}})
+	if _, ok := plain[BranchGeneric]; !ok || len(plain) != 1 {
+		t.Errorf("a plain folder goes to generic, got %v", plain)
 	}
 	marker, _ := SourceSwitch{}.Switch(flow.FileEvent{Done: &flow.WalkResult{}})
 	if len(marker) != Branches {

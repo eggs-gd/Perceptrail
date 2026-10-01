@@ -12,17 +12,17 @@ control "mime" as Mime
 control "validator" as Validator
 database "DB (gorm)" as DB
 end box
-control "transcode\n(switch)" as Transcode
+control "cheap preview" as Transcode
 
 == files gate ==
 
 Groups -> Gate: group []File\n(no main file yet)
 activate Gate
 Gate -> DB: files table by path:\nnew? size/mtime changed?\nCheckTime = this walk
-Gate -> DB: item of the group Ready?
-alt nothing changed and the item is Ready
+Gate -> DB: item of the group done?\n(Visible, Waiting, Ready)
+alt nothing changed and the item is done
     Gate ->x Gate: drop (no exif, no work)
-else new / changed / not Ready (new, Dirty, interrupted)
+else new / changed / not done (New, Dirty, interrupted)
     Gate -> Exif: group
 end
 deactivate Gate
@@ -39,7 +39,7 @@ activate DB
 alt found the same
     note over Validator, DB
     same path and same hash:
-    only reached when the item is not Ready
+    only reached when the item is not done
     (the gate drops the rest)
     end note
     DB -> Validator: <font color=blue><b>existing guid
@@ -52,12 +52,8 @@ else found moved
     first: the chain is async) -> restored
     end note
     DB <- DB: update path, new file rows\ntake the item's GUID
-    alt outputs for the GUID complete
-        DB -> Validator: <font color=blue><b>existing guid</b></font>, Ready
-        Validator ->x Validator: done, <b>no transcode
-    else something missing
-        DB -> Validator: <font color=blue><b>existing guid
-    end
+    DB -> Validator: <font color=blue><b>existing guid
+    note over Validator: goes on: the cheap stage refreshes\nthe preview path (it moved too)
 
 else don't found
     note over Validator, DB
@@ -83,7 +79,7 @@ end
 
 Validator -> Transcode: item (guid), group, exif
 deactivate Validator
-note over Transcode #LightGreen: then plugins; the closer sets the item <b>Ready</b>
+note over Transcode #LightGreen: then plugins; the closer sets <b>Visible</b> or <b>Waiting</b>
 
 == end of walk (the marker from every groups branch) ==
 

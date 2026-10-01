@@ -299,7 +299,7 @@
                  onclick={() => {
                      openItem(itm);
                  }}>
-                <ItemView item={itm} index={itm.order}/>
+                <ItemView item={itm} index={itm.order} sizes="{Math.round(itm.w)}px"/>
             </div>
         {/each}
     </div>

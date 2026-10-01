@@ -15,6 +15,8 @@ type RawItemRW interface {
 	// from and how the zone was found. Core only: external plugins read GetDate(),
 	// which returns the date in that zone.
 	SetDateInfo(date time.Time, source, zone string)
+	// SetDuration stores a video's length, seconds. Core only.
+	SetDuration(seconds float64)
 }
 
 type ExifCorePerceptor interface {

@@ -219,6 +219,133 @@ compose with `derived`. The current message protocol is a deviation from this de
 
 ## Backend: gontroller, plugins, exiftool
 
+### The asset contract (2026-09-30)
+
+- **The client gets the whole asset once and decides** (decision): files by role
+  (original, edit, stills, motion, frames) with size, mime and a video's codec. The
+  browser does the choosing itself: `<picture>` with a `<source type>` per format
+  and `srcset` widths + `sizes` = the tile's pixel width (it picks the format and
+  the size, retina included); `<video>` gets `<source type='video/mp4;
+  codecs="hvc1"'>` — MOV is offered as MP4 (same container family; Chrome plays it
+  but does not claim `video/quicktime`), unplayable sources are filtered with
+  `canPlayType` up front.
+- Hover: a playable video, else Apple's video frames as a flip-book — turned by an
+  attachment on the `<img>` (no component state per frame). Viewer: `sizes=100vw`,
+  "Original" opens what the browser shows and downloads the rest (HEIC in Chrome).
+- **The asset's kind (photo / live / video) marks moving tiles** (2026-10-01). Roles
+  cannot tell an Apple Live Photo from a video: in both the original is the `.mov`
+  (the source) and a photo is a still. The Photos DB says it: `ZKIND` 1 = video,
+  `ZPLAYBACKSTYLE` 3 = a Live Photo with live on (`ZKINDSUBTYPE` 2 with style 1 =
+  live switched off: a still in Photos). The real library: 351 live, 766 videos.
+  `ZKINDSUBTYPE` 101 is not slo-mo here (Android screen recordings carry it), 103
+  = screen recording — not used. Stored on the item (`Kind`) from a keyed source
+  and in the meta hash (the gate reprocesses Apple assets once); generic items get
+  it from the roles in the API (a video original = video, motion = live).
+- **Most videos of an iCloud library are not local** (2026-10-01): 766 of 770 —
+  the `.mov` is only in iCloud; Photos keeps stills and 0–10 scrubbing frames
+  (`cvt/`), so hover shows a flip-book or nothing and the viewer plays nothing; a
+  transcode has no source. The tile marks it (a cloud next to the kind) and shows
+  the length (`ZDURATION`, written to the meta record as exiftool's `Duration`; the
+  core `exif_duration` plugin reads it for every source). A real video needs
+  "Download Originals" in Photos, or a macOS helper (backlog).
+- **Photos' "Optimize Mac Storage" previews look good but are not originals**
+  (2026-10-01): 3 528 of 5 866 photos have no local original. Their biggest local
+  file is 480 px (1 627 of them), 1536×2048 (`_1_102_o`, 985) or full size for
+  screenshots (2622/1206 px, ~360 — still a JPEG, the PNG original is in iCloud);
+  the originals are mostly 4032 (12 MP) or 5712 (24 MP) on the long side. E.g.
+  IMG_4654.HEIC: 3024×4032, 2.4 MB in iCloud; local 1536×2048 JPEG.
+- **Original in the viewer is a switch** (2026-10-01): the original image replaces
+  the preview in place; the browser decides by loading it (HEIC shows in Safari,
+  fails in Chrome) — on an error the button becomes "Download original". A video or
+  RAW original is downloaded.
+- **The viewer never stretches an image** (2026-10-01): with `srcset` + `sizes=100vw`
+  the browser sizes an `<img>` as 100vw whatever the file, so `width: auto` +
+  `max-width/height` stopped capping it and every preview filled the screen. The
+  box is now sized from the biggest image the asset has: `min(w px, 100vw, 100vh ×
+  w/h)` with its aspect ratio — a 360 px preview stays 360 px, a big one fits.
+- **Blank tiles were `loading="lazy"`**, measured on the real library: the gallery
+  renders a window with a margin (1 viewport above, 2 below) exactly so images load
+  before they scroll in — lazy loading held that margin back. A scroll pass: 37
+  tiles blank 400–800 ms → 0 over 300 ms with `eager` (bounded: only the window
+  is rendered); resizes: ≤ 50 ms. What is left: a far jump (one frame), generic
+  assets whose only image is a big original (decode; the photo transcode fixes it),
+  a video with no stills (its metadata loads first).
+- Live check on the real library (a build before the contract): 6 420 Apple assets as
+  items keyed by UUID, all dated from the DB, 2 987 old generic items of the
+  library removed; 6 985 Visible, 9 Waiting (HEVC/HEIC outside the library).
+
+### Apple Photos grouper (2026-09-30)
+
+- **No 1 -> N step needed** (decision, after proposing one): the files of an asset are
+  scattered over the bundle, but the grouper forms the groups up front from the DB
+  and a `stat` of every candidate path — the expected files are exactly those on
+  disk, so each walked file closes at most one group. A file vanishing mid-walk
+  (Photos purging a derivative) leaves a group incomplete: it is held back with the
+  marker (`FileGroup.Held`), the gate does not count its files as gone, the next
+  walk reloads the DB.
+- **The asset UUID is the item's GUID** (`FileGroup.Key`): the main file of an asset
+  changes (a derivative while cloud-only, then the downloaded original) — the item
+  stays. Every file links to the key; an item with no files left is deleted (the
+  main/sidecar rule does not apply to keyed files).
+- Synthetic run (a copy of the dev library's real `Photos.sqlite` + the real file
+  list filled with sample media, since this process cannot read the library): 6 420
+  assets with local files loaded, 6 417 items Visible (3 were fixture PNGs left
+  empty), first import 27 s, 0 errors. Previews: small thumbnail 2 634 (videos pick
+  it over `.THM`, rightly: `.THM` is 32×32, the thumbnail ~360×640), ~2000 px 1 658, original 1 157 (JPEG originals; HEIC ones show
+  Apple's JPEG), ~1000 px 640, the edit 328.
+- A keyed asset is media if any of its files is (a broken original still has
+  Apple's derivatives).
+- **The Photos DB wins over the files' EXIF** (decision): it is what the user sees
+  and may have corrected in Photos; a cloud-only asset has nothing else. Date
+  (`ZDATECREATED`, Core Data seconds since 2001 UTC) + `ZTIMEZONEOFFSET` (known for
+  6 456 of 6 457 assets), `ZWIDTH`/`ZHEIGHT` (already oriented: they are swapped
+  against the original for orientation 6 — so the record says Orientation 1), GPS
+  (`-180` = none; 3 242 assets have it). Synthetic run: all 6 420 items dated from
+  the DB, real sizes.
+- **`ZDATECREATED` is declared `TIMESTAMP`**: SQLite keeps whole-second values as
+  integers (1 361 of 6 457 here) and the Go driver turns such values into
+  `time.Time` — scanning into a float failed and would have dropped the whole
+  library. Read it as `CAST(… AS REAL)`.
+
+### Apple Photos library: spike (2026-09-30)
+
+On a copy of the dev library's `Photos.sqlite` (read with `mode=ro`) and a list of
+the bundle's files (`originals/`, `resources/renders/`, `resources/derivatives/`).
+Every file belongs to a known asset; the DB's local-resource counts match the files.
+
+- 6 457 assets: 5 691 photos (367 Live Photos, 449 screenshots, 22 panoramas), 766
+  videos; 30 trashed, none hidden. Schema `ZASSET` (macOS 11+).
+- The DB stores only the original's path: `originals/<ZDIRECTORY>/<ZFILENAME>`.
+  Everything else follows a naming layout (`<X>` = the UUID's first character):
+
+  | File | What | Long side |
+  |---|---|---|
+  | `originals/<X>/<UUID>.<ext>` | the original (source) | full |
+  | `resources/renders/<X>/<UUID>_1_201_a.jpeg\|heic` | the user's edit, full size | ~1600, up to 5700 |
+  | `resources/renders/<X>/<UUID>.plist` | edit data (not an image) | — |
+  | `resources/derivatives/<X>/<UUID>_1_101_o`, `_1_102_o.jpeg` | preview of the original | ~2000–2600 |
+  | `resources/derivatives/<X>/<UUID>_1_102_a.jpeg` | preview of the edit | ~2000 |
+  | `resources/derivatives/<X>/<UUID>_1_105_c`, `_1_106_c.jpeg` | medium preview | ~1000 |
+  | `resources/derivatives/masters/<X>/<UUID>_4_5005_c.jpeg` | small thumbnail, nearly every asset | ~640 (360×640 measured; not in the DB) |
+  | `resources/derivatives/<X>/<UUID>.THM` | video "poster": a JPEG icon | 32×32 (measured) |
+  | `resources/derivatives/cvt/<X>/<UUID>/…_cvt_tNNNN.jpeg` | video frames (scrubbing) | — |
+
+  In `ZINTERNALRESOURCE` (local rows): `(type 0, version 0, subtype 1)` = originals,
+  `(0,2,2)` = renders, `(0,0,4)` = `_1_102_o`, `(0,0,3)` = `_1_101_o`, `(0,3,0)` =
+  `_1_105_c`, `(0,2,4)` = `_1_102_a`, `(14,3,0)` = masters; video = type 1, Live
+  Photo video = type 3.
+- **Optimize Mac Storage**: 1 782 originals are local, none of the videos and none of
+  the Live Photo videos. Best local preview per live photo asset (5 661): original
+  1 781; render 328; ~2000 px derivative 1 463; only the small master 2 082; nothing
+  7. Videos (766): poster `.THM` 544, a ~2000 px image 219, other 3. **Nothing at all:
+  7 of 6 427**. So a
+  derivative can show 6 420 assets where the originals alone show 1 781.
+- Decisions: cloud-only assets are items (preview from the derivative, metadata from
+  the DB); an edited photo shows its edit; any size counts; Apple's derivatives are
+  used as they are — transcode only fills gaps (see roadmap P3).
+- Unverified here: the Live Photo video's file name (`<UUID>_3.mov` per osxphotos) —
+  no Live Photo video is local in this library.
+
 ### Item == asset (2026-09-29)
 
 - **Decision: one entity.** An item is the asset — one whole group of files (source
