@@ -4,9 +4,10 @@ Libraries read through their own means — Apple Photos now, Immich and others l
 (roadmap "Providers"). A library that keeps renditions of its own is asked for them:
 we render and store nothing it keeps.
 
-- **The import chain**: one switch asks the enabled providers in order; a found file
-  goes to the grouper of the first that claims it (`Claims`) — each grouper is a
-  step of its own. The plain folder (`providers/folder`) is a provider too, the
+- **The import chain**: grouping is a sub-chain (`scan/groups.NewGrouping`) — found
+  files in, whole assets out; inside, one switch asks the enabled providers in order
+  and a file goes to the grouper of the first that claims it (`Claims`) — each
+  grouper is a step of its own. The plain folder (`providers/folder`) is a provider too, the
   last: it claims what nobody else did. A provider not enabled is not asked: its
   files are a plain folder's.
 - **On demand**: the web service asks the item's provider (`Of`, `Owns`) for a
