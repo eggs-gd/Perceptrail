@@ -411,6 +411,20 @@ Design: roadmap "Expensive stage".
 - **jellyfin-ffmpeg** in the image rather than our own build: every hardware backend
   and HDR tone mapping (iPhone HLG / Dolby Vision would come out washed out in H.264
   without it).
+- **Software first, hardware as a step of its own** (decided): the queue, the sizes,
+  the outputs and the HDR tone mapping are the same for any encoder and are got right
+  once on `libx264` — everywhere, CI included (no GPU); the software path stays the
+  reference and the fallback. Hardware is tied to Docker (QSV: `/dev/dri`) or to a
+  native binary (VideoToolbox on a Mac), so it comes with or after Docker. What is
+  needed from day one: the codec → encoder table and the probe with a fallback.
+- **Photos: CPU first, a hardware decoder only if measured** (discussed with ChatGPT
+  too). Hardware wins for video (fixed-function decoders/encoders); for photos it
+  helps parts of the pipeline at best — JPEG through libvips shrinks while it loads,
+  and copying a 24 MP bitmap to the GPU and back can eat the gain. Immich renders its
+  photo previews on the CPU too (hardware transcoding there is video only). For this
+  library the bigger win is the source: Photos' JPEG, the HEIC's embedded thumbnail,
+  the full original last. Benchmark (images/s, CPU, peak RSS) before adding a macOS
+  ImageIO HEIC decoder; its hardware path is an assumption to check.
 
 ## Backend: gontroller, plugins, exiftool
 

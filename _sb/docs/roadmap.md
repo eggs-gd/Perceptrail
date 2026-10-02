@@ -142,9 +142,18 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 ### Then
 
 - [ ] **The expensive stage: previews and transcode** — design below ("Expensive
-      stage"). In steps, each its own PR (the cut may still change): **photos**
-      (libvips previews, the DB-state queue) → **video** (ffmpeg, QSV, tone mapping) →
-      **Docker** (the image, compose + accelerator overrides) → 0.2.0. Regenerated for `Dirty`, dropped for `Deleted`. Transcoders take the
+      stage"). In steps, each its own PR (the cut may still change):
+      1. **photo renditions** — libvips on the CPU, the source chosen to avoid a full
+         decode, the DB-state queue, benchmarks on the real library;
+      2. **video, software** — `libx264`, HDR → SDR, hover clip, poster; the codec →
+         encoder table and the probe with a software fallback from day one;
+      3. **Docker** — the image (jellyfin-ffmpeg), a base compose with software encoding;
+      4. **hardware acceleration** — video: QSV (`hwaccel.qsv.yml`, the i5),
+         VideoToolbox (native on a Mac), NVENC when there is one to test on; photos: a
+         macOS ImageIO decoder for HEIC only if the benchmarks show HEIC is the
+         bottleneck.
+
+      0.2.0 needs 1–3; 4 is wanted, not required. Regenerated for `Dirty`, dropped for `Deleted`. Transcoders take the
       whole asset (group), not a file. Motion previews for videos and Live Photos: a
       short muted clip that plays on mouseover, the poster otherwise.
 
@@ -317,8 +326,20 @@ The transcode belongs to the core (as in Immich, PhotoPrism, Jellyfin: previews 
 ffmpeg in the server; ML apart — gomler). Its queue is DB state ("Two stages"), so any
 process with the database and the files can take work.
 
-**Photos** — libvips on the CPU (a GPU gives nothing here); HEIC via libheif, RAW via
-its embedded preview (or libraw).
+**Photos — renditions, not a transcode** (the asset contract already calls them
+renditions) — libvips on the CPU; HEIC via libheif, RAW via its embedded preview (or
+libraw). The win is not decoding faster but **not decoding a 12 MP HEIC at all**:
+- **the source, cheapest first**: Photos' own JPEG when it is big enough for the size
+  (`_1_102_o`, ~1536×2048 — JPEG is shrunk while it loads); the HEIC's embedded
+  thumbnail for a tile; the full original only when nothing else will do. Most of an
+  iCloud library has no local original anyway (3 528 of 5 866 photos here);
+- **a decoder per type that can be swapped** (source → decode → transform → encode);
+  libvips is the first and only one;
+- **benchmarks on the real library** in this step: JPEG → 400 / 1600, HEIC → 400 /
+  1600, on the Mac and on the i5 — images/s, CPU use, peak RSS (a slow one that
+  parallelises well is fine). A macOS ImageIO decoder for HEIC is the next step only
+  if HEIC → 1600 is the bottleneck (whether ImageIO decodes HEIC in hardware is to be
+  measured, not assumed).
 - **Sizes: an array in the config**, long side px — the system takes any array.
   Default `[400, 1600]` to start with (tiles, the viewer); previews, not copies of the
   original: ~3840 is close to the original itself. Worth trying later: 800 (tiles
