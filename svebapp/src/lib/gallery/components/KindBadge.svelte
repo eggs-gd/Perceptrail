@@ -6,9 +6,11 @@
         asset: Asset;
         /** A video's length, seconds: the asset's, unless the caller knows better */
         duration?: number;
+        /** Its video is on its way: a ring turns around the mark */
+        loading?: boolean;
     }
 
-    let {asset, duration = asset.duration}: Props = $props();
+    let {asset, duration = asset.duration, loading = false}: Props = $props();
 
     const TITLES: Record<AssetKind, string> = {photo: 'Photo', live: 'Live Photo', video: 'Video'};
 
@@ -29,6 +31,13 @@
             </svg>
         {/if}
         {#if asset.kind !== 'photo'}
+            <span class="mark">
+            {#if loading}
+                <svg class="spinner" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="12" cy="12" r="11" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-dasharray="17 52"/>
+                </svg>
+            {/if}
             <svg viewBox="0 0 24 24" aria-hidden="true">
                 {#if asset.kind === 'live'}
                     <!-- Live Photo: a dot in a ring in a dashed ring -->
@@ -40,6 +49,7 @@
                     <path d="M8 5.5v13l11-6.5z" fill="currentColor"/>
                 {/if}
             </svg>
+            </span>
         {/if}
         {#if asset.kind === 'video' && duration}
             <span class="duration">{formatDuration(duration)}</span>
@@ -71,5 +81,25 @@
     svg {
         width: 16px;
         height: 16px;
+    }
+
+    .mark {
+        position: relative;
+        display: flex;
+    }
+
+    /* Around the mark while its video comes (as Immich and Google Photos do) */
+    .spinner {
+        position: absolute;
+        inset: -3px;
+        width: 22px;
+        height: 22px;
+        animation: spin 0.9s linear infinite;
+    }
+
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
     }
 </style>

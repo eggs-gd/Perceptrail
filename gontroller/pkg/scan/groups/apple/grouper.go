@@ -184,12 +184,18 @@ const (
 	roleThumb       // the small thumbnail (~360×640)
 	roleVideoPoster // .THM (32×32)
 	// Video renditions Photos downloads on request (PhotoKit): after the stills, so
-	// the main file does not change when one appears
-	roleVideoHEVC   // _2_201_o.mov: 720p HEVC (an iPhone video's medium)
-	roleVideoMedium // _2_3_o.mp4: 720p H.264 (another video's medium)
-	roleVideoSmall  // _2_4_o.mp4: 360p H.264 (fast)
-	roleLiveMotion  // _2_101_o.mov: a Live Photo's motion, H.264
-	roleFrame       // cvt/…/_cvt_tNNNN.jpeg: frames of a video (a flip-book)
+	// the main file does not change when one appears. _a: of the user's edit (what
+	// Photos shows; seen for a Live Photo's motion, assumed for videos), _o: of the
+	// original.
+	roleLiveMotionEdit  // _2_101_a.mov
+	roleVideoHEVCEdit   // _2_201_a.mov
+	roleVideoMediumEdit // _2_3_a.mp4
+	roleVideoSmallEdit  // _2_4_a.mp4
+	roleVideoHEVC       // _2_201_o.mov: 720p HEVC (an iPhone video's medium)
+	roleVideoMedium     // _2_3_o.mp4: 720p H.264 (another video's medium)
+	roleVideoSmall      // _2_4_o.mp4: 360p H.264 (fast)
+	roleLiveMotion      // _2_101_o.mov: a Live Photo's motion, H.264
+	roleFrame           // cvt/…/_cvt_tNNNN.jpeg: frames of a video (a flip-book)
 )
 
 // fileRole: what the file is to the asset, for the client
@@ -201,7 +207,8 @@ func (r role) fileRole() string {
 		return dto.RoleEdit
 	case roleFrame:
 		return dto.RoleFrames
-	case roleVideoHEVC, roleVideoMedium, roleVideoSmall, roleLiveMotion:
+	case roleLiveMotionEdit, roleVideoHEVCEdit, roleVideoMediumEdit, roleVideoSmallEdit,
+		roleVideoHEVC, roleVideoMedium, roleVideoSmall, roleLiveMotion:
 		return dto.RoleMotion
 	default:
 		return dto.RoleStill
@@ -229,6 +236,10 @@ func candidates(root, uuid, dir, filename string) []candidate {
 		{filepath.Join(deriv, uuid+"_1_106_c.jpeg"), roleMedium2},
 		{filepath.Join(root, "resources", "derivatives", "masters", x, uuid+"_4_5005_c.jpeg"), roleThumb},
 		{filepath.Join(deriv, uuid+".THM"), roleVideoPoster},
+		{filepath.Join(deriv, uuid+"_2_101_a.mov"), roleLiveMotionEdit},
+		{filepath.Join(deriv, uuid+"_2_201_a.mov"), roleVideoHEVCEdit},
+		{filepath.Join(deriv, uuid+"_2_3_a.mp4"), roleVideoMediumEdit},
+		{filepath.Join(deriv, uuid+"_2_4_a.mp4"), roleVideoSmallEdit},
 		{filepath.Join(deriv, uuid+"_2_201_o.mov"), roleVideoHEVC},
 		{filepath.Join(deriv, uuid+"_2_3_o.mp4"), roleVideoMedium},
 		{filepath.Join(deriv, uuid+"_2_4_o.mp4"), roleVideoSmall},
@@ -251,10 +262,10 @@ const (
 // path is in the DB, not in the naming layout (the caller has it).
 var wanted = map[Want][]role{
 	WantImage:      {roleRender, roleEditPreview, roleLarge, roleLarge2},
-	WantVideo:      {roleVideoHEVC, roleVideoMedium},
-	WantVideoH264:  {roleVideoMedium, roleVideoSmall},
-	WantVideoHover: {roleVideoSmall, roleVideoMedium},
-	WantLiveMotion: {roleLiveMotion, roleLiveVideo},
+	WantVideo:      {roleVideoHEVCEdit, roleVideoMediumEdit, roleVideoHEVC, roleVideoMedium},
+	WantVideoH264:  {roleVideoMediumEdit, roleVideoSmallEdit, roleVideoMedium, roleVideoSmall},
+	WantVideoHover: {roleVideoSmallEdit, roleVideoMediumEdit, roleVideoSmall, roleVideoMedium},
+	WantLiveMotion: {roleLiveMotionEdit, roleLiveMotion, roleLiveVideo},
 }
 
 // Local: the best file of the asset in the library for want, "" if none is local

@@ -327,6 +327,7 @@ func TestGrouperVideoRenditions(t *testing.T) {
 		}},
 		{uuid: livePhoto, dir: "G", filename: livePhoto + ".heic", playback: 3, files: []string{
 			"resources/derivatives/G/" + livePhoto + "_1_102_o.jpeg",
+			"resources/derivatives/G/" + livePhoto + "_2_101_a.mov",
 			"resources/derivatives/G/" + livePhoto + "_2_101_o.mov",
 		}},
 	})
@@ -335,7 +336,7 @@ func TestGrouperVideoRenditions(t *testing.T) {
 
 	for uuid, want := range map[string][]string{
 		video:     {video + "_4_5005_c.jpeg", dto.RoleStill, video + "_2_201_o.mov", dto.RoleMotion, video + "_2_4_o.mp4", dto.RoleMotion},
-		livePhoto: {livePhoto + "_1_102_o.jpeg", dto.RoleStill, livePhoto + "_2_101_o.mov", dto.RoleMotion},
+		livePhoto: {livePhoto + "_1_102_o.jpeg", dto.RoleStill, livePhoto + "_2_101_a.mov", dto.RoleMotion, livePhoto + "_2_101_o.mov", dto.RoleMotion},
 	} {
 		var got []string
 		for _, f := range groups[uuid].Files {
@@ -355,7 +356,7 @@ func TestGrouperVideoRenditions(t *testing.T) {
 		{video, WantVideoH264, video + "_2_4_o.mp4"},
 		{video, WantVideoHover, video + "_2_4_o.mp4"},
 		{video, WantImage, ""},
-		{livePhoto, WantLiveMotion, livePhoto + "_2_101_o.mov"},
+		{livePhoto, WantLiveMotion, livePhoto + "_2_101_a.mov"}, // the edit's motion wins
 		{livePhoto, WantImage, livePhoto + "_1_102_o.jpeg"},
 	} {
 		if got := filepath.Base(Local(bundle, tc.uuid, tc.want)); (tc.file == "" && got != ".") || (tc.file != "" && got != tc.file) {

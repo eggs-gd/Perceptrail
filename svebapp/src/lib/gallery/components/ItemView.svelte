@@ -32,6 +32,8 @@
     // Apple Photos: a moving tile may ask for its video on hover (Motion)
     let hasMotion = $derived(videos.length > 0 || (asset?.frames.length ?? 0) > 1 || !!asset?.onDemand?.hover);
     let hovered = $state(false);
+    // The hover's video is on its way: the badge spins
+    let motionLoading = $state(false);
 
     // A video with no image (a plain .mp4 in a folder): the tile is the video itself,
     // paused on its first frame and played on hover. #t: Safari paints no frame of a
@@ -128,10 +130,11 @@
             {/if}
         {/if}
         {#if mode === 'tile' && hovered && hasMotion}
-            <div class="motion"><Motion {asset}/></div>
-        {:else if mode === 'tile' && asset.kind}
-            <!-- What moves is marked; the mark steps aside while it moves -->
-            <KindBadge {asset}/>
+            <div class="motion"><Motion {asset} bind:loading={motionLoading}/></div>
+        {/if}
+        {#if mode === 'tile' && asset.kind}
+            <!-- What moves is marked, also while it moves; it spins while the video comes -->
+            <KindBadge {asset} loading={hovered && motionLoading}/>
         {/if}
         {#if livePlaying}
             <video class="live" {@attach playLive} playsinline
@@ -153,9 +156,7 @@
                 <source src="{video.src}#t=0.1" type={video.type}>
             {/each}
         </video>
-        {#if !hovered}
-            <KindBadge {asset} duration={asset.duration || fileDuration}/>
-        {/if}
+        <KindBadge {asset} duration={asset.duration || fileDuration}/>
     </div>
 {:else if item.previewMime.startsWith("image")}
     <!-- From an older server (no asset): the default preview -->

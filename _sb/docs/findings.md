@@ -721,6 +721,14 @@ the binary by the linker; run from the user's terminal on the dev library.
   another database starts from an empty table. The count check heals the same way
   now. Checked: a new contract — the layout stayed at 6 991 rows through the sync, an
   item the server did not have was deleted; another database — emptied and refilled.
+- **An edited Live Photo's motion is `_2_101_a.mov`** (`_a`: of the edit), not
+  `_2_101_o.mov`: the owner's first hover on one gave a 404 — the file was there under
+  the other name (with `_1_102_a.jpeg`, the edit's still). The `_a` renditions win
+  (Photos shows the edit); for videos `_2_3_a.mp4`, `_2_4_a.mp4`, `_2_201_a.mov` are
+  assumed by analogy, not seen yet.
+- **Hover UX** (the owner, as Immich and Google Photos): the badge stays while the
+  tile moves, a ring turns around its mark while the video comes, the video fades in
+  over the frames (200 ms).
 - **A local HEIC original leaves no file**: asked for the image, Photos draws it
   from the original on disk and writes no derivative — the viewer got a 404. The
   image PhotoKit hands over comes back as JPEG (`pk_image`) and is served when no

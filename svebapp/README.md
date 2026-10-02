@@ -70,7 +70,8 @@ keeps in place.
   image once loaded (a video: its 720p first, `?hevc=0` where the browser plays no
   HEVC); the viewer page asks for the neighbours' (±6 in the view's order) ahead; a
   moving tile asks for its hover video after the pointer stayed 250 ms (`Motion`),
-  showing the frames until it plays.
+  showing the frames until it plays; the badge stays, a ring turns around its mark
+  while the video comes, the video fades in.
 - `lib/workers/tasks/wlayout.ts` (start) — loads the kept items and the view's kept
   order (`itemsDb.orders` `order:<view>`, shared by the tabs), so the sheet shows without the network; a
   change that keeps an item's size patches its row in place.
