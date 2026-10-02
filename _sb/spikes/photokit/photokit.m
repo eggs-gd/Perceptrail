@@ -78,9 +78,10 @@ pk_result pk_request(const char *uuid, int target, int network) {
         if (err) r.error = dupstr(err.description);
         if ([info[PHImageCancelledKey] boolValue] && !r.error) r.error = dupstr(@"cancelled");
         if (img) {
-            NSImageRep *rep = img.representations.firstObject;
-            r.width = (int)rep.pixelsWide;
-            r.height = (int)rep.pixelsHigh;
+            // The bitmap's own pixels: NSImage sizes are points (×2 on Retina)
+            CGImageRef cg = [img CGImageForProposedRect:NULL context:nil hints:nil];
+            r.width = (int)CGImageGetWidth(cg);
+            r.height = (int)CGImageGetHeight(cg);
         }
     }];
     if (r.seconds == 0) r.seconds = -[start timeIntervalSinceNow];
