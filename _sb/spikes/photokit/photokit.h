@@ -28,11 +28,13 @@ typedef struct {
     double duration;    // seconds
     int inCloud;
     char *url;          // where AVFoundation reads it from (a file in the library?), or NULL
+    char codec[5];      // the video track's FourCC (avc1, hvc1, …)
     char *error;
 } pk_video_result;
 
-// pk_video: the asset's video as a player would ask (medium quality)
-pk_video_result pk_video(const char *uuid, int network);
+// pk_video: the asset's video as a player would ask; mode: PHVideoRequestOptionsDeliveryMode
+// (0 automatic, 1 high quality, 2 medium quality, 3 fast)
+pk_video_result pk_video(const char *uuid, int network, int mode);
 
 // pk_live: a Live Photo of at most target×target, as the viewer would ask; the
 // result's width/height are the still's (an unknown size: 0)

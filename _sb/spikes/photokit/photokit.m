@@ -104,7 +104,7 @@ pk_result pk_request(const char *uuid, int target, int network) {
     return r;
 }
 
-pk_video_result pk_video(const char *uuid, int network) {
+pk_video_result pk_video(const char *uuid, int network, int mode) {
     pk_video_result res = {0};
     PHAsset *a = asset(uuid);
     if (!a) {
@@ -112,7 +112,7 @@ pk_video_result pk_video(const char *uuid, int network) {
         return res;
     }
     PHVideoRequestOptions *opt = [PHVideoRequestOptions new];
-    opt.deliveryMode = PHVideoRequestOptionsDeliveryModeMediumQualityFormat;
+    opt.deliveryMode = (PHVideoRequestOptionsDeliveryMode)mode;
     opt.networkAccessAllowed = network != 0;
     dispatch_semaphore_t done = dispatch_semaphore_create(0);
     __block pk_video_result r = res;
@@ -129,6 +129,12 @@ pk_video_result pk_video(const char *uuid, int network) {
         if (t) {
             r.width = (int)t.naturalSize.width;
             r.height = (int)t.naturalSize.height;
+            CMFormatDescriptionRef f = (__bridge CMFormatDescriptionRef)t.formatDescriptions.firstObject;
+            if (f) {
+                FourCharCode c = CMFormatDescriptionGetMediaSubType(f);
+                r.codec[0] = (char)(c >> 24); r.codec[1] = (char)(c >> 16);
+                r.codec[2] = (char)(c >> 8); r.codec[3] = (char)c; r.codec[4] = 0;
+            }
         }
         if (av) r.duration = CMTimeGetSeconds(av.duration);
         dispatch_semaphore_signal(done);

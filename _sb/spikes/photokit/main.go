@@ -45,6 +45,7 @@ func main() {
 	wait := flag.Duration("wait", 10*time.Second, "how long to let Photos write its DB after the request")
 	statusOnly := flag.Bool("status", false, "print the authorization status and stop (no prompt)")
 	kind := flag.String("kind", "photo", "what to ask for: photo (an image), video (the video), live (a Live Photo)")
+	vmode := flag.String("vmode", "medium", "video: the delivery mode asked for — auto, high, medium, fast")
 	flag.Parse()
 
 	fmt.Printf("Photos access: %s\n", statuses[int(C.pk_status())])
@@ -68,7 +69,7 @@ func main() {
 		ask := func(network bool) fmt.Stringer {
 			switch *kind {
 			case "video":
-				return video(uuid, network)
+				return video(uuid, network, map[string]int{"auto": 0, "high": 1, "medium": 2, "fast": 3}[*vmode])
 			case "live":
 				return live(uuid, *size, network)
 			}
@@ -140,11 +141,11 @@ type videoResult struct {
 	seconds, duration float64
 	w, h              int
 	inCloud           bool
-	url, err          string
+	url, codec, err   string
 }
 
 func (r videoResult) String() string {
-	s := fmt.Sprintf("%.2fs %dx%d %.1fs-long inCloud=%v", r.seconds, r.w, r.h, r.duration, r.inCloud)
+	s := fmt.Sprintf("%.2fs %s %dx%d %.1fs-long inCloud=%v", r.seconds, r.codec, r.w, r.h, r.duration, r.inCloud)
 	if r.url != "" {
 		s += " url=" + r.url
 	}
@@ -154,15 +155,15 @@ func (r videoResult) String() string {
 	return s
 }
 
-func video(uuid string, network bool) videoResult {
+func video(uuid string, network bool, mode int) videoResult {
 	cu := C.CString(uuid)
 	defer C.free(unsafe.Pointer(cu))
 	n := 0
 	if network {
 		n = 1
 	}
-	r := C.pk_video(cu, C.int(n))
-	out := videoResult{seconds: float64(r.seconds), duration: float64(r.duration), w: int(r.width), h: int(r.height), inCloud: r.inCloud != 0}
+	r := C.pk_video(cu, C.int(n), C.int(mode))
+	out := videoResult{seconds: float64(r.seconds), duration: float64(r.duration), w: int(r.width), h: int(r.height), inCloud: r.inCloud != 0, codec: C.GoString(&r.codec[0])}
 	if r.url != nil {
 		out.url = C.GoString(r.url)
 		C.free(unsafe.Pointer(r.url))

@@ -16,7 +16,7 @@ It only reads the library; Photos itself may download renditions into it.
 go build -o photokit-spike .
 ./photokit-spike -status                 # the permission, without asking
 ./photokit-spike <asset UUID>...         # asks once, then per asset:
-./photokit-spike -kind video <UUID>...   # the video, as a player asks (medium quality)
+./photokit-spike -kind video [-vmode auto|high|medium|fast] <UUID>...  # the video, as a player asks
 ./photokit-spike -kind live <UUID>...    # a Live Photo, as the viewer asks
 ```
 
