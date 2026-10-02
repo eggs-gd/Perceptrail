@@ -76,10 +76,10 @@ type importerService struct {
 	importChain chain.ChainProcessor
 
 	// One asset again (Refresh): its provider forms its group, the gate takes it like
-	// any other; whoever waits hears when its item leaves the chain
-	grouped   chan flow.FileGroup
-	waitersMu sync.Mutex
-	waiters   map[string][]chan struct{}
+	// any other; whoever waits hears when its item leaves the chain or the gate drops
+	// the group
+	grouped chan flow.FileGroup
+	waits   *assetWaits
 }
 
 func NewImporterService(ctx app.AppContext) *importerService {
@@ -150,23 +150,18 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	// Files -> whole assets: a file to the grouper of the first provider that claims
 	// it (Apple Photos…, the plain folder last)
 	ps := providers.Enabled()
-	toGroupers := make([]chan flow.FileEvent, len(ps))
-	outs := make([]chan<- flow.FileEvent, len(ps))
-	for i := range ps {
-		toGroupers[i] = make(chan flow.FileEvent)
-		outs[i] = toGroupers[i]
-	}
-	importChain.AddStep(groups.NewSwitch(ps, files, outs))
+	toGroupers := make([]chan<- flow.FileEvent, len(ps))
 	for i, p := range ps {
-		importChain.AddStep(chain.NewDecorator(toGroupers[i], grouped, p.Grouper()))
+		toGrouper := make(chan flow.FileEvent)
+		toGroupers[i] = toGrouper
+		importChain.AddStep(chain.NewDecorator(toGrouper, grouped, p.Grouper()))
 	}
+	importChain.AddStep(groups.NewSwitch(ps, files, toGroupers))
 
 	// Assets -> items: only what needs work, then metadata, kinds, identity. A keyed
 	// group it drops is told to whoever waits for that asset (Refresh)
-	svc := &importerService{waiters: map[string][]chan struct{}{}}
-	gate := newFilesGate(len(ps), progress, logger)
-	gate.dropped = svc.itemDone
-	importChain.AddStep(chain.NewDecorator(grouped, stored, chain.Decorator[flow.FileGroup, flow.FileGroup](gate)))
+	waits := newAssetWaits()
+	importChain.AddStep(NewFilesGate(len(ps), progress, waits.done, grouped, stored, logger))
 
 	// The rest reports to errProcessing: progress counts the groups in flight
 	processing := chain.NewChainProcessor(errProcessing)
@@ -184,15 +179,20 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	// steps keep errProcessing
 	importChain.AddStep(processing)
 
-	svc.appCtx, svc.errch, svc.items, svc.progress = ctx, errch, items, progress
-	svc.importChain, svc.grouped = importChain, grouped
-	return svc
+	return &importerService{
+		appCtx:      ctx,
+		errch:       errch,
+		items:       items,
+		progress:    progress,
+		importChain: importChain,
+		grouped:     grouped,
+		waits:       waits,
+	}
 }
 
 // Refresh processes one asset of a provider's library again, now — the library (Apple
 // Photos…) has just made a file of it local (on demand): no walk of the whole library
-// for one photo. Its group
-// goes to the gate like any group (only what changed passes; deletions are not
+// for one photo. Its group goes to the gate like any group (only what changed passes; deletions are not
 // touched — they come with the walk's marker; a walk sending the same asset at the
 // same time just processes it twice into the same item). Waits until the item has
 // left the chain or the gate dropped the group (nothing changed: Photos drew from
@@ -209,11 +209,8 @@ func (s *importerService) Refresh(uuid string, wait time.Duration) bool {
 	if !ok {
 		return false
 	}
-	done := make(chan struct{})
-	s.waitersMu.Lock()
-	s.waiters[uuid] = append(s.waiters[uuid], done)
-	s.waitersMu.Unlock()
-	defer s.dropWaiter(uuid, done)
+	done := s.waits.add(uuid)
+	defer s.waits.drop(uuid, done)
 
 	timeout := time.After(wait)
 	select {
@@ -229,29 +226,48 @@ func (s *importerService) Refresh(uuid string, wait time.Duration) bool {
 	}
 }
 
-func (s *importerService) dropWaiter(uuid string, done chan struct{}) {
-	s.waitersMu.Lock()
-	defer s.waitersMu.Unlock()
-	ws := s.waiters[uuid]
-	for i, w := range ws {
-		if w == done {
-			s.waiters[uuid] = append(ws[:i], ws[i+1:]...)
+// assetWaits: who waits for an asset's item to be done (Refresh) — told when the
+// item leaves the chain or the gate drops its group
+type assetWaits struct {
+	mu sync.Mutex
+	by map[string][]chan struct{}
+}
+
+func newAssetWaits() *assetWaits { return &assetWaits{by: map[string][]chan struct{}{}} }
+
+// add: a channel closed when the asset is done
+func (w *assetWaits) add(key string) chan struct{} {
+	ch := make(chan struct{})
+	w.mu.Lock()
+	w.by[key] = append(w.by[key], ch)
+	w.mu.Unlock()
+	return ch
+}
+
+// drop: the waiter gave up (or heard already)
+func (w *assetWaits) drop(key string, ch chan struct{}) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	chs := w.by[key]
+	for i, c := range chs {
+		if c == ch {
+			w.by[key] = append(chs[:i], chs[i+1:]...)
 			break
 		}
 	}
-	if len(s.waiters[uuid]) == 0 {
-		delete(s.waiters, uuid)
+	if len(w.by[key]) == 0 {
+		delete(w.by, key)
 	}
 }
 
-// itemDone: an item left the chain — its waiters hear of it
-func (s *importerService) itemDone(guid string) {
-	s.waitersMu.Lock()
-	defer s.waitersMu.Unlock()
-	for _, w := range s.waiters[guid] {
-		close(w)
+// done: the asset's item is done — everyone waiting hears
+func (w *assetWaits) done(key string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, c := range w.by[key] {
+		close(c)
 	}
-	delete(s.waiters, guid)
+	delete(w.by, key)
 }
 
 func (s *importerService) Start(parentCtx context.Context) {
@@ -265,7 +281,7 @@ func (s *importerService) Start(parentCtx context.Context) {
 			select {
 			case it := <-s.items:
 				s.progress.finished()
-				s.itemDone(it.Guid)
+				s.waits.done(it.Guid)
 			case <-ctx.Done():
 				return
 			}

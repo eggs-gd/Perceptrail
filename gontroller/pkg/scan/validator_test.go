@@ -76,8 +76,7 @@ func scanWith(t *testing.T, root string, dropped func(key string)) []string {
 	// The providers as the chain has them: Apple, the plain folder last
 	ps := []providers.Provider{apple.New("", nil, itemsProxy, logger), folder.New()}
 	sw := groups.Switch{Providers: ps}
-	gate := newFilesGate(len(ps), newProgress(), logger)
-	gate.dropped = dropped
+	gate := newFilesGate(len(ps), newProgress(), dropped, logger)
 	exif := &exifExtractor{logger: logger, extract: fakeExif}
 	valid := newValidator(logger)
 	preview := &cheapPreview{logger: logger, dir: t.TempDir(),
