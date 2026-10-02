@@ -17,6 +17,7 @@ const lengthIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" 
 
 func (p *durationPerceptor) View() api.View {
 	return api.View{
+		Slug:  "length",
 		Title: "Length",
 		Icon:  lengthIcon,
 		Help:  "Videos by their length, the longest first; photos follow.",
@@ -46,3 +47,13 @@ func length(seconds float64) string {
 
 // Schema: nothing of its own to keep — the core's item has it
 func (p *durationPerceptor) Schema() api.Schema { return api.Schema{} }
+
+// Info: a video's length (m:ss)
+func (p *durationPerceptor) Info(item api.ItemDataProvider) []api.Fact {
+	d := item.GetDuration()
+	if d <= 0 {
+		return nil
+	}
+	s := int(d + 0.5)
+	return []api.Fact{{Label: "Length", Value: fmt.Sprintf("%d:%02d", s/60, s%60)}}
+}

@@ -92,9 +92,11 @@ Target architecture — the diagrams in [`../puml`](../puml).
 
 ## Releases
 
-- **0.2.0** — when the first perceptor works end to end (e.g. a primitive geo). Until
-  then everything stays in `develop`.
-- **First public release** — includes Docker.
+- **0.2.0 — the first release**: transcode (photos and video, hardware video
+  encoding) and Docker. A release means an image someone installs; without the
+  transcode the system is not complete (HEIC in Chrome, iPhone HEVC video, big
+  originals in the grid). The first perceptor end to end (geo, PR #17) is no longer
+  the bar. Until then everything stays in `develop`.
 
 ## Next
 
@@ -129,24 +131,101 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
       `PHAssetResourceManager`, network access allowed); the next walk sees it and
       reprocesses the group. PhotoKit exists only on the Mac that owns the library,
       in a user session (not Docker, not a NAS reading a share or a copy). So an
-      optional capability: a small Swift helper (CLI first, later a launchd agent with
-      the Photos permission), called by the server; the viewer's Original button asks
-      it when the original is not local. First a spike: does the request leave the
-      original in the library, or only hand the data to the caller? Photos may purge
-      it again (Optimize Mac Storage): then the asset falls back to its derivative.
+      optional capability of the native macOS build (Go + cgo, see step 0 below);
+      the viewer's Original button asks it when the original is not local. Photos may
+      purge it again (Optimize Mac Storage): then the asset falls back to its
+      derivative.
 - Supported schema: `ZASSET` (macOS 11+); older (`ZGENERICASSET`) — not planned.
 - Later: albums, people (`ZPERSON` / `ZDETECTEDFACE`) → perceptors.
 
 ### Then
 
-- [ ] Thumbnails on the server: libvips via `bimg` (needs `brew install vips`), 400 px
-      for tiles, 1600 px for the viewer, WebP; `/assets/:guid?size=…` falls back to the
-      original; regenerated for `Dirty`, dropped for `Deleted`. Fixes blank tiles
-      (decoding originals) and HEIC in Chrome/Firefox. Transcoders take the whole
-      asset (group), not a file. Video: web previews are always downscaled (even a
-      browser-playable H.264 can be 4K); codecs (H.264 / HEVC / AV1 support) decided
-      then. Motion previews for videos and Live Photos: a short muted clip (or GIF)
-      that plays on mouseover in the gallery, the poster otherwise.
+- [ ] **The expensive stage: previews and transcode** — design below ("Expensive
+      stage"). In steps, each its own PR (the cut may still change):
+      0. **Apple Photos first — a spike, then a fork** (the dev library is mostly
+         iCloud-only, and Photos' DB knows every asset's renditions —
+         `ZINTERNALRESOURCE`: recipe, size, local / in iCloud; recipe 65741, up to
+         ~2048 px, is in iCloud for nearly every asset — 3 240 have it only there).
+         - **The principle: one copy.** Whatever Photos keeps, we do not keep again —
+           a cache of our own beside the library does not save disk, it adds a
+           second copy. What is local we serve as it is; what is not we ask Photos for
+           (PhotoKit), and Photos stores it in its own library, under its own
+           storage policy (Optimize Mac Storage purges it when space runs low — we
+           then fall back to a smaller rendition and ask again). The most we may
+           keep: a bounded working set (an LRU with a size limit, e.g. 2 GB) so the
+           viewer's neighbours open at once — any entry may vanish, it is not a copy
+           of the library. Our own renditions only for what Photos does not have
+           (generic folders; formats a browser cannot show).
+         - **By level, on demand** — not "make everything medium": recipe 65741
+           averages ~1 MB (~2.6 bits/pixel — a high-quality JPEG, Photos shows and
+           edits from it), ~100 GB per 100 k photos, ~40 % of the originals:
+
+           | for | rendition | when |
+           |---|---|---|
+           | tiles | small (65743 360×480 ~76 KB, 65747 768×1024 ~300 KB — often local already) | ahead, in the background |
+           | the viewer | medium, ~2048 | when a photo opens, plus its neighbours |
+           | the original | the full file | the Original button |
+
+           (Our own webp at 1600 px would be ~250 KB — fewer pixels ×0.6, quality
+           ~q80 ×0.6, the codec ×0.7 — but that saves space on a copy beside theirs:
+           not an argument.)
+         - **"Download Originals to this Mac" — supported, not the only way.** For
+           most libraries (the dev one too) it is the simplest: one checkbox,
+           everything local, nothing to ask Photos for. But people with decades of
+           photos (hundreds of thousands) would be forced to sync the whole library —
+           and Photos has no "keep renditions, originals on request" mode: it is
+           either everything or renditions at its own discretion. For them (Optimize
+           Mac Storage) asking Photos per level is exactly that missing mode, and the
+           reason to have the PhotoKit step at all. The docs give both: the checkbox
+           for who can afford the disk, the step for who cannot.
+         - **Go, not Swift.** PhotoKit is Objective-C: Go calls it through cgo (an
+           `.m` file beside the Go code), in the gontroller process — no second
+           process, no second language. cgo is there already (Go plugins need it);
+           the code sits behind `//go:build darwin`, the Linux build has no Apple
+           step. The Photos permission needs `NSPhotoLibraryUsageDescription`: a bare
+           binary gets an Info.plist through the linker
+           (`-sectcreate __TEXT __info_plist`). To check: who the permission is
+           granted to when started from a terminal (the binary or the terminal), and
+           whether each rebuild (a new ad-hoc signature) drops it — if it does,
+           development needs a stable signature, or the PhotoKit part becomes a small
+           process of its own after all.
+         - **Where it runs.** Reading the library (`groups/apple`: a copy of
+           `Photos.sqlite` + the files on disk) is pure Go and stays in every build:
+           an archived library after leaving Apple, a library on an external disk, a
+           copy on a NAS — what is on disk is shown, what is missing is marked.
+           Asking Photos is the native macOS build only. **Docker on a Mac** (Docker
+           Desktop is a Linux VM) has no PhotoKit, and macOS does not let it into a
+           `.photoslibrary` without Full Disk Access: a Mac with Photos runs the native
+           binary, Docker is for servers — the Docker step says so in its docs.
+         - **spike** (Go + cgo, `_sb/spikes/photokit`, its own branch): ask PhotoKit
+           for a cloud-only asset's medium image (network allowed) — does Photos make
+           the rendition local in the library (`resources/derivatives`, the DB's local
+           availability), or only hand us the bytes? Also: time and traffic per asset
+           (can the viewer wait for it on open?), limits when asking for thousands,
+           the permission questions above;
+         - **it normalises the library** → an Apple step in our chain of
+           responsibility: ask Photos for the level that is missing — small ahead for
+           the tiles, medium on demand (the work list straight from its DB); the next
+           walk finds the files — nothing rendered or stored by us, nothing written to
+           the library by us;
+         - **it only hands the bytes** → decide separately, still without a second
+           copy: serve them straight through (slow but no copies), or the bounded
+           working set above.
+      1. **photo renditions** — libvips on the CPU, the source chosen to avoid a full
+         decode, the DB-state queue, benchmarks on the real library (generic folders,
+         and Apple assets that still lack a viewable size);
+      2. **video, software** — `libx264`, HDR → SDR, hover clip, poster; the codec →
+         encoder table and the probe with a software fallback from day one;
+      3. **Docker** — the image (jellyfin-ffmpeg), a base compose with software encoding;
+         the docs say a Mac with Photos runs the native binary (no PhotoKit in Docker);
+      4. **hardware acceleration** — video: QSV (`hwaccel.qsv.yml`, the i5),
+         VideoToolbox (native on a Mac), NVENC when there is one to test on; photos: a
+         macOS ImageIO decoder for HEIC only if the benchmarks show HEIC is the
+         bottleneck.
+
+      0.2.0 needs 1–3; 4 is wanted, not required. Regenerated for `Dirty`, dropped for `Deleted`. Transcoders take the
+      whole asset (group), not a file. Motion previews for videos and Live Photos: a
+      short muted clip that plays on mouseover, the poster otherwise.
 
       **Two-stage readiness** (decided): show what we can as early as possible, but
       never content the browser cannot show.
@@ -192,7 +271,8 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
         face; on our previews part of them moves out into clusters of their own.
         Per item and perceptor we store the pass done (and the perceptor version).
         Order comes from the stages: every new item gets its cheap pass first.
-- [ ] First perceptor end to end (primitive geo: map, markers) → release 0.2.0.
+- [x] First perceptor end to end — geo (PR #17): its data, its view of the sheet.
+- [ ] Geo on a map (markers) — a perceptor UI slot (see "Later").
 
 ## Core — product (gontroller)
 
@@ -203,18 +283,68 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 
 ## Core — service (gontroller)
 
-- [ ] Unreadable/broken files still become items (0×0): exiftool returns File tags
-      even for garbage. Decide how to mark them (ignored? error state?).
-- [ ] Fewer Info logs in `fswalker` (several per file).
+- [x] Broken files (PR #18): a generic group whose main file exiftool reports as broken
+      (`Error`: "File format error", "File is empty") or an image with no size at all
+      (a JPEG cut after its header) is not an item; its files are ignored until one
+      changes (no retry on every walk); a photo that gets corrupted loses its item.
+      Apple assets are not judged by their file. A group exiftool returns nothing for
+      at all is still retried (that may be a passing failure).
+- [x] Fewer Info logs in `fswalker` — none per file since the import chain (C1).
 - [ ] `TestLoadExternalPlugins` should load real `.so` files.
 
 ## Deployment (first release)
 
-- [ ] Dockerfile: CGO (sqlite, libvips), exiftool from a `dist-*` release, fix `CMD`
-      (`--config /data/config.yml`, `/data` as a volume = what `.var/` is in dev).
+- [x] **Debug / release mode in the config** (PR #18): `mode: debug | release`
+      (release by default, debug in the dev config); `GET /app` gives the client the
+      version and the mode, so one client build serves both. Release: server logs at
+      Info (no SQL — it is logged at Debug), no per-request lines; the client logs
+      warnings and errors only (the workers get the mode as a message), no tile
+      borders, a neutral placeholder instead of "Can't render item".
+
+- [ ] Dockerfile (with 0.2.0): CGO (sqlite, libvips), jellyfin-ffmpeg, exiftool from a
+      `dist-*` release, fix `CMD` (`--config /data/config.yml`, `/data` as a volume =
+      what `.var/` is in dev). A base compose that runs anywhere (software encoding)
+      + an override per accelerator (`hwaccel.qsv.yml`: `/dev/dri` and the `render`
+      group; `hwaccel.nvenc.yml`: NVIDIA Container Toolkit).
 
 ## Frontend
 
+- [x] **Kept items, a delta sync** (PR #18): a direct link and the side panel's marks
+      waited for a sync from zero on every load (itemsDb was cleared). The items are
+      kept between visits; `/items?since=<cursor>` brings only what changed — changed
+      items, and `{guid, removed}` for the deleted or hidden ones; the server's epoch
+      (its database) decides when a full sync is needed. The layout starts from the kept
+      items and the view's kept order (then the server's, applied only if it differs).
+      Refreshed on the page's own moments: the start, coming back to the tab, every
+      navigation (at most every 5 s). A reload: tiles and marks in ~0.2 s, a direct
+      link ~0.3 s; an empty delta is 0 bytes instead of 3.5 MB.
+
+- [x] **Item info panel** in the viewer (PR #18): a toolbar switch, kept like the
+      other viewer switches (open photo to photo and between visits, until switched
+      off — a separate pin inside the panel was not obvious and is gone). Its content comes from the perceptors: each one gives what it knows
+      about the item — a base requirement next to navigation (`Perceptor.Info(item)` →
+      fields with labels and values; `GET /items/:guid/info` → per perceptor: its title,
+      icon and fields). Today: date (the date, its zone and where it came from), size
+      (pixels, megapixels), length, place (coordinates, region / city), the asset's
+      files (original, edits, what is local / in iCloud).
+- [x] **A burger menu instead of the side panel's pin** (PR #18): a dropdown with
+      toggles — pin the side panel; show / hide each perceptor's button. Three levels for a perceptor:
+      **off** (config `enabled: false` — not run), **hidden by the server** (`client:
+      false` — runs, the client does not get it), **hidden by the client** (the user's
+      toggle in the menu, kept in the browser).
+
+- [x] **Views and photos have URLs** (PR #18): `/v/<view>` — the sheet in a view,
+      `?at=<guid>` — around that photo (kept up to date as you scroll: a reload or a
+      shared link opens the same place); `/v/<view>/<guid>` — the viewer on a photo,
+      ← → walking that view. `<view>` is the perceptor's public slug (`api.View.Slug`:
+      `date`, `size`, `length`, `place`, `colour`; unique — a taken one is not given to
+      the client), not its plugin name. `/` redirects to `/v/date`; an unknown view goes
+      to the first. A switch is a history entry: Back returns to the previous view
+      around the same photo. The URL is the state (the view is no longer kept in the
+      browser's storage).
+- [x] Side panel: the first section of a deeper level (the first month of a year, the
+      first city of a region) sits at the same point as its parent's label — its
+      label now goes just under the parent's when there is room (PR #18).
 - [ ] Optimal (Dijkstra) layout for an already loaded gallery — optional.
 
 ## Later: the perceptor platform
@@ -223,8 +353,9 @@ Don't rush — a stable core first.
 
 - Server → client events (New / Updated / Processed Item) as designed in
   [`Client flow.puml`](../puml/Client%20flow.puml) (MQTT): the client draws a
-  preloader, fixes the grid, then the thumbnail. Until then — incremental
-  `/items?since=` + tombstones as a fallback.
+  preloader, fixes the grid, then the thumbnail. The delta itself is there
+  (`/items?since=` + tombstones, PR #18): the client refreshes on its own moments
+  today; a push would carry the same delta.
 - ML as a separate service (goMLer) per [`ML Flow.puml`](../puml/ML%20Flow.puml):
   consumes Processed Item, runs ML plugins, returns metadata.
 - Perceptor data: the core keeps it, a perceptor only declares it — see "Perceptor
@@ -254,11 +385,84 @@ Don't rush — a stable core first.
         To decide: rainbow, trail or both.
   - [ ] Relative perceptors (the trail) with the first ML perceptor (faces): the
         trail mechanism shared with the colour trail.
-  - [ ] A stable link to a photo: the viewer's `/N` is a position in the current
-        sheet and changes with the perceptor.
+  - [x] A stable link to a photo — `/v/<view>/<guid>` (see Frontend).
 - UI slots (`item-panel`, `view`) — a perceptor can bring its own UI (map, face
   management).
 - Reprocessing on plugin version change; fsnotify instead of the periodic walk.
+
+### Expensive stage: previews and transcode (design, 2026-10-01)
+
+The transcode belongs to the core (as in Immich, PhotoPrism, Jellyfin: previews and
+ffmpeg in the server; ML apart — gomler). Its queue is DB state ("Two stages"), so any
+process with the database and the files can take work.
+
+**Photos — renditions, not a transcode** (the asset contract already calls them
+renditions) — libvips on the CPU; HEIC via libheif, RAW via its embedded preview (or
+libraw). The win is not decoding faster but **not decoding a 12 MP HEIC at all**:
+- **the source, cheapest first**: Photos' own JPEG when it is big enough for the size
+  (`_1_102_o`, ~1536×2048 — JPEG is shrunk while it loads); the HEIC's embedded
+  thumbnail for a tile; the full original only when nothing else will do. Most of an
+  iCloud library has no local original anyway (3 528 of 5 866 photos here);
+- **a decoder per type that can be swapped** (source → decode → transform → encode);
+  libvips is the first and only one;
+- **benchmarks on the real library** in this step: JPEG → 400 / 1600, HEIC → 400 /
+  1600, on the Mac and on the i5 — images/s, CPU use, peak RSS (a slow one that
+  parallelises well is fine). A macOS ImageIO decoder for HEIC is the next step only
+  if HEIC → 1600 is the bottleneck (whether ImageIO decodes HEIC in hardware is to be
+  measured, not assumed).
+- **Sizes: an array in the config**, long side px — the system takes any array.
+  Default `[400, 1600]` to start with (tiles, the viewer); previews, not copies of the
+  original: ~3840 is close to the original itself. Worth trying later: 800 (tiles
+  are ~400 CSS px — 800 on Retina) and 2560 (pixel-perfect on a 2K 32"; a MacBook
+  16" is 3456×2234). `srcset` picks the size and the density; the original stays
+  behind the viewer's Original switch.
+- **Format: one, chosen in the config** — `webp` (default) or `avif`:
+
+  | | WebP | AVIF |
+  |---|---|---|
+  | size at the same quality | base | ~20–30% smaller |
+  | gradients (sky, skin) | banding possible | cleaner |
+  | depth, HDR | 8 bit, no HDR | 10–12 bit, HDR, wide gamut (iPhone Display P3) |
+  | encoding | fast | 5–10× slower on the CPU |
+  | browsers | all | all current (Safari 16+) |
+
+**Video** — ffmpeg (**jellyfin-ffmpeg**: every hardware backend and HDR tone mapping
+in one build, as Immich does).
+- **Codec: one, chosen in the config** (`h264` default — plays everywhere; `hevc`,
+  `av1`). The core maps it to the accelerator's encoder (`h264` → `h264_qsv` /
+  `h264_vaapi` / `h264_nvenc` / `h264_videotoolbox` / `libx264`).
+- **Accelerator in the config**: `auto | none | qsv | vaapi | nvenc | videotoolbox`.
+  At start a probe (a few frames of `testsrc`) checks it; a failure is logged and the
+  software encoder is used.
+- **The whole chain on the GPU** — decode → scale → encode without copying frames to
+  the CPU (`-hwaccel qsv -hwaccel_output_format qsv`, `scale_qsv`): that is where the
+  speed comes from.
+- **HDR → SDR tone mapping** — iPhone video is HLG / Dolby Vision HEVC: without it an
+  H.264 copy comes out washed out (`vpp_qsv` / `tonemap_opencl` / `libplacebo`). To
+  be checked on real iPhone videos.
+- Outputs: the viewer's video (sizes from the config, like photos), a short muted
+  hover clip, a poster.
+- **Hardware**:
+
+  | | encode | decode | in Docker |
+  |---|---|---|---|
+  | Intel QSV / VAAPI (dev box: i5-13500T, UHD 770) | H.264, HEVC 8/10 bit; AV1 only on Arc / Core Ultra | + AV1 | `/dev/dri`, `render` group |
+  | NVIDIA NVENC | H.264, HEVC; AV1 on Ada+ | + AV1 | NVIDIA Container Toolkit |
+  | AMD VAAPI | H.264, HEVC | | `/dev/dri` |
+  | Apple VideoToolbox | H.264, HEVC | | no: Docker on a Mac has no GPU — run the binary natively |
+
+  On the dev box AV1 encoding is software only (SVT-AV1, slow): `h264` / `hevc` there.
+
+**Where it runs**: in gontroller by default — one compose, one process. The same
+binary may later run in roles (`role: transcoder`, as Immich's workers) on a GPU box,
+taking work from the same DB queue; nothing extra to design for it — the queue is
+already DB state.
+
+- [ ] **Later: several codecs / formats at once** (`codecs: [h264, av1]`, `formats:
+      [avif, webp]`) — the asset contract already sends each rendition with its codec
+      and `<picture>` / `<source type>` lets the browser pick the best it plays. But
+      each one is another encode: N× the disk and the transcode time, so it is a
+      choice of its own, not the default.
 
 ### Perceptor data (decided 2026-10-01; Single done in PR #17)
 

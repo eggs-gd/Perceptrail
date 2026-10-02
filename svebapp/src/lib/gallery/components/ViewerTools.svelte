@@ -9,11 +9,14 @@
         /** The original is shown in place of the preview */
         showOriginal: boolean;
         ontoggleoriginal: () => void;
-        /** A perceptor was picked: to the sheet in its order, around this photo */
-        onperceptor: (name: string) => void;
+        /** A view was picked: to the sheet in its order, around this photo */
+        onperceptor: (slug: string) => void;
+        /** The info panel is shown */
+        infoOpen: boolean;
+        ontoggleinfo: () => void;
     }
 
-    let {asset, showOriginal, ontoggleoriginal, onperceptor}: Props = $props();
+    let {asset, showOriginal, ontoggleoriginal, onperceptor, infoOpen, ontoggleinfo}: Props = $props();
 
     // What the viewer can do with this asset decides the buttons
     let playable = $derived(playableVideos(asset).length > 0);
@@ -74,6 +77,14 @@
             </svg>
         </button>
     {/if}
+    <button class="tool" class:on={infoOpen} title="Info" aria-label="Info" aria-pressed={infoOpen}
+            onclick={ontoggleinfo}>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M12 11v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            <circle cx="12" cy="7.6" r="1.1" fill="currentColor"/>
+        </svg>
+    </button>
     {#if still}
         <button class="tool" class:on={viewerPrefs.stretchSmall} title={tooltips.stretch()}
                 aria-label={tooltips.stretch()} aria-pressed={viewerPrefs.stretchSmall}

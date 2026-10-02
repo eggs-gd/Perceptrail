@@ -1,7 +1,9 @@
 <script lang="ts">
     import ItemView from "$lib/gallery/components/ItemView.svelte";
     import ViewerTools from "$lib/gallery/components/ViewerTools.svelte";
-    import {switchPerceptor} from "$lib/gallery/perceptors.svelte";
+    import InfoPanel from "$lib/gallery/components/InfoPanel.svelte";
+    import {toggleViewerPref, viewerPrefs} from "$lib/gallery/components/viewerPrefs.svelte";
+    import {photoHref, viewHref} from "$lib/gallery/perceptors.svelte";
     import {page} from '$app/state';
     import {goto} from '$app/navigation';
     import {layoutDb} from "$lib/stores";
@@ -12,17 +14,24 @@
     const MIN_ZOOM = 0.25;
     const MAX_ZOOM = 8;
 
-    let index = $derived(Number(page.params.index));
+    // /v/<view>/<guid>: the photo by its guid (a link stays the same photo whatever
+    // the view or new photos do); ← → walk the view's sheet
+    let view = $derived(page.params.view!);
+    let guid = $derived(page.params.guid!);
 
-    // The gallery only holds the visible window, so the item comes from layoutDb.
-    // /3 → /4 reuses this component, and on a direct /N load the item is written by
-    // the layout worker after the first render — hence a live query per index.
-    // An absent /N gives undefined, so the previous photo is not kept.
+    // The gallery only holds the visible window, so the item comes from layoutDb. On a
+    // direct load it is written by the layout worker after the first render — hence a
+    // live query per guid; an unknown guid gives undefined.
     let itemQuery = $derived.by(() => {
-        const order = index;
-        return new LiveQuery(() => layoutDb.items.where('order').equals(order).first());
+        const g = guid;
+        return new LiveQuery(() => layoutDb.items.get(g));
     });
     let item = $derived(itemQuery.current);
+    let index = $derived(item?.order ?? 0);
+
+    // The info panel: its button is a switch kept like the others (photo to photo,
+    // between visits)
+    const toggleInfo = () => toggleViewerPref('infoOpen');
 
     // The Original switch is per item: the next one opens with its preview again
     let originalFor = $state<string | null>(null);
@@ -32,34 +41,41 @@
     let zoomState = $state({guid: '', value: 1});
     let zoom = $derived(zoomState.guid === item?.guid ? zoomState.value : 1);
 
-    // Close: back to the gallery entry it was opened from; opened directly (/N typed,
-    // a link, a reload of a replaced entry) there is none — go to the gallery instead
-    // of leaving the site
+    // Close: back to the gallery entry it was opened from; opened directly (a link, a
+    // reload of a replaced entry) there is none — go to the sheet around this photo
+    // instead of leaving the site
     function close() {
         if (page.state.fromGallery) history.back();
-        else goto('/', {replaceState: true, noScroll: true});
+        else goto(viewHref(view, guid), {replaceState: true, noScroll: true});
     }
 
-    // ← →: the previous / next item. The entry is replaced, so Back (and close) still
-    // leads to the gallery, not through every item seen. Steps count from the item
-    // being navigated to (a held key or quick presses add up); only the latest step
-    // navigates, past the end it stays.
+    // ← →: the previous / next item of the sheet. The entry is replaced, so Back (and
+    // close) still leads to the gallery, not through every item seen. Steps count from
+    // the item being navigated to (a held key or quick presses add up); only the latest
+    // step navigates, past the end it stays.
     let pending: number | undefined;
     function step(delta: number) {
-        const next = (pending ?? index) + delta;
+        if (!item) return;
+        const next = (pending ?? item.order) + delta;
         if (next < 0) return;
         pending = next;
-        layoutDb.items.where('order').equals(next).count().then((found) => {
+        layoutDb.items.where('order').equals(next).first().then((found) => {
             if (pending !== next) return; // a later step took over
             if (!found) {
                 pending = undefined;
                 return;
             }
-            goto('/' + next, {replaceState: true, noScroll: true, keepFocus: true, state: page.state})
+            goto(photoHref(view, found.guid), {replaceState: true, noScroll: true, keepFocus: true, state: page.state})
                 .finally(() => {
                     if (pending === next) pending = undefined;
                 });
         });
+    }
+
+    // A view picked here: the sheet in it around this photo (the viewer's entry is
+    // replaced — Back goes to where the viewer was opened from)
+    function pickView(slug: string) {
+        goto(viewHref(slug, guid), {replaceState: true, noScroll: true});
     }
 
     function onkeydown(e: KeyboardEvent) {
@@ -100,7 +116,11 @@
 {#if item?.asset}
     <ViewerTools asset={item.asset} {showOriginal}
                  ontoggleoriginal={() => (originalFor = showOriginal ? null : item!.guid)}
-                 onperceptor={(name) => { switchPerceptor(name, item!.guid); close(); }}/>
+                 onperceptor={pickView}
+                 infoOpen={viewerPrefs.infoOpen} ontoggleinfo={toggleInfo}/>
+{/if}
+{#if viewerPrefs.infoOpen}
+    <InfoPanel {guid} asset={item?.asset} onclose={toggleInfo}/>
 {/if}
 
 <style>

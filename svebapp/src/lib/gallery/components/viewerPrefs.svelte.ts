@@ -10,6 +10,8 @@ interface ViewerPrefs {
     autoplayVideo: boolean;
     /** Stretch an image smaller than the screen to fit it (off: its own size at most) */
     stretchSmall: boolean;
+    /** The info panel is open — kept photo to photo and between visits */
+    infoOpen: boolean;
 }
 
 function load(): Partial<ViewerPrefs> {
@@ -26,6 +28,7 @@ export const viewerPrefs: ViewerPrefs = $state({
     autoplayLive: saved.autoplayLive ?? true,
     autoplayVideo: saved.autoplayVideo ?? true,
     stretchSmall: saved.stretchSmall ?? false,
+    infoOpen: saved.infoOpen ?? false,
 });
 
 export function toggleViewerPref(key: keyof ViewerPrefs) {

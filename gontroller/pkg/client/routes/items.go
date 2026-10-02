@@ -1,6 +1,8 @@
 package routes
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -28,9 +30,37 @@ type clientItem struct {
 	Asset       clientAsset `json:"asset"` // every file of the asset, by role
 }
 
+// The client keeps its items between visits and asks only for what changed:
+// /items?since=<cursor>. The cursor is the server's time when a response began; it
+// comes as the stream's last line ({cursor}), so a stream cut short (a DB error after
+// the 200 went out, a dropped connection) has none and the client keeps its old one.
+// The epoch (a header) names this database — another one (recreated, another library)
+// means the client's copy is not a base for a delta, it fetches everything.
+const (
+	headerEpoch = "X-Sync-Epoch"
+	epochKey    = "sync_epoch"
+)
+
+// endLine: the stream's last line, only after every item went out
+type endLine struct {
+	Cursor string `json:"cursor"`
+}
+
+var syncEpoch string
+
 func RegisterItemsRoutes(segment string, e *echo.Echo, logger *l.Logger) {
 	if itemsProxy == nil {
 		itemsProxy = model.NewProxy(logger)
+	}
+	meta := model.MetaApi(model.NewProxy(logger))
+	syncEpoch, _ = meta.GetMeta(epochKey)
+	if syncEpoch == "" {
+		b := make([]byte, 8)
+		_, _ = rand.Read(b)
+		syncEpoch = hex.EncodeToString(b)
+		if err := meta.SetMeta(epochKey, syncEpoch); err != nil {
+			logger.Error("Sync epoch not kept", l.Error(err))
+		}
 	}
 
 	userGroup := e.Group(segment)
@@ -38,8 +68,26 @@ func RegisterItemsRoutes(segment string, e *echo.Echo, logger *l.Logger) {
 	userGroup.GET("", getItems)  // all items
 }
 
+// getItems: every shown item, newest first; ?since=<cursor>: only what changed since
+// — changed shown items as usual, and {guid, removed} for the deleted or hidden ones
 func getItems(c echo.Context) error {
-	return streamClientItems(c.Response().Writer)
+	var since *time.Time
+	if s := c.QueryParam("since"); s != "" {
+		t, err := time.Parse(time.RFC3339Nano, s)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "since: "+err.Error())
+		}
+		since = &t
+	}
+	c.Response().Header().Set(headerEpoch, syncEpoch)
+	cursor := time.Now().UTC().Format(time.RFC3339Nano)
+	return streamClientItems(c.Response().Writer, since, cursor)
+}
+
+// removedItem: a tombstone in a delta
+type removedItem struct {
+	Guid    string `json:"guid"`
+	Removed bool   `json:"removed"`
 }
 
 func toClientItem(dbItem *dto.ItemDto, files []*dto.FileDto) clientItem {
@@ -66,7 +114,7 @@ func toClientItem(dbItem *dto.ItemDto, files []*dto.FileDto) clientItem {
 	return item
 }
 
-func streamClientItems(w http.ResponseWriter) error {
+func streamClientItems(w http.ResponseWriter, since *time.Time, cursor string) error {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		return fmt.Errorf("streaming not supported")
@@ -78,17 +126,35 @@ func streamClientItems(w http.ResponseWriter) error {
 	flusher.Flush()
 
 	encoder := json.NewEncoder(w)
-
-	return itemsProxy.StreamAllItems(func(dbItem *dto.ItemDto, files []*dto.FileDto) error {
-		if !shown(dbItem) {
+	var err error
+	if since == nil {
+		err = itemsProxy.StreamAllItems(func(dbItem *dto.ItemDto, files []*dto.FileDto) error {
+			if !shown(dbItem) {
+				return nil
+			}
+			if err := encoder.Encode(toClientItem(dbItem, files)); err != nil {
+				return err
+			}
+			flusher.Flush()
 			return nil
-		}
-		if err := encoder.Encode(toClientItem(dbItem, files)); err != nil {
-			return err
-		}
-		flusher.Flush()
-		return nil
-	})
+		})
+	} else {
+		err = itemsProxy.StreamItemsSince(*since, func(dbItem *dto.ItemDto, files []*dto.FileDto) error {
+			var out any = toClientItem(dbItem, files)
+			if dbItem.DeletedAt.Valid || !shown(dbItem) {
+				out = removedItem{Guid: dbItem.Guid, Removed: true}
+			}
+			if err := encoder.Encode(out); err != nil {
+				return err
+			}
+			flusher.Flush()
+			return nil
+		})
+	}
+	if err != nil {
+		return err
+	}
+	return encoder.Encode(endLine{Cursor: cursor})
 }
 
 // shown: the client gets items it can display — Visible (a cheap preview) and Ready;

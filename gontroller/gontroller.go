@@ -7,12 +7,14 @@ import (
 	"os/signal"
 	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/client"
+	"perceptrail/gontroller/pkg/client/routes"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/plugins"
 	"perceptrail/gontroller/pkg/scan"
 	"syscall"
 
 	"github.com/eggs-gd/go-exiftool"
+	l "github.com/eggs-gd/perceplib/logger"
 )
 
 func main() {
@@ -32,8 +34,11 @@ func main() {
 	if ctx.Config().Exiftool != "" {
 		exiftool.Exec = ctx.Config().Exiftool
 	}
-	//ctx.SetLogLevel(l.WarnLevel)
-	//ctx.SetLogLevel(l.InfoLevel)
+	// Release: Info and up — no SQL (logged at Debug), no per-request lines
+	if !ctx.Config().Debug() {
+		ctx.SetLogLevel(l.InfoLevel)
+	}
+	log.Printf("mode: %s", ctx.Config().Mode)
 	svc := app.NewSvcContext()
 
 	err := plugins.Pm.LoadPlugins(ctx)
@@ -42,7 +47,7 @@ func main() {
 	}
 
 	svc.AddService(scan.NewImporterService(ctx))
-	web, err := client.NewWebService(ctx.Config().Server, plugins.Pm.ClientPerceptors(), plugins.Pm.LoadValues, ctx.Logger(string(app.LogHTTP)))
+	web, err := client.NewWebService(ctx.Config().Server, routes.AppInfo{Version: app.Version, Mode: ctx.Config().Mode}, plugins.Pm.ClientPerceptors(), plugins.Pm.LoadValues, ctx.Logger(string(app.LogHTTP)))
 	if err != nil {
 		log.Fatalf("Server: %v", err)
 	}

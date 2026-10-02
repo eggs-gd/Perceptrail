@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -42,13 +43,21 @@ func TestMain(m *testing.M) {
 }
 
 // fakeExif stands in for exiftool: the file content is its "metadata", so the
-// short hash follows the content; no MIMEType, so mime uses the extension table
+// short hash follows the content; no MIMEType, so mime uses the extension table.
+// A size, like a real image's. "BROKEN…": exiftool's Error (a corrupt file);
+// "NOSIZE…": a file with no image size (a JPEG cut after its header).
 func fakeExif(path string) (api.RawExif, error) {
 	content, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
-	return api.RawExif{"Content": content}, nil
+	switch {
+	case bytes.HasPrefix(content, []byte("BROKEN")):
+		return api.RawExif{"Content": content, "Error": []byte("File format error")}, nil
+	case bytes.HasPrefix(content, []byte("NOSIZE")):
+		return api.RawExif{"Content": content}, nil
+	}
+	return api.RawExif{"Content": content, "ImageSize": []byte("4x3")}, nil
 }
 
 // scan runs one walk through the steps of the import chain in order, the way the
@@ -348,4 +357,43 @@ func runCorePlugins(t *testing.T, it *flow.RawItem) {
 			t.Fatal(err)
 		}
 	}
+}
+
+// A broken file (exiftool's Error, or an image with no size) is not an item and is
+// not processed again on the next walk; fixed, it becomes one. A photo that gets
+// corrupted is no longer shown.
+func TestValidatorBrokenFiles(t *testing.T) {
+	root := t.TempDir()
+	corrupt := filepath.Join(root, "corrupt.jpg")
+	cut := filepath.Join(root, "cut.jpg")
+	good := filepath.Join(root, "good.jpg")
+	write(t, corrupt, "BROKEN garbage")
+	write(t, cut, "NOSIZE header only")
+	write(t, good, "a good photo")
+
+	processed := scan(t, root)
+	if len(processed) != 1 || processed[0] != good {
+		t.Fatalf("first walk processed %v, want only the good one", processed)
+	}
+	for _, p := range []string{corrupt, cut} {
+		if f, err := filesProxy.GetFileByPath(p); err != nil || !f.IsIgnored() {
+			t.Errorf("%s: not ignored (%v)", filepath.Base(p), err)
+		}
+	}
+	if again := scan(t, root); len(again) != 0 {
+		t.Errorf("second walk processed %v, want nothing (broken ones wait for a change)", again)
+	}
+
+	// Fixed: processed again, an item now
+	write(t, corrupt, "a repaired photo, longer")
+	if fixed := scan(t, root); len(fixed) != 1 || fixed[0] != corrupt {
+		t.Errorf("after the fix processed %v, want the repaired one", fixed)
+	}
+	itemAt(t, corrupt)
+
+	// Corrupted later: its item goes
+	guid := itemAt(t, good).Guid
+	write(t, good, "BROKEN now, and longer than before")
+	scan(t, root)
+	assertNoItem(t, guid)
 }

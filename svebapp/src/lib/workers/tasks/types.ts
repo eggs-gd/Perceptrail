@@ -33,7 +33,7 @@ export function isAbortError(error: Error): error is AbortError {
     return error instanceof AbortError;
 }
 
-export type WorkerTaskType = 'init' | 'start' | 'update' | 'order';
+export type WorkerTaskType = 'init' | 'start' | 'update' | 'order' | 'mode';
 
 export interface WorkerMessage<T, T1> {
     task: T;
@@ -51,6 +51,8 @@ export interface UpdateLayoutPayload {
 export interface OrderPayload {
     /** Echoed in the OrderResult */
     id: number;
+    /** The view (its order is kept per view) */
+    view: string;
     url: string;
     /** guid to keep in view: the relayout reports where it moved */
     anchor?: string;

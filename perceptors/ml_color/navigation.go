@@ -14,6 +14,7 @@ const colorIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" f
 
 func (p *colorPerceptor) View() api.View {
 	return api.View{
+		Slug:     "colour",
 		Title:    "Colour",
 		Icon:     colorIcon,
 		Help:     "A trail through photos of similar colour (not ready yet: nothing is analysed).",
@@ -34,3 +35,6 @@ func (p *colorPerceptor) Order(ctx context.Context, _ string, items []api.ItemDa
 
 // Schema: nothing kept yet (the processor is a stub)
 func (p *colorPerceptor) Schema() api.Schema { return api.Schema{} }
+
+// Info: nothing yet (nothing is analysed)
+func (p *colorPerceptor) Info(api.ItemDataProvider) []api.Fact { return nil }

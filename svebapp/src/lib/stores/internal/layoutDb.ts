@@ -1,5 +1,5 @@
 import Dexie, {type EntityTable} from "dexie";
-import type {LayoutItem, LayoutMeta, LayoutSections, LayoutSize} from "./types";
+import type {LayoutItem, LayoutMeta, LayoutOrder, LayoutSections, LayoutSize} from "./types";
 
 export const LAYOUT_META_KEY = 'layout' as const;
 export const LAYOUT_SIZE_KEY = 'size' as const;
@@ -10,14 +10,14 @@ export const LAYOUT_SECTIONS_KEY = 'sections' as const;
 // import this module, and a clear here would race with the worker's writes.
 export const layoutDb: Dexie & {
     items: EntityTable<LayoutItem, 'guid'>;
-    meta: EntityTable<LayoutMeta | LayoutSize | LayoutSections, 'key'>;
+    meta: EntityTable<LayoutMeta | LayoutSize | LayoutSections | LayoutOrder, 'key'>;
 } = new Dexie('layout') as Dexie & {
     items: EntityTable<LayoutItem, 'guid'>;
-    meta: EntityTable<LayoutMeta | LayoutSize | LayoutSections, 'key'>;
+    meta: EntityTable<LayoutMeta | LayoutSize | LayoutSections | LayoutOrder, 'key'>;
 };
 // v3: positions indexed by y and bottom (visible-window query) and order (viewer);
 // meta holds three records: 'layout' (per relayout), 'size' (per streamed batch) and
-// 'sections' (the side panel's marks, with either)
+// 'sections' (the side panel's marks, with either), 'order:<view>' (a view's last order)
 layoutDb.version(3).stores({
     items: '&guid, order, y, bottom',
     meta: '&key',

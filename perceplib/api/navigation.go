@@ -14,12 +14,21 @@ package api
 // View: what the client shows for a perceptor — a button in the toolbars and a
 // help text
 type View struct {
+	// Slug: the view's name in URLs (/v/date) — public, unique among the
+	// perceptors; not the plugin's name (an inside detail)
+	Slug  string
 	Title string
 	// SVG markup, 24×24 viewBox, currentColor; the client shows it as a mask (no
 	// scripts run)
 	Icon     string
 	Help     string
 	Relative bool
+}
+
+// Fact: one line of the viewer's info panel — "Taken: 14 Sep 2025, 08:00 +03:00"
+type Fact struct {
+	Label string
+	Value string
 }
 
 // Entry: one item of the sheet. Sections: the sections this item starts, coarsest

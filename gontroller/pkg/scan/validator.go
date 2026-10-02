@@ -44,6 +44,9 @@ func (v *validator) Decorate(g *flow.RawItem) (*flow.RawItem, error) {
 	if g.Key != "" {
 		return v.keyed(g)
 	}
+	if reason := broken(g); reason != "" {
+		return nil, v.ignoreBroken(g, reason)
+	}
 
 	for _, f := range g.Files {
 		f.LinkTo(main)
@@ -102,3 +105,43 @@ func (v *validator) keyed(g *flow.RawItem) (*flow.RawItem, error) {
 }
 
 func (v *validator) Stop() {}
+
+// broken: why the main file of a group cannot be a photo, "" if it can. exiftool
+// read it and says so (Error: "File format error", "File is empty"), or it is an
+// image with no size at all (a JPEG cut after its header). A keyed group (Apple
+// Photos) is not judged by its file: the library's DB is the truth, and its
+// derivatives may be fine.
+func broken(g *flow.RawItem) string {
+	if e := g.Exif[0]["Error"]; len(e) > 0 {
+		return string(e)
+	}
+	if g.Kinds[0] == flow.KindImage || g.Kinds[0] == flow.KindRaw {
+		for _, tag := range []string{"ImageWidth", "ImageSize", "ExifImageWidth"} {
+			if len(g.Exif[0][tag]) > 0 {
+				return ""
+			}
+		}
+		return "no image size"
+	}
+	return ""
+}
+
+// ignoreBroken: the group's files are remembered as ignored — the gate skips them
+// until a file changes (then they are processed again); an item the file used to be
+// (it got corrupted) goes
+func (v *validator) ignoreBroken(g *flow.RawItem, reason string) error {
+	main := g.Files[0]
+	v.logger.Warn("Broken file: ignored until it changes", l.String("file", main.Path), l.String("reason", reason))
+	if item, err := itemsProxy.GetItemByGuid(main.GUID); err == nil {
+		if err := itemsProxy.DeleteItem(item); err != nil {
+			return err
+		}
+	}
+	for _, f := range g.Files {
+		f.SetIgnored()
+	}
+	if _, err := filesProxy.UpdateFiles(g.Files); err != nil {
+		return err
+	}
+	return chain.ErrSkippedItem
+}

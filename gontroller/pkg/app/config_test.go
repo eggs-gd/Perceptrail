@@ -52,3 +52,14 @@ func TestConfigRescanDuration(t *testing.T) {
 		t.Errorf("rescan = %v, %v", c.Rescan, err)
 	}
 }
+
+// Release unless the config says debug: an unknown mode is not a debug one
+func TestConfigMode(t *testing.T) {
+	for mode, want := range map[string]string{"": ModeRelease, "release": ModeRelease, "debug": ModeDebug, "verbose": ModeRelease} {
+		c := Config{Mode: mode}
+		c.resolve(t.TempDir())
+		if c.Mode != want || c.Debug() != (want == ModeDebug) {
+			t.Errorf("%q: %q, want %q", mode, c.Mode, want)
+		}
+	}
+}

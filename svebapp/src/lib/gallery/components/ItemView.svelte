@@ -9,6 +9,7 @@
     import KindBadge from "./KindBadge.svelte";
     import {assetUrl, biggestImage, fallbackImage, hasImage, originalImage, playableVideos} from "./asset";
     import {viewerPrefs} from "./viewerPrefs.svelte";
+    import {debug} from "$lib/app.svelte";
 
     interface Props {
         item: Item;
@@ -132,10 +133,13 @@
     <Img item={item}/>
 {:else if item.previewMime.startsWith("video")}
     <Video item={item}/>
-{:else}
+{:else if debug()}
     <div>
         Can't render item {index}: {item.guid}
     </div>
+{:else}
+    <!-- Nothing the browser can show yet (the transcode comes later) -->
+    <div class="nothing"></div>
 {/if}
 
 <style>
@@ -161,6 +165,12 @@
         height: auto;
         max-width: 100vw;
         max-height: 100vh;
+    }
+
+    .nothing {
+        width: 100%;
+        height: 100%;
+        background: rgb(255 255 255 / 0.04);
     }
 
     .tile-video {

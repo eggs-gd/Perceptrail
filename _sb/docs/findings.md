@@ -288,6 +288,39 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
   and on a switch almost every tile is new. Now the switch's relayout fades the new
   tiles in by the same wave as the moves: from the anchor outwards, row by row,
   within 500 ms; the anchor and shared tiles move as on a resize.
+- **Views live in the URL** (`/v/<view>?at=<guid>`, `/v/<view>/<guid>`). Two traps on
+  the way:
+  - `?at` is kept up to date with a shallow `replaceState`; Back to such an entry gives
+    `page.url` **without** it (the URL of the original navigation) while the address
+    bar has it — `?at` is read from `location`.
+  - Back restores the entry's scroll (the router), which looked like the user's
+    scroll and dropped the switch's anchor: while a switch is on its way, scroll
+    events do not drop it. Buttons navigate with `noScroll`.
+  - In a hidden browser pane no scroll events fire: tiles measured in the DOM are
+    stale — check positions against `layoutDb` instead.
+- **Why every load looked like a fresh database** (Dexie was there all along): the
+  sync cleared itemsDb at its start, and the layout worker dropped all items on
+  `sync-start` — a direct link waited for the stream to reach its photo. Now the
+  items are kept and synced by a delta (`/items?since=` + tombstones, an epoch for
+  the database). Traps on the way:
+  - SQLite keeps times as text with the writer's offset (`…+03:00`, fractional parts
+    of any length; some `deleted_at` with no zone at all): compared as text they lie.
+    `julianday()` compares them; deletions are asked a day earlier (a tombstone too
+    many is harmless).
+  - A test that opened the `items` IndexedDB and never closed it blocked Dexie's
+    upgrade to the new version — every later open waited. Close connections opened
+    by hand.
+  - A refresh of the order after a sync must not run during a switch: it aborts the
+    switch's request, which then counts as failed.
+  - The cursor is the stream's **last line** (`{cursor}`), not a header (Codex, PR
+    #18): once the 200 and its headers are out, a DB error mid-stream cannot turn into
+    an error status — the client would keep a header cursor from a cut-short stream
+    and never ask for what it missed. No last line = cut short = the old cursor stays.
+    Likewise a line that cannot be parsed or stored fails the sync (it was only
+    logged — the cursor moved past the item).
+  - Switching to a view with a kept order shows that order at once; if the refresh
+    from the server then fails, the switch stands on the kept order (the URL was
+    being rolled back while the sheet already showed the new view).
 - A perceptor's icon is SVG from a plugin: shown as a CSS `mask-image` — no script in
   it runs, and the button's colour paints it (`currentColor` does not reach an
   `<img>`).
@@ -359,7 +392,90 @@ Design: roadmap "Perceptor data"; diagram [`Perceptor data.puml`](../puml/Percep
     (the Photos library is unreadable there): 12 with a place, 4 of them shown (8
     are Waiting HEIC/HEVC).
 
+### Transcode: decisions before the code (2026-10-01, design)
+
+Design: roadmap "Expensive stage".
+
+- **No release without the transcode** (decided): a release is a Docker image someone
+  installs; without the transcode HEIC does not show in Chrome, iPhone HEVC video does
+  not play, big originals slow the grid. 0.2.0 = transcode + Docker (the earlier bar,
+  "the first perceptor end to end", was met by geo and is not enough).
+- **One codec, one image format, chosen in the config** — not arrays. Arrays let the
+  browser pick (the asset contract is ready for it) but cost N× disk and transcode
+  time; a later feature of its own.
+- **Sizes: any array in the config, `[400, 1600]` to start with.** 1600 px is less
+  than a 2K 32" (2560) or a MacBook 16" (3456), and tiles would want 800 on Retina —
+  but ~3840 is close to the original itself: we make previews, not copies; the
+  original stays behind the viewer's Original switch. Larger sizes are a config
+  experiment, the system must take any array.
+- **How others split it**: Immich — one server image does API, previews and ffmpeg,
+  the same image can run as workers (env), ML in its own container; PhotoPrism,
+  Jellyfin — monoliths, ffmpeg as a subprocess; LibrePhotos — backend + queue
+  workers. Common ground: previews and transcode in the core, ML apart. Ours: in
+  gontroller by default, roles later from the same binary — the DB-state queue makes
+  that free.
+- **Hardware on the dev box**: i5-13500T (Raptor Lake, UHD 770) — QSV encodes and
+  decodes H.264 / HEVC 8/10 bit, decodes AV1, does not encode it. Docker on a Mac has
+  no GPU: VideoToolbox only in a native binary.
+- **jellyfin-ffmpeg** in the image rather than our own build: every hardware backend
+  and HDR tone mapping (iPhone HLG / Dolby Vision would come out washed out in H.264
+  without it).
+- **Software first, hardware as a step of its own** (decided): the queue, the sizes,
+  the outputs and the HDR tone mapping are the same for any encoder and are got right
+  once on `libx264` — everywhere, CI included (no GPU); the software path stays the
+  reference and the fallback. Hardware is tied to Docker (QSV: `/dev/dri`) or to a
+  native binary (VideoToolbox on a Mac), so it comes with or after Docker. What is
+  needed from day one: the codec → encoder table and the probe with a fallback.
+- **Photos: CPU first, a hardware decoder only if measured** (discussed with ChatGPT
+  too). Hardware wins for video (fixed-function decoders/encoders); for photos it
+  helps parts of the pipeline at best — JPEG through libvips shrinks while it loads,
+  and copying a 24 MP bitmap to the GPU and back can eat the gain. Immich renders its
+  photo previews on the CPU too (hardware transcoding there is video only). For this
+  library the bigger win is the source: Photos' JPEG, the HEIC's embedded thumbnail,
+  the full original last. Benchmark (images/s, CPU, peak RSS) before adding a macOS
+  ImageIO HEIC decoder; its hardware path is an assumption to check.
+- **Apple Photos: one copy** (2026-10-02, decided; roadmap step 0). A cache of our
+  own beside the library does not save disk, it adds a second copy — whatever Photos
+  keeps is served as it is, what it lacks is asked of Photos (PhotoKit) and lands in
+  its library, under its storage policy. At most a bounded working set (LRU, size
+  limit). By level, on demand: small renditions ahead for the tiles, the medium one
+  (~2048, ~1 MB — ~40 % of the originals for a whole library) when a photo opens,
+  the original on its button. Our webp at 1600 would be ~4× smaller (fewer pixels,
+  q80 against Apple's ~q90+, a better codec) — a saving on a duplicate, so no reason.
+- **"Download Originals" — one option, not the only strategy** (the user): for most
+  libraries one checkbox makes everything local and is the simplest; for decades of
+  photos it forces the whole library onto the disk, and Photos has no "renditions
+  local, originals on request" mode — all or its own choice. Asking Photos per level
+  is that missing mode, for the libraries that stay on Optimize Mac Storage.
+- **PhotoKit from Go, not a Swift helper**: it is Objective-C, cgo calls it in the
+  gontroller process (cgo is there for the plugins anyway), behind
+  `//go:build darwin`. Open for the spike: the Photos permission for a bare binary
+  (Info.plist through `-sectcreate`), whom it is granted to when started from a
+  terminal, and whether a rebuild (new ad-hoc signature) drops it.
+- **Reading the library stays in every build** (`groups/apple` is pure Go): an
+  archived library after leaving Apple, an external disk, a NAS copy. Only asking
+  Photos is native macOS. Docker on a Mac is a Linux VM — no PhotoKit, and no access
+  to the `.photoslibrary` without Full Disk Access: a Mac with Photos runs the native
+  binary.
+- The agent's shell cannot read `Photos Library.photoslibrary` (macOS privacy): the
+  JPEG quality of Apple's renditions was estimated from the sizes in the DB
+  (~2.6 bits/pixel), not measured — the spike has the same permission question.
+
 ## Backend: gontroller, plugins, exiftool
+
+### Broken files (2026-10-01)
+
+- exiftool reads a broken file and says so: garbage and empty files give only the
+  File tags plus `Error` ("File format error", "File is empty"); a JPEG cut after its
+  header gives FileType / MIMEType but no size at all, with a `Warning`. Those are the
+  signals: such a main file is not an item, and its files are ignored (`LinkedTo =
+  "-"`) — the gate skips them until a file's size or mtime changes, then they are
+  processed again. Before, they became 0×0 items or failed every walk.
+- A group exiftool returns nothing for (a timeout, a crash) is still an error and is
+  retried — it may pass. Apple assets are not judged by their file (the DB is the
+  truth and the derivatives may be fine).
+- The test's fake exiftool now returns a size, like a real image (with the new rule a
+  sizeless image is broken).
 
 ### The asset contract (2026-09-30)
 

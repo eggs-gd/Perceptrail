@@ -1,9 +1,13 @@
 package model
 
 import (
+	"time"
+
 	"perceptrail/gontroller/pkg/model/dto"
 
 	"github.com/eggs-gd/perceplib/api"
+
+	"gorm.io/gorm"
 )
 
 type ItemsApi interface {
@@ -31,6 +35,9 @@ type ItemsApi interface {
 	// perceptors read to order them (guid, date and its zone, size, duration) — not
 	// the whole rows
 	GetItemsInStates(states ...dto.ItemState) ([]*dto.ItemDto, error)
+	// StreamItemsSince: the items changed or deleted since then (deleted ones too:
+	// DeletedAt is set), for the client's delta sync
+	StreamItemsSince(since time.Time, fn func(*dto.ItemDto, []*dto.FileDto) error) error
 	GetItemByGuid(guid string) (*dto.ItemDto, error)
 	GetItemByPath(path string) (*dto.ItemDto, error)
 	GetItemByHash(hash string) (*dto.ItemDto, error)
@@ -56,19 +63,40 @@ func (p *proxy) GetAllItems() ([]*dto.ItemDto, error) {
 }
 
 func (p *proxy) StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) error {
-	const pageSize = 32
-
 	// The ids in sheet order first (cheap), then the items page by page: a stable
 	// order while the import writes, without paging by a date
 	var ids []uint
 	if err := p.db.Model(&dto.ItemDto{}).Order("date DESC, id DESC").Pluck("id", &ids).Error; err != nil {
 		return err
 	}
+	return p.streamIDs(p.db, ids, fn)
+}
 
+// Deletions are sent this much earlier than asked: some deleted_at rows carry no
+// zone (written as local time); a tombstone too many is harmless
+const deletionMargin = 24 * time.Hour
+
+func (p *proxy) StreamItemsSince(since time.Time, fn func(*dto.ItemDto, []*dto.FileDto) error) error {
+	// SQLite keeps times as text with the writer's offset ("…+03:00", across DST
+	// changes too): compared as julian days, not as text
+	var ids []uint
+	err := p.db.Unscoped().Model(&dto.ItemDto{}).
+		Where("julianday(updated_at) >= julianday(?) OR julianday(deleted_at) >= julianday(?)",
+			since.UTC(), since.Add(-deletionMargin).UTC()).
+		Order("id").Pluck("id", &ids).Error
+	if err != nil {
+		return err
+	}
+	return p.streamIDs(p.db.Unscoped(), ids, fn)
+}
+
+// streamIDs: the items of ids in that order, each with its files (one query per page)
+func (p *proxy) streamIDs(db *gorm.DB, ids []uint, fn func(*dto.ItemDto, []*dto.FileDto) error) error {
+	const pageSize = 32
 	for start := 0; start < len(ids); start += pageSize {
 		page := ids[start:min(start+pageSize, len(ids))]
 		var batch []*dto.ItemDto
-		if err := p.db.Where("id IN ?", page).Find(&batch).Error; err != nil {
+		if err := db.Where("id IN ?", page).Find(&batch).Error; err != nil {
 			return err
 		}
 		byID := make(map[uint]*dto.ItemDto, len(batch))

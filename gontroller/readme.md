@@ -51,9 +51,12 @@ packages — see [findings](../_sb/docs/findings.md#go-plugins-2026-09-28).
 
 | Method | Path | Returns |
 |---|---|---|
-| GET | `/items` | All shown items as an NDJSON stream, newest first (`id, guid, date, mimeType, width, height, asset`; `width/height` is the reduced aspect ratio) |
-| GET | `/perceptors` | The perceptors given to the client (config `perceptors.<name>.client`): `name, title, icon (SVG), help, relative` — a button each |
-| GET | `/p/:name/order?anchor=` | The sheet in that perceptor's order, NDJSON `{guid, sections?: [{level, label}]}` — the sections this photo starts, coarsest first (a path or one tag) |
+| GET | `/items` | All shown items as an NDJSON stream, newest first (`id, guid, date, mimeType, width, height, asset`; `width/height` is the reduced aspect ratio). Header `X-Sync-Epoch` (this database); the last line is `{cursor}` — only a complete stream has it; `?since=<cursor>`: only the changes, a removed item as `{guid, removed}` |
+| GET | `/items?since=<cursor>` | The delta: changed shown items as above, `{guid, removed: true}` for deleted or hidden ones |
+| GET | `/perceptors` | The perceptors given to the client (config `perceptors.<name>.client`): `slug (the view in URLs), title, icon (SVG), help, relative` — a button each |
+| GET | `/items/:guid/info` | What each perceptor knows about the item (the viewer's info panel): `[{slug, title, icon, facts: [{label, value}]}]` |
+| GET | `/app` | The server's `version` and `mode` (debug / release) |
+| GET | `/p/:view/order?anchor=` | The sheet in that perceptor's order, NDJSON `{guid, sections?: [{level, label}]}` — the sections this photo starts, coarsest first (a path or one tag) |
 | GET | `/assets/:guid` | The original file of an item |
 
 ## Import pipeline
@@ -82,7 +85,7 @@ Item states (`dto.ItemState`): `New → Dirty → Processing → Ready`, `Delete
 | `pkg/scan` | import steps: `fswalker`, `exifextractor`, `exifpluginprocessor` |
 | `pkg/plugins` | plugin manager (core + `.so`), `exif_core/{date,size}` |
 | `pkg/model` | SQLite via GORM, `ItemsApi`/`FilesApi`, DTOs |
-| `pkg/client` | Echo, `/items`, `/assets`, `/perceptors` and `/p/:name/order` routes |
+| `pkg/client` | Echo, `/items`, `/assets`, `/perceptors` and `/p/:view/order` routes |
 | `pkg/transcoder` | thumbnail stub (needs libvips) |
 
 ## Worth knowing

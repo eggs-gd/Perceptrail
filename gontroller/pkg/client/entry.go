@@ -15,18 +15,19 @@ import (
 type webService struct {
 	logger     *l.Logger
 	cfg        ServerConfig
+	app        routes.AppInfo
 	perceptors []api.Perceptor
 	values     routes.ValuesLoader
 }
 
 // NewWebService checks cfg (see ServerConfig) and fills its defaults. perceptors:
 // the ones the client is given (/perceptors, /p/:name/order).
-func NewWebService(cfg ServerConfig, perceptors []api.Perceptor, values routes.ValuesLoader, logger *l.Logger) (*webService, error) {
+func NewWebService(cfg ServerConfig, app routes.AppInfo, perceptors []api.Perceptor, values routes.ValuesLoader, logger *l.Logger) (*webService, error) {
 	cfg, err := cfg.withDefaults()
 	if err != nil {
 		return nil, err
 	}
-	return &webService{logger, cfg, perceptors, values}, nil
+	return &webService{logger, cfg, app, perceptors, values}, nil
 }
 
 func (s *webService) Start(parentCtx context.Context) {
@@ -37,8 +38,13 @@ func (s *webService) Start(parentCtx context.Context) {
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: s.cfg.AllowedOrigins,
 		AllowMethods: []string{echo.GET, echo.POST, echo.PUT, echo.DELETE},
+		// The client reads the delta sync's cursor and epoch (/items)
+		ExposeHeaders: []string{"X-Sync-Epoch"},
 	}))
-	e.Use(middleware.Logger())
+	// A line per request (every tile image too): debug only
+	if s.app.Mode == "debug" {
+		e.Use(middleware.Logger())
+	}
 	e.Use(middleware.Recover())
 
 	e.GET("/", func(c echo.Context) error {
@@ -48,6 +54,7 @@ func (s *webService) Start(parentCtx context.Context) {
 	routes.RegisterItemsRoutes("/items", e, s.logger)
 	routes.RegisterAssetsRoutes("/assets", e, s.logger)
 	routes.RegisterPerceptorsRoutes(e, s.perceptors, s.values, s.logger)
+	routes.RegisterAppRoutes(e, s.app)
 
 	e.Logger.Fatal(e.Start(s.cfg.Addr()))
 

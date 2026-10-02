@@ -45,6 +45,10 @@ if (browser) {
 
 function handleWorkerMessage(event: MessageEvent<any>) {
     const {data} = event;
+    if (data?.task === 'sync') {
+        for (const listener of syncListeners) listener(data.changed ?? 0);
+        return;
+    }
     if (data?.task === 'order') {
         const result = data as OrderResult;
         pendingOrders.get(result.id)?.(result.ok);
@@ -57,15 +61,43 @@ function handleWorkerMessage(event: MessageEvent<any>) {
 let orderSeq = 0;
 const pendingOrders = new Map<number, (ok: boolean) => void>();
 
-export const loadFromServer = () => {
-    if (!browser || syncStarted) return;
-    syncStarted = true;
+/** The server's mode for the workers' loggers */
+export const setWorkersMode = (mode: string) => {
+    workers?.workerSync.postMessage({task: 'mode', payload: mode});
+    workers?.workerLayout.postMessage({task: 'mode', payload: mode});
+}
 
+// The items are kept between visits; a refresh brings what changed (a delta). No
+// push from the server: the page's own moments trigger it — the start, coming back to
+// the tab, every navigation — at most every REFRESH_MS (a start always).
+const REFRESH_MS = 5000;
+let lastRefresh = 0;
+
+export const refreshFromServer = (force = false) => {
+    if (!browser || !workers) return;
+    const now = Date.now();
+    if (!force && now - lastRefresh < REFRESH_MS) return;
+    lastRefresh = now;
     const msg: StartSyncMessage = {
         task: 'start',
         payload: `${PUBLIC_API_PATH}/items`,
     };
-    workers?.workerSync.postMessage(msg);
+    workers.workerSync.postMessage(msg);
+}
+
+/** The first sync of the page */
+export const loadFromServer = () => {
+    if (syncStarted) return;
+    syncStarted = true;
+    refreshFromServer(true);
+}
+
+const syncListeners = new Set<(changed: number) => void>();
+
+/** Called after every sync with how many items changed; returns the unsubscribe */
+export function onSynced(listener: (changed: number) => void): () => void {
+    syncListeners.add(listener);
+    return () => syncListeners.delete(listener);
 }
 
 /** anchor: guid of the first visible item, kept in view across the relayout */
@@ -89,7 +121,7 @@ export const setOrder = (perceptor: string, anchor?: string): Promise<boolean> =
     const query = anchor ? `?anchor=${encodeURIComponent(anchor)}` : '';
     const msg: OrderMessage = {
         task: 'order',
-        payload: {id, url: `${PUBLIC_API_PATH}/p/${encodeURIComponent(perceptor)}/order${query}`, anchor},
+        payload: {id, view: perceptor, url: `${PUBLIC_API_PATH}/p/${encodeURIComponent(perceptor)}/order${query}`, anchor},
     };
     return new Promise((resolve) => {
         pendingOrders.set(id, resolve);
