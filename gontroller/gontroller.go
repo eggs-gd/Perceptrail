@@ -9,6 +9,7 @@ import (
 	"perceptrail/gontroller/pkg/client"
 	"perceptrail/gontroller/pkg/client/routes"
 	"perceptrail/gontroller/pkg/model"
+	"perceptrail/gontroller/pkg/photokit"
 	"perceptrail/gontroller/pkg/plugins"
 	"perceptrail/gontroller/pkg/scan"
 	"syscall"
@@ -47,7 +48,14 @@ func main() {
 	}
 
 	svc.AddService(scan.NewImporterService(ctx))
-	web, err := client.NewWebService(ctx.Config().Server, routes.AppInfo{Version: app.Version, Mode: ctx.Config().Mode}, plugins.Pm.ClientPerceptors(), plugins.Pm.LoadValues, ctx.Logger(string(app.LogHTTP)))
+	// Apple Photos on demand (macOS): asks for access once — the prompt names the app
+	// that started us (the terminal)
+	go func() {
+		if photokit.Authorize() {
+			log.Printf("Photos: renditions on demand")
+		}
+	}()
+	web, err := client.NewWebService(ctx.Config().Server, routes.AppInfo{Version: app.Version, Mode: ctx.Config().Mode}, plugins.Pm.ClientPerceptors(), plugins.Pm.LoadValues, photokit.Library{}, ctx.Logger(string(app.LogHTTP)))
 	if err != nil {
 		log.Fatalf("Server: %v", err)
 	}
@@ -56,6 +64,9 @@ func main() {
 
 	go svc.RunApp(mainCtx)
 
-	<-stop
+	// The main thread serves PhotoKit's main queue until a stop (macOS; elsewhere: waits)
+	done := make(chan struct{})
+	go func() { <-stop; close(done) }()
+	photokit.RunMain(done)
 	log.Printf("Chain Sys stop")
 }

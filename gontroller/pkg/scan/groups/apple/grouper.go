@@ -173,6 +173,12 @@ const (
 	roleMedium2     // ~1000 px
 	roleThumb       // the small thumbnail (~360×640)
 	roleVideoPoster // .THM (32×32)
+	// Video renditions Photos downloads on request (PhotoKit): after the stills, so
+	// the main file does not change when one appears
+	roleVideoHEVC   // _2_201_o.mov: 720p HEVC (an iPhone video's medium)
+	roleVideoMedium // _2_3_o.mp4: 720p H.264 (another video's medium)
+	roleVideoSmall  // _2_4_o.mp4: 360p H.264 (fast)
+	roleLiveMotion  // _2_101_o.mov: a Live Photo's motion, H.264
 	roleFrame       // cvt/…/_cvt_tNNNN.jpeg: frames of a video (a flip-book)
 )
 
@@ -185,6 +191,8 @@ func (r role) fileRole() string {
 		return dto.RoleEdit
 	case roleFrame:
 		return dto.RoleFrames
+	case roleVideoHEVC, roleVideoMedium, roleVideoSmall, roleLiveMotion:
+		return dto.RoleMotion
 	default:
 		return dto.RoleStill
 	}
@@ -211,7 +219,49 @@ func candidates(root, uuid, dir, filename string) []candidate {
 		{filepath.Join(deriv, uuid+"_1_106_c.jpeg"), roleMedium2},
 		{filepath.Join(root, "resources", "derivatives", "masters", x, uuid+"_4_5005_c.jpeg"), roleThumb},
 		{filepath.Join(deriv, uuid+".THM"), roleVideoPoster},
+		{filepath.Join(deriv, uuid+"_2_201_o.mov"), roleVideoHEVC},
+		{filepath.Join(deriv, uuid+"_2_3_o.mp4"), roleVideoMedium},
+		{filepath.Join(deriv, uuid+"_2_4_o.mp4"), roleVideoSmall},
+		{filepath.Join(deriv, uuid+"_2_101_o.mov"), roleLiveMotion},
 	}
+}
+
+// Want: what the client asks for on demand (the viewer, a hover)
+type Want int
+
+const (
+	WantImage      Want = iota // the viewer's image: the edit, else ~2048 px
+	WantVideo                  // the viewer's video: 720p, HEVC allowed
+	WantVideoH264              // the same for a browser that plays no HEVC
+	WantVideoHover             // a video on hover: the smallest H.264
+	WantLiveMotion             // a Live Photo's motion
+)
+
+// wanted: the renditions that answer a want, best first. Not the original: its
+// path is in the DB, not in the naming layout (the caller has it).
+var wanted = map[Want][]role{
+	WantImage:      {roleRender, roleEditPreview, roleLarge, roleLarge2},
+	WantVideo:      {roleVideoHEVC, roleVideoMedium},
+	WantVideoH264:  {roleVideoMedium, roleVideoSmall},
+	WantVideoHover: {roleVideoSmall, roleVideoMedium},
+	WantLiveMotion: {roleLiveMotion, roleLiveVideo},
+}
+
+// Local: the best file of the asset in the library for want, "" if none is local
+// yet — then Photos is asked for it (PhotoKit) and Local looks again
+func Local(root, uuid string, want Want) string {
+	byRole := map[role]string{}
+	for _, c := range candidates(root, uuid, "", "") {
+		byRole[c.role] = c.path
+	}
+	for _, r := range wanted[want] {
+		if p, ok := byRole[r]; ok {
+			if info, err := os.Stat(p); err == nil && !info.IsDir() {
+				return p
+			}
+		}
+	}
+	return ""
 }
 
 // frames: the frames Photos keeps for a video (resources/derivatives/cvt/<X>/<UUID>/),

@@ -38,6 +38,8 @@ type clientAsset struct {
 	Stills   []rendition `json:"stills"` // viewable images, smallest first
 	Motion   []rendition `json:"motion"` // videos (a Live Photo's video)
 	Frames   []rendition `json:"frames"` // a flip-book, in order (Apple's video frames)
+	// Apple Photos: better renditions asked for when needed (see rendition.go)
+	OnDemand *onDemand `json:"onDemand,omitempty"`
 }
 
 // embeddedName: the extracted embedded preview (not a file of the asset)
@@ -75,6 +77,7 @@ func toClientAsset(item *dto.ItemDto, files []*dto.FileDto) clientAsset {
 	bySize(a.Edit)
 	bySize(a.Stills)
 	a.Kind, a.Duration = assetKind(item, a), item.Duration
+	a.OnDemand = onDemandOf(item)
 	return a
 }
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"perceptrail/gontroller/pkg/model/dto"
@@ -307,6 +308,58 @@ func TestGrouperRoles(t *testing.T) {
 	} {
 		if got := roles(live)[name]; got != want {
 			t.Errorf("live %s: %q, want %q", name, got, want)
+		}
+	}
+}
+
+// The renditions Photos downloads on request: videos are the asset's motion, the
+// main file stays what it was (they come after the stills); Local finds the best
+// one for a want
+func TestGrouperVideoRenditions(t *testing.T) {
+	const video = "F6666666-0000-0000-0000-000000000006" // cloud-only, two renditions fetched
+	const livePhoto = "G7777777-0000-0000-0000-000000000007"
+	root := t.TempDir()
+	bundle := makeLibrary(t, root, []fixtureAsset{
+		{uuid: video, dir: "F", filename: video + ".mov", zkind: 1, duration: 8, files: []string{
+			"resources/derivatives/masters/F/" + video + "_4_5005_c.jpeg",
+			"resources/derivatives/F/" + video + "_2_201_o.mov",
+			"resources/derivatives/F/" + video + "_2_4_o.mp4",
+		}},
+		{uuid: livePhoto, dir: "G", filename: livePhoto + ".heic", playback: 3, files: []string{
+			"resources/derivatives/G/" + livePhoto + "_1_102_o.jpeg",
+			"resources/derivatives/G/" + livePhoto + "_2_101_o.mov",
+		}},
+	})
+	g := NewDecorator(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	groups, _ := walk(t, g, root, nil)
+
+	for uuid, want := range map[string][]string{
+		video:     {video + "_4_5005_c.jpeg", dto.RoleStill, video + "_2_201_o.mov", dto.RoleMotion, video + "_2_4_o.mp4", dto.RoleMotion},
+		livePhoto: {livePhoto + "_1_102_o.jpeg", dto.RoleStill, livePhoto + "_2_101_o.mov", dto.RoleMotion},
+	} {
+		var got []string
+		for _, f := range groups[uuid].Files {
+			got = append(got, filepath.Base(f.Path), f.Role)
+		}
+		if strings.Join(got, " ") != strings.Join(want, " ") {
+			t.Errorf("%s: %v, want %v (the main file first)", uuid[:1], got, want)
+		}
+	}
+
+	for _, tc := range []struct {
+		uuid string
+		want Want
+		file string
+	}{
+		{video, WantVideo, video + "_2_201_o.mov"},
+		{video, WantVideoH264, video + "_2_4_o.mp4"},
+		{video, WantVideoHover, video + "_2_4_o.mp4"},
+		{video, WantImage, ""},
+		{livePhoto, WantLiveMotion, livePhoto + "_2_101_o.mov"},
+		{livePhoto, WantImage, livePhoto + "_1_102_o.jpeg"},
+	} {
+		if got := filepath.Base(Local(bundle, tc.uuid, tc.want)); (tc.file == "" && got != ".") || (tc.file != "" && got != tc.file) {
+			t.Errorf("Local(%s, %d) = %s, want %q", tc.uuid[:1], tc.want, got, tc.file)
 		}
 	}
 }
