@@ -28,11 +28,14 @@ import (
 //	                                   motion
 //
 // What is on disk is served without asking; nothing local and nothing to ask (not
-// macOS, no access, not a Photos item): 404, the client keeps what it shows.
+// macOS, no access, not a Photos item): 404, the client keeps what it shows. An
+// image Photos draws from a local original (a HEIC) leaves no file: the JPEG it
+// handed over is served (not kept — the browser caches it).
 
-// Fetcher asks the source for a rendition it does not keep locally (photokit.Library)
+// Fetcher asks the source for a rendition it does not keep locally (photokit.Library).
+// Image returns the image as JPEG too (nil if none).
 type Fetcher interface {
-	Image(uuid string, size int) error
+	Image(uuid string, size int) ([]byte, error)
 	Video(uuid string, mode int) error
 	Live(uuid string) error
 }
@@ -53,10 +56,16 @@ const fetchers = 3
 var (
 	fetcher  Fetcher
 	fetchSem = make(chan struct{}, fetchers)
-	// One request per asset and want at a time: the others wait for it
+	// One request per asset and want at a time: the others wait for its result
 	inFlightMu sync.Mutex
-	inFlight   = map[string]chan struct{}{}
+	inFlight   = map[string]*fetching{}
 )
+
+type fetching struct {
+	done chan struct{}
+	data []byte
+	err  error
+}
 
 // RegisterRenditionRoutes: f may be nil (only what is on disk is served)
 func RegisterRenditionRoutes(e *echo.Echo, f Fetcher, logger *l.Logger) {
@@ -82,61 +91,74 @@ func getRendition(c echo.Context, logger *l.Logger) error {
 	}
 	uuid := item.Guid // an Apple item's GUID is its asset UUID
 	path := apple.Local(root, uuid, want)
+	var drawn []byte
 	if path == "" && fetcher != nil {
-		if err := once(uuid+"/"+c.Param("level"), func() error { return ask(fetcher, uuid) }); err != nil {
+		var err error
+		drawn, err = once(uuid+"/"+c.Param("level"), func() ([]byte, error) { return ask(fetcher, uuid) })
+		if err != nil {
+			drawn = nil // a failed request hands over nothing to show
 			logger.Debug("Rendition not fetched", l.String("guid", uuid), l.String("level", c.Param("level")), l.Error(err))
 		}
 		path = apple.Local(root, uuid, want)
+	}
+	c.Response().Header().Set("Cache-Control", "private, max-age=86400")
+	if path == "" && len(drawn) > 0 {
+		return c.Blob(http.StatusOK, "image/jpeg", drawn) // drawn from a local original: no file
 	}
 	if path == "" && want == apple.WantImage && viewableOriginal(item.Path) {
 		path = item.Path // a local JPEG/PNG original: Photos had nothing smaller to make
 	}
 	if path == "" {
+		c.Response().Header().Del("Cache-Control")
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
-	c.Response().Header().Set("Cache-Control", "private, max-age=86400")
 	return c.File(path)
 }
 
+type askFunc func(Fetcher, string) ([]byte, error)
+
+func noData(err error) ([]byte, error) { return nil, err }
+
 // wantOf: what a level means for the item's kind, and how to ask Photos for it
-func wantOf(kind, level string, hevc bool) (apple.Want, func(Fetcher, string) error, bool) {
+func wantOf(kind, level string, hevc bool) (apple.Want, askFunc, bool) {
 	switch {
 	case level == "medium" && kind == dto.KindVideo && hevc:
-		return apple.WantVideo, func(f Fetcher, u string) error { return f.Video(u, videoMedium) }, true
+		return apple.WantVideo, func(f Fetcher, u string) ([]byte, error) { return noData(f.Video(u, videoMedium)) }, true
 	case level == "medium" && kind == dto.KindVideo:
 		// No H.264 720p for an iPhone video from Photos: its 360p
-		return apple.WantVideoH264, func(f Fetcher, u string) error { return f.Video(u, videoFast) }, true
+		return apple.WantVideoH264, func(f Fetcher, u string) ([]byte, error) { return noData(f.Video(u, videoFast)) }, true
 	case level == "medium":
-		return apple.WantImage, func(f Fetcher, u string) error { return f.Image(u, mediumSize) }, true
+		return apple.WantImage, func(f Fetcher, u string) ([]byte, error) { return f.Image(u, mediumSize) }, true
 	case level == "hover" && kind == dto.KindVideo:
-		return apple.WantVideoHover, func(f Fetcher, u string) error { return f.Video(u, videoFast) }, true
+		return apple.WantVideoHover, func(f Fetcher, u string) ([]byte, error) { return noData(f.Video(u, videoFast)) }, true
 	case level == "hover" && kind == dto.KindLive:
-		return apple.WantLiveMotion, func(f Fetcher, u string) error { return f.Live(u) }, true
+		return apple.WantLiveMotion, func(f Fetcher, u string) ([]byte, error) { return noData(f.Live(u)) }, true
 	}
 	return 0, nil, false
 }
 
-// once runs fetch for key unless one runs already (then waits for it), at most
-// `fetchers` at a time
-func once(key string, fetch func() error) error {
+// once runs fetch for key unless one runs already (then waits for its result), at
+// most `fetchers` at a time
+func once(key string, fetch func() ([]byte, error)) ([]byte, error) {
 	inFlightMu.Lock()
-	if ch, ok := inFlight[key]; ok {
+	if f, ok := inFlight[key]; ok {
 		inFlightMu.Unlock()
-		<-ch
-		return nil // the first caller logs its error; the caller looks at the disk again
+		<-f.done
+		return f.data, nil // the first caller logs the error
 	}
-	ch := make(chan struct{})
-	inFlight[key] = ch
+	f := &fetching{done: make(chan struct{})}
+	inFlight[key] = f
 	inFlightMu.Unlock()
 	defer func() {
 		inFlightMu.Lock()
 		delete(inFlight, key)
 		inFlightMu.Unlock()
-		close(ch)
+		close(f.done)
 	}()
 	fetchSem <- struct{}{}
 	defer func() { <-fetchSem }()
-	return fetch()
+	f.data, f.err = fetch()
+	return f.data, f.err
 }
 
 func viewableOriginal(path string) bool {
@@ -179,7 +201,7 @@ func hydrateRound(asked map[string]bool, logger *l.Logger) {
 		}
 		asked[it.Guid] = true
 		// The image even for a video: its poster is what the tile shows
-		if err := once(it.Guid+"/medium", func() error { return fetcher.Image(it.Guid, mediumSize) }); err != nil {
+		if _, err := once(it.Guid+"/medium", func() ([]byte, error) { return fetcher.Image(it.Guid, mediumSize) }); err != nil {
 			logger.Debug("Waiting asset not fetched", l.String("guid", it.Guid), l.Error(err))
 		}
 	}

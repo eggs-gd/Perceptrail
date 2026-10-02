@@ -7,8 +7,10 @@ int pk_status(void);
 int pk_authorize(void);
 
 // pk_image: an image of at most size×size — Photos makes that rendition local in its
-// library (recipe 65741, ~2048 px) when it is only in iCloud
-char *pk_image(const char *uuid, int size);
+// library (recipe 65741, ~2048 px) when it is only in iCloud. The image itself comes
+// back as JPEG (*jpeg, *len; free it): when Photos draws it from a local original
+// (a HEIC) it writes no file, and that is all there is to show.
+char *pk_image(const char *uuid, int size, void **jpeg, long *len);
 
 // pk_video: the video in a delivery mode (2 medium: 720p, HEVC for iPhone videos;
 // 3 fast: H.264 360p) — Photos makes that rendition local

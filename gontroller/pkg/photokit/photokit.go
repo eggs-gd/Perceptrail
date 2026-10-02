@@ -22,8 +22,9 @@ const (
 type Library struct{}
 
 // Image makes the asset's image of at most size×size local (Photos' ~2048 px
-// rendition when only in iCloud)
-func (Library) Image(uuid string, size int) error { return image(uuid, size) }
+// rendition when only in iCloud) and returns it as JPEG: drawn from a local
+// original (a HEIC) Photos writes no file — the JPEG is all there is to show
+func (Library) Image(uuid string, size int) ([]byte, error) { return image(uuid, size) }
 
 // Video makes the asset's video in that mode local
 func (Library) Video(uuid string, mode int) error { return video(uuid, mode) }

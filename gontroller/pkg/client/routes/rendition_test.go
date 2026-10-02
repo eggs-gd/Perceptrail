@@ -22,6 +22,7 @@ type fakePhotos struct {
 	root  string
 	asked []string
 	fail  bool
+	draw  bool // draw from a local original: no file, only the JPEG
 }
 
 func (f *fakePhotos) put(uuid, name string) error {
@@ -36,7 +37,13 @@ func (f *fakePhotos) put(uuid, name string) error {
 	return os.WriteFile(p, []byte(name), 0o644)
 }
 
-func (f *fakePhotos) Image(uuid string, size int) error { return f.put(uuid, "_1_102_o.jpeg") }
+func (f *fakePhotos) Image(uuid string, size int) ([]byte, error) {
+	if f.draw {
+		f.asked = append(f.asked, "drawn")
+		return []byte("JPEG"), nil
+	}
+	return []byte("JPEG"), f.put(uuid, "_1_102_o.jpeg")
+}
 func (f *fakePhotos) Video(uuid string, mode int) error {
 	if mode == videoFast {
 		return f.put(uuid, "_2_4_o.mp4")
@@ -94,6 +101,14 @@ func TestRenditionOnDemand(t *testing.T) {
 			t.Errorf("%s: %d %q, asked %v; want %d %q, asked %d times", tc.path, code, body, photos.asked, tc.code, tc.body, tc.asked)
 		}
 	}
+
+	// Drawn from a local original (a HEIC): no file — the JPEG Photos handed over
+	photos.draw = true
+	put("F6666666-HEIC", dto.KindPhoto, filepath.Join(root, "originals/F/F6666666-HEIC.heic"))
+	if code, body := get("/items/F6666666-HEIC/rendition/medium"); code != 200 || body != "JPEG" {
+		t.Errorf("drawn: %d %q, want the JPEG", code, body)
+	}
+	photos.draw = false
 
 	// Photos fails (offline, no access) and nothing is local: 404, the client keeps
 	// what it shows

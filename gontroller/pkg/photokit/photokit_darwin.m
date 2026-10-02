@@ -50,7 +50,9 @@ static char *pk_wait(dispatch_semaphore_t done, char **err) {
     return *err;
 }
 
-char *pk_image(const char *uuid, int size) {
+char *pk_image(const char *uuid, int size, void **jpeg, long *len) {
+    *jpeg = NULL;
+    *len = 0;
     PHAsset *a = asset(uuid);
     if (!a) return dupstr(@"asset not found");
     PHImageRequestOptions *opt = [PHImageRequestOptions new];
@@ -61,6 +63,7 @@ char *pk_image(const char *uuid, int size) {
     // come on the main queue)
     opt.synchronous = YES;
     __block char *err = NULL;
+    __block NSData *data = nil;
     [[PHImageManager defaultManager] requestImageForAsset:a
                                                targetSize:CGSizeMake(size, size)
                                               contentMode:PHImageContentModeAspectFit
@@ -68,7 +71,18 @@ char *pk_image(const char *uuid, int size) {
                                             resultHandler:^(NSImage *img, NSDictionary *info) {
         if ([info[PHImageResultIsDegradedKey] boolValue]) return;
         err = errstr(info);
+        CGImageRef cg = img ? [img CGImageForProposedRect:NULL context:nil hints:nil] : NULL;
+        if (cg) {
+            NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithCGImage:cg];
+            data = [rep representationUsingType:NSBitmapImageFileTypeJPEG
+                                     properties:@{NSImageCompressionFactor: @0.85}];
+        }
     }];
+    if (!err && data.length) {
+        *jpeg = malloc(data.length);
+        memcpy(*jpeg, data.bytes, data.length);
+        *len = (long)data.length;
+    }
     return err;
 }
 
