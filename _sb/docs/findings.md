@@ -639,6 +639,38 @@ Design: roadmap "Expensive stage".
   `time.Time` — scanning into a float failed and would have dropped the whole
   library. Read it as `CAST(… AS REAL)`.
 
+### PhotoKit spike (2026-10-02)
+
+Roadmap step 0. `_sb/spikes/photokit`: Go + cgo (Objective-C), the Info.plist put into
+the binary by the linker; run from the user's terminal on the dev library.
+
+- **Photos normalises the library.** Three unedited HEICs, cloud-only (original and
+  medium both `-1/1`): `requestImageForAsset` ≤ 2048 px with network allowed returned
+  1536×2048 in **0.92 / 0.59 / 0.78 s**; after it recipe 65741 is `1/1` in the DB and
+  `resources/derivatives/<X>/<UUID>_1_102_o.jpeg` exists with exactly its
+  `ZDATALENGTH` bytes (956 659 / 848 806 / 803 251). The original (recipe 0) stays in
+  iCloud. A request without network right after: the image at once.
+- Without network a cloud-only asset fails at once: `PHPhotosErrorDomain` 3164
+  (network access required), `PHImageResultIsInCloudKey` — a free "is it local".
+- Photos serves the best local thing first: an edited HEIC whose edit
+  (`FullSizeRender.heic`, recipe 65938, 1991×2557) is local got the edit scaled to
+  2048 in 0.16 s, nothing downloaded.
+- Recipe 65741's file is `_1_102_o.jpeg` (the grouper's `roleLarge2`), not
+  `_1_105_c.jpeg` (that one is recipe 65747, ~768×1024). The tiles need no request:
+  `masters/<X>/<UUID>_4_5005_c.jpeg` (~100 KB, 360×480) is local even for cloud-only
+  assets.
+- `PHAssetResource` lists only the original, the edit and its adjustments — not
+  Photos' derivatives: whether a rendition is local is read from the DB / disk (or
+  answered by a request without network).
+- **The permission goes to the terminal** that starts the binary (its "responsible"
+  app): a terminal with Photos access ran it without a prompt, a new one asked for
+  the terminal itself. So a rebuild does not drop it; the embedded Info.plist does not
+  matter there. Not started from a terminal (launchd) — still to check.
+- Traps: asynchronous PhotoKit results are delivered on the main queue, which a
+  command-line tool does not run — the request never came back (synchronous requests
+  from a cgo thread work); yet Photos finished the download it had started. `NSImage`
+  sizes are points (×2 on Retina): the bitmap's pixels come from its `CGImage`.
+
 ### Apple Photos library: spike (2026-09-30)
 
 On a copy of the dev library's `Photos.sqlite` (read with `mode=ro`) and a list of

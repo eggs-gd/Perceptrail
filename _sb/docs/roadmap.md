@@ -210,20 +210,23 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
            Desktop is a Linux VM) has no PhotoKit, and macOS does not let it into a
            `.photoslibrary` without Full Disk Access: a Mac with Photos runs the native
            binary, Docker is for servers — the Docker step says so in its docs.
-         - **spike** (Go + cgo, `_sb/spikes/photokit`, its own branch): ask PhotoKit
-           for a cloud-only asset's medium image (network allowed) — does Photos make
-           the rendition local in the library (`resources/derivatives`, the DB's local
-           availability), or only hand us the bytes? Also: time and traffic per asset
-           (can the viewer wait for it on open?), limits when asking for thousands,
-           the permission questions above;
-         - **it normalises the library** → an Apple step in our chain of
-           responsibility: ask Photos for the level that is missing — small ahead for
-           the tiles, medium on demand (the work list straight from its DB); the next
-           walk finds the files — nothing rendered or stored by us, nothing written to
-           the library by us;
-         - **it only hands the bytes** → decide separately, still without a second
-           copy: serve them straight through (slow but no copies), or the bounded
-           working set above.
+         - [x] **spike** (Go + cgo, `_sb/spikes/photokit`; findings "PhotoKit spike"):
+           **Photos normalises the library.** Asked for a cloud-only asset's image
+           (≤ 2048 px, network allowed), it downloads recipe 65741 (1536×2048,
+           ~0.8–0.96 MB) into `resources/derivatives/<X>/<UUID>_1_102_o.jpeg` and marks
+           it local in the DB; the original stays in iCloud. 0.6–0.9 s per photo; "is
+           it local" answers at once (error 3164 without network). The permission goes
+           to the terminal that starts the binary, not to the binary.
+         - **→ the Apple step in our chain of responsibility** (the fork taken): ask
+           Photos for the medium rendition when it is missing — on demand when a photo
+           opens (and its neighbours), or ahead in the background; the next walk finds
+           the file (the grouper already knows `_1_102_o.jpeg`) — nothing rendered or
+           stored by us, nothing written to the library by us. The tiles need nothing:
+           Photos keeps `masters/<X>/<UUID>_4_5005_c.jpeg` (~100 KB) local for every
+           asset, cloud-only ones too.
+         - [ ] Still open: asking for thousands in a row (limits, rate); the
+           permission when not started from a terminal (launchd); the Original button
+           (the same request for recipe 0).
       1. **photo renditions** — libvips on the CPU, the source chosen to avoid a full
          decode (Photos' JPEG, the HEIC's embedded thumbnail, a RAW's embedded JPEG —
          `PreviewImage` / `JpgFromRaw`), the DB-state queue, benchmarks on the real
