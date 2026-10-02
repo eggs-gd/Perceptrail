@@ -50,8 +50,10 @@ keeps in place.
 - `lib/workers/proxy.ts` — creates the workers, `loadFromServer()`,
   `updateLayout(screenWidth, rowHeight, anchor?)`.
 - `lib/workers/tasks/wsync.ts` — the delta sync: with a cursor from the same server
-  database (its epoch) asks `/items?since=`, applies puts and removals; otherwise
-  clears `itemsDb` and takes everything. The new cursor is the stream's last line and
+  database (its epoch, `<database>.<contract>`) asks `/items?since=`, applies puts and
+  removals; another contract (or a copy whose count is off): everything over the kept
+  copy, in place, deleting what the stream did not bring; another database: clears
+  `itemsDb` and takes everything. The new cursor is the stream's last line and
   is kept only if it came and every line was stored — else the next sync retries.
   One sync at a time across tabs (Web Locks; none on plain HTTP — then unserialized);
   a copy whose count differs from the stream's `total` after a delta is synced again

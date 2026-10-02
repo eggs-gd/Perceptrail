@@ -714,7 +714,13 @@ the binary by the linker; run from the user's terminal on the dev library.
   server sent `asset.onDemand`, but a delta brings only changed items — the client's
   kept copy never got the new field, so nothing asked. The sync epoch now carries a
   contract version (`items.go` `contractVersion`): a change to what an item carries
-  bumps it, and every client syncs from nothing once.
+  bumps it, and every client takes everything once — **in place** (the owner: "this is
+  critical"): the epoch is `<database>.<contract>`; another contract over the same
+  database puts every item over the kept copy and deletes, after the stream, the ones
+  it did not bring — the sheet never empties, a direct link keeps working. Only
+  another database starts from an empty table. The count check heals the same way
+  now. Checked: a new contract — the layout stayed at 6 991 rows through the sync, an
+  item the server did not have was deleted; another database — emptied and refilled.
 - **A local HEIC original leaves no file**: asked for the image, Photos draws it
   from the original on disk and writes no derivative — the viewer got a 404. The
   image PhotoKit hands over comes back as JPEG (`pk_image`) and is served when no
