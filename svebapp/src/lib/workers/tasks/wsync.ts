@@ -1,11 +1,12 @@
 import {type Item, itemsDb} from "$lib/stores";
-import {type CurrentWorkerTask, type MessageFromSync, type WorkerMessage} from "./types";
+import {type CurrentWorkerTask, ITEMS_CHANNEL, type MessageFromSync, type WorkerMessage} from "./types";
 import {getLogger, setLogLevel} from "$lib/logger";
 
 const logger = getLogger();
 let currentTask: CurrentWorkerTask = null;
 
-let updatesPort: MessagePort;
+// To every tab's layout worker (see ITEMS_CHANNEL)
+const updatesPort = new BroadcastChannel(ITEMS_CHANNEL);
 
 self.onmessage = async function (msg: { data: WorkerMessage<any, any> }) {
     const {task, payload} = msg.data;
@@ -13,7 +14,6 @@ self.onmessage = async function (msg: { data: WorkerMessage<any, any> }) {
     if (task === 'mode') {
         setLogLevel(payload);
     } else if (task === 'init') {
-        updatesPort = payload[0];
         logger.debug('Inited');
     } else if (task === 'start' && !currentTask) {
         currentTask = startNewTask(payload);
@@ -31,6 +31,12 @@ self.onmessage = async function (msg: { data: WorkerMessage<any, any> }) {
  * database (its epoch) only what changed since comes (/items?since=), a removed item
  * as {guid, removed}; otherwise everything, from an empty table. Starts asked for
  * while one runs are folded into one more run after it.
+ *
+ * Every tab has its own sync worker over the one IndexedDB: a full sync in one tab
+ * cleared the table while another was filling it, and that one kept its cursor over
+ * what was left (a library of 79 photos instead of 6 993). Syncs take a lock shared by
+ * the tabs (Web Locks), and the stream's last line says how many items there are: a
+ * copy holding another count is synced again from nothing.
  */
 function startNewTask(apiPath: string) {
     const controller = new AbortController();
@@ -38,7 +44,12 @@ function startNewTask(apiPath: string) {
         controller,
         promise: (async () => {
             try {
-                const changed = await sync(controller.signal, apiPath);
+                // No Web Locks outside a secure context (plain HTTP on a LAN address):
+                // unserialized then, and the count check heals what two tabs break
+                const changed = navigator.locks
+                    ? await navigator.locks.request('items-sync', {signal: controller.signal},
+                        () => sync(controller.signal, apiPath))
+                    : await sync(controller.signal, apiPath);
                 postMessage({task: 'sync', status: 'completed', changed});
             } catch (error) {
                 postMessage({task: 'sync', status: 'error', changed: 0});
@@ -56,8 +67,8 @@ function startNewTask(apiPath: string) {
 
 let again = false;
 
-async function sync(signal: AbortSignal, apiPath: string): Promise<number> {
-    const state = await itemsDb.sync.get('state');
+async function sync(signal: AbortSignal, apiPath: string, fromNothing = false): Promise<number> {
+    const state = fromNothing ? undefined : await itemsDb.sync.get('state');
     let response = await fetch(state ? `${apiPath}?since=${encodeURIComponent(state.cursor)}` : apiPath, {signal});
     let epoch = response.headers.get('X-Sync-Epoch') ?? '';
     let full = !state;
@@ -81,10 +92,12 @@ async function sync(signal: AbortSignal, apiPath: string): Promise<number> {
     itemsDb.items.hook.deleting.subscribe(hookDelete);
     let changed = 0;
     let cursor = '';
+    let total = -1;
     try {
         await readLines(signal, response, async (line) => {
             if ('cursor' in line) {
                 cursor = line.cursor;
+                total = line.total ?? -1;
                 return;
             }
             if (line.removed) await itemsDb.items.delete(line.guid);
@@ -100,8 +113,19 @@ async function sync(signal: AbortSignal, apiPath: string): Promise<number> {
     // failed after the 200, the connection dropped). Kept only once everything is in:
     // a failed sync starts again from the old cursor.
     if (!cursor) throw new Error(`${apiPath}: the stream ended without its cursor`);
-    if (epoch) await itemsDb.sync.put({key: 'state', epoch, cursor});
     if (full) updatesPort.postMessage({action: 'sync-done'});
+    const held = await itemsDb.items.count();
+    if (total >= 0 && held !== total) {
+        if (!full) {
+            // The copy is not what the server has: the delta cannot mend it
+            logger.warn(`Sync: ${held} items kept, the server has ${total} — syncing from nothing`);
+            await itemsDb.sync.delete('state');
+            return changed + await sync(signal, apiPath, true);
+        }
+        // A full sync can differ only by what changed while it ran: the next delta brings it
+        logger.warn(`Sync: ${held} items after a full sync, the server had ${total}`);
+    }
+    if (epoch) await itemsDb.sync.put({key: 'state', epoch, cursor});
     return changed;
 }
 
@@ -122,7 +146,7 @@ function hookDelete(key: string, item: Item) {
     updatesPort.postMessage(msg);
 }
 
-type SyncLine = (Item & {removed?: boolean}) | {cursor: string};
+type SyncLine = (Item & {removed?: boolean}) | {cursor: string, total?: number};
 
 /**
  * NDJSON, line by line as it streams. A line that cannot be read or stored fails the

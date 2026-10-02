@@ -81,7 +81,7 @@ export interface SectionMark {
     y: number;
 }
 
-/** A view's last order (GET /p/:view/order), kept: the sheet shows at once next time */
+/** A view's last order (GET /p/:view/order), kept in itemsDb.orders: the sheet shows at once next time */
 export interface LayoutOrder {
     key: `order:${string}`;
     entries: {guid: string, sections?: {level: number, label: string}[]}[];
