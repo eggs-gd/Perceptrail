@@ -1,6 +1,6 @@
 # Roadmap
 
-Status as of 2026-10-01 (PR #17). Details and reasons — [findings.md](findings.md).
+Status as of 2026-10-02 (PR #18). Details and reasons — [findings.md](findings.md).
 Target architecture — the diagrams in [`../puml`](../puml).
 
 ## Done
@@ -102,18 +102,31 @@ Target architecture — the diagrams in [`../puml`](../puml).
 
 One PR per feature (its steps are commits); docs are updated in that PR (AGENTS.md).
 
-### Import chain — open
+### The asset from all its files — open
 
-- [ ] Live Photo pairs checked by `ContentIdentifier` (today by name); an `animated`
-      kind.
+Perceptrail is not a library of its own but a viewer over a popular one: Immich,
+PhotoPrism, Lightroom, digiKam, Apple Photos keep the albums, tags, sync and the heavy
+UX; we give another way through the same photos — rediscovery. Most of them write
+sidecars (by default or on request), so an asset is a package — the original, RAW +
+JPEG, edits, `.xmp` / `.aae`, the motion part — and the grouping exists to collect
+the whole package, not only to find its main file.
+
+- [ ] **One item from the whole package** — the metadata merged from every file of
+      the group, not only the main file's: rating, tags, captions, face regions from
+      the XMP sidecars those libraries write ([`Item flow.puml`](../puml/Item%20flow.puml)
+      — designed that way, not finished). Which library writes what, and what wins
+      when files disagree — to work out per library.
+- [ ] **Live Photo pairs by `ContentIdentifier`** in generic folders (today by name:
+      a rename breaks the pair, two namesakes stick together); Apple libraries pair
+      from their DB already. An `animated` kind (GIF, animated WebP / HEIC) shown
+      moving, not as a still.
 
 ### Dates and time zones
 
-D1–D3 done (PR #13), see Done.
-
-- [ ] **D4. API and client — to discuss.** Maybe not needed: if server and client
-      normalise dates the same way, the API needs no separate zone. Sorting/grouping
-      the gallery by date is separate (it makes all of this visible).
+D1–D3 done (PR #13), see Done. D4 (a zone in the API) — parked: the order and the
+sections come from the date perceptor on the server, the info panel gets the date
+already formatted in the shot's zone. Keep it only when a UX reason for the zone
+shows up (the place already tells where it was taken).
 
 ### Apple Photos library — open
 
@@ -212,8 +225,9 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
            copy: serve them straight through (slow but no copies), or the bounded
            working set above.
       1. **photo renditions** — libvips on the CPU, the source chosen to avoid a full
-         decode, the DB-state queue, benchmarks on the real library (generic folders,
-         and Apple assets that still lack a viewable size);
+         decode (Photos' JPEG, the HEIC's embedded thumbnail, a RAW's embedded JPEG —
+         `PreviewImage` / `JpgFromRaw`), the DB-state queue, benchmarks on the real
+         library (generic folders, and Apple assets that still lack a viewable size);
       2. **video, software** — `libx264`, HDR → SDR, hover clip, poster; the codec →
          encoder table and the probe with a software fallback from day one;
       3. **Docker** — the image (jellyfin-ffmpeg), a base compose with software encoding;
@@ -277,9 +291,8 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 ## Core — product (gontroller)
 
 - Own media-type table and the main file of a group → **C5** (import chain).
-- [ ] One main item merged from all sidecars
-      ([`Item flow.puml`](../puml/Item%20flow.puml)).
-- [ ] Embedded RAW preview (`PreviewImage`/`JpgFromRaw`) for the transcoder.
+- [ ] One main item merged from all sidecars → "The asset from all its files" (Next).
+- Embedded RAW preview → the photo renditions step (a source).
 
 ## Core — service (gontroller)
 
@@ -290,7 +303,9 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
       Apple assets are not judged by their file. A group exiftool returns nothing for
       at all is still retried (that may be a passing failure).
 - [x] Fewer Info logs in `fswalker` — none per file since the import chain (C1).
-- [ ] `TestLoadExternalPlugins` should load real `.so` files.
+- [ ] **`TestLoadExternalPlugins` should load real `.so` files** — today it does not,
+      so a plugin built against other dependency versions than the host (it happened:
+      `x/sync`, `testify`) is caught only by running the server. To do.
 
 ## Deployment (first release)
 
@@ -345,7 +360,12 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 - [x] Side panel: the first section of a deeper level (the first month of a year, the
       first city of a region) sits at the same point as its parent's label — its
       label now goes just under the parent's when there is room (PR #18).
-- [ ] Optimal (Dijkstra) layout for an already loaded gallery — optional.
+- Maybe, some day: the optimal (Dijkstra) layout. Where the gallery started: the
+  best row breaks over the whole set (rows closest to the target height). It keeps
+  the order — only the breaks change, so the views' fixed orders are fine — but every
+  photo may move the rows above it, so streaming replaced it with the greedy layout.
+  It could still fit the full relayouts we already do (a view switch, a resize),
+  with the greedy one appending. Code kept (`workers/layout/`); not planned.
 
 ## Later: the perceptor platform
 

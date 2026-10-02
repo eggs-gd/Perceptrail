@@ -461,6 +461,20 @@ Design: roadmap "Expensive stage".
   JPEG quality of Apple's renditions was estimated from the sizes in the DB
   (~2.6 bits/pixel), not measured — the spike has the same permission question.
 
+### A viewer over a library, not a library (2026-10-02)
+
+- The product's place (the owner): Immich, PhotoPrism, Lightroom, Apple Photos keep
+  the library — sync, albums, tags, the heavy UX. Perceptrail is another way through
+  the same photos, a rediscovery of them, not a replacement. So we read what those
+  libraries leave (Photos' DB, the sidecars Immich / PhotoPrism / Lightroom write) and
+  never become a second copy of it (see "Apple Photos: one copy").
+- Hence the grouping collects the whole asset package — originals, edits, RAW +
+  JPEG, sidecars — and an item is meant to be merged from all of it (roadmap "The
+  asset from all its files"). Today the metadata comes from the main file only.
+- The optimal (Dijkstra) layout does not reorder photos, it only picks row breaks;
+  what ruled it out is that it needs the whole set (one photo may move the rows
+  above), not the views' fixed orders.
+
 ## Backend: gontroller, plugins, exiftool
 
 ### Broken files (2026-10-01)
