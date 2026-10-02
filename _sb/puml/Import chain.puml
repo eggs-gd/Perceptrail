@@ -82,4 +82,10 @@ Gate -> DB: after the marker from every branch:\ndeletions (V2), only after a co
 Closer --> Walker: the last group of the walk is done (items + errors counted)
 Walker -> Walker: rescan pause (1 min), then walk again
 
+== One asset again (Apple Photos on demand) ==
+note over Photos: Photos made a file of an asset local\n(the viewer asked for it: PhotoKit)
+Photos -> Photos: Regroup(uuid): the last load's DB rows\n+ the disk now (no walk, no DB read)
+Photos -> Gate: group (asset UUID): like any group,\nonly what changed passes; no marker,\ndeletions untouched
+Closer --> Photos: the item is done: the request waiting\nfor it answers (importer Refresh)
+
 @enduml
