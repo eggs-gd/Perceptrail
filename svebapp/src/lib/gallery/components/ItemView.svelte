@@ -7,7 +7,7 @@
     import Picture from "./Picture.svelte";
     import Motion from "./Motion.svelte";
     import KindBadge from "./KindBadge.svelte";
-    import {assetUrl, biggestImage, fallbackImage, hasImage, hoverUrl, mediumUrl, originalImage, playableVideos} from "./asset";
+    import {assetUrl, biggestImage, fallbackImage, hasImage, hoverUrl, mediumUrl, originalImage, originalOnDemand, playableVideos} from "./asset";
     import {viewerPrefs} from "./viewerPrefs.svelte";
     import {debug} from "$lib/app.svelte";
 
@@ -46,9 +46,24 @@
         else video.pause();
     };
 
-    // The viewer's Original switch (the buttons are ViewerTools): the original image
-    // in place of the preview
-    let original = $derived(mode === 'view' && showOriginal && asset ? originalImage(asset) : undefined);
+    // The viewer's Original switch (the buttons are ViewerTools): the original over the
+    // preview — the local one the browser shows, else Photos' (on demand: a photo's at
+    // full resolution; a Live Photo's photo always comes from there, its own original
+    // is its video)
+    let fromPhotos = $derived(asset ? originalOnDemand(asset) : undefined);
+    let original = $derived.by((): {url: string, w?: number, h?: number} | undefined => {
+        if (mode !== 'view' || !showOriginal || !asset || asset.kind === 'video') return undefined;
+        const local = asset.kind === 'live' && fromPhotos ? undefined : originalImage(asset);
+        if (local) return {url: assetUrl(local), w: local.w, h: local.h};
+        return fromPhotos && {url: fromPhotos.view};
+    });
+    let originalLoad = $state<{url: string, w: number, h: number}>();
+    let originalReady = $derived(!!original && originalLoad?.url === original.url);
+    let originalDims = $derived(originalReady ? originalLoad : original?.w ? original : undefined);
+    // A video's Original: its own file (here, or from Photos)
+    let videoOriginal = $derived(mode === 'view' && showOriginal && asset?.kind === 'video'
+        ? (asset.original?.mime.startsWith('video/') ? assetUrl(asset.original) : fromPhotos?.view)
+        : undefined);
 
     // A Live Photo in the viewer: its motion plays over the photo once when it opens
     // (if autoplay is on) and again on hover, then the photo is back. With sound: the
@@ -73,11 +88,11 @@
 
     // Apple Photos: the viewer's medium rendition (the image, a video's 720p), asked
     // for when it opens — the image goes over what the asset has once it loads
-    let medium = $derived(asset && mode === 'view' && !original ? mediumUrl(asset) : undefined);
+    let medium = $derived(asset && mode === 'view' ? mediumUrl(asset) : undefined);
     let mediumLoad = $state<{url: string, w?: number, h?: number}>();
     let better = $derived(medium && mediumLoad?.url === medium && mediumLoad.w ? mediumLoad : undefined);
-    // Asked for and not answered yet (a failure answers too)
-    let waiting = $derived(!!medium && mediumLoad?.url !== medium);
+    // Asked for and not answered yet (a failure answers too); the original as well
+    let waiting = $derived((!!medium && mediumLoad?.url !== medium) || (!!original && !originalDims));
 
     // The viewer: the image at its own pixel size, fitted into the screen — stretched
     // only if the user switched that on. srcset makes an <img> as wide as `sizes`
@@ -88,10 +103,11 @@
     let videoLoad = $state<{guid: string, w: number, h: number}>();
     let videoDims = $derived(videoLoad?.guid === item.guid ? videoLoad : undefined);
     let playsVideo = $derived(!!asset && mode === 'view' && asset.kind !== 'live'
-        && (videos.length > 0 || (asset.kind === 'video' && !!medium)));
+        && (videos.length > 0 || (asset.kind === 'video' && (!!medium || !!videoOriginal))));
 
     let shown = $derived(asset && mode === 'view'
-        ? (playsVideo ? (videoDims ?? {w: item.width, h: item.height}) : (original ?? better ?? biggestImage(asset)))
+        ? (playsVideo ? (videoDims ?? {w: item.width, h: item.height})
+            : original ? (originalDims ?? better ?? biggestImage(asset)) : (better ?? biggestImage(asset)))
         : undefined);
     let fit = $derived(shown?.w && shown.h
         ? {
@@ -108,19 +124,26 @@
     {@const poster = fallbackImage(asset)}
     <!-- Sized as a photo: its own pixels, fitted into the screen (stretched if switched on) -->
     <div class="asset view" style:width={fit?.width} style:aspect-ratio={fit?.ratio}>
+        <!-- The Original switch swaps the sources: a new element -->
+        {#key videoOriginal}
         <video controls autoplay={viewerPrefs.autoplayVideo} playsinline poster={poster && assetUrl(poster)}
                onclick={(e) => e.stopPropagation()}
                onloadedmetadata={(e) => {
                    const v = e.currentTarget as HTMLVideoElement;
                    videoLoad = {guid: item.guid, w: v.videoWidth, h: v.videoHeight};
                }}>
-            {#if medium}
-                <source src={medium}>
+            {#if videoOriginal}
+                <source src={videoOriginal}>
+            {:else}
+                {#if medium}
+                    <source src={medium}>
+                {/if}
+                {#each videos as video (video.src)}
+                    <source src={video.src} type={video.type}>
+                {/each}
             {/if}
-            {#each videos as video (video.src)}
-                <source src={video.src} type={video.type}>
-            {/each}
         </video>
+        {/key}
     </div>
 {:else if asset && hasStill}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -131,18 +154,22 @@
          style:aspect-ratio={fit?.ratio}
          onmouseenter={() => { hovered = true; if (mode === 'view') liveReplay = item.guid; }}
          onmouseleave={() => (hovered = false)}>
+        <Picture {asset} {sizes} alt={item.guid} width={item.width} height={item.height}/>
+        {#if medium}
+            <img class="medium" class:ready={better} src={medium} alt=""
+                 onload={(e) => {
+                     const img = e.currentTarget as HTMLImageElement;
+                     mediumLoad = {url: medium!, w: img.naturalWidth, h: img.naturalHeight};
+                 }}
+                 onerror={() => (mediumLoad = {url: medium!})}>
+        {/if}
         {#if original}
-            <img class="original-image" src={assetUrl(original)} alt={item.guid}>
-        {:else}
-            <Picture {asset} {sizes} alt={item.guid} width={item.width} height={item.height}/>
-            {#if medium}
-                <img class="medium" class:ready={better} src={medium} alt=""
-                     onload={(e) => {
-                         const img = e.currentTarget as HTMLImageElement;
-                         mediumLoad = {url: medium!, w: img.naturalWidth, h: img.naturalHeight};
-                     }}
-                     onerror={() => (mediumLoad = {url: medium!})}>
-            {/if}
+            <!-- Over what is shown, once it loaded (from Photos it may take a while) -->
+            <img class="medium" class:ready={originalReady} src={original.url} alt={item.guid}
+                 onload={(e) => {
+                     const img = e.currentTarget as HTMLImageElement;
+                     originalLoad = {url: original!.url, w: img.naturalWidth, h: img.naturalHeight};
+                 }}>
         {/if}
         {#if mode === 'tile' && hovered && hasMotion}
             <div class="motion"><Motion {asset} bind:loading={motionLoading}/></div>
@@ -243,12 +270,6 @@
         opacity: 1;
     }
 
-    .original-image {
-        display: block;
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-    }
 
     .live {
         position: absolute;

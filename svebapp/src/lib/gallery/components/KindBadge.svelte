@@ -1,6 +1,6 @@
 <script lang="ts">
     import type {Asset, AssetKind} from '$lib/stores';
-    import {formatDuration, hasLocalVideo} from './asset';
+    import {formatDuration} from './asset';
 
     interface Props {
         asset: Asset;
@@ -14,9 +14,10 @@
 
     const TITLES: Record<AssetKind, string> = {photo: 'Photo', live: 'Live Photo', video: 'Video'};
 
-    // Only in iCloud: a photo whose original is not here (we show Photos' preview), a
-    // video or a Live Photo whose video is not here (it does not play)
-    let cloud = $derived(asset.kind === 'photo' ? !asset.original : !hasLocalVideo(asset));
+    // The original is only in iCloud — the same for every kind: what is shown or
+    // played comes from Photos on demand, the cloud says where the original is
+    // (a Live Photo's original is its video)
+    let cloud = $derived(!asset.original);
     let title = $derived(TITLES[asset.kind] + (cloud ? ' (in iCloud only)' : ''));
 </script>
 

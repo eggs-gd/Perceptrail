@@ -261,9 +261,14 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
            client lays the medium over the image, plays the hover video after 250 ms,
            asks for ±6 neighbours ahead. Access is asked for only when a Photos
            library is under the root.
+         - [x] **The Original** (PR #21): a photo's (a Live Photo's photo's) at full
+           resolution, unedited, drawn by Photos as JPEG — any browser shows it,
+           HEIC in Chrome too; its file on `?file=1` (HEIC, RAW: a download); a
+           video's original file (high quality). The viewer's switch for all of
+           them; the tile's cloud means "the original is only in iCloud" for every
+           kind now.
          - [ ] Still open: the permission when not started from a terminal
-           (launchd); the Original button (the same request for recipe 0, the full
-           file). Asking for thousands in a row is not needed (nothing asks in bulk).
+           (launchd). Asking for thousands in a row is not needed (nothing asks in bulk).
       1. **photo renditions** — libvips on the CPU, the source chosen to avoid a full
          decode (Photos' JPEG, the HEIC's embedded thumbnail, a RAW's embedded JPEG —
          `PreviewImage` / `JpgFromRaw`), the DB-state queue, benchmarks on the real

@@ -1,6 +1,6 @@
 <script lang="ts">
     import type {Asset} from '$lib/stores';
-    import {assetUrl, canShowImage, hasImage, originalImage, playableVideos} from './asset';
+    import {assetUrl, canShowImage, hasImage, originalImage, originalOnDemand, playableVideos} from './asset';
     import {cycleLiveMode, toggleViewerPref, viewerPrefs} from './viewerPrefs.svelte';
     import PerceptorButtons from './PerceptorButtons.svelte';
 
@@ -25,8 +25,12 @@
     // A playable video is shown as itself: no switch; one the browser cannot play
     // is downloaded
     let video = $derived(asset.kind === 'video' && (playable || !!asset.onDemand));
-    let image = $derived(video ? undefined : originalImage(asset));
-    let other = $derived(!video && !image ? asset.original : null);
+    // The original from Photos when it is not here (a Live Photo's photo: always)
+    let fromPhotos = $derived(originalOnDemand(asset));
+    let image = $derived(video || (asset.kind === 'live' && fromPhotos) ? undefined : originalImage(asset));
+    let other = $derived(!video && !image && !fromPhotos ? asset.original : null);
+    // A video's Original: its own file, here or from Photos
+    let videoOriginal = $derived(video && (!!fromPhotos || !!asset.original?.mime.startsWith('video/')));
     // A photo or a video is shown: its size can be stretched
     let still = $derived(video || hasImage(asset));
 
@@ -48,6 +52,20 @@
                   stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
     </a>
+{/snippet}
+
+{#snippet originalSwitch()}
+    <button class="tool" class:on={showOriginal}
+            title={showOriginal ? 'Showing the original' : 'Show the original'}
+            aria-label="Original" aria-pressed={showOriginal} onclick={ontoggleoriginal}>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor"
+                  stroke-width="1.6"/>
+            <path d="M3.5 16.5l5-5 4 4 2.5-2.5 5.5 5.5" fill="none" stroke="currentColor"
+                  stroke-width="1.6" stroke-linejoin="round"/>
+            <circle cx="15.5" cy="9.5" r="1.6" fill="currentColor"/>
+        </svg>
+    </button>
 {/snippet}
 
 {#snippet slash(on: boolean)}
@@ -113,21 +131,19 @@
         <!-- Tested when the item opens: the switch if the browser shows it, else a download -->
         {#await canShowImage(image) then shown}
             {#if shown}
-                <button class="tool" class:on={showOriginal}
-                        title={showOriginal ? 'Showing the original' : 'Show the original'}
-                        aria-label="Original" aria-pressed={showOriginal} onclick={ontoggleoriginal}>
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor"
-                              stroke-width="1.6"/>
-                        <path d="M3.5 16.5l5-5 4 4 2.5-2.5 5.5 5.5" fill="none" stroke="currentColor"
-                              stroke-width="1.6" stroke-linejoin="round"/>
-                        <circle cx="15.5" cy="9.5" r="1.6" fill="currentColor"/>
-                    </svg>
-                </button>
+                {@render originalSwitch()}
             {:else}
                 {@render download(assetUrl(image))}
             {/if}
         {/await}
+    {:else if fromPhotos && !video}
+        <!-- From Photos: shown at full resolution (any browser), the file to download -->
+        {@render originalSwitch()}
+        {#if fromPhotos.file}
+            {@render download(fromPhotos.file)}
+        {/if}
+    {:else if videoOriginal}
+        {@render originalSwitch()}
     {:else if other}
         {@render download(assetUrl(other))}
     {/if}

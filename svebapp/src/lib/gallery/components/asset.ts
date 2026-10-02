@@ -127,6 +127,18 @@ export function hoverUrl(asset: Asset): string | undefined {
     return asset.onDemand?.hover && `${PUBLIC_API_PATH}${asset.onDemand.hover}`;
 }
 
+/**
+ * The viewer's Original from Photos (it is not here): what to show — a photo's (a
+ * Live Photo's photo's) at full resolution as JPEG, any browser shows it; a video's
+ * file — and a photo's file itself to download (HEIC, RAW)
+ */
+export function originalOnDemand(asset: Asset): {view: string, file?: string} | undefined {
+    const o = asset.onDemand?.original;
+    if (!o) return undefined;
+    const url = `${PUBLIC_API_PATH}${o}`;
+    return asset.kind === 'video' ? {view: url} : {view: url, file: `${url}?file=1`};
+}
+
 let hevc: boolean | undefined;
 function playsHevc(): boolean {
     if (typeof document === 'undefined') return false;

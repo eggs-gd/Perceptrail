@@ -736,6 +736,16 @@ the binary by the linker; run from the user's terminal on the dev library.
   loaded, as big as the screen until then; stretched if switched on). A Live Photo's
   motion was 300×150 in a corner: the stage's `.stage video { width: auto }` beat
   `.live { width: 100% }` on specificity — `.asset.view video` fills the box now.
+- **The cloud and the Original** (the owner asked what each means): the tile's cloud
+  meant "no original" for a photo but "no video at all" for a video or a Live
+  Photo — it vanished after the first hover. Now one meaning for every kind: the
+  original is only in iCloud. The Original switch: a local original the browser
+  shows; otherwise Photos' (`rendition/original`: the unedited original drawn at
+  full resolution as JPEG — so a HEIC shows in Chrome too — and the file itself on
+  `?file=1` for the download); a Live Photo's photo always comes from Photos (its
+  own original in the DB is its video); a video switches to its original file. Each
+  makes Photos download the original into its library — the cloud goes after the
+  next walk. Contract version 3 (`onDemand.original`).
 - **Viewer switches** (the owner): a Live Photo's motion has one button with three
   states — off → once → loop (`viewerPrefs.liveMode`; the old switch carries over:
   off stays off, on is once). The wheel zoom is gone altogether (the owner: it

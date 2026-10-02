@@ -29,10 +29,11 @@ export interface Asset {
     frames: Rendition[];
     /**
      * Apple Photos: better renditions the server asks Photos for when needed (it
-     * keeps them in iCloud only) — the viewer's medium, a hover for what moves.
+     * keeps them in iCloud only) — the viewer's medium, a hover for what moves, the
+     * original when it is not here (a Live Photo: always — its original is its video).
      * Relative to the API, like the renditions' urls.
      */
-    onDemand?: {medium: string, hover?: string};
+    onDemand?: {medium: string, hover?: string, original?: string};
 }
 
 export interface Item {
