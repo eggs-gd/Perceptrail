@@ -1,6 +1,6 @@
 # Roadmap
 
-Status as of 2026-10-02 (PR #18). Details and reasons — [findings.md](findings.md).
+Status as of 2026-10-02 (PR #21). Details and reasons — [findings.md](findings.md).
 Target architecture — the diagrams in [`../puml`](../puml).
 
 ## Done
@@ -89,6 +89,21 @@ Target architecture — the diagrams in [`../puml`](../puml).
   region → city from the time zone. A photo may start a path of sections; the side
   panel's scale is by sections, √ of their photos, at every level
   ([`Perceptor data.puml`](../puml/Perceptor%20data.puml)).
+- Views by URL, info panel, delta sync, debug/release mode (PR #18); the roadmap's
+  old items sorted, the plugin loader test on real `.so` files, RAW previews keep
+  their orientation (PR #19); several tabs — one sync at a time, a self-healing copy,
+  a layout per tab, plain HTTP on a LAN address (PR #20); providers listed (PR #22).
+- **Apple Photos on demand** (PR #21, transcode step 0): Photos, asked through
+  PhotoKit, makes a cloud-only rendition local in its own library — we render and
+  store nothing it keeps. `pkg/photokit` (cgo, macOS); `/items/:guid/rendition/
+  {medium,hover,original}`; one asset processed again without a walk (`Regroup` →
+  the gate → `Refresh`); assets with nothing local asked for in the background;
+  `/items/:guid/files`. The viewer opens on what is here (the comfortable ~2048 px,
+  or the full size lit as the Original), the medium asked for only when nothing here
+  is that big; hover with a loading ring; the tile's cloud = the full resolution is
+  not here; Info → Files with downloads. The sync takes a new contract in place and
+  passes nested changes to the layout. Spike and results: `_sb/spikes/photokit`,
+  findings "PhotoKit spike".
 
 ## Releases
 
@@ -175,23 +190,16 @@ shows up (the place already tells where it was taken).
 ### Apple Photos library — open
 
 Done in the cheap stage (spike, grouper, what an asset shows, DB metadata, tests —
-see Done and findings "Apple Photos library: spike"). We only read the library.
+see Done and findings "Apple Photos library: spike"), and on demand (PR #21 — see
+Done). We only read the library.
 
-- [ ] **Transcode only the gaps.** Apple's derivatives are good JPEGs (~2000 and
-      ~1000 px): transcode only when the best one is below our size and the original
-      is local, or when nothing is browser-viewable (a HEIC render without its JPEG).
-      Cloud-only: the best derivative is final. Apple's derivatives are a cache Photos
-      may purge: we point at them, never copy.
-- [ ] **"Show the original" for cloud-only assets** — most of an iCloud library
-      (here: 3 528 of 5 866 photos, 766 of 770 videos, all 351 Live Photos). We never
-      write to the library — we ask Photos to download the original (PhotoKit,
-      `PHAssetResourceManager`, network access allowed); the next walk sees it and
-      reprocesses the group. PhotoKit exists only on the Mac that owns the library,
-      in a user session (not Docker, not a NAS reading a share or a copy). So an
-      optional capability of the native macOS build (Go + cgo, see step 0 below);
-      the viewer's Original button asks it when the original is not local. Photos may
-      purge it again (Optimize Mac Storage): then the asset falls back to its
-      derivative.
+- [x] **Transcode only the gaps** — none for a Photos library: whatever the client
+      needs, Photos makes local on request (PR #21); our transcode is for generic
+      folders (steps 1–2).
+- [x] **"Show the original" for cloud-only assets** — the Original from Photos (PR
+      #21): the biggest of what is seen, at full resolution.
+- [ ] The Photos permission when gontroller is not started from a terminal
+      (launchd) — the binary would need its own (Info.plist, a stable signature).
 - Supported schema: `ZASSET` (macOS 11+); older (`ZGENERICASSET`) — not planned.
 - Later: albums, people (`ZPERSON` / `ZDETECTEDFACE`) → perceptors.
 
@@ -199,7 +207,7 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 
 - [ ] **The expensive stage: previews and transcode** — design below ("Expensive
       stage"). In steps, each its own PR (the cut may still change):
-      0. **Apple Photos first — a spike, then a fork** (the dev library is mostly
+      0. ✅ **Apple Photos first — a spike, then a fork** (done: PR #21; the dev library is mostly
          iCloud-only, and Photos' DB knows every asset's renditions —
          `ZINTERNALRESOURCE`: recipe, size, local / in iCloud; recipe 65741, up to
          ~2048 px, is in iCloud for nearly every asset — 3 240 have it only there).
