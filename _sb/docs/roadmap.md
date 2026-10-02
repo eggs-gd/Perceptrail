@@ -104,7 +104,7 @@ One PR per feature (its steps are commits); docs are updated in that PR (AGENTS.
 
 ### Providers — other libraries as sources (2026-10-02, to work out)
 
-The Apple step (PhotoKit, PR #21) showed the shape: a library that already keeps
+The Apple step (PhotoKit, PR #21 — in review, not merged yet) showed the shape: a library that already keeps
 renditions is a **provider** — we read its assets and metadata, and ask it for a
 rendition when the client needs one; we render nothing it already has. Perceptrail
 stays a viewer over the user's library (findings "A viewer over a library, not a
@@ -113,8 +113,9 @@ library").
 - **Our client knows only our server.** The provider is server-side: gontroller
   talks to the library's API with its key and passes the bytes on (a proxy) — the
   key and the library's address never reach the browser, and the library need not
-  be reachable from the client's network. The client keeps `asset.onDemand` /
-  `/items/:guid/rendition/...` as for Apple.
+  be reachable from the client's network. The client contract is the one PR #21
+  brings (proposed until it is merged): `asset.onDemand` and
+  `/items/:guid/rendition/...`, the same for every provider.
 - **No access to their databases** where there is an API (Immich and PhotoPrism keep
   Postgres / MariaDB with schemas that change between versions); a database or a
   catalog only where it is the library's own format (Apple, Lightroom, digiKam).
@@ -122,14 +123,14 @@ library").
   exiftool's tag names (as the Photos DB does), so the perceptors read it unchanged;
   their faces, people, albums, labels, smart search — perceptor data without an ML of
   our own.
-- Generalise `rendition.go`: a provider interface (Apple: the local file or
+- Generalise `rendition.go` (PR #21): a provider interface (Apple: the local file or
   PhotoKit; an API provider: its thumbnail / preview / playback, proxied).
 
 All of them listed for now; the order is to be decided:
 
 | provider | how | what it gives | notes |
 |---|---|---|---|
-| **Apple Photos** | `Photos.sqlite` + files; PhotoKit on demand | renditions, edits, Live Photos, video renditions | done (PR #21) |
+| **Apple Photos** | `Photos.sqlite` + files; PhotoKit on demand | renditions, edits, Live Photos, video renditions | reading: done; on demand: PR #21 (in review) |
 | **Immich** | REST API + an API key (`asset.read`, `asset.view`; `asset.download` only for originals); Sync v2 (streamed, resumable deltas) | `thumbnail` / `preview` (~1440 px) / original, transcoded video playback; faces, people, albums, CLIP search | **first** — the owner uses it daily. To check: API stability between versions, Sync v2 from a non-mobile client, its video transcode policy |
 | **PhotoPrism** | REST API + an app password (Bearer) | thumbnails `/api/v1/t/<hash>/<preview token>/<size>`, H.264 video; labels, faces, places | similar to Immich |
 | **Lightroom Classic** | the catalog `.lrcat` (SQLite) + the previews `.lrdata` | ratings, keywords, collections, edits; its previews | the previews' format is Adobe's own; fits "the asset from all its files" |
