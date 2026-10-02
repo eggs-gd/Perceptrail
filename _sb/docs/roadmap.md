@@ -231,15 +231,18 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
              other tabs learn of it through the delta;
            - **the neighbours** — 1–3 rows around the opened photo (in the view's
              order) are asked for ahead, so the arrows open at once; not more;
-           - **a video**: `medium` and `fast` both (~3–5 MB together) — HEVC or
-             H.264 720p, and H.264 360p; the browser picks by `<source type>`
-             (Safari and Chrome on a Mac play HEVC, the rest gets 360p). Never
-             `automatic` / `high`: they download the original. An H.264 720p of our
-             own (from the HEVC) only if 360p is not enough elsewhere — the video
-             step; Photos keeps no such file locally;
-           - **a Live Photo**: `requestLivePhotoForAsset` — its motion, H.264;
-           - **hover**: Photos' `cvt` frames where it has them; else the 360p
-             video itself;
+           - **a video on the sheet** (decided): `fast` is enough — H.264 360p,
+             ~0.7 MB, ~0.9 s — asked for on hover; meanwhile Photos' `cvt` frames if
+             it has them. **Hover prefers the video**: once the 360p is local it
+             plays, the frames are not shown;
+           - **a video in the viewer**: `medium` on open, as a photo's medium
+             rendition — HEVC or H.264 720p; a browser that cannot play HEVC
+             (Firefox, Chrome without the hardware decoder) gets the `fast` 360p
+             (`<source type>`). Never `automatic` / `high`: they download the
+             original. An H.264 720p of our own only if 360p proves not enough
+             there — the video step; Photos keeps no such file locally;
+           - **a Live Photo**: `requestLivePhotoForAsset` — its motion, H.264, for
+             hover and the viewer;
            - the grouper learns the video renditions' names (`_2_3_o.mp4`,
              `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`).
          - [ ] Still open: the permission when not started from a terminal
