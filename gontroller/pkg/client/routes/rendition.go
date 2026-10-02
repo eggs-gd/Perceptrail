@@ -63,7 +63,9 @@ const mediumSize = 2048
 const fetchers = 3
 
 var (
-	fetcher  Fetcher
+	fetcher Fetcher
+	// changed: Photos made something local — the walk goes sooner (scan.WalkSoon)
+	changed  = func() {}
 	fetchSem = make(chan struct{}, fetchers)
 	// One request per asset and want at a time: the others wait for its result
 	inFlightMu sync.Mutex
@@ -76,12 +78,16 @@ type fetching struct {
 	err  error
 }
 
-// RegisterRenditionRoutes: f may be nil (only what is on disk is served)
-func RegisterRenditionRoutes(e *echo.Echo, f Fetcher, logger *l.Logger) {
+// RegisterRenditionRoutes: f may be nil (only what is on disk is served);
+// libraryChanged is called when Photos made a file local (nil: nothing)
+func RegisterRenditionRoutes(e *echo.Echo, f Fetcher, libraryChanged func(), logger *l.Logger) {
 	if itemsProxy == nil {
 		itemsProxy = model.NewProxy(logger)
 	}
 	fetcher = f
+	if libraryChanged != nil {
+		changed = libraryChanged
+	}
 	e.GET("/items/:guid/rendition/:level", func(c echo.Context) error { return getRendition(c, logger) })
 }
 
@@ -110,6 +116,8 @@ func getRendition(c echo.Context, logger *l.Logger) error {
 		if err != nil {
 			drawn = nil // a failed request hands over nothing to show
 			logger.Debug("Rendition not fetched", l.String("guid", uuid), l.String("level", c.Param("level")), l.Error(err))
+		} else {
+			changed()
 		}
 		path = apple.Local(root, uuid, want)
 	}
@@ -143,6 +151,8 @@ func getOriginal(c echo.Context, item *dto.ItemDto, logger *l.Logger) error {
 		logger.Debug("Original not fetched", l.String("guid", item.Guid), l.Error(err))
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
+	// Photos keeps the original local now: the item learns of it with the next walk
+	defer changed()
 	c.Response().Header().Set("Cache-Control", "private, max-age=86400")
 	switch {
 	case item.Kind == dto.KindVideo:
@@ -272,6 +282,8 @@ func hydrateRound(asked map[string]bool, logger *l.Logger) {
 		// The image even for a video: its poster is what the tile shows
 		if _, err := once(it.Guid+"/medium", func() ([]byte, error) { return fetcher.Image(it.Guid, mediumSize) }); err != nil {
 			logger.Debug("Waiting asset not fetched", l.String("guid", it.Guid), l.Error(err))
+		} else {
+			changed()
 		}
 	}
 }

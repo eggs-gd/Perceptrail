@@ -70,7 +70,7 @@ func TestRenditionOnDemand(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "Photos Library.photoslibrary")
 	photos := &fakePhotos{root: root}
 	e := echo.New()
-	RegisterRenditionRoutes(e, photos, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	RegisterRenditionRoutes(e, photos, nil, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
 
 	put := func(guid, kind, path string) {
 		t.Helper()
@@ -173,7 +173,8 @@ func TestOnDemandInAsset(t *testing.T) {
 func TestHydrateWaiting(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "Photos Library.photoslibrary")
 	photos := &fakePhotos{root: root}
-	RegisterRenditionRoutes(echo.New(), photos, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	walks := 0
+	RegisterRenditionRoutes(echo.New(), photos, func() { walks++ }, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
 	for _, it := range []*dto.ItemDto{
 		{Guid: "H1111111-WAITING", State: dto.Waiting, Kind: dto.KindPhoto, Path: filepath.Join(root, "originals/H/H1111111-WAITING.heic")},
 		{Guid: "H2222222-SHOWN", State: dto.Visible, Kind: dto.KindPhoto, Path: filepath.Join(root, "originals/H/H2222222-SHOWN.heic")},
@@ -187,6 +188,9 @@ func TestHydrateWaiting(t *testing.T) {
 	logger := l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{})
 	hydrateRound(asked, logger)
 	hydrateRound(asked, logger) // the next round: not again
+	if walks != 1 {
+		t.Errorf("the walk was asked to go sooner %d times, want once (Photos made a file local)", walks)
+	}
 	if len(photos.asked) != 1 || !asked["H1111111-WAITING"] {
 		t.Errorf("asked %v (%v), want the waiting Photos asset once", photos.asked, asked)
 	}

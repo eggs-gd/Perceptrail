@@ -19,18 +19,27 @@
 
     // Start the sync once, in the browser. Not in a load function: load must stay free
     // of side effects (it also runs on the server and on every navigation).
+    const REFRESH_EVERY_MS = 20_000;
+
     onMount(() => {
         loadApp().then(setWorkersMode);
         loadFromServer();
         // The views; the URL says which one the sheet is in (the stream itself comes
         // newest first, so the photos show before the order arrives)
         loadPerceptors();
-        // What changed on the server: on coming back to the tab, on every navigation
+        // What changed on the server: on coming back to the tab, on every navigation,
+        // and every 20 s while the tab is seen (no push from the server yet: an
+        // original Photos downloaded, a new import show up by themselves; an empty
+        // delta is 0 bytes)
         const onVisible = () => {
             if (document.visibilityState === 'visible') refreshFromServer();
         };
         document.addEventListener('visibilitychange', onVisible);
-        return () => document.removeEventListener('visibilitychange', onVisible);
+        const timer = setInterval(onVisible, REFRESH_EVERY_MS);
+        return () => {
+            document.removeEventListener('visibilitychange', onVisible);
+            clearInterval(timer);
+        };
     });
     afterNavigate(() => refreshFromServer());
 

@@ -137,11 +137,8 @@
             {/if}
         {/await}
     {:else if fromPhotos && !video}
-        <!-- From Photos: shown at full resolution (any browser), the file to download -->
+        <!-- From Photos: drawn as JPEG, so every browser shows it — no download needed -->
         {@render originalSwitch()}
-        {#if fromPhotos.file}
-            {@render download(fromPhotos.file)}
-        {/if}
     {:else if videoOriginal}
         {@render originalSwitch()}
     {:else if other}

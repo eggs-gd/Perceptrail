@@ -746,6 +746,16 @@ the binary by the linker; run from the user's terminal on the dev library.
   own original in the DB is its video); a video switches to its original file. Each
   makes Photos download the original into its library — the cloud goes after the
   next walk. Contract version 3 (`onDemand.original`).
+- **"I showed the original and the cloud is still there"** (the owner): the walk did
+  pick the originals up (items updated a few minutes later), but it walks a minute
+  after the last one was processed, and the client asked for a delta only on a
+  navigation or a return to the tab — back in the list before the walk, nothing
+  told it later. Now a successful request to Photos cuts the walk's pause short
+  (`scan.WalkSoon`; a walk of the dev library's 19 000 files takes under a minute),
+  and the page asks for a delta every 20 s while the tab is seen (an empty one is
+  0 bytes). The download next to Photos' original is gone: it is a JPEG every
+  browser shows — the download stays only as the fallback for a local original the
+  browser cannot show.
 - **Viewer switches** (the owner): a Live Photo's motion has one button with three
   states — off → once → loop (`viewerPrefs.liveMode`; the old switch carries over:
   off stays off, on is once). The wheel zoom is gone altogether (the owner: it
