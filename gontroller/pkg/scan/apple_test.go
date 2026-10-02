@@ -140,3 +140,25 @@ func TestAppleMetadataFromDB(t *testing.T) {
 		t.Errorf("corrected date %s", got)
 	}
 }
+
+// The gate tells which keyed group it let not through: an asset processed again on
+// demand (Refresh) answers at once when Photos made nothing new local
+func TestGateTellsDropped(t *testing.T) {
+	root := t.TempDir()
+	photosLibrary(t, root)
+	scan(t, root)
+
+	var dropped []string
+	if got := scanWith(t, root, func(key string) { dropped = append(dropped, key) }); len(got) != 0 {
+		t.Fatalf("nothing changed, processed %v", got)
+	}
+	want := map[string]bool{appleEdited: true, appleCloud: true, appleLive: true}
+	if len(dropped) != len(want) {
+		t.Errorf("dropped %v, want the three assets", dropped)
+	}
+	for _, k := range dropped {
+		if !want[k] {
+			t.Errorf("dropped %q, not an asset", k)
+		}
+	}
+}

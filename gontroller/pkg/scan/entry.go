@@ -153,8 +153,12 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	appleGrouper := apple.NewDecorator(logger)
 	importChain.AddStep(chain.NewDecorator(toApple, grouped, appleGrouper))
 
-	// Assets -> items: only what needs work, then metadata, kinds, identity
-	importChain.AddStep(NewFilesGate(groups.Branches, progress, grouped, stored, logger))
+	// Assets -> items: only what needs work, then metadata, kinds, identity. A keyed
+	// group it drops is told to whoever waits for that asset (Refresh)
+	svc := &importerService{waiters: map[string][]chan struct{}{}}
+	gate := newFilesGate(groups.Branches, progress, logger)
+	gate.dropped = svc.itemDone
+	importChain.AddStep(chain.NewDecorator(grouped, stored, chain.Decorator[flow.FileGroup, flow.FileGroup](gate)))
 
 	// The rest reports to errProcessing: progress counts the groups in flight
 	processing := chain.NewChainProcessor(errProcessing)
@@ -172,16 +176,9 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	// steps keep errProcessing
 	importChain.AddStep(processing)
 
-	return &importerService{
-		appCtx:      ctx,
-		errch:       errch,
-		items:       items,
-		progress:    progress,
-		importChain: importChain,
-		apple:       appleGrouper,
-		grouped:     grouped,
-		waiters:     map[string][]chan struct{}{},
-	}
+	svc.appCtx, svc.errch, svc.items, svc.progress = ctx, errch, items, progress
+	svc.importChain, svc.apple, svc.grouped = importChain, appleGrouper, grouped
+	return svc
 }
 
 // Refresh processes one Apple Photos asset again, now — Photos has just made a file
@@ -189,8 +186,9 @@ func NewImporterService(ctx app.AppContext) *importerService {
 // goes to the gate like any group (only what changed passes; deletions are not
 // touched — they come with the walk's marker; a walk sending the same asset at the
 // same time just processes it twice into the same item). Waits until the item has
-// left the chain, at most wait; false if it did not (no such asset, nothing changed,
-// too slow) — the next walk catches up anyway.
+// left the chain or the gate dropped the group (nothing changed: Photos drew from
+// what was local), at most wait; false if neither (no such asset, too slow) — the
+// next walk catches up anyway.
 func (s *importerService) Refresh(uuid string, wait time.Duration) bool {
 	group, ok := s.apple.Regroup(uuid)
 	if !ok {

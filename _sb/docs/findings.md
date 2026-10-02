@@ -736,6 +736,14 @@ the binary by the linker; run from the user's terminal on the dev library.
   loaded, as big as the screen until then; stretched if switched on). A Live Photo's
   motion was 300×150 in a corner: the stage's `.stage video { width: auto }` beat
   `.live { width: 100% }` on specificity — `.asset.view video` fills the box now.
+- **A full-size derivative is not the original**: a cloud-only PNG screenshot
+  (1 206 × 2 622) has a local JPEG derivative of the same size (recipe 65739,
+  `_1_101_o.jpeg`): the Original (Photos' current version at full size) is drawn
+  from it, the PNG is not downloaded — the cloud stays, as it says where the
+  original file is. And the request took 10 s: the asset was processed again, the
+  gate dropped it (nothing changed) and the request waited for an item that never
+  came. The gate tells now which keyed group it dropped (`dropped`), `Refresh`
+  answers at once.
 - **The cloud went only on F5** (the owner): the server had the original, a reload
   showed it, the live update did not. Dexie's `updating` hook gives the changes by
   key path (`{"asset.original": …}`); `{...item, ...mods}` put them beside the item as
