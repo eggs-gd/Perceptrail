@@ -666,6 +666,10 @@ the binary by the linker; run from the user's terminal on the dev library.
   app): a terminal with Photos access ran it without a prompt, a new one asked for
   the terminal itself. So a rebuild does not drop it; the embedded Info.plist does not
   matter there. Not started from a terminal (launchd) — still to check.
+- **On demand, never in bulk** (the user): the sheet has its tiles already, the
+  medium rendition is needed only when a photo opens — that request triggers the
+  download, the viewer swaps the image in when it comes; 1–3 rows around it are asked
+  for ahead. So the limits of asking for thousands were not measured: nothing will.
 - Traps: asynchronous PhotoKit results are delivered on the main queue, which a
   command-line tool does not run — the request never came back (synchronous requests
   from a cgo thread work); yet Photos finished the download it had started. `NSImage`

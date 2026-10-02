@@ -217,16 +217,23 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
            it local in the DB; the original stays in iCloud. 0.6–0.9 s per photo; "is
            it local" answers at once (error 3164 without network). The permission goes
            to the terminal that starts the binary, not to the binary.
-         - **→ the Apple step in our chain of responsibility** (the fork taken): ask
-           Photos for the medium rendition when it is missing — on demand when a photo
-           opens (and its neighbours), or ahead in the background; the next walk finds
-           the file (the grouper already knows `_1_102_o.jpeg`) — nothing rendered or
-           stored by us, nothing written to the library by us. The tiles need nothing:
-           Photos keeps `masters/<X>/<UUID>_4_5005_c.jpeg` (~100 KB) local for every
-           asset, cloud-only ones too.
-         - [ ] Still open: asking for thousands in a row (limits, rate); the
-           permission when not started from a terminal (launchd); the Original button
-           (the same request for recipe 0).
+         - **→ the Apple step in our chain of responsibility** (the fork taken):
+           nothing rendered or stored by us, nothing written to the library by us —
+           Photos downloads, the walk finds the file (the grouper already knows
+           `_1_102_o.jpeg`). Only on demand, never in bulk (decided):
+           - **the sheet** asks for nothing: Photos keeps
+             `masters/<X>/<UUID>_4_5005_c.jpeg` (~100 KB) local for every asset,
+             cloud-only ones too;
+           - **opening a photo** triggers it: the viewer shows what there is (the
+             tile's image) at once, the server asks Photos for the medium rendition
+             (~1 s) — the request waits for it and serves the file, the viewer swaps
+             the image in; the asset's group is processed again, so the item and the
+             other tabs learn of it through the delta;
+           - **the neighbours** — 1–3 rows around the opened photo (in the view's
+             order) are asked for ahead, so the arrows open at once; not more.
+         - [ ] Still open: the permission when not started from a terminal
+           (launchd); the Original button (the same request for recipe 0, the full
+           file). Asking for thousands in a row is not needed (nothing asks in bulk).
       1. **photo renditions** — libvips on the CPU, the source chosen to avoid a full
          decode (Photos' JPEG, the HEIC's embedded thumbnail, a RAW's embedded JPEG —
          `PreviewImage` / `JpgFromRaw`), the DB-state queue, benchmarks on the real
