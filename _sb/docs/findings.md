@@ -738,7 +738,8 @@ the binary by the linker; run from the user's terminal on the dev library.
   `.live { width: 100% }` on specificity — `.asset.view video` fills the box now.
 - **Viewer switches** (the owner): a Live Photo's motion has one button with three
   states — off → once → loop (`viewerPrefs.liveMode`; the old switch carries over:
-  off stays off, on is once); the wheel does not zoom a video.
+  off stays off, on is once). The wheel zoom is gone altogether (the owner: it
+  worked badly — Immich and Google do it better, each differently): roadmap.
 - **Hover UX** (the owner, as Immich and Google Photos): the badge stays while the
   tile moves, a ring turns around its mark while the video comes (shown only after
   300 ms: a video that starts at once made it blink), the video fades in

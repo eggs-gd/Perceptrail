@@ -405,6 +405,11 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 - [x] Side panel: the first section of a deeper level (the first month of a year, the
       first city of a region) sits at the same point as its parent's label — its
       label now goes just under the parent's when there is room (PR #18).
+- [ ] **Zoom in the viewer** — the wheel zoom (scale of the stage around its centre)
+      worked badly and is gone (PR #21). To do it properly: look at how Immich and
+      Google Photos do it (they differ) — around the pointer, pan when zoomed, pinch
+      on a trackpad, double-click, and the original's pixels when zoomed past the
+      preview.
 - Maybe, some day: the optimal (Dijkstra) layout. Where the gallery started: the
   best row breaks over the whole set (rows closest to the target height). It keeps
   the order — only the breaks change, so the views' fixed orders are fine — but every
