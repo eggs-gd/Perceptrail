@@ -55,11 +55,12 @@ pk_result pk_request(const char *uuid, int target, int network) {
     opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
     opt.resizeMode = PHImageRequestOptionsResizeModeFast;
     opt.networkAccessAllowed = network != 0;
-    opt.synchronous = NO;
+    // Synchronous: asynchronous results are delivered on the main queue, which a
+    // command-line tool does not run — the request would never come back
+    opt.synchronous = YES;
     __block double progress = -1;
     opt.progressHandler = ^(double p, NSError *err, BOOL *stop, NSDictionary *info) { progress = p; };
 
-    dispatch_semaphore_t done = dispatch_semaphore_create(0);
     __block pk_result r = res;
     NSDate *start = [NSDate date];
     [[PHImageManager defaultManager] requestImageForAsset:a
@@ -81,13 +82,8 @@ pk_result pk_request(const char *uuid, int target, int network) {
             r.width = (int)rep.pixelsWide;
             r.height = (int)rep.pixelsHigh;
         }
-        dispatch_semaphore_signal(done);
     }];
-    // Network requests may take a while; a spike gives up after two minutes
-    if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW, 120 * NSEC_PER_SEC)) != 0) {
-        r.seconds = -[start timeIntervalSinceNow];
-        r.error = dupstr(@"timeout");
-    }
+    if (r.seconds == 0) r.seconds = -[start timeIntervalSinceNow];
     r.progress = progress;
     return r;
 }
