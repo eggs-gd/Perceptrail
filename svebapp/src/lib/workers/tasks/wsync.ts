@@ -1,3 +1,4 @@
+import Dexie from "dexie";
 import {type Item, itemsDb} from "$lib/stores";
 import {type CurrentWorkerTask, ITEMS_CHANNEL, type MessageFromSync, type WorkerMessage} from "./types";
 import {getLogger, setLogLevel} from "$lib/logger";
@@ -151,10 +152,18 @@ function hookCreate(key: string, item: Item) {
     updatesPort.postMessage(msg);
 }
 
-function hookUpdate(mods: Object, key: string, item: Item) {
-    // Dexie passes the pre-update object: merge mods so the change gets through
+function hookUpdate(mods: Record<string, unknown>, key: string, item: Item) {
+    // Dexie passes the pre-update object and the changes by key path
+    // ("asset.original": …) — applied by path: spread over the object they would sit
+    // beside it as keys with dots, and a change inside the asset (an original that
+    // became local) never reached the layout until a reload
     if (Object.keys(mods).length === 0) return;
-    const msg: MessageFromSync = {action: "update", item: {...item, ...mods}};
+    const updated = structuredClone(item);
+    for (const [path, value] of Object.entries(mods)) {
+        if (value === undefined) Dexie.delByKeyPath(updated, path);
+        else Dexie.setByKeyPath(updated, path, value);
+    }
+    const msg: MessageFromSync = {action: "update", item: updated};
     updatesPort.postMessage(msg);
 }
 

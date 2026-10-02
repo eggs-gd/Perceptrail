@@ -736,6 +736,13 @@ the binary by the linker; run from the user's terminal on the dev library.
   loaded, as big as the screen until then; stretched if switched on). A Live Photo's
   motion was 300×150 in a corner: the stage's `.stage video { width: auto }` beat
   `.live { width: 100% }` on specificity — `.asset.view video` fills the box now.
+- **The cloud went only on F5** (the owner): the server had the original, a reload
+  showed it, the live update did not. Dexie's `updating` hook gives the changes by
+  key path (`{"asset.original": …}`); `{...item, ...mods}` put them beside the item as
+  keys with dots and left `asset` as it was — fine while only top-level fields
+  changed (date, size), lost for anything inside the asset. The changes are applied
+  by path now (`Dexie.setByKeyPath`). Checked: an original given to an item on the
+  server — the tile's cloud went with the delta, no reload.
 - **A cached answer looked like a bug**: after the Original became the current
   version, the owner still saw edited screenshots unedited — the browser served the
   old answer of the same URL (cached for a day); the server's own answer matched the
