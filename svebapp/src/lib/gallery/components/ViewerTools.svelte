@@ -1,7 +1,7 @@
 <script lang="ts">
     import type {Asset} from '$lib/stores';
     import {assetUrl, canShowImage, hasImage, originalImage, playableVideos} from './asset';
-    import {toggleViewerPref, viewerPrefs} from './viewerPrefs.svelte';
+    import {cycleLiveMode, toggleViewerPref, viewerPrefs} from './viewerPrefs.svelte';
     import PerceptorButtons from './PerceptorButtons.svelte';
 
     interface Props {
@@ -31,7 +31,11 @@
     let still = $derived(video || hasImage(asset));
 
     const tooltips = {
-        live: () => (viewerPrefs.autoplayLive ? 'Live Photo plays on open' : 'Live Photo does not play on open'),
+        live: () => ({
+            off: 'Live Photo does not play on open',
+            once: 'Live Photo plays once on open',
+            loop: 'Live Photo plays in a loop',
+        })[viewerPrefs.liveMode],
         video: () => (viewerPrefs.autoplayVideo ? 'Video plays on open' : 'Video does not play on open'),
         stretch: () => (viewerPrefs.stretchSmall ? 'Small photos and videos fill the screen' : 'Small photos and videos at their own size'),
     };
@@ -57,14 +61,23 @@
     <PerceptorButtons onpick={onperceptor}/>
     <span class="divider"></span>
     {#if live}
-        <button class="tool" class:on={viewerPrefs.autoplayLive} title={tooltips.live()} aria-label={tooltips.live()}
-                aria-pressed={viewerPrefs.autoplayLive} onclick={() => toggleViewerPref('autoplayLive')}>
+        <!-- One button, three states: off → once → loop -->
+        <button class="tool" class:on={viewerPrefs.liveMode !== 'off'} title={tooltips.live()} aria-label={tooltips.live()}
+                onclick={cycleLiveMode}>
             <svg viewBox="0 0 24 24" aria-hidden="true">
                 <circle cx="12" cy="12" r="3" fill="currentColor"/>
                 <circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
-                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"
-                        stroke-dasharray="1.6 2.4"/>
-                {@render slash(viewerPrefs.autoplayLive)}
+                {#if viewerPrefs.liveMode === 'loop'}
+                    <!-- The outer ring as an arrow going round -->
+                    <path d="M21.5 12a9.5 9.5 0 1 1-2.8-6.7" fill="none" stroke="currentColor" stroke-width="1.6"
+                          stroke-linecap="round"/>
+                    <path d="M19.2 1.8v3.8h-3.8" fill="none" stroke="currentColor" stroke-width="1.6"
+                          stroke-linecap="round" stroke-linejoin="round"/>
+                {:else}
+                    <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"
+                            stroke-dasharray="1.6 2.4"/>
+                {/if}
+                {@render slash(viewerPrefs.liveMode !== 'off')}
             </svg>
         </button>
     {/if}

@@ -109,8 +109,9 @@
     // onwheel={...} would be passive: preventDefault() needs a manual listener
     const wheelZoom: Attachment<HTMLElement> = (node) => {
         const onWheel = (e: WheelEvent) => {
+            // A video is not zoomed (its controls are the wheel's then)
+            if (!item || item.asset?.kind === 'video') return;
             e.preventDefault();
-            if (!item) return;
             const factor = e.deltaY > 0 ? 0.9 : 1.1;
             zoomState = {guid: item.guid, value: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * factor))};
         };

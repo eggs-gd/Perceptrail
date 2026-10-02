@@ -63,7 +63,7 @@
     let liveDone = $state<string | null>(null);   // the item whose autoplay has ended
     let liveReplay = $state<string | null>(null); // the item hovered to play again
     let livePlaying = $derived(liveVideos.length > 0 && (liveReplay === item.guid
-        || (viewerPrefs.autoplayLive && liveDone !== item.guid)));
+        || (viewerPrefs.liveMode !== 'off' && liveDone !== item.guid)));
     const playLive: Attachment<HTMLVideoElement> = (video) => {
         video.play().catch(() => {
             video.muted = true;
@@ -152,7 +152,7 @@
             <KindBadge {asset} loading={hovered && motionLoading}/>
         {/if}
         {#if livePlaying}
-            <video class="live" {@attach playLive} playsinline
+            <video class="live" {@attach playLive} playsinline loop={viewerPrefs.liveMode === 'loop'}
                    onended={() => { liveDone = item.guid; liveReplay = null; }}>
                 {#each liveVideos as video (video.src)}
                     <source src={video.src} type={video.type || undefined}>

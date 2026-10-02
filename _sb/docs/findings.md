@@ -736,6 +736,9 @@ the binary by the linker; run from the user's terminal on the dev library.
   loaded, as big as the screen until then; stretched if switched on). A Live Photo's
   motion was 300×150 in a corner: the stage's `.stage video { width: auto }` beat
   `.live { width: 100% }` on specificity — `.asset.view video` fills the box now.
+- **Viewer switches** (the owner): a Live Photo's motion has one button with three
+  states — off → once → loop (`viewerPrefs.liveMode`; the old switch carries over:
+  off stays off, on is once); the wheel does not zoom a video.
 - **Hover UX** (the owner, as Immich and Google Photos): the badge stays while the
   tile moves, a ring turns around its mark while the video comes, the video fades in
   over the frames (200 ms).
