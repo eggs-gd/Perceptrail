@@ -1,0 +1,23 @@
+// PhotoKit, as plain C for cgo. Every call blocks until Photos answers.
+
+// pk_status: the authorization status without asking (PHAuthorizationStatus)
+int pk_status(void);
+// pk_auth: asks for read access (the system prompt the first time); the status after
+int pk_auth(void);
+
+// pk_resources: the asset's resources as JSON lines — type, file name, size, and
+// whether the file is on this Mac (private KVC: fine for a spike, not for the product)
+char *pk_resources(const char *uuid);
+
+typedef struct {
+    double seconds;     // until the final (not degraded) image or an error
+    int width, height;  // of the image handed over, pixels
+    int inCloud;        // Photos says the image needs the network
+    int degraded;       // how many degraded images came first
+    double progress;    // the last download progress reported (0..1), -1 = none
+    char *error;        // NULL, or the error (free it)
+} pk_result;
+
+// pk_request: an image of at most target×target pixels, as the viewer would ask;
+// network: may Photos download it
+pk_result pk_request(const char *uuid, int target, int network);
