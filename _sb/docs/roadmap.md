@@ -143,8 +143,26 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 
 - [ ] **The expensive stage: previews and transcode** — design below ("Expensive
       stage"). In steps, each its own PR (the cut may still change):
+      0. **Apple Photos first — a spike, then a fork** (the dev library is mostly
+         iCloud-only, and Photos' DB knows every asset's renditions —
+         `ZINTERNALRESOURCE`: recipe, size, local / in iCloud; recipe 65741, up to
+         ~2048 px, is in iCloud for nearly every asset — 3 240 have it only there):
+         - **spike**: a small Swift tool asks PhotoKit for a cloud-only asset's
+           medium image (network allowed) — does Photos make the rendition local in
+           the library (`resources/derivatives`, the DB's local availability), or
+           only hand us the bytes? Also: time and traffic per asset, limits when
+           asking for thousands, the Photos permission from a terminal tool;
+         - **it normalises the library** → an Apple step in our chain of
+           responsibility: the helper asks Photos to make the medium rendition local
+           for the assets that lack it (the work list straight from its DB); the next
+           walk finds the files — nothing rendered or stored by us, nothing written
+           to the library by us;
+         - **it only hands the bytes** → decide separately: copying images Apple
+           already keeps into a folder of our own is not wanted. To brainstorm — e.g.
+           an instruction for the user ("turn on Download Originals to this Mac").
       1. **photo renditions** — libvips on the CPU, the source chosen to avoid a full
-         decode, the DB-state queue, benchmarks on the real library;
+         decode, the DB-state queue, benchmarks on the real library (generic folders,
+         and Apple assets that still lack a viewable size);
       2. **video, software** — `libx264`, HDR → SDR, hover clip, poster; the codec →
          encoder table and the probe with a software fallback from day one;
       3. **Docker** — the image (jellyfin-ffmpeg), a base compose with software encoding;
