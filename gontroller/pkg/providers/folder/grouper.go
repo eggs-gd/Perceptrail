@@ -20,10 +20,6 @@ type Grouper struct {
 	open []*dto.FileDto
 }
 
-func NewGrouper(chin <-chan flow.FileEvent, chout chan<- flow.FileGroup) chain.Processor {
-	return chain.NewDecorator(chin, chout, &Grouper{})
-}
-
 func (g *Grouper) Decorate(ev flow.FileEvent) (flow.FileGroup, error) {
 	if ev.Done != nil {
 		last := g.open

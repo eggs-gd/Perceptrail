@@ -162,7 +162,7 @@ func names(files []*dto.FileDto) []string {
 func TestGrouper(t *testing.T) {
 	root := t.TempDir()
 	bundle := makeLibrary(t, root, fixture())
-	g := NewDecorator(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
 
 	vanished := filepath.Join(bundle, "resources/derivatives/masters/E/"+vanishing+"_4_5005_c.jpeg")
 	groups, marker := walk(t, g, root, func(p string) {
@@ -209,7 +209,7 @@ func TestGrouperUnreadableLibrary(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(bundle, "database", "Photos.sqlite"), []byte("not a database"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	g := NewDecorator(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
 	groups, marker := walk(t, g, root, nil)
 	if len(groups) != 0 {
 		t.Errorf("groups %v, want none", groups)
@@ -240,7 +240,7 @@ func TestBundleRoot(t *testing.T) {
 func TestMetaRecord(t *testing.T) {
 	root := t.TempDir()
 	makeLibrary(t, root, fixture())
-	g := NewDecorator(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
 	groups, _ := walk(t, g, root, nil)
 	m := groups[edited].Meta
 	want := map[string]string{
@@ -280,7 +280,7 @@ func TestMetaRecord(t *testing.T) {
 func TestGrouperRoles(t *testing.T) {
 	root := t.TempDir()
 	makeLibrary(t, root, fixture())
-	g := NewDecorator(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
 	groups, _ := walk(t, g, root, nil)
 
 	roles := func(uuid string) map[string]string {
@@ -331,7 +331,7 @@ func TestGrouperVideoRenditions(t *testing.T) {
 			"resources/derivatives/G/" + livePhoto + "_2_101_o.mov",
 		}},
 	})
-	g := NewDecorator(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
 	groups, _ := walk(t, g, root, nil)
 
 	for uuid, want := range map[string][]string{
@@ -383,7 +383,7 @@ func TestHasLibrary(t *testing.T) {
 func TestRegroup(t *testing.T) {
 	root := t.TempDir()
 	bundle := makeLibrary(t, root, fixture())
-	g := NewDecorator(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
 	walk(t, g, root, nil)
 
 	if _, ok := g.Regroup("NOT-AN-ASSET"); ok {

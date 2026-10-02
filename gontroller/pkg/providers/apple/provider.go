@@ -38,7 +38,7 @@ var _ providers.Provider = (*Provider)(nil)
 func New(root string, photos Photos, items model.ItemsApi, logger *l.Logger) *Provider {
 	return &Provider{
 		root:     root,
-		grouper:  NewDecorator(logger),
+		grouper:  newGrouper(logger),
 		photos:   photos,
 		items:    items,
 		logger:   logger,
