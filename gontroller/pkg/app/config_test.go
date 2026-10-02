@@ -63,3 +63,14 @@ func TestConfigMode(t *testing.T) {
 		}
 	}
 }
+
+// A provider not listed is enabled; enabled: false takes it out of the chain
+func TestProvidersEnabled(t *testing.T) {
+	var c Config
+	if err := yaml.Unmarshal([]byte("providers:\n  apple:\n    enabled: false\n"), &c); err != nil {
+		t.Fatal(err)
+	}
+	if c.Providers.Enabled("apple") || !c.Providers.Enabled("immich") || !(Providers(nil)).Enabled("apple") {
+		t.Errorf("providers %+v", c.Providers)
+	}
+}

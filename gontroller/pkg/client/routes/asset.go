@@ -38,7 +38,8 @@ type clientAsset struct {
 	Stills   []rendition `json:"stills"` // viewable images, smallest first
 	Motion   []rendition `json:"motion"` // videos (a Live Photo's video)
 	Frames   []rendition `json:"frames"` // a flip-book, in order (Apple's video frames)
-	// Apple Photos: better renditions asked for when needed (see rendition.go)
+	// A provider's item (Apple Photos…): better renditions asked for when needed
+	// (see rendition.go)
 	OnDemand *onDemand `json:"onDemand,omitempty"`
 	// The full size of what is seen (oriented; for an edited Photos asset its
 	// current version): a rendition this big is the full resolution — the viewer

@@ -1,0 +1,84 @@
+// Package providers: the libraries we read through their own means — Apple Photos
+// now, Immich and others later. A library that keeps renditions of its own is asked
+// for them; we render and store nothing it keeps.
+//
+// In the import chain every provider is a step: a found file it claims goes to its
+// own grouper (a channel of its own), one it does not goes on to the next provider;
+// what nobody claims is a plain folder's (the generic grouper, last). A provider
+// that is not enabled is not in the chain at all — its files are a plain folder's.
+//
+// On demand the web service asks the item's provider for a rendition (the viewer's
+// medium, a hover, the original) and serves what it gets: a file or bytes.
+package providers
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/scan/flow"
+
+	"github.com/eggs-gd/perceplib/chain"
+)
+
+type Provider interface {
+	Name() string
+
+	// Claims: a found file is this library's — its grouper takes it
+	Claims(path string) bool
+	// Grouper: its files into whole assets; one instance per run (it keeps what
+	// Regroup needs)
+	Grouper() chain.Decorator[flow.FileEvent, flow.FileGroup]
+	// Regroup: one asset's group as it is on disk now (processed again on demand);
+	// false if the asset is not this provider's or has no file
+	Regroup(key string) (flow.FileGroup, bool)
+
+	// Owns: the item is this library's (on-demand renditions go to it)
+	Owns(item *dto.ItemDto) bool
+	// Levels: what the client may ask for this item ("medium", "hover", "original")
+	Levels(item *dto.ItemDto) []string
+	// Rendition: a level of the item — a file, or bytes when the library drew it;
+	// ErrNoRendition when there is nothing to serve
+	Rendition(item *dto.ItemDto, level string, opt Options) (Rendition, error)
+
+	// Start: its own work in the background (access, assets nothing shows yet);
+	// refresh processes one asset's item again when the library made a file local
+	Start(ctx context.Context, refresh Refresher)
+}
+
+// Options of a rendition request
+type Options struct {
+	HEVC bool // the browser plays HEVC
+}
+
+// Rendition: a file of the library, or bytes it drew (Data with Mime)
+type Rendition struct {
+	Path string
+	Data []byte
+	Mime string
+}
+
+// Refresher processes one asset's item again now (the importer's Refresh), waiting
+// at most wait; false if it did not happen
+type Refresher func(key string, wait time.Duration) bool
+
+var ErrNoRendition = errors.New("no rendition")
+
+var enabled []Provider
+
+// Enable: the providers of this run, in the order of the chain (set once, at start)
+func Enable(ps ...Provider) { enabled = ps }
+
+// Enabled: the providers in the chain, in order
+func Enabled() []Provider { return enabled }
+
+// Of: the provider an item belongs to, nil for a plain folder's
+func Of(item *dto.ItemDto) Provider {
+	for _, p := range enabled {
+		if p.Owns(item) {
+			return p
+		}
+	}
+	return nil
+}

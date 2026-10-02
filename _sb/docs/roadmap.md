@@ -142,8 +142,15 @@ library").
 - A cloud-only original is not described (its name, format, weight): for local
   files the original is what is on disk; a provider's own description waits for a
   second provider — the abstraction comes from two or more, not from one.
-- Generalise `rendition.go` (PR #21): a provider interface (Apple: the local file or
-  PhotoKit; an API provider: its thumbnail / preview / playback, proxied).
+- [x] **The mechanism** (PR #23): `pkg/providers` — every enabled provider is a step
+      of the import chain (claim: its own grouper, or on; the plain folder last),
+      and the source of on-demand renditions; Apple Photos is the first
+      (`pkg/providers/apple`), enabled by the config. A provider that comes later
+      takes its files over through the usual deletions (findings "Providers as steps
+      of the chain").
+- [x] Generalise `rendition.go` (PR #23): the provider gives the rendition (Apple: the
+  local file or PhotoKit; an API provider: its thumbnail / preview / playback,
+  proxied), the web service serves it.
 
 All of them listed for now; the order is to be decided:
 

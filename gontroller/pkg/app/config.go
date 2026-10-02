@@ -28,6 +28,9 @@ type Config struct {
 	Plugins []string `yaml:"plugins"`
 	// Per perceptor (core and plugins, by name): run it, give it to the client
 	Perceptors settings.Perceptors `yaml:"perceptors"`
+	// Per provider (a library read through its own means — apple): in the import
+	// chain or not; a provider not enabled leaves its files to a plain folder's
+	Providers Providers `yaml:"providers"`
 	// Runtime data: database, caches. Default: the config file's directory
 	DataDir string `yaml:"data_dir"`
 	// ExifTool executable. Default: "exiftool" from PATH
@@ -135,4 +138,18 @@ func (c *Config) resolve(base string) {
 	if filepath.Base(c.Exiftool) != c.Exiftool {
 		c.Exiftool = abs(c.Exiftool)
 	}
+}
+
+// Providers: by name; a provider not listed is enabled
+//
+//	providers:
+//	  apple:
+//	    enabled: false   # not in the chain: a Photos library is a plain folder then
+type Providers map[string]struct {
+	Enabled *bool `yaml:"enabled"`
+}
+
+func (p Providers) Enabled(name string) bool {
+	c, ok := p[name]
+	return !ok || c.Enabled == nil || *c.Enabled
 }

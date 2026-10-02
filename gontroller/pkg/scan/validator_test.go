@@ -11,6 +11,7 @@ import (
 	"perceptrail/gontroller/pkg/plugins/exif_core"
 	"perceptrail/gontroller/pkg/plugins/exif_core/date"
 	"perceptrail/gontroller/pkg/plugins/exif_core/size"
+	"perceptrail/gontroller/pkg/providers"
 	"perceptrail/gontroller/pkg/providers/apple"
 	"perceptrail/gontroller/pkg/scan/flow"
 	"perceptrail/gontroller/pkg/scan/groups"
@@ -72,11 +73,29 @@ func scanWith(t *testing.T, root string, dropped func(key string)) []string {
 	t.Helper()
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
 	m := newTestMonitor(t, root)
-	groupers := map[int]chain.Decorator[flow.FileEvent, flow.FileGroup]{
-		groups.BranchGeneric: &generic.Grouper{},
-		groups.BranchApple:   apple.NewDecorator(logger),
+	// The providers' steps as the chain has them (Apple, then the plain folder)
+	ps := []providers.Provider{apple.New("", nil, itemsProxy, logger)}
+	plain := &generic.Grouper{}
+	type routed struct {
+		grouper chain.Decorator[flow.FileEvent, flow.FileGroup]
+		ev      flow.FileEvent
 	}
-	gate := newFilesGate(groups.Branches, newProgress(), logger)
+	route := func(ev flow.FileEvent) []routed {
+		var out []routed
+		for _, p := range ps {
+			res, _ := groups.Claim{Provider: p}.Switch(ev)
+			if own, ok := res[groups.Own]; ok {
+				out = append(out, routed{p.Grouper(), own})
+			}
+			next, ok := res[groups.Next]
+			if !ok {
+				return out
+			}
+			ev = next
+		}
+		return append(out, routed{plain, ev})
+	}
+	gate := newFilesGate(groups.Branches(ps), newProgress(), logger)
 	gate.dropped = dropped
 	exif := &exifExtractor{logger: logger, extract: fakeExif}
 	valid := newValidator(logger)
@@ -94,16 +113,8 @@ func scanWith(t *testing.T, root string, dropped func(key string)) []string {
 		return true
 	}
 	toGroupers := func(ev flow.FileEvent) {
-		branches, err := groups.SourceSwitch{}.Switch(ev)
-		if !ok(err) {
-			return
-		}
-		for b := range groups.Branches { // marker: every branch, in branch order
-			in, has := branches[b]
-			if !has {
-				continue
-			}
-			group, err := groupers[b].Decorate(in)
+		for _, r := range route(ev) { // marker: every grouper, in chain order
+			group, err := r.grouper.Decorate(r.ev)
 			if !ok(err) {
 				continue
 			}

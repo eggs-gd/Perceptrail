@@ -10,6 +10,7 @@ import (
 	"perceptrail/gontroller/pkg/client/routes"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/plugins"
+	"perceptrail/gontroller/pkg/providers"
 	"perceptrail/gontroller/pkg/providers/apple"
 	"perceptrail/gontroller/pkg/providers/apple/photokit"
 	"perceptrail/gontroller/pkg/scan"
@@ -48,18 +49,21 @@ func main() {
 		log.Fatalf("Failed to load plugins: %v", err)
 	}
 
+	// The providers, in the order of the import chain (a plain folder after them).
+	// Apple Photos: its library's DB and files; PhotoKit on demand (macOS).
+	var ps []providers.Provider
+	if ctx.Config().Providers.Enabled("apple") {
+		ps = append(ps, apple.New(ctx.Config().Path, photokit.Library{},
+			model.NewProxy(ctx.Logger(string(app.LogDB))), ctx.Logger(string(app.LogImporter))))
+	}
+	providers.Enable(ps...)
+
 	importer := scan.NewImporterService(ctx)
 	svc.AddService(importer)
-	// Apple Photos on demand (macOS, a Photos library under the root): asks for
-	// access once — the prompt names the app that started us (the terminal)
-	if apple.HasLibrary(ctx.Config().Path) {
-		go func() {
-			if photokit.Authorize() {
-				log.Printf("Photos: renditions on demand")
-			}
-		}()
+	for _, p := range ps {
+		p.Start(mainCtx, importer.Refresh)
 	}
-	web, err := client.NewWebService(ctx.Config().Server, routes.AppInfo{Version: app.Version, Mode: ctx.Config().Mode}, plugins.Pm.ClientPerceptors(), plugins.Pm.LoadValues, photokit.Library{}, importer.Refresh, ctx.Logger(string(app.LogHTTP)))
+	web, err := client.NewWebService(ctx.Config().Server, routes.AppInfo{Version: app.Version, Mode: ctx.Config().Mode}, plugins.Pm.ClientPerceptors(), plugins.Pm.LoadValues, ctx.Logger(string(app.LogHTTP)))
 	if err != nil {
 		log.Fatalf("Server: %v", err)
 	}

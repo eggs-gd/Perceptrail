@@ -11,27 +11,30 @@ with branches are sub-packages:
 ```
 scan/                     fswalker, files gate, exif, mime, validator, plugins; the wiring
 scan/flow/                what flows between the steps (shared by everything below)
-scan/groups/              the source switch
-scan/groups/generic/      plain folders: sidecars by name
-scan/groups/apple/        Apple Photos library: groups from its DB
+scan/groups/              a provider's step (claim: its grouper, or on)
+scan/groups/generic/      plain folders: sidecars by name (what no provider claimed)
 scan/transcode/           the switch by the kind of the asset (not wired yet)
 scan/transcode/photo/     thumbnails (stub)
 scan/transcode/video/     poster, previews, playable video (stub)
 scan/transcode/livephoto/ the video with its photo (stub)
 ```
 
-A new source is a new `groups/<name>` package + a branch in `groups.SourceSwitch`
-(+ `groups.Branches`); a new transcoder is a `transcode/<name>` package + a branch
-in `transcode.Switch`. Sub-packages cannot import `scan` (it imports them): the
-types they share live in `flow`.
+A library read through its own means is a provider (`pkg/providers`, Apple Photos
+in `pkg/providers/apple`): the chain gets a step per enabled provider, one after
+another — a file it claims goes to its own grouper, the rest on; the generic
+grouper takes what nobody claimed. A new transcoder is a `transcode/<name>` package
++ a branch in `transcode.Switch`. Sub-packages cannot import `scan` (it imports
+them): the types they share live in `flow`.
 
 Diagrams: [`Import chain.puml`](../../../_sb/puml/Import%20chain.puml) (the whole
 chain), [`Walker.puml`](../../../_sb/puml/Walker.puml) (files gate and validator in
 detail).
 
 ```
-fswalker -> source switch ─┬─ generic grouper ───┬─> files gate -> exif (N) -> mime -> validator
-                           └─ Apple Photos (stub)┘
+fswalker -> [Apple: claims? ─ its grouper ─┐
+                    └ no ┐                  │
+            [next provider…]                ├─> files gate -> exif (N) -> mime -> validator
+                    └ no ─ generic grouper ─┘
          -> cheap preview -> plugins -> closer (Visible | Waiting)
 
 later, its own chain:  feeder (DB) -> transcode switch (photo | video | Live Photo) -> Ready
@@ -42,9 +45,9 @@ later, its own chain:  feeder (DB) -> transcode switch (photo | video | Live Pho
 | Step | File | In -> out | What it does |
 |---|---|---|---|
 | fswalker | `fswalker.go` | root -> `FileEvent` | Reports every file (path + stat), then the end-of-walk marker. Unreadable subdirectories are skipped and recorded. |
-| source switch | `groups/sourceswitch.go` | `FileEvent` -> `FileEvent` | Routes a file to the grouper of its source; the marker goes to every grouper. |
+| provider steps | `groups/claim.go` | `FileEvent` -> `FileEvent` | One per enabled provider, in order: a file it claims goes to its grouper, the rest to the next step; the marker to both. The gate waits for a marker per grouper (`groups.Branches`). |
 | generic grouper | `groups/generic` | `FileEvent` -> `FileGroup` | Sidecars by name, next to each other: one open group; a complete group goes out, the last one with the marker. |
-| Apple Photos grouper | `groups/apple` | `FileEvent` -> `FileGroup` | The first file of a library loads the assets from a copy of `Photos.sqlite` and forms the groups (files that exist, per the naming layout); a group goes out when its last file arrives. Key = asset UUID; the main file = the source; `Show` = the edit, the original, then Apple's derivatives. Trashed / hidden assets are not sent; incomplete groups are `Held` with the marker. Video renditions Photos downloads on request (`_2_3_o.mp4`, `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`; `_a` instead of `_o` for an edit, preferred) are `motion`, after the stills (the main file does not change); `apple.Local` finds the best file for an on-demand want; `Regroup` forms one asset's group again (the last load's DB rows + the disk now) for `importerService.Refresh`: after Photos made a file local, that asset is processed again through the gate without a walk. |
+| Apple Photos grouper | `pkg/providers/apple` | `FileEvent` -> `FileGroup` | The first file of a library loads the assets from a copy of `Photos.sqlite` and forms the groups (files that exist, per the naming layout); a group goes out when its last file arrives. Key = asset UUID; the main file = the source; `Show` = the edit, the original, then Apple's derivatives. Trashed / hidden assets are not sent; incomplete groups are `Held` with the marker. Video renditions Photos downloads on request (`_2_3_o.mp4`, `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`; `_a` instead of `_o` for an edit, preferred) are `motion`, after the stills (the main file does not change); `apple.Local` finds the best file for an on-demand want; `Regroup` forms one asset's group again (the last load's DB rows + the disk now) for `importerService.Refresh`: after Photos made a file local, that asset is processed again through the gate without a walk. |
 | files gate | `filesgate.go` | `FileGroup` -> `FileGroup` | The files table (rows, stat, `CheckTime`); drops groups that need no work; deletions after every grouper's marker. |
 | exif | `exifextractor.go` | `FileGroup` -> `*RawItem` | `exiftool -all` for every file; N steps in parallel on the same channels. |
 | mime | `mimeranker.go` | `*RawItem` -> `*RawItem` | The kind of every file; the main file (the source) first. |
@@ -119,7 +122,7 @@ later, its own chain:  feeder (DB) -> transcode switch (photo | video | Live Pho
 - `fswalker_test.go` — walk results (complete, unreadable dir, missing root, cancel).
 - `groups/…_test.go`, `groups/generic/…_test.go`, `transcode/…_test.go` — the
   switches and the generic grouper (names, directories, the marker).
-- `groups/apple/grouper_test.go` — a fixture library: edit, cloud-only, Live Photo,
+- `pkg/providers/apple/grouper_test.go` — a fixture library: edit, cloud-only, Live Photo,
   trashed, Photos' own files, a file vanishing mid-walk (held, complete next walk).
 - `apple_test.go` — a fixture library through the chain: keys, previews, nothing
   to do on the next walk, a downloaded original, an asset moved to the trash.

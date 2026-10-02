@@ -25,6 +25,14 @@ plugins:
 #   exif_duration:
 #     client: false
 
+# Providers: libraries read through their own means, one after another in the
+# import chain; what none of them claims is a plain folder. A provider not listed is
+# enabled. apple: a *.photoslibrary under `path` — its DB, and PhotoKit on demand
+# (macOS; access is asked once, the prompt names the terminal that started us).
+# providers:
+#   apple:
+#     enabled: false   # not in the chain: the library is a plain folder then
+
 # Database and caches (thumbnails). Default: the directory of this file
 # data_dir: .
 
