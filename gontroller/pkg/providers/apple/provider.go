@@ -6,12 +6,17 @@ import (
 	"time"
 
 	"perceptrail/gontroller/pkg/importer/flow"
-	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/providers"
 
 	l "github.com/eggs-gd/perceplib/logger"
 )
+
+// Items: what the provider reads of the import's items — the ones still waiting
+// for a viewable file (on demand: asked of Photos)
+type Items interface {
+	GetItemsInStates(states ...dto.ItemState) ([]*dto.ItemDto, error)
+}
 
 // Provider: Apple Photos — the files of a *.photoslibrary grouped by its DB (the
 // grouper), and on demand what Photos keeps only in iCloud (PhotoKit, macOS: see
@@ -20,7 +25,7 @@ type Provider struct {
 	root    string // the library root walked: access to Photos is asked only if one is there
 	grouper *Grouper
 	photos  Photos // nil: only what is on disk
-	items   model.ItemsApi
+	items   Items
 	logger  *l.Logger
 
 	refresh providers.Refresher
@@ -35,7 +40,7 @@ var _ providers.Provider = (*Provider)(nil)
 
 // New: photos asks Photos for renditions (photokit.Library; nil: only what is on
 // disk); root is the library root walked
-func New(root string, photos Photos, items model.ItemsApi, logger *l.Logger) *Provider {
+func New(root string, photos Photos, items Items, logger *l.Logger) *Provider {
 	return &Provider{
 		root:     root,
 		grouper:  newGrouper(logger),

@@ -1,7 +1,6 @@
 package identify
 
 import (
-	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 
 	l "github.com/eggs-gd/perceplib/logger"
@@ -171,18 +170,26 @@ const mimeVersion = "2"
 
 const mimeVersionKey = "mime_version"
 
+// KindsStore: what the kinds' table version needs — the meta table (the version
+// the files were judged by) and the "ignored" marks it clears
+type KindsStore interface {
+	GetMeta(key string) (string, error)
+	SetMeta(key, value string) error
+	UnignoreFiles() (int64, error)
+}
+
 // reclassifyIgnored runs at start: a new mimeVersion clears every "ignored" mark,
 // the gate then sends those groups through mime again
-func reclassifyIgnored(meta model.MetaApi, files model.FilesApi, logger *l.Logger) error {
-	stored, err := meta.GetMeta(mimeVersionKey)
+func reclassifyIgnored(db KindsStore, logger *l.Logger) error {
+	stored, err := db.GetMeta(mimeVersionKey)
 	if err != nil || stored == mimeVersion {
 		return err
 	}
-	n, err := files.UnignoreFiles()
+	n, err := db.UnignoreFiles()
 	if err != nil {
 		return err
 	}
 	logger.Info("MIME detection changed: ignored files are classified again",
 		l.String("from", stored), l.String("to", mimeVersion), l.Int("files", int(n)))
-	return meta.SetMeta(mimeVersionKey, mimeVersion)
+	return db.SetMeta(mimeVersionKey, mimeVersion)
 }

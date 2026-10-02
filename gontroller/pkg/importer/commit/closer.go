@@ -7,7 +7,6 @@ import (
 
 	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/importer/flow"
-	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/plugins"
 
@@ -16,19 +15,24 @@ import (
 )
 
 // New: in — the perceived items; out — the published ones. Its step reports to errch.
-func New(db model.ItemsApi, in <-chan *flow.RawItem, out chan<- *dto.ItemDto, errch chan error, logger *l.Logger) chain.ChainProcessor {
+func New(db CloserStore, in <-chan *flow.RawItem, out chan<- *dto.ItemDto, errch chan error, logger *l.Logger) chain.ChainProcessor {
 	stage := chain.NewChainProcessor(errch)
 	stage.AddStep(chain.NewDecorator(in, out, NewCloser(db, logger.Named(string(app.LogPluginExifCloser)))))
 	return stage
 }
 
+// CloserStore: what the closer writes — the item, in its final state
+type CloserStore interface {
+	UpdateItem(item *dto.ItemDto) (*dto.ItemDto, error)
+}
+
 // Closer: the closer step's logic
 type Closer struct {
-	db     model.ItemsApi
+	db     CloserStore
 	logger *l.Logger
 }
 
-func NewCloser(db model.ItemsApi, logger *l.Logger) *Closer { return &Closer{db: db, logger: logger} }
+func NewCloser(db CloserStore, logger *l.Logger) *Closer { return &Closer{db: db, logger: logger} }
 
 func (c *Closer) Decorate(in *flow.RawItem) (*dto.ItemDto, error) {
 	if in == nil || in.Item == nil {

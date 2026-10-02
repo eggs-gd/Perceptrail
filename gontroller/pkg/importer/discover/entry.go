@@ -12,7 +12,6 @@ import (
 
 	"perceptrail/gontroller/pkg/importer/discover/group"
 	"perceptrail/gontroller/pkg/importer/flow"
-	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/providers"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -30,7 +29,7 @@ type Stage struct {
 // (progress); out gets the groups that need work; dropped hears of a keyed group
 // the gate let not through (nothing changed). Its steps report to errch.
 func New(root string, rescan time.Duration, ps []providers.Provider, progress *flow.Progress,
-	dropped func(key string), db model.Store, out chan<- flow.FileGroup, errch chan error, logger *l.Logger) *Stage {
+	dropped func(key string), db Store, out chan<- flow.FileGroup, errch chan error, logger *l.Logger) *Stage {
 
 	// walk → group: one file (path + stat), or the end-of-walk marker
 	found := make(chan flow.FileEvent)

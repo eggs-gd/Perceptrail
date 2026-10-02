@@ -9,19 +9,23 @@ import (
 	"strconv"
 
 	"perceptrail/gontroller/pkg/importer/flow"
-	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 
 	_ "golang.org/x/image/webp"
 )
 
+// SizesStore: what sizes writes — the files' pixels and codecs
+type SizesStore interface {
+	UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error)
+}
+
 // Sizes: the sizes step's logic — the pixel size and codec of every file the client
 // may show, written to the files table (the asset contract sends them)
 type Sizes struct {
-	db model.Store
+	db SizesStore
 }
 
-func NewSizes(db model.Store) *Sizes { return &Sizes{db: db} }
+func NewSizes(db SizesStore) *Sizes { return &Sizes{db: db} }
 
 func (s *Sizes) Decorate(it *flow.RawItem) (*flow.RawItem, error) {
 	setSizes(it)

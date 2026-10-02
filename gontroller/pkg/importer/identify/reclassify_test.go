@@ -12,7 +12,11 @@ import (
 	"github.com/eggs-gd/perceplib/logger/decorators"
 )
 
-var testDB model.Store
+var testDB interface {
+	model.ItemsApi
+	model.FilesApi
+	model.MetaApi
+} // the whole DB: the tests set up what the steps only see a part of
 
 func TestMain(m *testing.M) {
 	dir, _ := os.MkdirTemp("", "identify-test")
@@ -45,7 +49,7 @@ func TestReclassifyIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
-	if err := reclassifyIgnored(testDB, testDB, logger); err != nil {
+	if err := reclassifyIgnored(testDB, logger); err != nil {
 		t.Fatal(err)
 	}
 	if v, _ := testDB.GetMeta(mimeVersionKey); v != mimeVersion {

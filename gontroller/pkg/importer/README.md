@@ -32,7 +32,9 @@ Stage packages export their steps' logic (`discover.NewGate`, `identify.NewReade
 `identify.NewSizes`, `identify.Pick`, `commit.NewCloser`, …) — their
 `New` runs it between channels; the tests of the whole import run it one group at a
 time. Sub-packages cannot import `importer` (it imports them): what they share
-lives in `flow`. The sources are providers (`pkg/providers`: Apple Photos, the plain
+lives in `flow`. Every step declares the DB methods it calls as its own small
+interface (`GateStore`, `SweepStore`, `ValidatorStore`, `SizesStore`, `KindsStore`,
+`CloserStore`); a stage's `Store` embeds its steps'; the top passes the proxy. The sources are providers (`pkg/providers`: Apple Photos, the plain
 folder last); the transcoders (`pkg/transcode`, not wired yet) are a chain of their
 own later (fed from the DB).
 
@@ -57,7 +59,7 @@ detail).
 | group | `discover/group/switch.go` | `FileEvent` -> `FileGroup` | A sub-chain: a switch sends a file to the grouper of the first enabled provider that claims it (the plain folder last: everything else), the marker to every grouper; each grouper is a step of it. |
 | (plain folder grouper) | `pkg/providers/folder` | `FileEvent` -> `FileGroup` | Sidecars by name, next to each other: one open group; a complete group goes out, the last one with the marker. |
 | (Apple Photos grouper) | `pkg/providers/apple` | `FileEvent` -> `FileGroup` | The first file of a library loads the assets from a copy of `Photos.sqlite` and forms the groups (files that exist, per the naming layout); a group goes out when its last file arrives. Key = asset UUID; the main file = the source; `Show` = the edit, the original, then Apple's derivatives. Trashed / hidden assets are not sent; incomplete groups are `Held` with the marker. Video renditions Photos downloads on request (`_2_3_o.mp4`, `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`; `_a` instead of `_o` for an edit, preferred) are `motion`, after the stills; `apple.Local` finds the best file for an on-demand want; `Regroup` forms one asset's group again (the last load's DB rows + the disk now). |
-| gate | `discover/gate.go` | `FileGroup` -> `FileGroup` | The files table (rows, stat, `CheckTime`); drops groups that need no work (and tells a keyed one's waiters); deletions after every grouper's marker. |
+| gate | `discover/gate.go` | `FileGroup` -> `FileGroup` | The files table (rows, stat, `CheckTime`); drops groups that need no work (and tells a keyed one's waiters); after every grouper's marker runs the deletions (`discover/sweep.go`: files not stamped, their items, the perceptors' rows). |
 | **identify** | `identify/entry.go` | `FileGroup` -> `*RawItem` | The item known: identity, metadata, kinds and roles, what to show now. exiftool lives here. |
 | read | `identify/read.go` | `FileGroup` -> `*RawItem` | `exiftool -all` for every file; N steps in parallel on the same channels, one pool. |
 | classify | `identify/classify.go` | `*RawItem` -> `*RawItem` | The kind of every file; the main file (the source) first; roles. |

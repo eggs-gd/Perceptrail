@@ -2,13 +2,9 @@ package discover
 
 import (
 	"errors"
-	"path/filepath"
-	"slices"
-	"strings"
 	"time"
 
 	"perceptrail/gontroller/pkg/importer/flow"
-	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/plugins"
 
@@ -19,11 +15,27 @@ import (
 	"gorm.io/gorm"
 )
 
+// GateStore: what the gate reads and writes — the files table, and an item's state
+// (does its group need work)
+type GateStore interface {
+	GetFileByPath(path string) (*dto.FileDto, error)
+	CreateFile(entry dto.ItemEntry) (*dto.FileDto, error)
+	UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error)
+	GetItemByGuid(guid string) (*dto.ItemDto, error)
+}
+
+// Store: what discover reads and writes — the gate's and the deletions' needs
+type Store interface {
+	GateStore
+	SweepStore
+}
+
 // files gate: keeps the files table (identity, stat, CheckTime) and lets through
 // only groups that need work — so unchanged files never reach exiftool. After the
 // end-of-walk marker from every grouper it derives deletions.
 type Gate struct {
-	db       model.Store
+	db       GateStore
+	sweep    sweep
 	logger   *l.Logger
 	branches int // markers to wait for
 	markers  int
@@ -36,8 +48,8 @@ type Gate struct {
 
 // NewGate: the gate step's logic. branches is the number of groupers that send an
 // end-of-walk marker; dropped hears of a keyed group let not through (nil: nobody).
-func NewGate(db model.Store, branches int, progress *flow.Progress, dropped func(key string), logger *l.Logger) *Gate {
-	return &Gate{db: db, logger: logger, branches: branches, progress: progress, dropped: dropped}
+func NewGate(db Store, branches int, progress *flow.Progress, dropped func(key string), logger *l.Logger) *Gate {
+	return &Gate{db: db, sweep: sweep{db: db, logger: logger}, logger: logger, branches: branches, progress: progress, dropped: dropped}
 }
 
 func (g *Gate) Decorate(in flow.FileGroup) (flow.FileGroup, error) {
@@ -55,7 +67,7 @@ func (g *Gate) Decorate(in flow.FileGroup) (flow.FileGroup, error) {
 		g.markers++
 		if g.markers == g.branches { // every grouper has flushed: all files are stamped
 			g.markers = 0
-			g.finalizeWalk(*in.Done, g.held)
+			g.sweep.finalizeWalk(*in.Done, g.held)
 			g.held = nil
 			g.progress.WalkGated()
 		}
@@ -183,31 +195,6 @@ func (g *Gate) perceptorMissing(guid string) bool {
 	return false
 }
 
-// pruneStores: the perceptors' rows of items that are gone
-func (g *Gate) pruneStores() {
-	stores := plugins.Pm.Stores()
-	if len(stores) == 0 {
-		return
-	}
-	guids, err := g.db.GetAllGuids()
-	if err != nil {
-		g.logger.Error("Perceptor storage: can't read items", l.Error(err))
-		return
-	}
-	keep := make(map[string]bool, len(guids))
-	for _, guid := range guids {
-		keep[guid] = true
-	}
-	for _, st := range stores {
-		n, err := st.Prune(func(guid string) bool { return keep[guid] })
-		if err != nil {
-			g.logger.Error("Perceptor storage: prune failed", l.String("store", st.Name()), l.Error(err))
-		} else if n > 0 {
-			g.logger.Info("Perceptor storage: pruned", l.String("store", st.Name()), l.Int("rows", n))
-		}
-	}
-}
-
 // cheapStageDone: the item went through the cheap stage (Visible, Waiting) or is
 // fully done (Ready). An item shown without a preview is from before the cheap
 // stage existed: it goes through once more.
@@ -219,100 +206,4 @@ func cheapStageDone(item *dto.ItemDto) bool {
 		return true
 	}
 	return false
-}
-
-// finalizeWalk derives deletions: files not stamped by this walk are gone.
-func (g *Gate) finalizeWalk(result flow.WalkResult, held []string) {
-	if !result.Complete {
-		g.logger.Warn("Walk incomplete: deletions are not checked")
-		return
-	}
-	if result.Files == 0 {
-		// An empty root (e.g. an unmounted drive's mount point) must not delete the library
-		g.logger.Warn("Walk found no files: deletions are not checked", l.String("path", result.Root))
-		return
-	}
-	g.logger.Info("Walk complete", l.Int("files", result.Files), l.Int("unreadable", len(result.Unreadable)))
-
-	stale, err := g.db.GetFilesCheckedBefore(result.Started)
-	if err != nil {
-		g.logger.Error("Deletions: can't read files", l.Error(err))
-		return
-	}
-	gone := goneFiles(stale, result.Root, result.Unreadable, held)
-	deletedItems, dirtyItems := 0, 0
-
-	for _, f := range gone {
-		switch {
-		case f.IsIgnored() || f.LinkedTo == "":
-		case f.LinkedTo == f.GUID: // main file: the item is gone
-			item, err := g.db.GetItemByGuid(f.GUID)
-			if err != nil {
-				continue // never became an item, or already deleted
-			}
-			if err := g.db.DeleteItem(item); err != nil {
-				g.logger.Error("Deletions: can't delete item", l.String("guid", item.Guid), l.Error(err))
-				continue
-			}
-			deletedItems++
-		default: // sidecar: its item must be processed again
-			item, err := g.db.GetItemByGuid(f.LinkedTo)
-			if err != nil {
-				continue
-			}
-			item.State = dto.Dirty
-			if _, err := g.db.UpdateItem(item); err != nil {
-				g.logger.Error("Deletions: can't mark item dirty", l.String("guid", item.Guid), l.Error(err))
-				continue
-			}
-			dirtyItems++
-		}
-	}
-
-	if err := g.db.DeleteFiles(gone); err != nil {
-		g.logger.Error("Deletions: can't delete files", l.Error(err))
-		return
-	}
-	// An item with no files left is gone too (a keyed asset: every file is "linked",
-	// none is "main" by its own GUID)
-	for _, f := range gone {
-		if f.LinkedTo == "" || f.IsIgnored() {
-			continue
-		}
-		if n, err := g.db.CountLinkedFiles(f.LinkedTo); err == nil && n == 0 {
-			if item, err := g.db.GetItemByGuid(f.LinkedTo); err == nil {
-				if err := g.db.DeleteItem(item); err == nil {
-					deletedItems++
-				}
-			}
-		}
-	}
-	g.logger.Info("Deletions", l.Int("files", len(gone)), l.Int("items", deletedItems), l.Int("dirty", dirtyItems))
-	g.pruneStores()
-}
-
-// goneFiles keeps the stale files that belong to this root and were not hidden by
-// an unreadable directory: only those are known to be deleted.
-func goneFiles(stale []*dto.FileDto, root string, unreadable, held []string) []*dto.FileDto {
-	isHeld := make(map[string]bool, len(held))
-	for _, p := range held {
-		isHeld[p] = true
-	}
-	var gone []*dto.FileDto
-	for _, f := range stale {
-		if !isUnder(f.Path, root) {
-			continue // another library root (config changed): not ours to judge
-		}
-		if isHeld[f.Path] || slices.ContainsFunc(unreadable, func(dir string) bool { return f.Path == dir || isUnder(f.Path, dir) }) {
-			continue
-		}
-		gone = append(gone, f)
-	}
-	return gone
-}
-
-// isUnder reports whether path is inside dir
-func isUnder(path, dir string) bool {
-	rel, err := filepath.Rel(dir, path)
-	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }

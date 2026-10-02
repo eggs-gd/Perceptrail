@@ -564,6 +564,13 @@ yields:
   exported so the whole-import tests run it one group at a time.
 - Sub-packages cannot import `importer`: what they share (`FileGroup`, `RawItem`, the
   walk's progress) lives in `importer/flow`.
+- **A step gets only the DB methods it calls**: each declares its own small interface
+  next to it (`GateStore`, `SweepStore`, `ValidatorStore`, `SizesStore`,
+  `KindsStore`, `CloserStore`, `apple.Items`); a stage's `Store` embeds its steps'
+  (overlaps are fine). `model.ItemsApi` / `FilesApi` / `MetaApi` stay the proxy's
+  full API (routes, tests); `model.Store` is gone. The gate needed ten methods for
+  two jobs: the deletions after a walk moved to `sweep` (its own store), the gate
+  keeps the files table.
 
 ### Broken files (2026-10-01)
 

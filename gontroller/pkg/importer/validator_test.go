@@ -30,7 +30,11 @@ import (
 // uses its own library root, and deletions are scoped to the root.
 // The DB the tests read and write (the stages get it in their constructors)
 var (
-	testDB     model.Store
+	testDB interface {
+		model.ItemsApi
+		model.FilesApi
+		model.MetaApi
+	} // the whole DB: the tests set up what the steps only see a part of
 	filesProxy model.FilesApi
 	itemsProxy model.ItemsApi
 )

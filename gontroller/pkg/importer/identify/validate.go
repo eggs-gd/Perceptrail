@@ -5,20 +5,32 @@ import (
 
 	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/model"
+	"perceptrail/gontroller/pkg/model/dto"
 
+	"github.com/eggs-gd/perceplib/api"
 	"github.com/eggs-gd/perceplib/chain"
 
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
+// ValidatorStore: what validate reads and writes — the item of a group (by its
+// main file's hash or its key), the files' links, a superseded item deleted
+type ValidatorStore interface {
+	ValidateFile(main *dto.FileDto, meta api.RawExif) (*dto.ItemDto, model.Outcome, error)
+	ValidateKeyed(key string, main *dto.FileDto, meta api.RawExif) (*dto.ItemDto, error)
+	UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error)
+	GetItemByGuid(guid string) (*dto.ItemDto, error)
+	DeleteItem(item *dto.ItemDto) error
+}
+
 // validator: the group's identity in the DB (Walker.puml). Links the files to the
 // main file, then same / changed / moved / duplicate -> the item.
 type Validator struct {
-	db     model.Store
+	db     ValidatorStore
 	logger *l.Logger
 }
 
-func NewValidator(db model.Store, logger *l.Logger) *Validator {
+func NewValidator(db ValidatorStore, logger *l.Logger) *Validator {
 	return &Validator{db: db, logger: logger}
 }
 
