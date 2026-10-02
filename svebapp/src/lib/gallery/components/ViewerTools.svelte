@@ -20,19 +20,20 @@
 
     // What the viewer can do with this asset decides the buttons
     let playable = $derived(playableVideos(asset).length > 0);
-    let live = $derived(asset.kind === 'live' && playable);
+    // Apple Photos: a video or a motion not here yet is asked for when it plays
+    let live = $derived(asset.kind === 'live' && (playable || !!asset.onDemand?.hover));
     // A playable video is shown as itself: no switch; one the browser cannot play
     // is downloaded
-    let video = $derived(asset.kind === 'video' && playable);
+    let video = $derived(asset.kind === 'video' && (playable || !!asset.onDemand));
     let image = $derived(video ? undefined : originalImage(asset));
     let other = $derived(!video && !image ? asset.original : null);
-    // An image is shown (not a playing video): its size can be stretched
-    let still = $derived(!video && hasImage(asset));
+    // A photo or a video is shown: its size can be stretched
+    let still = $derived(video || hasImage(asset));
 
     const tooltips = {
         live: () => (viewerPrefs.autoplayLive ? 'Live Photo plays on open' : 'Live Photo does not play on open'),
         video: () => (viewerPrefs.autoplayVideo ? 'Video plays on open' : 'Video does not play on open'),
-        stretch: () => (viewerPrefs.stretchSmall ? 'Small images fill the screen' : 'Small images at their own size'),
+        stretch: () => (viewerPrefs.stretchSmall ? 'Small photos and videos fill the screen' : 'Small photos and videos at their own size'),
     };
 </script>
 

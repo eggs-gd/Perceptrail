@@ -107,7 +107,7 @@ export function playableVideos(asset: Asset): VideoSource[] {
 
 function videoType(r: Rendition): string {
     const mime = r.mime === 'video/quicktime' ? 'video/mp4' : r.mime;
-    return r.codec ? `${mime}; codecs="${r.codec}"` : mime;
+    return r.codec ? `${mime}; codecs="${fullCodec(r.codec)}"` : mime;
 }
 
 // Apple Photos on demand (the server's rendition.go): asked for when needed — the
@@ -130,8 +130,17 @@ export function hoverUrl(asset: Asset): string | undefined {
 let hevc: boolean | undefined;
 function playsHevc(): boolean {
     if (typeof document === 'undefined') return false;
-    hevc ??= document.createElement('video').canPlayType('video/mp4; codecs="hvc1"') !== '';
+    hevc ??= document.createElement('video').canPlayType(`video/mp4; codecs="${fullCodec('hvc1')}"`) !== '';
     return hevc;
+}
+
+/**
+ * A codec as the browser wants to be asked: Chrome answers "" for a bare "hvc1" and
+ * "probably" for "hvc1.1.6.L93.B0" (and plays it). The server knows only the FourCC
+ * (exiftool's CompressorID): HEVC is asked as Main profile, level 3.1.
+ */
+function fullCodec(codec: string): string {
+    return codec === 'hvc1' || codec === 'hev1' ? `${codec}.1.6.L93.B0` : codec;
 }
 
 /** Can this browser play the video (none on the server) */

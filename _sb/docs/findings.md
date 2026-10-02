@@ -726,6 +726,16 @@ the binary by the linker; run from the user's terminal on the dev library.
   the other name (with `_1_102_a.jpeg`, the edit's still). The `_a` renditions win
   (Photos shows the edit); for videos `_2_3_a.mp4`, `_2_4_a.mp4`, `_2_201_a.mov` are
   assumed by analogy, not seen yet.
+- **Chrome says no to a bare `hvc1`**: `canPlayType('video/mp4; codecs="hvc1"')` is
+  `""`, with `hvc1.1.6.L93.B0` it is `probably` (and it plays). The client asked for
+  `?hevc=0` and got the 360p — "videos are always small" — and counted local HEVC
+  files as unplayable. The server knows only the FourCC (exiftool's
+  `CompressorID`): the client asks for HEVC as Main profile, level 3.1.
+- **The viewer's video sized as a photo** (the owner): it had no box — its natural
+  size, the stretch switch did nothing. Now a box like a photo's (its pixels once
+  loaded, as big as the screen until then; stretched if switched on). A Live Photo's
+  motion was 300×150 in a corner: the stage's `.stage video { width: auto }` beat
+  `.live { width: 100% }` on specificity — `.asset.view video` fills the box now.
 - **Hover UX** (the owner, as Immich and Google Photos): the badge stays while the
   tile moves, a ring turns around its mark while the video comes, the video fades in
   over the frames (200 ms).

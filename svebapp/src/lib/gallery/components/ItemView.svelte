@@ -84,10 +84,18 @@
     // (100vw), so the box is sized here from the image the asset has (the medium
     // once it came; while it comes, as big as the screen allows: it will be).
     // Unknown size: the image's natural size.
-    let shown = $derived(asset && mode === 'view' ? (original ?? better ?? biggestImage(asset)) : undefined);
+    // A video: its own pixels once it loaded; until then as big as the screen allows
+    let videoLoad = $state<{guid: string, w: number, h: number}>();
+    let videoDims = $derived(videoLoad?.guid === item.guid ? videoLoad : undefined);
+    let playsVideo = $derived(!!asset && mode === 'view' && asset.kind !== 'live'
+        && (videos.length > 0 || (asset.kind === 'video' && !!medium)));
+
+    let shown = $derived(asset && mode === 'view'
+        ? (playsVideo ? (videoDims ?? {w: item.width, h: item.height}) : (original ?? better ?? biggestImage(asset)))
+        : undefined);
     let fit = $derived(shown?.w && shown.h
         ? {
-            width: `min(${viewerPrefs.stretchSmall || waiting ? '' : `${shown.w}px, `}100vw, calc(100vh * ${shown.w} / ${shown.h}))`,
+            width: `min(${viewerPrefs.stretchSmall || waiting || (playsVideo && !videoDims) ? '' : `${shown.w}px, `}100vw, calc(100vh * ${shown.w} / ${shown.h}))`,
             ratio: `${shown.w} / ${shown.h}`,
         }
         : undefined);
@@ -96,17 +104,24 @@
 <!-- The viewer plays a video; a Live Photo is a photo there (its motion is the tile's hover).
      Apple Photos: the 720p asked for first, what is here after it (a failed source
      falls through to the next) -->
-{#if asset && mode === 'view' && asset.kind !== 'live' && (videos.length || (asset.kind === 'video' && medium))}
+{#if asset && playsVideo}
     {@const poster = fallbackImage(asset)}
-    <video controls autoplay={viewerPrefs.autoplayVideo} playsinline poster={poster && assetUrl(poster)}
-           onclick={(e) => e.stopPropagation()}>
-        {#if medium}
-            <source src={medium}>
-        {/if}
-        {#each videos as video (video.src)}
-            <source src={video.src} type={video.type}>
-        {/each}
-    </video>
+    <!-- Sized as a photo: its own pixels, fitted into the screen (stretched if switched on) -->
+    <div class="asset view" style:width={fit?.width} style:aspect-ratio={fit?.ratio}>
+        <video controls autoplay={viewerPrefs.autoplayVideo} playsinline poster={poster && assetUrl(poster)}
+               onclick={(e) => e.stopPropagation()}
+               onloadedmetadata={(e) => {
+                   const v = e.currentTarget as HTMLVideoElement;
+                   videoLoad = {guid: item.guid, w: v.videoWidth, h: v.videoHeight};
+               }}>
+            {#if medium}
+                <source src={medium}>
+            {/if}
+            {#each videos as video (video.src)}
+                <source src={video.src} type={video.type}>
+            {/each}
+        </video>
+    </div>
 {:else if asset && hasStill}
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="asset"
@@ -247,5 +262,15 @@
         display: block;
         max-width: 100vw;
         max-height: 100vh;
+    }
+
+    /* The viewer's video (and a Live Photo's motion) fill their box: over the stage's
+       natural-size rule */
+    .asset.view video {
+        width: 100%;
+        height: 100%;
+        max-width: none;
+        max-height: none;
+        object-fit: contain;
     }
 </style>
