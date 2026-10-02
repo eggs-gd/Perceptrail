@@ -57,9 +57,16 @@ func TestItemsDelta(t *testing.T) {
 				Guid    string `json:"guid"`
 				Removed bool   `json:"removed"`
 				Cursor  string `json:"cursor"`
+				Total   *int64 `json:"total"`
 			}
 			if err := json.Unmarshal(sc.Bytes(), &line); err != nil {
 				t.Fatal(err)
+			}
+			if line.Cursor != "" {
+				n, _ := itemsProxy.CountItemsInStates(shownStates...)
+				if line.Total == nil || *line.Total != n {
+					t.Errorf("%s: total %v, want %d (the shown items)", query, line.Total, n)
+				}
 			}
 			cursor = line.Cursor
 			if strings.HasPrefix(line.Guid, "d-") {

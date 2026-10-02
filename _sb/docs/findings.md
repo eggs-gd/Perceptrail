@@ -318,6 +318,46 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
     and never ask for what it missed. No last line = cut short = the old cursor stays.
     Likewise a line that cannot be parsed or stored fails the sync (it was only
     logged — the cursor moved past the item).
+  - **Two tabs broke the copy** (2026-10-02): every tab has its own sync worker over
+    the one IndexedDB. A full sync in one tab cleared the table while another was
+    filling it, and that one kept its cursor over what was left — Chrome showed 79
+    photos of 6 993 and the deltas never brought the rest (Safari, Cursor: one tab,
+    fine). Now syncs take a lock shared by the tabs (Web Locks,
+    `navigator.locks.request('items-sync')`, works in workers), and the stream's last
+    line carries `total` (shown items, counted with the cursor): after a delta a copy
+    holding another count drops its state and syncs from nothing. A full sync that
+    differs only warns (what changed while it ran comes with the next delta) — no
+    loop. Checked: 79 kept of 6 990 → healed on reload; two tabs from an empty copy →
+    6 990.
+  - **The layout was shared too**: `layoutDb` (positions, the side panel's sections,
+    the views' kept orders) was one database for all tabs, each tab's layout worker
+    rewriting it for its own width and view — a date tab next to a place tab showed
+    the place view's sections ("Europe"). Now one layout database per tab
+    (`layout-<random>`, named by the page at load, passed to its worker with `init`);
+    the page holds a Web Lock of that name while it lives, and a new page deletes
+    the `layout-*` databases nobody holds (closed tabs, earlier loads) and the old
+    shared `layout`. The views' kept orders are the server's data, the same for every
+    tab: they moved to `itemsDb.orders` (v5). Not sessionStorage for the name: a
+    duplicated tab copies it, and two tabs would share again. Checked: a 1024 px
+    date tab and a 500 px place tab — each its own width and first mark ("2026" /
+    "Europe"); a closed tab's database gone on the next load; the viewer's direct
+    link and arrows.
+  - **Changes reach every tab** (Codex, PR #20): the sync told only its own tab's
+    layout worker (a private MessageChannel). With the lock, a second tab's sync
+    finds the cursor already moved, gets an empty delta and keeps the items it
+    loaded. Now wsync broadcasts every change on a BroadcastChannel
+    (`items-changes`) and every tab's layout worker listens. Checked: an item hidden
+    on the server, one tab synced — both tabs' layouts lost it.
+  - **Plain HTTP on a LAN address** (Codex, PR #20) — the likely self-hosted setup —
+    is not a secure context: no `navigator.locks`, no `crypto.randomUUID` (the client
+    would have died on load). Without Web Locks syncs run unserialized (the count
+    check heals what two tabs break), live pages answer a roll call on a
+    BroadcastChannel instead of holding a lock (a page whose database is dropped all
+    the same reloads itself), the database id is not a UUID. Checked on
+    `http://192.168.x.x` (`isSecureContext` false): full sync, layout, earlier
+    databases dropped, two tabs kept. The browser pane blocks a LAN page's requests
+    to another port (`ERR_BLOCKED_BY_CLIENT`): tested with Vite proxying the API
+    on the same origin.
   - Switching to a view with a kept order shows that order at once; if the refresh
     from the server then fails, the switch stands on the kept order (the URL was
     being rolled back while the sheet already showed the new view).

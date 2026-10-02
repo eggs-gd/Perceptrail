@@ -1,4 +1,5 @@
 import {
+    ITEMS_CHANNEL,
     type MessageFromSync,
     type OrderEntry,
     type OrderPayload,
@@ -13,6 +14,7 @@ import {
     LAYOUT_SIZE_KEY,
     itemsDb,
     layoutDb,
+    useLayoutDb,
     type LayoutItem,
     type LayoutOrder,
     type LayoutMeta,
@@ -114,8 +116,10 @@ self.onmessage = function (msg: { data: WorkerMessage<any, any> }) {
     if (task === 'mode') {
         setLogLevel(payload);
     } else if (task === 'init') {
-        const itemsDbPort: MessagePort = payload[0];
-        itemsDbPort.onmessage = onItemsDbMessage;
+        if (payload?.layoutDb) useLayoutDb(payload.layoutDb); // the page's own layout database
+        // Every tab's syncs (one copy of the items); after the database is set: the
+        // messages write the layout
+        new BroadcastChannel(ITEMS_CHANNEL).onmessage = onItemsDbMessage;
         logger.debug('Inited')
     } else if (task === 'update') {
         const p: UpdateLayoutPayload = payload;
@@ -151,7 +155,7 @@ async function applyOrder({view, url, anchor}: OrderPayload) {
     orderFetch?.abort();
     const fetching = orderFetch = new AbortController();
     const key = `order:${view}` as const;
-    const cached = await layoutDb.meta.get(key) as LayoutOrder | undefined;
+    const cached = await itemsDb.orders.get(key);
     fetching.signal.throwIfAborted();
     if (cached) useOrder(cached.entries, anchor);
 
@@ -172,7 +176,7 @@ async function applyOrder({view, url, anchor}: OrderPayload) {
         .map((line) => JSON.parse(line));
     if (cached && JSON.stringify(cached.entries) === JSON.stringify(entries)) return;
     useOrder(entries, anchor);
-    enqueue(() => layoutDb.meta.put({key, entries} as LayoutOrder));
+    enqueue(() => itemsDb.orders.put({key, entries} as LayoutOrder));
 }
 
 function useOrder(entries: OrderEntry[], anchor: string | undefined) {

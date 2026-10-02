@@ -35,6 +35,8 @@ type ItemsApi interface {
 	// perceptors read to order them (guid, date and its zone, size, duration) — not
 	// the whole rows
 	GetItemsInStates(states ...dto.ItemState) ([]*dto.ItemDto, error)
+	// CountItemsInStates: how many items are in these states (deleted ones excluded)
+	CountItemsInStates(states ...dto.ItemState) (int64, error)
 	// StreamItemsSince: the items changed or deleted since then (deleted ones too:
 	// DeletedAt is set), for the client's delta sync
 	StreamItemsSince(since time.Time, fn func(*dto.ItemDto, []*dto.FileDto) error) error
@@ -131,6 +133,11 @@ func (p *proxy) GetItemsInStates(states ...dto.ItemState) ([]*dto.ItemDto, error
 	var items []*dto.ItemDto
 	return items, p.db.Select("id", "guid", "date", "date_offset", "date_source", "size_w", "size_h", "ratio_w", "ratio_h", "duration").
 		Where("state IN ?", states).Order("date DESC, id DESC").Find(&items).Error
+}
+
+func (p *proxy) CountItemsInStates(states ...dto.ItemState) (int64, error) {
+	var n int64
+	return n, p.db.Model(&dto.ItemDto{}).Where("state IN ?", states).Count(&n).Error
 }
 
 func (p *proxy) GetItemByGuid(guid string) (*dto.ItemDto, error) {

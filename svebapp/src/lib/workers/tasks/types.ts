@@ -65,7 +65,8 @@ export interface OrderEntry {
     sections?: {level: number, label: string}[];
 }
 
-export type InitMessage = WorkerMessage<'init', MessagePort[]>;
+/** init: for wlayout, its page's layout database */
+export type InitMessage = WorkerMessage<'init', {layoutDb?: string}>;
 export type OrderMessage = WorkerMessage<'order', OrderPayload>;
 
 /** wlayout → page: whether an order was applied (a later one supersedes it: false) */
@@ -81,7 +82,14 @@ export interface WorkerEventData {
     status: string,
 }
 
-/** wsync → wlayout. The layout itself reaches the page through layoutDb (liveQuery). */
+/**
+ * wsync → every tab's wlayout, over a BroadcastChannel: the items are one copy for all
+ * tabs, so a sync one tab ran reaches the layouts of the others (a private channel
+ * left them on the items they had loaded). The layout itself reaches the page
+ * through layoutDb (liveQuery).
+ */
+export const ITEMS_CHANNEL = 'items-changes';
+
 export interface MessageFromSync {
     item?: Item | LayoutItem,
     action: 'create' | 'update' | 'delete' | 'sync-start' | 'sync-done',

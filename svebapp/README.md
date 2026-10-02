@@ -34,7 +34,7 @@ wlayout (worker)   all photos in memory, in the active perceptor's order
    │  writes layoutDb: a full relayout = ONE transaction (items + meta + sections),
    │  a streamed photo = one small transaction
    ▼
-layoutDb (Dexie "layout": items by y/order, meta {rev, height, anchor}, sections)
+layoutDb (Dexie "layout-<random>", one per tab: items by y/order, meta {rev, height, anchor}, sections)
    │  liveQuery over the VISIBLE WINDOW only (layoutWindow.ts)
    ▼
 Gallery.svelte     renders the window: absolutely positioned tiles, keyed by guid;
@@ -52,10 +52,19 @@ keeps in place.
 - `lib/workers/tasks/wsync.ts` — the delta sync: with a cursor from the same server
   database (its epoch) asks `/items?since=`, applies puts and removals; otherwise
   clears `itemsDb` and takes everything. The new cursor is the stream's last line and
-  is kept only if it came and every line was stored — else the next sync retries. Refreshes come from `refreshFromServer()`
+  is kept only if it came and every line was stored — else the next sync retries.
+  One sync at a time across tabs (Web Locks; none on plain HTTP — then unserialized);
+  a copy whose count differs from the stream's `total` after a delta is synced again
+  from nothing. Changes go to every tab's layout worker (BroadcastChannel
+  `items-changes`). Refreshes come from `refreshFromServer()`
+- `lib/stores/internal/layoutDb.ts` — the layout is per tab (its width, its view): the
+  page names its database `layout-<random>` and holds a Web Lock of that name (on
+  plain HTTP: answers a roll call on a BroadcastChannel); the layout worker gets the
+  name with `init`. A new page drops the databases of pages no longer alive and the
+  old shared `layout`.
   (proxy): the start, coming back to the tab, every navigation, at most every 5 s.
 - `lib/workers/tasks/wlayout.ts` (start) — loads the kept items and the view's kept
-  order (`layoutDb.meta` `order:<view>`), so the sheet shows without the network; a
+  order (`itemsDb.orders` `order:<view>`, shared by the tabs), so the sheet shows without the network; a
   change that keeps an item's size patches its row in place.
 - `lib/workers/tasks/wlayout.ts` — row layout (greedy: fits → into the row;
   overflow < ½ of the photo → close the row without it; otherwise add it and shrink

@@ -32,8 +32,10 @@ type clientItem struct {
 
 // The client keeps its items between visits and asks only for what changed:
 // /items?since=<cursor>. The cursor is the server's time when a response began; it
-// comes as the stream's last line ({cursor}), so a stream cut short (a DB error after
-// the 200 went out, a dropped connection) has none and the client keeps its old one.
+// comes as the stream's last line ({cursor, total}), so a stream cut short (a DB error
+// after the 200 went out, a dropped connection) has none and the client keeps its old
+// one. total: how many items are shown then — a client whose copy holds another count
+// after applying the stream (a table left half-filled) starts again from nothing.
 // The epoch (a header) names this database — another one (recreated, another library)
 // means the client's copy is not a base for a delta, it fetches everything.
 const (
@@ -44,6 +46,7 @@ const (
 // endLine: the stream's last line, only after every item went out
 type endLine struct {
 	Cursor string `json:"cursor"`
+	Total  int64  `json:"total"`
 }
 
 var syncEpoch string
@@ -80,8 +83,14 @@ func getItems(c echo.Context) error {
 		since = &t
 	}
 	c.Response().Header().Set(headerEpoch, syncEpoch)
+	// The count and the cursor at the same moment, just before the stream picks its
+	// items: what the client holds after it matches the count
 	cursor := time.Now().UTC().Format(time.RFC3339Nano)
-	return streamClientItems(c.Response().Writer, since, cursor)
+	total, err := itemsProxy.CountItemsInStates(shownStates...)
+	if err != nil {
+		return err
+	}
+	return streamClientItems(c.Response().Writer, since, endLine{Cursor: cursor, Total: total})
 }
 
 // removedItem: a tombstone in a delta
@@ -114,7 +123,7 @@ func toClientItem(dbItem *dto.ItemDto, files []*dto.FileDto) clientItem {
 	return item
 }
 
-func streamClientItems(w http.ResponseWriter, since *time.Time, cursor string) error {
+func streamClientItems(w http.ResponseWriter, since *time.Time, end endLine) error {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		return fmt.Errorf("streaming not supported")
@@ -154,7 +163,7 @@ func streamClientItems(w http.ResponseWriter, since *time.Time, cursor string) e
 	if err != nil {
 		return err
 	}
-	return encoder.Encode(endLine{Cursor: cursor})
+	return encoder.Encode(end)
 }
 
 // shown: the client gets items it can display — Visible (a cheap preview) and Ready;
