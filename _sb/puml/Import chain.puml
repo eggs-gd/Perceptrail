@@ -6,7 +6,7 @@ title Import chain (gontroller): every participant is a chain step (own goroutin
 
 control "fswalker\n(entry point)" as Walker
 
-box "providers: one switch, a grouper each" #LightCyan
+box "grouping (a sub-chain): the providers' switch, a grouper each" #LightCyan
 control "switch\n(first that claims)" as Groups
 control "Apple Photos\ngrouper" as Photos
 control "plain folder\ngrouper (last)" as Generic

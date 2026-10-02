@@ -647,7 +647,10 @@ Design: roadmap "Expensive stage".
   that claims it — each grouper a step of its own. The plain folder is a provider
   too (`providers/folder`), the last: it claims what nobody else did. (First built
   as a claim step per provider, one after another, the generic grouper apart — the
-  owner: one switch over all, and the plain folder is the same kind of grouper.) Rejected on the way: a `sources:` list with types (folder /
+  owner: one switch over all, and the plain folder is the same kind of grouper.)
+  Grouping is a sub-chain of its own (`groups.NewGrouping`), as processing is:
+  files in, groups out — the top of the chain reads walker → grouping → gate →
+  processing; the switch and the groupers are inside. Rejected on the way: a `sources:` list with types (folder /
   library / api) — the user would have to know what each folder is; marker files
   (`.immich`, `@eaDir`, …) as a filter of their own — the claim is the provider's
   own business.

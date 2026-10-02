@@ -25,9 +25,9 @@ var itemsProxy model.ItemsApi
 //
 // Enter: library root ->
 // - fswalker: every file found (path + stat), then the end-of-walk marker
-// - switch -> the grouper of the first provider that claims the file
-//   (providers.Enabled: Apple Photos…, the plain folder last): files -> whole assets
-//   (FileGroup)
+// - grouping (a sub-chain, scan/groups): files -> whole assets (FileGroup). Inside,
+//   a switch sends a file to the grouper of the first provider that claims it
+//   (providers.Enabled: Apple Photos…, the plain folder last)
 // Exit: -> FileGroup
 //
 // Enter: FileGroup ->
@@ -121,12 +121,10 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	// Channels between the steps: from -> to, what it carries. The message types
 	// are in the flow package (FileEvent, FileGroup, WalkResult, RawItem).
 
-	// fswalker -> switch: one file (path + stat), or the end-of-walk marker. The
-	// switch -> the grouper of the first provider that claims the file (the plain
-	// folder claims the rest); the marker to every grouper.
+	// fswalker -> grouping: one file (path + stat), or the end-of-walk marker
 	files := make(chan flow.FileEvent)
-	// groupers -> files gate: a complete group (no main file yet), and/or the
-	// grouper's marker; every grouper writes here
+	// grouping -> files gate: a complete group (no main file yet), and/or a
+	// grouper's marker (one from each provider's grouper)
 	grouped := make(chan flow.FileGroup)
 	// files gate -> exif: the same group, stored: rows of the files table (GUIDs);
 	// only groups that need work
@@ -147,16 +145,10 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	// Find every file under the library root
 	importChain.AddStep(NewFsWalker(ctx.Config().Path, rescan, progress, files, logger))
 
-	// Files -> whole assets: a file to the grouper of the first provider that claims
-	// it (Apple Photos…, the plain folder last)
+	// Files -> whole assets: the grouping sub-chain (the providers' switch and
+	// groupers inside)
 	ps := providers.Enabled()
-	toGroupers := make([]chan<- flow.FileEvent, len(ps))
-	for i, p := range ps {
-		toGrouper := make(chan flow.FileEvent)
-		toGroupers[i] = toGrouper
-		importChain.AddStep(chain.NewDecorator(toGrouper, grouped, p.Grouper()))
-	}
-	importChain.AddStep(groups.NewSwitch(ps, files, toGroupers))
+	importChain.AddStep(groups.NewGrouping(ps, files, grouped, errch))
 
 	// Assets -> items: only what needs work, then metadata, kinds, identity. A keyed
 	// group it drops is told to whoever waits for that asset (Refresh)
