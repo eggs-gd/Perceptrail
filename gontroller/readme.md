@@ -88,7 +88,7 @@ Item states (`dto.ItemState`): `New → Dirty → Processing → Ready`, `Delete
 | `pkg/plugins` | plugin manager (core + `.so`), `exif_core/{date,size}` |
 | `pkg/model` | SQLite via GORM, `ItemsApi`/`FilesApi`, DTOs |
 | `pkg/client` | Echo, `/items`, `/assets`, `/perceptors` and `/p/:view/order` routes |
-| `pkg/providers` | libraries read through their own means, as steps of the import chain (claim → own grouper, or on) and on-demand renditions; `providers/apple`: Apple Photos (its DB, the grouper, on demand), `providers/apple/photokit`: PhotoKit (cgo, macOS only; a stub elsewhere; the main thread serves its main queue) |
+| `pkg/providers` | the sources: one switch sends a file to the grouper of the first provider that claims it, and on-demand renditions come from the item's provider; `providers/folder`: the plain folder (last, takes the rest); `providers/apple`: Apple Photos (its DB, the grouper, on demand), `providers/apple/photokit`: PhotoKit (cgo, macOS only; a stub elsewhere; the main thread serves its main queue) |
 | `pkg/transcoder` | thumbnail stub (needs libvips) |
 
 ## Worth knowing

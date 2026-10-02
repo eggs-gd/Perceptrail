@@ -142,10 +142,11 @@ library").
 - A cloud-only original is not described (its name, format, weight): for local
   files the original is what is on disk; a provider's own description waits for a
   second provider — the abstraction comes from two or more, not from one.
-- [x] **The mechanism** (PR #23): `pkg/providers` — every enabled provider is a step
-      of the import chain (claim: its own grouper, or on; the plain folder last),
-      and the source of on-demand renditions; Apple Photos is the first
-      (`pkg/providers/apple`), enabled by the config. A provider that comes later
+- [x] **The mechanism** (PR #23): `pkg/providers` — one switch sends a found file to
+      the grouper of the first provider that claims it (the plain folder,
+      `providers/folder`, last), and the item's provider gives on-demand renditions;
+      Apple Photos is the first library (`pkg/providers/apple`), enabled by the
+      config. A provider that comes later
       takes its files over through the usual deletions (findings "Providers as steps
       of the chain").
 - [x] Generalise `rendition.go` (PR #23): the provider gives the rendition (Apple: the

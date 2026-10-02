@@ -81,7 +81,7 @@ func (v *validator) Decorate(g *flow.RawItem) (*flow.RawItem, error) {
 // GUID is the key, every file links to it, whatever the main file is
 func (v *validator) keyed(g *flow.RawItem) (*flow.RawItem, error) {
 	for _, f := range g.Files {
-		// An item of the file's own from before (the generic grouper read the
+		// An item of the file's own from before (the plain folder's grouper read the
 		// library's originals): the asset's item replaces it
 		if f.GUID != g.Key {
 			if old, err := itemsProxy.GetItemByGuid(f.GUID); err == nil {

@@ -11,18 +11,17 @@ with branches are sub-packages:
 ```
 scan/                     fswalker, files gate, exif, mime, validator, plugins; the wiring
 scan/flow/                what flows between the steps (shared by everything below)
-scan/groups/              a provider's step (claim: its grouper, or on)
-scan/groups/generic/      plain folders: sidecars by name (what no provider claimed)
+scan/groups/              the switch: a file to the grouper of the first provider that claims it
 scan/transcode/           the switch by the kind of the asset (not wired yet)
 scan/transcode/photo/     thumbnails (stub)
 scan/transcode/video/     poster, previews, playable video (stub)
 scan/transcode/livephoto/ the video with its photo (stub)
 ```
 
-A library read through its own means is a provider (`pkg/providers`, Apple Photos
-in `pkg/providers/apple`): the chain gets a step per enabled provider, one after
-another — a file it claims goes to its own grouper, the rest on; the generic
-grouper takes what nobody claimed. A new transcoder is a `transcode/<name>` package
+Every source is a provider (`pkg/providers`): Apple Photos (`providers/apple`), the
+plain folder (`providers/folder`, last — it claims what nobody else did). One switch
+sends a file to the grouper of the first provider that claims it; each provider's
+grouper is a step of its own. A new transcoder is a `transcode/<name>` package
 + a branch in `transcode.Switch`. Sub-packages cannot import `scan` (it imports
 them): the types they share live in `flow`.
 
@@ -31,10 +30,9 @@ chain), [`Walker.puml`](../../../_sb/puml/Walker.puml) (files gate and validator
 detail).
 
 ```
-fswalker -> [Apple: claims? ─ its grouper ─┐
-                    └ no ┐                  │
-            [next provider…]                ├─> files gate -> exif (N) -> mime -> validator
-                    └ no ─ generic grouper ─┘
+fswalker -> switch ─┬─ Apple Photos grouper ─┬─> files gate -> exif (N) -> mime -> validator
+                    ├─ … (other providers)  │
+                    └─ plain folder grouper ┘
          -> cheap preview -> plugins -> closer (Visible | Waiting)
 
 later, its own chain:  feeder (DB) -> transcode switch (photo | video | Live Photo) -> Ready
@@ -45,8 +43,8 @@ later, its own chain:  feeder (DB) -> transcode switch (photo | video | Live Pho
 | Step | File | In -> out | What it does |
 |---|---|---|---|
 | fswalker | `fswalker.go` | root -> `FileEvent` | Reports every file (path + stat), then the end-of-walk marker. Unreadable subdirectories are skipped and recorded. |
-| provider steps | `groups/claim.go` | `FileEvent` -> `FileEvent` | One per enabled provider, in order: a file it claims goes to its grouper, the rest to the next step; the marker to both. The gate waits for a marker per grouper (`groups.Branches`). |
-| generic grouper | `groups/generic` | `FileEvent` -> `FileGroup` | Sidecars by name, next to each other: one open group; a complete group goes out, the last one with the marker. |
+| switch | `groups/switch.go` | `FileEvent` -> `FileEvent` | A file to the grouper of the first enabled provider that claims it (the plain folder last: everything else); the marker to every grouper. |
+| plain folder grouper | `pkg/providers/folder` | `FileEvent` -> `FileGroup` | Sidecars by name, next to each other: one open group; a complete group goes out, the last one with the marker. |
 | Apple Photos grouper | `pkg/providers/apple` | `FileEvent` -> `FileGroup` | The first file of a library loads the assets from a copy of `Photos.sqlite` and forms the groups (files that exist, per the naming layout); a group goes out when its last file arrives. Key = asset UUID; the main file = the source; `Show` = the edit, the original, then Apple's derivatives. Trashed / hidden assets are not sent; incomplete groups are `Held` with the marker. Video renditions Photos downloads on request (`_2_3_o.mp4`, `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`; `_a` instead of `_o` for an edit, preferred) are `motion`, after the stills (the main file does not change); `apple.Local` finds the best file for an on-demand want; `Regroup` forms one asset's group again (the last load's DB rows + the disk now) for `importerService.Refresh`: after Photos made a file local, that asset is processed again through the gate without a walk. |
 | files gate | `filesgate.go` | `FileGroup` -> `FileGroup` | The files table (rows, stat, `CheckTime`); drops groups that need no work; deletions after every grouper's marker. |
 | exif | `exifextractor.go` | `FileGroup` -> `*RawItem` | `exiftool -all` for every file; N steps in parallel on the same channels. |
@@ -76,7 +74,7 @@ later, its own chain:  feeder (DB) -> transcode switch (photo | video | Live Pho
   one group.
 - **The marker passes through the groupers**, not around them: the gate may derive
   deletions only after every grouper has sent its last group (all files stamped).
-  It counts markers (`groups.Branches`).
+  It counts markers: one per provider's grouper.
 - **Deletions are conservative**: only after a complete walk that found files, never
   under an unreadable directory, only under the configured root. A main file gone
   -> the item is soft-deleted; a sidecar gone -> the item is `Dirty`.
@@ -120,8 +118,8 @@ later, its own chain:  feeder (DB) -> transcode switch (photo | video | Live Pho
 ## Tests
 
 - `fswalker_test.go` — walk results (complete, unreadable dir, missing root, cancel).
-- `groups/…_test.go`, `groups/generic/…_test.go`, `transcode/…_test.go` — the
-  switches and the generic grouper (names, directories, the marker).
+- `groups/…_test.go`, `pkg/providers/folder/…_test.go`, `transcode/…_test.go` — the
+  switches and the plain folder's grouper (names, directories, the marker).
 - `pkg/providers/apple/grouper_test.go` — a fixture library: edit, cloud-only, Live Photo,
   trashed, Photos' own files, a file vanishing mid-walk (held, complete next walk).
 - `apple_test.go` — a fixture library through the chain: keys, previews, nothing

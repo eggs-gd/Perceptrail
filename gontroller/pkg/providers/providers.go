@@ -2,10 +2,10 @@
 // now, Immich and others later. A library that keeps renditions of its own is asked
 // for them; we render and store nothing it keeps.
 //
-// In the import chain every provider is a step: a found file it claims goes to its
-// own grouper (a channel of its own), one it does not goes on to the next provider;
-// what nobody claims is a plain folder's (the generic grouper, last). A provider
-// that is not enabled is not in the chain at all — its files are a plain folder's.
+// In the import chain one switch asks the providers in order: a found file goes to
+// the grouper of the first that claims it — each grouper a step of its own. The
+// plain folder (providers/folder) is a provider too, the last: it claims what nobody
+// else did. A provider not enabled is not asked — its files are a plain folder's.
 //
 // On demand the web service asks the item's provider for a rendition (the viewer's
 // medium, a hover, the original) and serves what it gets: a file or bytes.

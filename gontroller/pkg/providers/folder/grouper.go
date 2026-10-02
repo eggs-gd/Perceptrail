@@ -1,9 +1,10 @@
-// Package generic groups plain folders: sidecars have the main file's name and sit
-// next to it, and the walk lists a directory in name order — so a group's files
-// come one after another. One group is open; a file that does not belong to it
-// closes it (the group goes out) and opens the next. The end-of-walk marker goes
-// out with the last group.
-package generic
+// Package folder: the plain folder — the provider that takes every file no other
+// one claimed (the last in the switch). Its grouper: sidecars have the main file's
+// name and sit next to it, and the walk lists a directory in name order — so a
+// group's files come one after another. One group is open; a file that does not
+// belong to it closes it (the group goes out) and opens the next. The end-of-walk
+// marker goes out with the last group.
+package folder
 
 import (
 	"path/filepath"

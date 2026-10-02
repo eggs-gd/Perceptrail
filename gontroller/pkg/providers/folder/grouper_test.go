@@ -1,4 +1,4 @@
-package generic
+package folder
 
 import (
 	"path/filepath"

@@ -13,6 +13,7 @@ import (
 	"perceptrail/gontroller/pkg/providers"
 	"perceptrail/gontroller/pkg/providers/apple"
 	"perceptrail/gontroller/pkg/providers/apple/photokit"
+	"perceptrail/gontroller/pkg/providers/folder"
 	"perceptrail/gontroller/pkg/scan"
 	"syscall"
 
@@ -49,13 +50,15 @@ func main() {
 		log.Fatalf("Failed to load plugins: %v", err)
 	}
 
-	// The providers, in the order of the import chain (a plain folder after them).
-	// Apple Photos: its library's DB and files; PhotoKit on demand (macOS).
+	// The providers, in the order the switch asks them; the plain folder last (it
+	// takes what nobody claimed). Apple Photos: its library's DB and files; PhotoKit
+	// on demand (macOS).
 	var ps []providers.Provider
 	if ctx.Config().Providers.Enabled("apple") {
 		ps = append(ps, apple.New(ctx.Config().Path, photokit.Library{},
 			model.NewProxy(ctx.Logger(string(app.LogDB))), ctx.Logger(string(app.LogImporter))))
 	}
+	ps = append(ps, folder.New())
 	providers.Enable(ps...)
 
 	importer := scan.NewImporterService(ctx)

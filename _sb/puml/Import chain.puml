@@ -6,10 +6,10 @@ title Import chain (gontroller): every participant is a chain step (own goroutin
 
 control "fswalker\n(entry point)" as Walker
 
-box "providers, one after another (claim: own grouper, or on)" #LightCyan
-control "Apple Photos\n(claim + grouper)" as Photos
-control "next provider..." as Next
-control "generic\n(plain folder)" as Generic
+box "providers: one switch, a grouper each" #LightCyan
+control "switch\n(first that claims)" as Groups
+control "Apple Photos\ngrouper" as Photos
+control "plain folder\ngrouper (last)" as Generic
 end box
 
 control "files gate" as Gate #LightGreen
@@ -26,7 +26,7 @@ control "closer" as Closer
 == files flow in; groups flow out one by one, steps run concurrently ==
 
 loop every file under the root
-    Walker -> Photos: file (path, stat)
+    Walker -> Groups: file (path, stat)
     note left of Walker
     Unreadable directory:
     skipped, recorded (V1)
@@ -34,15 +34,15 @@ loop every file under the root
 end
 
 alt Apple claims it (inside *.photoslibrary)
+    Groups -> Photos: file
     Photos -> Photos: first file: asset links from Photos.sqlite\n(original, render, Live Photo video); buffer of open\ngroups, a group goes out when all its files arrived
     Photos -> Gate: group (asset UUID)
-else not claimed: on to the next provider (Immich, ... later)
-    Photos -> Next: file
-    Next -> Generic: file (nobody claimed it)
+else nobody else claims it (other providers: Immich, ... later)
+    Groups -> Generic: file
     Generic -> Generic: sidecars by name, next to each other\n(buffer: one open group; a complete group goes out)
     Generic -> Gate: group
 end
-note over Photos: a provider not enabled is not in the chain:\nits files are a plain folder's
+note over Groups: a provider not enabled is not asked:\nits files are a plain folder's
 
 Gate -> DB: stat vs files table,\nCheckTime of every file
 alt unchanged and the item is Ready
@@ -71,10 +71,10 @@ end note
 
 == end of walk ==
 
-Walker -> Photos: marker (walk result)
-Photos -> Next: marker
-Next -> Generic: marker
-note right of Photos: every step: to its grouper and on
+Walker -> Groups: marker (walk result)
+Groups -> Photos: marker
+& Groups -> Generic: marker
+note right of Groups: to every grouper
 Generic -> Gate: last groups, marker
 Photos -> Gate: last groups, marker
 Gate -> DB: after the marker from every branch:\ndeletions (V2), only after a complete walk,\nnot under unreadable directories

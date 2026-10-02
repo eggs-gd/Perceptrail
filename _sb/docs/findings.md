@@ -642,10 +642,12 @@ Design: roadmap "Expensive stage".
 ### Providers as steps of the chain (2026-10-02, decided)
 
 - **How a library is told from a plain folder** (the owner): not by markers, not by
-  a typed list of sources in the config. The providers are steps of the import
-  chain, one after another: a found file a provider claims goes to its own grouper
-  (another channel), one it does not goes on; the last step is the plain folder (the
-  generic grouper). Rejected on the way: a `sources:` list with types (folder /
+  a typed list of sources in the config. Every source is a provider; one switch
+  asks the enabled ones in order and a found file goes to the grouper of the first
+  that claims it — each grouper a step of its own. The plain folder is a provider
+  too (`providers/folder`), the last: it claims what nobody else did. (First built
+  as a claim step per provider, one after another, the generic grouper apart — the
+  owner: one switch over all, and the plain folder is the same kind of grouper.) Rejected on the way: a `sources:` list with types (folder /
   library / api) — the user would have to know what each folder is; marker files
   (`.immich`, `@eaDir`, …) as a filter of their own — the claim is the provider's
   own business.
@@ -661,8 +663,9 @@ Design: roadmap "Expensive stage".
   is for when a second provider exists.
 - `pkg/providers`: `Claims`, `Grouper`, `Regroup`, `Owns`, `Levels`, `Rendition`,
   `Start`. Apple is the first: its grouper, PhotoKit and the on-demand logic moved
-  into `pkg/providers/apple`; outside it nothing says Apple (the source switch,
-  `routes/rendition.go`, the importer and `main` only see providers).
+  into `pkg/providers/apple`; the plain folder's grouper into `providers/folder`;
+  outside them nothing names a source (the switch, `routes/rendition.go`, the
+  importer and `main` only see providers).
 
 ### PhotoKit spike (2026-10-02)
 

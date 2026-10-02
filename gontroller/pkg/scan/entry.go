@@ -9,7 +9,6 @@ import (
 	"perceptrail/gontroller/pkg/providers"
 	"perceptrail/gontroller/pkg/scan/flow"
 	"perceptrail/gontroller/pkg/scan/groups"
-	"perceptrail/gontroller/pkg/scan/groups/generic"
 	"sync"
 	"time"
 
@@ -26,9 +25,9 @@ var itemsProxy model.ItemsApi
 //
 // Enter: library root ->
 // - fswalker: every file found (path + stat), then the end-of-walk marker
-// - the providers' steps (providers.Enabled, one after another: Apple Photos…) -> a
-//   provider's grouper for what it claims; the generic grouper for the rest (a plain
-//   folder): files -> whole assets (FileGroup)
+// - switch -> the grouper of the first provider that claims the file
+//   (providers.Enabled: Apple Photos…, the plain folder last): files -> whole assets
+//   (FileGroup)
 // Exit: -> FileGroup
 //
 // Enter: FileGroup ->
@@ -122,9 +121,9 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	// Channels between the steps: from -> to, what it carries. The message types
 	// are in the flow package (FileEvent, FileGroup, WalkResult, RawItem).
 
-	// fswalker -> the first provider's step: one file (path + stat), or the
-	// end-of-walk marker. Each provider's step -> its grouper (what it claims) or the
-	// next step (the rest); the last -> the generic grouper. The marker goes to both.
+	// fswalker -> switch: one file (path + stat), or the end-of-walk marker. The
+	// switch -> the grouper of the first provider that claims the file (the plain
+	// folder claims the rest); the marker to every grouper.
 	files := make(chan flow.FileEvent)
 	// groupers -> files gate: a complete group (no main file yet), and/or the
 	// grouper's marker; every grouper writes here
@@ -148,22 +147,24 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	// Find every file under the library root
 	importChain.AddStep(NewFsWalker(ctx.Config().Path, rescan, progress, files, logger))
 
-	// Files -> whole assets: the providers one after another, each takes what it
-	// claims to its own grouper; what nobody claimed is a plain folder's
+	// Files -> whole assets: a file to the grouper of the first provider that claims
+	// it (Apple Photos…, the plain folder last)
 	ps := providers.Enabled()
-	next := files
-	for _, p := range ps {
-		own, rest := make(chan flow.FileEvent), make(chan flow.FileEvent)
-		importChain.AddStep(groups.NewClaim(p, next, own, rest))
-		importChain.AddStep(chain.NewDecorator(own, grouped, p.Grouper()))
-		next = rest
+	toGroupers := make([]chan flow.FileEvent, len(ps))
+	outs := make([]chan<- flow.FileEvent, len(ps))
+	for i := range ps {
+		toGroupers[i] = make(chan flow.FileEvent)
+		outs[i] = toGroupers[i]
 	}
-	importChain.AddStep(generic.NewGrouper(next, grouped))
+	importChain.AddStep(groups.NewSwitch(ps, files, outs))
+	for i, p := range ps {
+		importChain.AddStep(chain.NewDecorator(toGroupers[i], grouped, p.Grouper()))
+	}
 
 	// Assets -> items: only what needs work, then metadata, kinds, identity. A keyed
 	// group it drops is told to whoever waits for that asset (Refresh)
 	svc := &importerService{waiters: map[string][]chan struct{}{}}
-	gate := newFilesGate(groups.Branches(ps), progress, logger)
+	gate := newFilesGate(len(ps), progress, logger)
 	gate.dropped = svc.itemDone
 	importChain.AddStep(chain.NewDecorator(grouped, stored, chain.Decorator[flow.FileGroup, flow.FileGroup](gate)))
 

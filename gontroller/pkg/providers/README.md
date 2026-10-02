@@ -4,10 +4,11 @@ Libraries read through their own means — Apple Photos now, Immich and others l
 (roadmap "Providers"). A library that keeps renditions of its own is asked for them:
 we render and store nothing it keeps.
 
-- **The import chain**: every enabled provider is a step, one after another. A
-  found file it claims (`Claims`) goes to its own grouper; one it does not, to the
-  next step; what nobody claims is a plain folder's (the generic grouper, last). A
-  provider not enabled is not in the chain: its files are a plain folder's.
+- **The import chain**: one switch asks the enabled providers in order; a found file
+  goes to the grouper of the first that claims it (`Claims`) — each grouper is a
+  step of its own. The plain folder (`providers/folder`) is a provider too, the
+  last: it claims what nobody else did. A provider not enabled is not asked: its
+  files are a plain folder's.
 - **On demand**: the web service asks the item's provider (`Of`, `Owns`) for a
   level (`Levels`: medium, hover, original) and serves what it gets — a file, or
   bytes it drew (`Rendition`). After its library made a file local, the provider
@@ -15,10 +16,11 @@ we render and store nothing it keeps.
 - **Background**: `Start` — access to the library, assets nothing shows yet.
 
 Enabled in `main` by the config (`providers: {apple: {enabled: …}}`, enabled when
-not listed).
+not listed); the plain folder always, last.
 
 | package | what |
 |---|---|
 | `providers` | the interface, the enabled list |
 | `providers/apple` | Apple Photos: the grouper (the library's DB, the naming layout), on demand (`ondemand.go`), `Regroup` |
 | `providers/apple/photokit` | PhotoKit through cgo (macOS; a stub elsewhere) |
+| `providers/folder` | the plain folder: sidecars by name; nothing on demand (the transcode renders for it) |
