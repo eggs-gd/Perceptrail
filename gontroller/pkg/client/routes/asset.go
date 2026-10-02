@@ -40,6 +40,15 @@ type clientAsset struct {
 	Frames   []rendition `json:"frames"` // a flip-book, in order (Apple's video frames)
 	// Apple Photos: better renditions asked for when needed (see rendition.go)
 	OnDemand *onDemand `json:"onDemand,omitempty"`
+	// The full size of what is seen (oriented; for an edited Photos asset its
+	// current version): a rendition this big is the full resolution — the viewer
+	// shows it as the Original, the tile's cloud says when none is here
+	Full *dims `json:"full,omitempty"`
+}
+
+type dims struct {
+	W int `json:"w"`
+	H int `json:"h"`
 }
 
 // embeddedName: the extracted embedded preview (not a file of the asset)
@@ -78,6 +87,9 @@ func toClientAsset(item *dto.ItemDto, files []*dto.FileDto) clientAsset {
 	bySize(a.Stills)
 	a.Kind, a.Duration = assetKind(item, a), item.Duration
 	a.OnDemand = onDemandOf(item)
+	if item.Size.W > 0 && item.Size.H > 0 {
+		a.Full = &dims{W: int(item.Size.W), H: int(item.Size.H)}
+	}
 	return a
 }
 

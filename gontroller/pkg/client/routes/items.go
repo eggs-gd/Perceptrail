@@ -56,8 +56,8 @@ var syncEpoch string
 // delta brings only changed items, the kept ones would never get the field.
 // 2: asset.onDemand (Apple Photos); 3: asset.onDemand.original; 4: the original
 // for every Photos item (the biggest of what is seen, the edit); 5: the on-demand
-// URLs carry the version (?v=).
-const contractVersion = "5"
+// URLs carry the version (?v=); 6: asset.full (the full size of what is seen).
+const contractVersion = "6"
 
 func RegisterItemsRoutes(segment string, e *echo.Echo, logger *l.Logger) {
 	if itemsProxy == nil {

@@ -1,11 +1,13 @@
 package routes
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -191,5 +193,40 @@ func TestHydrateWaiting(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "resources/derivatives/H/H1111111-WAITING_1_102_o.jpeg")); err != nil {
 		t.Error("the image is not in the library")
+	}
+}
+
+// The info panel's files: every file of the group, sidecars too, each downloadable;
+// the asset carries the full size of what is seen
+func TestItemFilesAndFull(t *testing.T) {
+	e := echo.New()
+	RegisterAssetsRoutes("/assets", e, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	if _, err := itemsProxy.UpdateItem(&dto.ItemDto{Guid: "FILES-1", State: dto.Visible}); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []struct{ name, role string }{{"a.heic", dto.RoleOriginal}, {"a.xmp", dto.RoleMeta}} {
+		file, err := filesProxy.CreateFile(dto.ItemEntry{Path: "/lib/" + f.name, Name: f.name, Size: 10})
+		if err != nil {
+			t.Fatal(err)
+		}
+		file.LinkedTo, file.Role = "FILES-1", f.role
+		if _, err := filesProxy.UpdateFile(file); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/items/FILES-1/files", nil))
+	var files []itemFile
+	if err := json.Unmarshal(rec.Body.Bytes(), &files); err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 2 || files[1].Role != dto.RoleMeta || !strings.HasPrefix(files[1].URL, "/assets/FILES-1/") {
+		t.Errorf("files %+v, want the original and its sidecar, downloadable", files)
+	}
+
+	item := &dto.ItemDto{Guid: "FULL-1"}
+	item.Size.W, item.Size.H = 3024, 4032
+	if a := toClientAsset(item, nil); a.Full == nil || a.Full.W != 3024 || a.Full.H != 4032 {
+		t.Errorf("full %+v, want the item's size", a.Full)
 	}
 }
