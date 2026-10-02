@@ -639,6 +639,209 @@ Design: roadmap "Expensive stage".
   `time.Time` — scanning into a float failed and would have dropped the whole
   library. Read it as `CAST(… AS REAL)`.
 
+### PhotoKit spike (2026-10-02)
+
+Roadmap step 0. `_sb/spikes/photokit`: Go + cgo (Objective-C), the Info.plist put into
+the binary by the linker; run from the user's terminal on the dev library.
+
+- **Photos normalises the library.** Three unedited HEICs, cloud-only (original and
+  medium both `-1/1`): `requestImageForAsset` ≤ 2048 px with network allowed returned
+  1536×2048 in **0.92 / 0.59 / 0.78 s**; after it recipe 65741 is `1/1` in the DB and
+  `resources/derivatives/<X>/<UUID>_1_102_o.jpeg` exists with exactly its
+  `ZDATALENGTH` bytes (956 659 / 848 806 / 803 251). The original (recipe 0) stays in
+  iCloud. A request without network right after: the image at once.
+- Without network a cloud-only asset fails at once: `PHPhotosErrorDomain` 3164
+  (network access required), `PHImageResultIsInCloudKey` — a free "is it local".
+- Photos serves the best local thing first: an edited HEIC whose edit
+  (`FullSizeRender.heic`, recipe 65938, 1991×2557) is local got the edit scaled to
+  2048 in 0.16 s, nothing downloaded.
+- Recipe 65741's file is `_1_102_o.jpeg` (the grouper's `roleLarge2`), not
+  `_1_105_c.jpeg` (that one is recipe 65747, ~768×1024). The tiles need no request:
+  `masters/<X>/<UUID>_4_5005_c.jpeg` (~100 KB, 360×480) is local even for cloud-only
+  assets.
+- `PHAssetResource` lists only the original, the edit and its adjustments — not
+  Photos' derivatives: whether a rendition is local is read from the DB / disk (or
+  answered by a request without network).
+- **The permission goes to the terminal** that starts the binary (its "responsible"
+  app): a terminal with Photos access ran it without a prompt, a new one asked for
+  the terminal itself. So a rebuild does not drop it; the embedded Info.plist does not
+  matter there. Not started from a terminal (launchd) — still to check.
+- **Videos and Live Photos — the same: Photos normalises the library**, the file
+  comes as `file://…/resources/derivatives/…` (not streamed); the original stays in
+  iCloud unless the mode asks for it. By `PHVideoRequestOptions.deliveryMode`
+  (short iPhone videos, cloud-only):
+
+  | mode | recipe → file | codec | size | time |
+  |---|---|---|---|---|
+  | fast | 131081 → `_2_4_o.mp4` | H.264 640×360 | ~0.7 MB | 0.9 s |
+  | medium | 131475 → `_2_201_o.mov` (iPhone), 131079 → `_2_3_o.mp4` (others) | **HEVC** / H.264 720p | 2–5 MB | 1.2–1.6 s |
+  | automatic, high | the original → `originals/<X>/<UUID>.mov` | HEVC 1080p | 8–12 MB | 2.3–2.8 s |
+
+  For an iPhone video no mode hands over the H.264 720p (131079), though iCloud has
+  it. Automatic / high download the original (it becomes local): avoid them except
+  for the Original button. A Live Photo (`requestLivePhotoForAsset`, 0.9–1 s) makes
+  its motion local: 131275 → `_2_101_o.mov`, H.264 ~650×870, ~1.8 MB; the original
+  `.MOV` stays in iCloud.
+- **The `cvt` frames** (`derivatives/cvt/<X>/<UUID>/…_cvt_tNNNN.jpeg`, 400×600,
+  ~48 KB) are not a recipe in the DB and no request makes them: they come from
+  Photos' own background analysis. Their number follows the length (up to 10;
+  0–2 for a few seconds), and a third of the videos have none, whatever the length;
+  Live Photos never.
+- The grouper does not know the video renditions' names yet (`_2_3_o.mp4`,
+  `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`): the walk would not find what Photos
+  downloaded.
+- **HEVC in browsers, 2026** (checked on the user's word: "as basic as H.264 by
+  now"): Safari always; Chrome / Edge since 107 on Windows and macOS (hardware
+  decode); Firefox 134 Windows, 136 macOS, 137 Linux (VA-API, MP4 only). Gaps: Chrome
+  on Linux (VA-API only, extra packages and flags), no software decoder in Chrome or
+  Firefox (old hardware), some Windows installs need the HEVC extension. So HEVC is
+  the viewer's default; the 360p H.264 we fetch for the sheet covers the gaps; no
+  H.264 720p transcode of our own.
+- **Videos, decided** (the user): the sheet's hover needs only `fast` (360p),
+  asked for on hover; when both the video and `cvt` frames are there, hover plays
+  the video. `medium` on open, as a photo's medium rendition. A Live Photo's motion
+  likewise: asked for on hover, played on hover.
+- **On demand, never in bulk** (the user): the sheet has its tiles already, the
+  medium rendition is needed only when a photo opens — that request triggers the
+  download, the viewer swaps the image in when it comes; 1–3 rows around it are asked
+  for ahead. So the limits of asking for thousands were not measured: nothing will.
+- **Assets with nothing local** (Codex, PR #21): on-open-only would never reach
+  them — without a viewable file an item is Waiting, not on the sheet, so nobody
+  opens it (7 of 6 427 in the dev library). `HydrateWaiting` asks Photos for their
+  image in the background (every minute, each asset once per run); the next walk
+  shows them. Not bulk: only what cannot be shown at all.
+- **First run on the owner's server — nothing changed in the UI** (PR #21): the
+  server sent `asset.onDemand`, but a delta brings only changed items — the client's
+  kept copy never got the new field, so nothing asked. The sync epoch now carries a
+  contract version (`items.go` `contractVersion`): a change to what an item carries
+  bumps it, and every client takes everything once — **in place** (the owner: "this is
+  critical"): the epoch is `<database>.<contract>`; another contract over the same
+  database puts every item over the kept copy and deletes, after the stream, the ones
+  it did not bring — the sheet never empties, a direct link keeps working. Only
+  another database starts from an empty table. The count check heals the same way
+  now. Checked: a new contract — the layout stayed at 6 991 rows through the sync, an
+  item the server did not have was deleted; another database — emptied and refilled.
+- **An edited Live Photo's motion is `_2_101_a.mov`** (`_a`: of the edit), not
+  `_2_101_o.mov`: the owner's first hover on one gave a 404 — the file was there under
+  the other name (with `_1_102_a.jpeg`, the edit's still). The `_a` renditions win
+  (Photos shows the edit); for videos `_2_3_a.mp4`, `_2_4_a.mp4`, `_2_201_a.mov` are
+  assumed by analogy, not seen yet.
+- **Chrome says no to a bare `hvc1`**: `canPlayType('video/mp4; codecs="hvc1"')` is
+  `""`, with `hvc1.1.6.L93.B0` it is `probably` (and it plays). The client asked for
+  `?hevc=0` and got the 360p — "videos are always small" — and counted local HEVC
+  files as unplayable. The server knows only the FourCC (exiftool's
+  `CompressorID`): the client asks for HEVC as Main profile, level 3.1.
+- **The viewer's video sized as a photo** (the owner): it had no box — its natural
+  size, the stretch switch did nothing. Now a box like a photo's (its pixels once
+  loaded, as big as the screen until then; stretched if switched on). A Live Photo's
+  motion was 300×150 in a corner: the stage's `.stage video { width: auto }` beat
+  `.live { width: 100% }` on specificity — `.asset.view video` fills the box now.
+- **The viewer picks from what is here; the cloud means "full resolution not here"**
+  (the owner, decided). The asset carries its full size (`full`: the current
+  version's, oriented — contract 6). Opening: the smallest local image covering our
+  comfortable size (the preview's ~2048 px long side, or the full size if smaller)
+  is shown as it is — no 360 px first, no request; only when nothing here is that
+  big is the medium asked for. As big as the full size: it is the Original, the
+  switch is lit (nothing to switch to); else the switch asks for it. A video whose
+  original is here and plays: played at once, lit. The tile's cloud: no file of the
+  asset is as big as the full size (an original, an edit's render, a full-size
+  derivative all count). Info → Files lists every file of the group (sidecars too,
+  `/items/:guid/files`; a video's frames as one set — "10 frames · 360 × 640 ·
+  372 KB" — unfolding to each), each downloadable (`?download=1`: `Content-Disposition`,
+  the download attribute does not work across origins). Checked on the test pair: a
+  local 1600 px original — shown at once, lit, "full resolution here"; a cloud-only
+  photo with 480 px local — shown, the medium asked over it, the switch off.
+- **A cloud-only original is not described** (decided, the owner): we keep no row
+  for a file that is not on disk — the item knows only its full size (`full`), kind
+  and metadata, not its name, format or weight. Describing a provider's original
+  (`source: {name, mime, size, here}` from Photos' DB) waits for a second provider:
+  for local files the original is what is on disk, every provider has its own
+  shape, and the abstraction comes from two or more of them, not from one.
+- **A full-size derivative is not the original**: a cloud-only PNG screenshot
+  (1 206 × 2 622) has a local JPEG derivative of the same size (recipe 65739,
+  `_1_101_o.jpeg`): the Original (Photos' current version at full size) is drawn
+  from it, the PNG is not downloaded — the cloud stays, as it says where the
+  original file is. And the request took 10 s: the asset was processed again, the
+  gate dropped it (nothing changed) and the request waited for an item that never
+  came. The gate tells now which keyed group it dropped (`dropped`), `Refresh`
+  answers at once.
+- **The cloud went only on F5** (the owner): the server had the original, a reload
+  showed it, the live update did not. Dexie's `updating` hook gives the changes by
+  key path (`{"asset.original": …}`); `{...item, ...mods}` put them beside the item as
+  keys with dots and left `asset` as it was — fine while only top-level fields
+  changed (date, size), lost for anything inside the asset. The changes are applied
+  by path now (`Dexie.setByKeyPath`). Checked: an original given to an item on the
+  server — the tile's cloud went with the delta, no reload.
+- **A cached answer looked like a bug**: after the Original became the current
+  version, the owner still saw edited screenshots unedited — the browser served the
+  old answer of the same URL (cached for a day); the server's own answer matched the
+  edit's render (checked pixel by pixel). The contract version is part of the
+  on-demand URLs now (`?v=5`; the change itself is contract 5, so the kept items get the new URLs): what they answer changes only with the contract, and
+  a new one is a new URL.
+- **The Original is the biggest of what the user sees** (the owner, decided): edits
+  and their history are the library's feature, not ours — we do not follow each
+  provider's specifics. From Photos: its current version (the edit, cropped) at full
+  resolution, asked for every Photos item (a local unedited original is not what is
+  seen); elsewhere the biggest edit, else the original. The unedited original and
+  its file download (`?file=1`) are gone (contract version 4).
+- **The cloud and the Original** (the owner asked what each means): the tile's cloud
+  meant "no original" for a photo but "no video at all" for a video or a Live
+  Photo — it vanished after the first hover. Now one meaning for every kind: the
+  original is only in iCloud. The Original switch: a local original the browser
+  shows; otherwise Photos' (`rendition/original`: the unedited original drawn at
+  full resolution as JPEG — so a HEIC shows in Chrome too — and the file itself on
+  `?file=1` for the download); a Live Photo's photo always comes from Photos (its
+  own original in the DB is its video); a video switches to its original file. Each
+  makes Photos download the original into its library — the cloud goes after the
+  next walk. Contract version 3 (`onDemand.original`).
+- **"I showed the original and the cloud is still there"** (the owner): the walk did
+  pick the originals up (items updated a few minutes later), but it walks a minute
+  after the last one was processed, and the client asked for a delta only on a
+  navigation or a return to the tab — back in the list before the walk, nothing
+  told it later. First fix (a successful request cut the walk's pause short, the
+  page polled every 20 s) — rejected by the owner: a whole walk for one known
+  photo. Now **one asset is processed again**: the Apple grouper keeps the DB rows
+  of its last load and forms that asset's group from them and the disk now
+  (`Regroup` — no walk, no DB read; the DB's metadata still wins over the files'
+  EXIF); the importer hands it to the files gate like any group (`Refresh`: only
+  what changed passes; deletions are untouched — they come with the walk's marker;
+  a walk sending the same asset at the same time processes it twice into the same
+  item) and waits until the item leaves the closer. The Original's answer waits for
+  it (≤ 10 s), the client asks for the delta once the original has loaded — the
+  cloud is gone on the way back to the list. A medium or a hover refreshes in the
+  background. The download next to Photos' original is gone: it is a JPEG every
+  browser shows — the download stays only as the fallback for a local original the
+  browser cannot show.
+- **Viewer switches** (the owner): a Live Photo's motion has one button with three
+  states — off → once → loop (`viewerPrefs.liveMode`; the old switch carries over:
+  off stays off, on is once). The wheel zoom is gone altogether (the owner: it
+  worked badly — Immich and Google do it better, each differently): roadmap.
+- **Hover UX** (the owner, as Immich and Google Photos): the badge stays while the
+  tile moves, a ring turns around its mark while the video comes (shown only after
+  300 ms: a video that starts at once made it blink), the video fades in
+  over the frames (200 ms).
+- **A local HEIC original leaves no file**: asked for the image, Photos draws it
+  from the original on disk and writes no derivative — the viewer got a 404. The
+  image PhotoKit hands over comes back as JPEG (`pk_image`) and is served when no
+  file appeared (not kept; the browser caches it). A failed request serves nothing.
+- **In the server** (PR #21): the request does not reprocess anything — the
+  endpoint serves the file from the library right after Photos made it local, and
+  the next walk adds it to the group (a new file), so the item and the other tabs get
+  it through the delta. The video renditions go after the stills in the group: a
+  cloud-only video's main file stays its still. Asking for access is done only when
+  a `*.photoslibrary` is under the root (no prompt for a folder library). Not
+  checked in the agent's shell (no Photos access there); the user's server is the
+  test.
+- Traps: asynchronous PhotoKit results are delivered on the main queue, which a
+  command-line tool does not run — the request never came back (synchronous requests
+  from a cgo thread work); yet Photos finished the download it had started. In the
+  server: images synchronous, videos come on any queue, Live Photos on the main queue
+  — `photokit` locks main to the main thread (`LockOSThread` in `init`) and
+  `RunMain` turns its run loop in place of waiting for a stop. The `.m` file is
+  `photokit_darwin.m`: without the suffix a Linux build (no cgo in the package)
+  refuses it. `NSImage`
+  sizes are points (×2 on Retina): the bitmap's pixels come from its `CGImage`.
+
 ### Apple Photos library: spike (2026-09-30)
 
 On a copy of the dev library's `Photos.sqlite` (read with `mode=ro`) and a list of

@@ -22,6 +22,8 @@ type FilesApi interface {
 	UnignoreFiles() (int64, error)
 	// CountLinkedFiles: how many files an item still has
 	CountLinkedFiles(guid string) (int64, error)
+	// GetLinkedFiles: every file of an item (its group: sidecars, derivatives…)
+	GetLinkedFiles(guid string) ([]*dto.FileDto, error)
 	GetFileByID(id uint) (*dto.FileDto, error)
 }
 
@@ -75,6 +77,11 @@ func (p *proxy) DeleteFiles(files []*dto.FileDto) error {
 func (p *proxy) UnignoreFiles() (int64, error) {
 	res := p.db.Model(&dto.FileDto{}).Where("linked_to = ?", "-").Update("linked_to", "")
 	return res.RowsAffected, res.Error
+}
+
+func (p *proxy) GetLinkedFiles(guid string) ([]*dto.FileDto, error) {
+	var files []*dto.FileDto
+	return files, p.db.Where("linked_to = ?", guid).Order("id").Find(&files).Error
 }
 
 func (p *proxy) CountLinkedFiles(guid string) (int64, error) {

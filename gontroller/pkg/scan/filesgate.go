@@ -27,6 +27,9 @@ type filesGate struct {
 	markers  int
 	held     []string // files the groupers held back in this walk: not gone
 	progress *progress
+	// dropped hears of a keyed group the gate let not through (nothing to do): one
+	// asset processed again on demand (importer Refresh) answers at once
+	dropped func(key string)
 }
 
 // NewFilesGate: branches is the number of groupers that send an end-of-walk marker
@@ -45,6 +48,8 @@ func (g *filesGate) Decorate(in flow.FileGroup) (flow.FileGroup, error) {
 		out.Key, out.Show = in.Key, stored(in.Show, out.Files)
 		out.Meta, out.MetaHash, out.Kind = in.Meta, in.MetaHash, in.Kind
 		g.progress.passed()
+	} else if in.Key != "" && in.Files != nil && g.dropped != nil {
+		g.dropped(in.Key)
 	}
 	if in.Done != nil {
 		g.held = append(g.held, in.Held...)

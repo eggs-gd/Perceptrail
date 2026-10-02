@@ -1,7 +1,7 @@
 <script lang="ts">
     import type {Asset} from '$lib/stores';
-    import {assetUrl, canShowImage, hasImage, originalImage, playableVideos} from './asset';
-    import {toggleViewerPref, viewerPrefs} from './viewerPrefs.svelte';
+    import {assetUrl, canShowImage, hasImage, localFullVideo, originalImage, originalOnDemand, playableVideos, viewerChoice} from './asset';
+    import {cycleLiveMode, toggleViewerPref, viewerPrefs} from './viewerPrefs.svelte';
     import PerceptorButtons from './PerceptorButtons.svelte';
 
     interface Props {
@@ -20,19 +20,33 @@
 
     // What the viewer can do with this asset decides the buttons
     let playable = $derived(playableVideos(asset).length > 0);
-    let live = $derived(asset.kind === 'live' && playable);
+    // Apple Photos: a video or a motion not here yet is asked for when it plays
+    let live = $derived(asset.kind === 'live' && (playable || !!asset.onDemand?.hover));
     // A playable video is shown as itself: no switch; one the browser cannot play
     // is downloaded
-    let video = $derived(asset.kind === 'video' && playable);
-    let image = $derived(video ? undefined : originalImage(asset));
-    let other = $derived(!video && !image ? asset.original : null);
-    // An image is shown (not a playing video): its size can be stretched
-    let still = $derived(!video && hasImage(asset));
+    let video = $derived(asset.kind === 'video' && (playable || !!asset.onDemand));
+    // From Photos: the biggest of what is seen (its current version) — always asked
+    // there; elsewhere the biggest edit or the original here
+    let fromPhotos = $derived(originalOnDemand(asset));
+    let image = $derived(video || fromPhotos ? undefined : originalImage(asset));
+    let other = $derived(!video && !image && !fromPhotos ? asset.original : null);
+    // A video's Original: its own file, here or from Photos
+    let videoOriginal = $derived(video && (!!fromPhotos || !!asset.original?.mime.startsWith('video/')));
+    // What the viewer shows at once is the full resolution already: the switch is lit
+    // and there is nothing bigger to switch to
+    let full = $derived(asset.kind === 'video' ? !!localFullVideo(asset) : viewerChoice(asset).full);
+    let originalOn = $derived(full || showOriginal);
+    // A photo or a video is shown: its size can be stretched
+    let still = $derived(video || hasImage(asset));
 
     const tooltips = {
-        live: () => (viewerPrefs.autoplayLive ? 'Live Photo plays on open' : 'Live Photo does not play on open'),
+        live: () => ({
+            off: 'Live Photo does not play on open',
+            once: 'Live Photo plays once on open',
+            loop: 'Live Photo plays in a loop',
+        })[viewerPrefs.liveMode],
         video: () => (viewerPrefs.autoplayVideo ? 'Video plays on open' : 'Video does not play on open'),
-        stretch: () => (viewerPrefs.stretchSmall ? 'Small images fill the screen' : 'Small images at their own size'),
+        stretch: () => (viewerPrefs.stretchSmall ? 'Small photos and videos fill the screen' : 'Small photos and videos at their own size'),
     };
 </script>
 
@@ -43,6 +57,20 @@
                   stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
     </a>
+{/snippet}
+
+{#snippet originalSwitch()}
+    <button class="tool" class:on={originalOn}
+            title={full ? 'The original: shown at full resolution' : showOriginal ? 'Showing the original' : 'Show the original'}
+            aria-label="Original" aria-pressed={originalOn} onclick={() => { if (!full) ontoggleoriginal(); }}>
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+            <rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor"
+                  stroke-width="1.6"/>
+            <path d="M3.5 16.5l5-5 4 4 2.5-2.5 5.5 5.5" fill="none" stroke="currentColor"
+                  stroke-width="1.6" stroke-linejoin="round"/>
+            <circle cx="15.5" cy="9.5" r="1.6" fill="currentColor"/>
+        </svg>
+    </button>
 {/snippet}
 
 {#snippet slash(on: boolean)}
@@ -56,14 +84,23 @@
     <PerceptorButtons onpick={onperceptor}/>
     <span class="divider"></span>
     {#if live}
-        <button class="tool" class:on={viewerPrefs.autoplayLive} title={tooltips.live()} aria-label={tooltips.live()}
-                aria-pressed={viewerPrefs.autoplayLive} onclick={() => toggleViewerPref('autoplayLive')}>
+        <!-- One button, three states: off → once → loop -->
+        <button class="tool" class:on={viewerPrefs.liveMode !== 'off'} title={tooltips.live()} aria-label={tooltips.live()}
+                onclick={cycleLiveMode}>
             <svg viewBox="0 0 24 24" aria-hidden="true">
                 <circle cx="12" cy="12" r="3" fill="currentColor"/>
                 <circle cx="12" cy="12" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/>
-                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"
-                        stroke-dasharray="1.6 2.4"/>
-                {@render slash(viewerPrefs.autoplayLive)}
+                {#if viewerPrefs.liveMode === 'loop'}
+                    <!-- The outer ring as an arrow going round -->
+                    <path d="M21.5 12a9.5 9.5 0 1 1-2.8-6.7" fill="none" stroke="currentColor" stroke-width="1.6"
+                          stroke-linecap="round"/>
+                    <path d="M19.2 1.8v3.8h-3.8" fill="none" stroke="currentColor" stroke-width="1.6"
+                          stroke-linecap="round" stroke-linejoin="round"/>
+                {:else}
+                    <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="1.6"
+                            stroke-dasharray="1.6 2.4"/>
+                {/if}
+                {@render slash(viewerPrefs.liveMode !== 'off')}
             </svg>
         </button>
     {/if}
@@ -95,25 +132,22 @@
             </svg>
         </button>
     {/if}
-    {#if image}
+    {#if full}
+        {@render originalSwitch()}
+    {:else if image}
         <!-- Tested when the item opens: the switch if the browser shows it, else a download -->
         {#await canShowImage(image) then shown}
             {#if shown}
-                <button class="tool" class:on={showOriginal}
-                        title={showOriginal ? 'Showing the original' : 'Show the original'}
-                        aria-label="Original" aria-pressed={showOriginal} onclick={ontoggleoriginal}>
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor"
-                              stroke-width="1.6"/>
-                        <path d="M3.5 16.5l5-5 4 4 2.5-2.5 5.5 5.5" fill="none" stroke="currentColor"
-                              stroke-width="1.6" stroke-linejoin="round"/>
-                        <circle cx="15.5" cy="9.5" r="1.6" fill="currentColor"/>
-                    </svg>
-                </button>
+                {@render originalSwitch()}
             {:else}
                 {@render download(assetUrl(image))}
             {/if}
         {/await}
+    {:else if fromPhotos && !video}
+        <!-- From Photos: drawn as JPEG, so every browser shows it — no download needed -->
+        {@render originalSwitch()}
+    {:else if videoOriginal}
+        {@render originalSwitch()}
     {:else if other}
         {@render download(assetUrl(other))}
     {/if}

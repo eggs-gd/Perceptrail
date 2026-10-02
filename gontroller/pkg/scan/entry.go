@@ -10,6 +10,7 @@ import (
 	"perceptrail/gontroller/pkg/scan/groups"
 	"perceptrail/gontroller/pkg/scan/groups/apple"
 	"perceptrail/gontroller/pkg/scan/groups/generic"
+	"sync"
 	"time"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -72,6 +73,13 @@ type importerService struct {
 	progress *progress
 
 	importChain chain.ChainProcessor
+
+	// One asset again (Refresh): the Apple grouper forms its group, the gate takes it
+	// like any other; whoever waits hears when its item leaves the chain
+	apple     *apple.Grouper
+	grouped   chan flow.FileGroup
+	waitersMu sync.Mutex
+	waiters   map[string][]chan struct{}
 }
 
 func NewImporterService(ctx app.AppContext) *importerService {
@@ -142,10 +150,15 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	// Files -> whole assets, a grouper per source
 	importChain.AddStep(groups.NewSourceSwitch(files, toGeneric, toApple))
 	importChain.AddStep(generic.NewGrouper(toGeneric, grouped))
-	importChain.AddStep(apple.NewGrouper(toApple, grouped, logger))
+	appleGrouper := apple.NewDecorator(logger)
+	importChain.AddStep(chain.NewDecorator(toApple, grouped, appleGrouper))
 
-	// Assets -> items: only what needs work, then metadata, kinds, identity
-	importChain.AddStep(NewFilesGate(groups.Branches, progress, grouped, stored, logger))
+	// Assets -> items: only what needs work, then metadata, kinds, identity. A keyed
+	// group it drops is told to whoever waits for that asset (Refresh)
+	svc := &importerService{waiters: map[string][]chan struct{}{}}
+	gate := newFilesGate(groups.Branches, progress, logger)
+	gate.dropped = svc.itemDone
+	importChain.AddStep(chain.NewDecorator(grouped, stored, chain.Decorator[flow.FileGroup, flow.FileGroup](gate)))
 
 	// The rest reports to errProcessing: progress counts the groups in flight
 	processing := chain.NewChainProcessor(errProcessing)
@@ -163,13 +176,67 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	// steps keep errProcessing
 	importChain.AddStep(processing)
 
-	return &importerService{
-		appCtx:      ctx,
-		errch:       errch,
-		items:       items,
-		progress:    progress,
-		importChain: importChain,
+	svc.appCtx, svc.errch, svc.items, svc.progress = ctx, errch, items, progress
+	svc.importChain, svc.apple, svc.grouped = importChain, appleGrouper, grouped
+	return svc
+}
+
+// Refresh processes one Apple Photos asset again, now — Photos has just made a file
+// of it local (on demand): no walk of the whole library for one photo. Its group
+// goes to the gate like any group (only what changed passes; deletions are not
+// touched — they come with the walk's marker; a walk sending the same asset at the
+// same time just processes it twice into the same item). Waits until the item has
+// left the chain or the gate dropped the group (nothing changed: Photos drew from
+// what was local), at most wait; false if neither (no such asset, too slow) — the
+// next walk catches up anyway.
+func (s *importerService) Refresh(uuid string, wait time.Duration) bool {
+	group, ok := s.apple.Regroup(uuid)
+	if !ok {
+		return false
 	}
+	done := make(chan struct{})
+	s.waitersMu.Lock()
+	s.waiters[uuid] = append(s.waiters[uuid], done)
+	s.waitersMu.Unlock()
+	defer s.dropWaiter(uuid, done)
+
+	timeout := time.After(wait)
+	select {
+	case s.grouped <- group:
+	case <-timeout:
+		return false
+	}
+	select {
+	case <-done:
+		return true
+	case <-timeout:
+		return false
+	}
+}
+
+func (s *importerService) dropWaiter(uuid string, done chan struct{}) {
+	s.waitersMu.Lock()
+	defer s.waitersMu.Unlock()
+	ws := s.waiters[uuid]
+	for i, w := range ws {
+		if w == done {
+			s.waiters[uuid] = append(ws[:i], ws[i+1:]...)
+			break
+		}
+	}
+	if len(s.waiters[uuid]) == 0 {
+		delete(s.waiters, uuid)
+	}
+}
+
+// itemDone: an item left the chain — its waiters hear of it
+func (s *importerService) itemDone(guid string) {
+	s.waitersMu.Lock()
+	defer s.waitersMu.Unlock()
+	for _, w := range s.waiters[guid] {
+		close(w)
+	}
+	delete(s.waiters, guid)
 }
 
 func (s *importerService) Start(parentCtx context.Context) {
@@ -181,8 +248,9 @@ func (s *importerService) Start(parentCtx context.Context) {
 	go func() {
 		for {
 			select {
-			case <-s.items:
+			case it := <-s.items:
 				s.progress.finished()
+				s.itemDone(it.Guid)
 			case <-ctx.Done():
 				return
 			}

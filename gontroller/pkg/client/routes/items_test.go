@@ -76,6 +76,10 @@ func TestItemsDelta(t *testing.T) {
 		return got, cursor, rec.Header()
 	}
 
+	// The cursor counts from a response's start, compared as julian days (~1 ms):
+	// an item written in the same millisecond comes again in the next delta (on
+	// purpose — >=, nothing missed); the test steps past it
+	time.Sleep(10 * time.Millisecond)
 	full, cursor, h := get("")
 	if len(full) != 4 || h.Get(headerEpoch) == "" || cursor == "" {
 		t.Fatalf("full: %v, cursor %q, headers %v", full, cursor, h)

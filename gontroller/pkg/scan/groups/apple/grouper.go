@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"perceptrail/gontroller/pkg/model/dto"
 
@@ -34,6 +35,11 @@ import (
 type Grouper struct {
 	logger *l.Logger
 	libs   map[string]*library // by bundle path, loaded once per walk
+
+	// The libraries as last loaded, kept between walks: one asset's group can be
+	// formed again without reading the DB (Regroup)
+	lastMu sync.Mutex
+	last   map[string]*library
 }
 
 func NewGrouper(chin <-chan flow.FileEvent, chout chan<- flow.FileGroup, logger *l.Logger) chain.Processor {
@@ -42,7 +48,7 @@ func NewGrouper(chin <-chan flow.FileEvent, chout chan<- flow.FileGroup, logger 
 
 // NewDecorator: the grouper itself, for tests and custom wiring
 func NewDecorator(logger *l.Logger) *Grouper {
-	return &Grouper{logger: logger, libs: map[string]*library{}}
+	return &Grouper{logger: logger, libs: map[string]*library{}, last: map[string]*library{}}
 }
 
 func (g *Grouper) Decorate(ev flow.FileEvent) (flow.FileGroup, error) {
@@ -71,6 +77,9 @@ func (g *Grouper) Decorate(ev flow.FileEvent) (flow.FileGroup, error) {
 			lib = &library{byPath: map[string]*asset{}, failed: true}
 		} else {
 			g.logger.Info("Photos library loaded", l.String("library", root), l.Int("assets", len(lib.assets)))
+			g.lastMu.Lock()
+			g.last[root] = lib
+			g.lastMu.Unlock()
 		}
 		g.libs[root] = lib
 	}
@@ -93,6 +102,16 @@ func (g *Grouper) Decorate(ev flow.FileEvent) (flow.FileGroup, error) {
 
 func (g *Grouper) Stop() {}
 
+// HasLibrary: root is a Photos library or holds one at its top (where Photos keeps
+// it: ~/Pictures) — then Photos is worth asking for access
+func HasLibrary(root string) bool {
+	if strings.HasSuffix(strings.ToLower(root), ".photoslibrary") {
+		return true
+	}
+	m, _ := filepath.Glob(filepath.Join(root, "*.photoslibrary"))
+	return len(m) > 0
+}
+
 // BundleRoot: the *.photoslibrary directory path contains, "" if none
 func BundleRoot(path string) string {
 	parts := strings.Split(filepath.ToSlash(path), "/")
@@ -107,8 +126,10 @@ func BundleRoot(path string) string {
 type library struct {
 	assets []*asset
 	byPath map[string]*asset
-	failed bool     // the DB did not load
-	held   []string // a failed library's files, as walked
+	root   string
+	rows   map[string]assetRow // every asset of the DB by UUID (Regroup), files or not
+	failed bool                // the DB did not load
+	held   []string            // a failed library's files, as walked
 }
 
 // pending: the files of groups that did not go out; all of a failed library's
@@ -173,7 +194,19 @@ const (
 	roleMedium2     // ~1000 px
 	roleThumb       // the small thumbnail (~360×640)
 	roleVideoPoster // .THM (32×32)
-	roleFrame       // cvt/…/_cvt_tNNNN.jpeg: frames of a video (a flip-book)
+	// Video renditions Photos downloads on request (PhotoKit): after the stills, so
+	// the main file does not change when one appears. _a: of the user's edit (what
+	// Photos shows; seen for a Live Photo's motion, assumed for videos), _o: of the
+	// original.
+	roleLiveMotionEdit  // _2_101_a.mov
+	roleVideoHEVCEdit   // _2_201_a.mov
+	roleVideoMediumEdit // _2_3_a.mp4
+	roleVideoSmallEdit  // _2_4_a.mp4
+	roleVideoHEVC       // _2_201_o.mov: 720p HEVC (an iPhone video's medium)
+	roleVideoMedium     // _2_3_o.mp4: 720p H.264 (another video's medium)
+	roleVideoSmall      // _2_4_o.mp4: 360p H.264 (fast)
+	roleLiveMotion      // _2_101_o.mov: a Live Photo's motion, H.264
+	roleFrame           // cvt/…/_cvt_tNNNN.jpeg: frames of a video (a flip-book)
 )
 
 // fileRole: what the file is to the asset, for the client
@@ -185,6 +218,9 @@ func (r role) fileRole() string {
 		return dto.RoleEdit
 	case roleFrame:
 		return dto.RoleFrames
+	case roleLiveMotionEdit, roleVideoHEVCEdit, roleVideoMediumEdit, roleVideoSmallEdit,
+		roleVideoHEVC, roleVideoMedium, roleVideoSmall, roleLiveMotion:
+		return dto.RoleMotion
 	default:
 		return dto.RoleStill
 	}
@@ -211,7 +247,53 @@ func candidates(root, uuid, dir, filename string) []candidate {
 		{filepath.Join(deriv, uuid+"_1_106_c.jpeg"), roleMedium2},
 		{filepath.Join(root, "resources", "derivatives", "masters", x, uuid+"_4_5005_c.jpeg"), roleThumb},
 		{filepath.Join(deriv, uuid+".THM"), roleVideoPoster},
+		{filepath.Join(deriv, uuid+"_2_101_a.mov"), roleLiveMotionEdit},
+		{filepath.Join(deriv, uuid+"_2_201_a.mov"), roleVideoHEVCEdit},
+		{filepath.Join(deriv, uuid+"_2_3_a.mp4"), roleVideoMediumEdit},
+		{filepath.Join(deriv, uuid+"_2_4_a.mp4"), roleVideoSmallEdit},
+		{filepath.Join(deriv, uuid+"_2_201_o.mov"), roleVideoHEVC},
+		{filepath.Join(deriv, uuid+"_2_3_o.mp4"), roleVideoMedium},
+		{filepath.Join(deriv, uuid+"_2_4_o.mp4"), roleVideoSmall},
+		{filepath.Join(deriv, uuid+"_2_101_o.mov"), roleLiveMotion},
 	}
+}
+
+// Want: what the client asks for on demand (the viewer, a hover)
+type Want int
+
+const (
+	WantImage      Want = iota // the viewer's image: the edit, else ~2048 px
+	WantVideo                  // the viewer's video: 720p, HEVC allowed
+	WantVideoH264              // the same for a browser that plays no HEVC
+	WantVideoHover             // a video on hover: the smallest H.264
+	WantLiveMotion             // a Live Photo's motion
+)
+
+// wanted: the renditions that answer a want, best first. Not the original: its
+// path is in the DB, not in the naming layout (the caller has it).
+var wanted = map[Want][]role{
+	WantImage:      {roleRender, roleEditPreview, roleLarge, roleLarge2},
+	WantVideo:      {roleVideoHEVCEdit, roleVideoMediumEdit, roleVideoHEVC, roleVideoMedium},
+	WantVideoH264:  {roleVideoMediumEdit, roleVideoSmallEdit, roleVideoMedium, roleVideoSmall},
+	WantVideoHover: {roleVideoSmallEdit, roleVideoMediumEdit, roleVideoSmall, roleVideoMedium},
+	WantLiveMotion: {roleLiveMotionEdit, roleLiveMotion, roleLiveVideo},
+}
+
+// Local: the best file of the asset in the library for want, "" if none is local
+// yet — then Photos is asked for it (PhotoKit) and Local looks again
+func Local(root, uuid string, want Want) string {
+	byRole := map[role]string{}
+	for _, c := range candidates(root, uuid, "", "") {
+		byRole[c.role] = c.path
+	}
+	for _, r := range wanted[want] {
+		if p, ok := byRole[r]; ok {
+			if info, err := os.Stat(p); err == nil && !info.IsDir() {
+				return p
+			}
+		}
+	}
+	return ""
 }
 
 // frames: the frames Photos keeps for a video (resources/derivatives/cvt/<X>/<UUID>/),
@@ -238,29 +320,15 @@ func loadLibrary(root string) (*library, error) {
 	if err != nil {
 		return nil, err
 	}
-	lib := &library{byPath: map[string]*asset{}}
+	lib := &library{byPath: map[string]*asset{}, root: root, rows: map[string]assetRow{}}
 	for _, r := range rows {
 		if r.trashed || r.hidden || len(r.uuid) < 2 {
 			continue
 		}
-		meta := r.meta.record()
-		a := &asset{uuid: r.uuid, arrived: map[string]*dto.FileDto{}, meta: meta, kind: r.kind(),
-			metaHash: hashRecord(meta, r.kind())}
-		byRole := map[role]string{}
-		for _, c := range candidates(root, r.uuid, r.dir, r.filename) {
-			if info, err := os.Stat(c.path); err == nil && !info.IsDir() {
-				a.files = append(a.files, c)
-				byRole[c.role] = c.path
-			}
-		}
-		a.files = append(a.files, frames(root, r.uuid)...)
+		lib.rows[r.uuid] = r
+		a := newAsset(root, r)
 		if len(a.files) == 0 {
 			continue // nothing local: not even a thumbnail
-		}
-		for _, r := range showRank {
-			if p, ok := byRole[r]; ok {
-				a.show = append(a.show, p)
-			}
 		}
 		lib.assets = append(lib.assets, a)
 		for _, c := range a.files {
@@ -268,6 +336,61 @@ func loadLibrary(root string) (*library, error) {
 		}
 	}
 	return lib, nil
+}
+
+// newAsset: the asset of a DB row with the files of it that exist now
+func newAsset(root string, r assetRow) *asset {
+	meta := r.meta.record()
+	a := &asset{uuid: r.uuid, arrived: map[string]*dto.FileDto{}, meta: meta, kind: r.kind(),
+		metaHash: hashRecord(meta, r.kind())}
+	byRole := map[role]string{}
+	for _, c := range candidates(root, r.uuid, r.dir, r.filename) {
+		if info, err := os.Stat(c.path); err == nil && !info.IsDir() {
+			a.files = append(a.files, c)
+			byRole[c.role] = c.path
+		}
+	}
+	a.files = append(a.files, frames(root, r.uuid)...)
+	for _, r := range showRank {
+		if p, ok := byRole[r]; ok {
+			a.show = append(a.show, p)
+		}
+	}
+	return a
+}
+
+// Regroup: the group of one asset as it is on disk now — after Photos made a file
+// of it local (on demand), its item is processed again without a walk. The DB's
+// metadata is the one the last walk loaded (it wins over the files' EXIF). false:
+// no such asset in a loaded library, or no file of it on disk.
+func (g *Grouper) Regroup(uuid string) (flow.FileGroup, bool) {
+	g.lastMu.Lock()
+	var lib *library
+	var row assetRow
+	for _, lb := range g.last {
+		if r, ok := lb.rows[uuid]; ok {
+			lib, row = lb, r
+			break
+		}
+	}
+	g.lastMu.Unlock()
+	if lib == nil {
+		return flow.FileGroup{}, false
+	}
+	a := newAsset(lib.root, row)
+	for _, c := range a.files {
+		info, err := os.Stat(c.path)
+		if err != nil {
+			return flow.FileGroup{}, false // vanished meanwhile: the next walk sees it
+		}
+		a.arrived[c.path] = &dto.FileDto{ItemEntry: dto.ItemEntry{
+			Path: c.path, Name: filepath.Base(c.path), Size: info.Size(), ModTime: info.ModTime(),
+		}}
+	}
+	if len(a.files) == 0 {
+		return flow.FileGroup{}, false
+	}
+	return a.group(), true
 }
 
 type assetRow struct {

@@ -64,6 +64,12 @@ func fakeExif(path string) (api.RawExif, error) {
 // chain wires them, with fakeExif. Returns the main files that reached the plugins.
 func scan(t *testing.T, root string) []string {
 	t.Helper()
+	return scanWith(t, root, nil)
+}
+
+// scanWith: scan with the gate's dropped hook (nil: none)
+func scanWith(t *testing.T, root string, dropped func(key string)) []string {
+	t.Helper()
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
 	m := newTestMonitor(t, root)
 	groupers := map[int]chain.Decorator[flow.FileEvent, flow.FileGroup]{
@@ -71,6 +77,7 @@ func scan(t *testing.T, root string) []string {
 		groups.BranchApple:   apple.NewDecorator(logger),
 	}
 	gate := newFilesGate(groups.Branches, newProgress(), logger)
+	gate.dropped = dropped
 	exif := &exifExtractor{logger: logger, extract: fakeExif}
 	valid := newValidator(logger)
 	preview := &cheapPreview{logger: logger, dir: t.TempDir(),

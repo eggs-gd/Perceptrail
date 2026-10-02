@@ -107,7 +107,103 @@ export function playableVideos(asset: Asset): VideoSource[] {
 
 function videoType(r: Rendition): string {
     const mime = r.mime === 'video/quicktime' ? 'video/mp4' : r.mime;
-    return r.codec ? `${mime}; codecs="${r.codec}"` : mime;
+    return r.codec ? `${mime}; codecs="${fullCodec(r.codec)}"` : mime;
+}
+
+// The viewer picks from what is here first. Our comfortable size is the preview's
+// (a long side of ~2048 px, Photos' medium rendition): the smallest local image that
+// covers it — or the full size, if that is smaller — is shown as it is, no 360 px
+// first. As big as the full size: that is the Original (its switch is lit); bigger
+// is asked for with the switch.
+const COMFORT_PX = 2048;
+// Sizes from different sources round differently (an edit's render, the DB's size)
+const FULL_SLACK = 0.98;
+
+const longSide = (r: {w?: number, h?: number}) => Math.max(r.w ?? 0, r.h ?? 0);
+
+/** The images the viewer may show here: the edit if there is one, else the stills
+ * and an original every browser shows — smallest first, sized only */
+function localImages(asset: Asset): Rendition[] {
+    const images = asset.edit.length ? [...asset.edit] : [...asset.stills];
+    if (!asset.edit.length && asset.original && VIEWABLE_IMAGES.has(asset.original.mime)) images.push(asset.original);
+    return images.filter((r) => VIEWABLE_IMAGES.has(r.mime) && r.w && r.h)
+        .sort((a, b) => longSide(a) - longSide(b));
+}
+
+/** A video's original, here and playable: shown at once, as the Original */
+export function localFullVideo(asset: Asset): Rendition | undefined {
+    const o = asset.original;
+    return asset.kind === 'video' && o?.mime.startsWith('video/') && canPlayVideo(o) ? o : undefined;
+}
+
+/**
+ * The full resolution is here (the tile's cloud says when not): a video's original;
+ * for an image, any file of the asset as big as the full size — the original, the
+ * edit's render, a full-size derivative
+ */
+export function fullHere(asset: Asset): boolean {
+    if (asset.kind === 'video') return !!asset.original?.mime.startsWith('video/');
+    if (!asset.full) return !!asset.original;
+    const full = longSide(asset.full) * FULL_SLACK;
+    return [...asset.edit, ...asset.stills, ...(asset.original ? [asset.original] : [])]
+        .some((r) => longSide(r) >= full);
+}
+
+/**
+ * What the viewer shows of an image when it opens: the smallest local image that
+ * covers our comfortable size (or the full size, if smaller); full — it is as big as
+ * the full size (the Original switch is lit); ask — nothing here is that big, the
+ * medium rendition is asked for (Photos)
+ */
+export function viewerChoice(asset: Asset): {image?: Rendition, full: boolean, ask: boolean} {
+    const images = localImages(asset);
+    const fullLong = asset.full ? longSide(asset.full) : longSide(images.at(-1) ?? {});
+    const want = Math.min(COMFORT_PX, fullLong || COMFORT_PX) * FULL_SLACK;
+    const image = images.find((r) => longSide(r) >= want) ?? images.at(-1);
+    const size = image ? longSide(image) : 0;
+    return {image, full: !!image && fullLong > 0 && size >= fullLong * FULL_SLACK, ask: size < want};
+}
+
+// Apple Photos on demand (the server's rendition.go): asked for when needed — the
+// medium when the viewer opens, the hover when a moving tile is pointed at; the
+// file comes when Photos has downloaded it (~1 s), 404 if it cannot
+
+/** The viewer's rendition: the image (~2048 px or the edit), a video's 720p — H.264
+ * only (?hevc=0) for a browser that plays no HEVC */
+export function mediumUrl(asset: Asset): string | undefined {
+    if (!asset.onDemand) return undefined;
+    const url = `${PUBLIC_API_PATH}${asset.onDemand.medium}`;
+    return asset.kind === 'video' && !playsHevc() ? `${url}${url.includes('?') ? '&' : '?'}hevc=0` : url;
+}
+
+/** A video's 360p or a Live Photo's motion, for a tile's hover */
+export function hoverUrl(asset: Asset): string | undefined {
+    return asset.onDemand?.hover && `${PUBLIC_API_PATH}${asset.onDemand.hover}`;
+}
+
+/**
+ * The viewer's Original from Photos: the biggest of what the user sees — a photo's
+ * (a Live Photo's photo's) current version, the edit, at full resolution as JPEG
+ * (any browser shows it); a video's original file
+ */
+export function originalOnDemand(asset: Asset): string | undefined {
+    return asset.onDemand?.original && `${PUBLIC_API_PATH}${asset.onDemand.original}`;
+}
+
+let hevc: boolean | undefined;
+function playsHevc(): boolean {
+    if (typeof document === 'undefined') return false;
+    hevc ??= document.createElement('video').canPlayType(`video/mp4; codecs="${fullCodec('hvc1')}"`) !== '';
+    return hevc;
+}
+
+/**
+ * A codec as the browser wants to be asked: Chrome answers "" for a bare "hvc1" and
+ * "probably" for "hvc1.1.6.L93.B0" (and plays it). The server knows only the FourCC
+ * (exiftool's CompressorID): HEVC is asked as Main profile, level 3.1.
+ */
+function fullCodec(codec: string): string {
+    return codec === 'hvc1' || codec === 'hev1' ? `${codec}.1.6.L93.B0` : codec;
 }
 
 /** Can this browser play the video (none on the server) */
@@ -116,12 +212,17 @@ export function canPlayVideo(r: Rendition): boolean {
 }
 
 /**
- * The image the viewer's Original switch shows: the original if it is an image; a
- * Live Photo whose original is its video (Apple): its biggest photo
+ * The image the viewer's Original switch shows here (not from Photos): the biggest
+ * of what the user sees — the biggest edit if there is one, else the original if it
+ * is an image; a Live Photo whose original is its video: its biggest photo. Edits
+ * and their history belong to the library, not to us: no unedited original over an
+ * edit.
  */
 export function originalImage(asset: Asset): Rendition | undefined {
+    const bySize = (rs: Rendition[]) => [...rs].sort((a, b) => (b.w ?? 0) - (a.w ?? 0))[0];
+    if (asset.edit.length) return bySize(asset.edit);
     if (asset.original?.mime.startsWith('image/')) return asset.original;
-    if (asset.kind === 'live') return [...asset.stills].sort((a, b) => (b.w ?? 0) - (a.w ?? 0))[0];
+    if (asset.kind === 'live') return bySize(asset.stills);
     return undefined;
 }
 

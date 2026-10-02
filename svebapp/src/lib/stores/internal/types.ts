@@ -27,6 +27,15 @@ export interface Asset {
     motion: Rendition[];
     /** A flip-book, in order (Apple's video frames) */
     frames: Rendition[];
+    /**
+     * Apple Photos: better renditions the server asks Photos for when needed (it
+     * keeps them in iCloud only) — the viewer's medium, a hover for what moves, the
+     * original when it is not here (a Live Photo: always — its original is its video).
+     * Relative to the API, like the renditions' urls.
+     */
+    onDemand?: {medium: string, hover?: string, original?: string};
+    /** The full size of what is seen (oriented; an edited Photos asset: its current version) */
+    full?: {w: number, h: number};
 }
 
 export interface Item {

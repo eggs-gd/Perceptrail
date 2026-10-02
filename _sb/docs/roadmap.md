@@ -1,6 +1,6 @@
 # Roadmap
 
-Status as of 2026-10-02 (PR #18). Details and reasons — [findings.md](findings.md).
+Status as of 2026-10-02 (PR #21). Details and reasons — [findings.md](findings.md).
 Target architecture — the diagrams in [`../puml`](../puml).
 
 ## Done
@@ -89,6 +89,21 @@ Target architecture — the diagrams in [`../puml`](../puml).
   region → city from the time zone. A photo may start a path of sections; the side
   panel's scale is by sections, √ of their photos, at every level
   ([`Perceptor data.puml`](../puml/Perceptor%20data.puml)).
+- Views by URL, info panel, delta sync, debug/release mode (PR #18); the roadmap's
+  old items sorted, the plugin loader test on real `.so` files, RAW previews keep
+  their orientation (PR #19); several tabs — one sync at a time, a self-healing copy,
+  a layout per tab, plain HTTP on a LAN address (PR #20); providers listed (PR #22).
+- **Apple Photos on demand** (PR #21, transcode step 0): Photos, asked through
+  PhotoKit, makes a cloud-only rendition local in its own library — we render and
+  store nothing it keeps. `pkg/photokit` (cgo, macOS); `/items/:guid/rendition/
+  {medium,hover,original}`; one asset processed again without a walk (`Regroup` →
+  the gate → `Refresh`); assets with nothing local asked for in the background;
+  `/items/:guid/files`. The viewer opens on what is here (the comfortable ~2048 px,
+  or the full size lit as the Original), the medium asked for only when nothing here
+  is that big; hover with a loading ring; the tile's cloud = the full resolution is
+  not here; Info → Files with downloads. The sync takes a new contract in place and
+  passes nested changes to the layout. Spike and results: `_sb/spikes/photokit`,
+  findings "PhotoKit spike".
 
 ## Releases
 
@@ -104,7 +119,7 @@ One PR per feature (its steps are commits); docs are updated in that PR (AGENTS.
 
 ### Providers — other libraries as sources (2026-10-02, to work out)
 
-The Apple step (PhotoKit, PR #21 — in review, not merged yet) showed the shape: a library that already keeps
+The Apple step (PhotoKit, PR #21) showed the shape: a library that already keeps
 renditions is a **provider** — we read its assets and metadata, and ask it for a
 rendition when the client needs one; we render nothing it already has. Perceptrail
 stays a viewer over the user's library (findings "A viewer over a library, not a
@@ -114,8 +129,9 @@ library").
   talks to the library's API with its key and passes the bytes on (a proxy) — the
   key and the library's address never reach the browser, and the library need not
   be reachable from the client's network. The client contract is the one PR #21
-  brings (proposed until it is merged): `asset.onDemand` and
-  `/items/:guid/rendition/...`, the same for every provider.
+  brought: `asset.onDemand` (medium, hover, original — versioned URLs), `asset.full`
+  and `/items/:guid/rendition/...`, the same for every provider; the viewer picks
+  from what is here first.
 - **No access to their databases** where there is an API (Immich and PhotoPrism keep
   Postgres / MariaDB with schemas that change between versions); a database or a
   catalog only where it is the library's own format (Apple, Lightroom, digiKam).
@@ -123,6 +139,9 @@ library").
   exiftool's tag names (as the Photos DB does), so the perceptors read it unchanged;
   their faces, people, albums, labels, smart search — perceptor data without an ML of
   our own.
+- A cloud-only original is not described (its name, format, weight): for local
+  files the original is what is on disk; a provider's own description waits for a
+  second provider — the abstraction comes from two or more, not from one.
 - Generalise `rendition.go` (PR #21): a provider interface (Apple: the local file or
   PhotoKit; an API provider: its thumbnail / preview / playback, proxied).
 
@@ -130,7 +149,7 @@ All of them listed for now; the order is to be decided:
 
 | provider | how | what it gives | notes |
 |---|---|---|---|
-| **Apple Photos** | `Photos.sqlite` + files; PhotoKit on demand | renditions, edits, Live Photos, video renditions | reading: done; on demand: PR #21 (in review) |
+| **Apple Photos** | `Photos.sqlite` + files; PhotoKit on demand | renditions, edits, Live Photos, video renditions | done (reading; on demand: PR #21) |
 | **Immich** | REST API + an API key (`asset.read`, `asset.view`; `asset.download` only for originals); Sync v2 (streamed, resumable deltas) | `thumbnail` / `preview` (~1440 px) / original, transcoded video playback; faces, people, albums, CLIP search | **first** — the owner uses it daily. To check: API stability between versions, Sync v2 from a non-mobile client, its video transcode policy |
 | **PhotoPrism** | REST API + an app password (Bearer) | thumbnails `/api/v1/t/<hash>/<preview token>/<size>`, H.264 video; labels, faces, places | similar to Immich |
 | **Lightroom Classic** | the catalog `.lrcat` (SQLite) + the previews `.lrdata` | ratings, keywords, collections, edits; its previews | the previews' format is Adobe's own; fits "the asset from all its files" |
@@ -171,23 +190,16 @@ shows up (the place already tells where it was taken).
 ### Apple Photos library — open
 
 Done in the cheap stage (spike, grouper, what an asset shows, DB metadata, tests —
-see Done and findings "Apple Photos library: spike"). We only read the library.
+see Done and findings "Apple Photos library: spike"), and on demand (PR #21 — see
+Done). We only read the library.
 
-- [ ] **Transcode only the gaps.** Apple's derivatives are good JPEGs (~2000 and
-      ~1000 px): transcode only when the best one is below our size and the original
-      is local, or when nothing is browser-viewable (a HEIC render without its JPEG).
-      Cloud-only: the best derivative is final. Apple's derivatives are a cache Photos
-      may purge: we point at them, never copy.
-- [ ] **"Show the original" for cloud-only assets** — most of an iCloud library
-      (here: 3 528 of 5 866 photos, 766 of 770 videos, all 351 Live Photos). We never
-      write to the library — we ask Photos to download the original (PhotoKit,
-      `PHAssetResourceManager`, network access allowed); the next walk sees it and
-      reprocesses the group. PhotoKit exists only on the Mac that owns the library,
-      in a user session (not Docker, not a NAS reading a share or a copy). So an
-      optional capability of the native macOS build (Go + cgo, see step 0 below);
-      the viewer's Original button asks it when the original is not local. Photos may
-      purge it again (Optimize Mac Storage): then the asset falls back to its
-      derivative.
+- [x] **Transcode only the gaps** — none for a Photos library: whatever the client
+      needs, Photos makes local on request (PR #21); our transcode is for generic
+      folders (steps 1–2).
+- [x] **"Show the original" for cloud-only assets** — the Original from Photos (PR
+      #21): the biggest of what is seen, at full resolution.
+- [ ] The Photos permission when gontroller is not started from a terminal
+      (launchd) — the binary would need its own (Info.plist, a stable signature).
 - Supported schema: `ZASSET` (macOS 11+); older (`ZGENERICASSET`) — not planned.
 - Later: albums, people (`ZPERSON` / `ZDETECTEDFACE`) → perceptors.
 
@@ -195,7 +207,7 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 
 - [ ] **The expensive stage: previews and transcode** — design below ("Expensive
       stage"). In steps, each its own PR (the cut may still change):
-      0. **Apple Photos first — a spike, then a fork** (the dev library is mostly
+      0. ✅ **Apple Photos first — a spike, then a fork** (done: PR #21; the dev library is mostly
          iCloud-only, and Photos' DB knows every asset's renditions —
          `ZINTERNALRESOURCE`: recipe, size, local / in iCloud; recipe 65741, up to
          ~2048 px, is in iCloud for nearly every asset — 3 240 have it only there).
@@ -250,20 +262,66 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
            Desktop is a Linux VM) has no PhotoKit, and macOS does not let it into a
            `.photoslibrary` without Full Disk Access: a Mac with Photos runs the native
            binary, Docker is for servers — the Docker step says so in its docs.
-         - **spike** (Go + cgo, `_sb/spikes/photokit`, its own branch): ask PhotoKit
-           for a cloud-only asset's medium image (network allowed) — does Photos make
-           the rendition local in the library (`resources/derivatives`, the DB's local
-           availability), or only hand us the bytes? Also: time and traffic per asset
-           (can the viewer wait for it on open?), limits when asking for thousands,
-           the permission questions above;
-         - **it normalises the library** → an Apple step in our chain of
-           responsibility: ask Photos for the level that is missing — small ahead for
-           the tiles, medium on demand (the work list straight from its DB); the next
-           walk finds the files — nothing rendered or stored by us, nothing written to
-           the library by us;
-         - **it only hands the bytes** → decide separately, still without a second
-           copy: serve them straight through (slow but no copies), or the bounded
-           working set above.
+         - [x] **spike** (Go + cgo, `_sb/spikes/photokit`; findings "PhotoKit spike"):
+           **Photos normalises the library.** Asked for a cloud-only asset's image
+           (≤ 2048 px, network allowed), it downloads recipe 65741 (1536×2048,
+           ~0.8–0.96 MB) into `resources/derivatives/<X>/<UUID>_1_102_o.jpeg` and marks
+           it local in the DB; the original stays in iCloud. 0.6–0.9 s per photo; "is
+           it local" answers at once (error 3164 without network). The permission goes
+           to the terminal that starts the binary, not to the binary.
+         - [x] **→ the Apple step** (the fork taken; done in PR #21 — the spike and
+           its implementation in one):
+           nothing rendered or stored by us, nothing written to the library by us —
+           Photos downloads, the walk finds the file (the grouper already knows
+           `_1_102_o.jpeg`). Only on demand, never in bulk (decided):
+           - **the sheet** asks for nothing: Photos keeps
+             `masters/<X>/<UUID>_4_5005_c.jpeg` (~100 KB) local for nearly every
+             asset, cloud-only ones too. The exception (Codex): an asset with nothing
+             local at all (7 of 6 427 here) is Waiting — never on the sheet, never
+             opened — so those are asked for in the background, each once per run;
+           - **opening a photo** triggers it: the viewer shows what there is (the
+             tile's image) at once, the server asks Photos for the medium rendition
+             (~1 s) — the request waits for it and serves the file, the viewer swaps
+             the image in; the asset's group is processed again, so the item and the
+             other tabs learn of it through the delta;
+           - **the neighbours** — 1–3 rows around the opened photo (in the view's
+             order) are asked for ahead, so the arrows open at once; not more;
+           - **a video on the sheet** (decided): `fast` is enough — H.264 360p,
+             ~0.7 MB, ~0.9 s — asked for on hover; meanwhile Photos' `cvt` frames if
+             it has them. **Hover prefers the video**: once the 360p is local it
+             plays, the frames are not shown;
+           - **a video in the viewer**: `medium` on open, as a photo's medium
+             rendition — HEVC or H.264 720p. HEVC plays in every current browser
+             with a hardware decoder (findings "HEVC in browsers, 2026"); the rare
+             one without (Chrome on Linux, old hardware) gets the `fast` 360p — the
+             client decides (`canPlayType('video/mp4; codecs="hvc1"')`), the asset
+             contract already sends each file's codec. Never `automatic` / `high`:
+             they download the original. No H.264 720p of our own (decided);
+           - the server's cheap stage counts only H.264 as browser-playable (HEVC
+             waits for a transcode): let the client decide by `canPlayType`
+             instead;
+           - **a Live Photo** (decided): as a video on the sheet — its motion is
+             asked for on hover (`requestLivePhotoForAsset`, H.264 ~650×870,
+             ~1.8 MB, ~0.9 s) and plays there once local; the same file in the
+             viewer;
+           - the grouper learns the video renditions' names (`_2_3_o.mp4`,
+             `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`).
+           Done as: `pkg/photokit` (cgo, macOS; a stub elsewhere; the main thread
+           turns the main run loop), `GET /items/:guid/rendition/{medium,hover}`
+           (serves the local file, asks Photos when there is none: one request per
+           asset and level, three at once), `asset.onDemand` for Photos items; the
+           client lays the medium over the image, plays the hover video after 250 ms,
+           asks for ±6 neighbours ahead. Access is asked for only when a Photos
+           library is under the root.
+         - [x] **The Original** (PR #21): the biggest of what the user sees — a
+           photo's (a Live Photo's photo's) current version, the edit, at full
+           resolution, drawn by Photos as JPEG (any browser shows it, HEIC in Chrome
+           too); a video's original file (high quality). Edits are Photos' business:
+           no unedited original, no provider specifics. The viewer's switch for all of
+           them; the tile's cloud means "the original is only in iCloud" for every
+           kind now.
+         - [ ] Still open: the permission when not started from a terminal
+           (launchd). Asking for thousands in a row is not needed (nothing asks in bulk).
       1. **photo renditions** — libvips on the CPU, the source chosen to avoid a full
          decode (Photos' JPEG, the HEIC's embedded thumbnail, a RAW's embedded JPEG —
          `PreviewImage` / `JpgFromRaw`), the DB-state queue, benchmarks on the real
@@ -405,6 +463,11 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 - [x] Side panel: the first section of a deeper level (the first month of a year, the
       first city of a region) sits at the same point as its parent's label — its
       label now goes just under the parent's when there is room (PR #18).
+- [ ] **Zoom in the viewer** — the wheel zoom (scale of the stage around its centre)
+      worked badly and is gone (PR #21). To do it properly: look at how Immich and
+      Google Photos do it (they differ) — around the pointer, pan when zoomed, pinch
+      on a trackpad, double-click, and the original's pixels when zoomed past the
+      preview.
 - Maybe, some day: the optimal (Dijkstra) layout. Where the gallery started: the
   best row breaks over the whole set (rows closest to the target height). It keeps
   the order — only the breaks change, so the views' fixed orders are fine — but every

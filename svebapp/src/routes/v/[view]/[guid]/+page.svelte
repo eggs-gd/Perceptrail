@@ -9,10 +9,13 @@
     import {layoutDb} from "$lib/stores";
     // Not re-exported from $lib/stores: the workers import that, this is page-only (svelte/reactivity)
     import {LiveQuery} from "$lib/stores/internal/liveQuery";
-    import type {Attachment} from "svelte/attachments";
+    import {mediumUrl} from "$lib/gallery/components/asset";
 
-    const MIN_ZOOM = 0.25;
-    const MAX_ZOOM = 8;
+    // Apple Photos: the neighbours' medium renditions are asked for ahead (about a row
+    // or two of the sheet each way), so the arrows open them at once; not videos
+    const PREFETCH = 6;
+    const prefetched = new Set<string>();
+
 
     // /v/<view>/<guid>: the photo by its guid (a link stays the same photo whatever
     // the view or new photos do); ← → walk the view's sheet
@@ -29,6 +32,19 @@
     let item = $derived(itemQuery.current);
     let index = $derived(item?.order ?? 0);
 
+    $effect(() => {
+        if (!item?.asset?.onDemand) return;
+        const at = item.order;
+        layoutDb.items.where('order').between(at - PREFETCH, at + PREFETCH, true, true).toArray().then((near) => {
+            for (const it of near) {
+                const url = it.asset && it.asset.kind !== 'video' ? mediumUrl(it.asset) : undefined;
+                if (!url || it.order === at || prefetched.has(url)) continue;
+                prefetched.add(url);
+                new Image().src = url;
+            }
+        });
+    });
+
     // The info panel: its button is a switch kept like the others (photo to photo,
     // between visits)
     const toggleInfo = () => toggleViewerPref('infoOpen');
@@ -37,9 +53,6 @@
     let originalFor = $state<string | null>(null);
     let showOriginal = $derived(!!item && originalFor === item.guid);
 
-    // Zoom is remembered per item, so switching items starts at 1× again
-    let zoomState = $state({guid: '', value: 1});
-    let zoom = $derived(zoomState.guid === item?.guid ? zoomState.value : 1);
 
     // Close: back to the gallery entry it was opened from; opened directly (a link, a
     // reload of a replaced entry) there is none — go to the sheet around this photo
@@ -86,33 +99,20 @@
         else return;
         e.preventDefault();
     }
-
-    // onwheel={...} would be passive: preventDefault() needs a manual listener
-    const wheelZoom: Attachment<HTMLElement> = (node) => {
-        const onWheel = (e: WheelEvent) => {
-            e.preventDefault();
-            if (!item) return;
-            const factor = e.deltaY > 0 ? 0.9 : 1.1;
-            zoomState = {guid: item.guid, value: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * factor))};
-        };
-        node.addEventListener('wheel', onWheel, {passive: false});
-        return () => node.removeEventListener('wheel', onWheel);
-    };
 </script>
 
 <svelte:window {onkeydown}/>
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 <div class="viewer"
-     {@attach wheelZoom}
      onclick={close}>
     {#if item}
-        <div class="stage" style:transform="scale({zoom})">
+        <div class="stage">
             <ItemView {item} {index} mode="view" sizes="100vw" {showOriginal}/>
         </div>
     {/if}
 </div>
-<!-- Outside the zoomed stage: a transform would make the toolbar scale and move -->
+<!-- Outside the stage (a zoom will come back to it: roadmap) -->
 {#if item?.asset}
     <ViewerTools asset={item.asset} {showOriginal}
                  ontoggleoriginal={() => (originalFor = showOriginal ? null : item!.guid)}
@@ -137,7 +137,6 @@
     .stage {
         max-width: 100%;
         max-height: 100%;
-        transform-origin: center center;
         line-height: 0;
     }
 

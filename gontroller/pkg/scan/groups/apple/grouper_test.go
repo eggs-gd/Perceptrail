@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"perceptrail/gontroller/pkg/model/dto"
@@ -308,5 +309,107 @@ func TestGrouperRoles(t *testing.T) {
 		if got := roles(live)[name]; got != want {
 			t.Errorf("live %s: %q, want %q", name, got, want)
 		}
+	}
+}
+
+// The renditions Photos downloads on request: videos are the asset's motion, the
+// main file stays what it was (they come after the stills); Local finds the best
+// one for a want
+func TestGrouperVideoRenditions(t *testing.T) {
+	const video = "F6666666-0000-0000-0000-000000000006" // cloud-only, two renditions fetched
+	const livePhoto = "G7777777-0000-0000-0000-000000000007"
+	root := t.TempDir()
+	bundle := makeLibrary(t, root, []fixtureAsset{
+		{uuid: video, dir: "F", filename: video + ".mov", zkind: 1, duration: 8, files: []string{
+			"resources/derivatives/masters/F/" + video + "_4_5005_c.jpeg",
+			"resources/derivatives/F/" + video + "_2_201_o.mov",
+			"resources/derivatives/F/" + video + "_2_4_o.mp4",
+		}},
+		{uuid: livePhoto, dir: "G", filename: livePhoto + ".heic", playback: 3, files: []string{
+			"resources/derivatives/G/" + livePhoto + "_1_102_o.jpeg",
+			"resources/derivatives/G/" + livePhoto + "_2_101_a.mov",
+			"resources/derivatives/G/" + livePhoto + "_2_101_o.mov",
+		}},
+	})
+	g := NewDecorator(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	groups, _ := walk(t, g, root, nil)
+
+	for uuid, want := range map[string][]string{
+		video:     {video + "_4_5005_c.jpeg", dto.RoleStill, video + "_2_201_o.mov", dto.RoleMotion, video + "_2_4_o.mp4", dto.RoleMotion},
+		livePhoto: {livePhoto + "_1_102_o.jpeg", dto.RoleStill, livePhoto + "_2_101_a.mov", dto.RoleMotion, livePhoto + "_2_101_o.mov", dto.RoleMotion},
+	} {
+		var got []string
+		for _, f := range groups[uuid].Files {
+			got = append(got, filepath.Base(f.Path), f.Role)
+		}
+		if strings.Join(got, " ") != strings.Join(want, " ") {
+			t.Errorf("%s: %v, want %v (the main file first)", uuid[:1], got, want)
+		}
+	}
+
+	for _, tc := range []struct {
+		uuid string
+		want Want
+		file string
+	}{
+		{video, WantVideo, video + "_2_201_o.mov"},
+		{video, WantVideoH264, video + "_2_4_o.mp4"},
+		{video, WantVideoHover, video + "_2_4_o.mp4"},
+		{video, WantImage, ""},
+		{livePhoto, WantLiveMotion, livePhoto + "_2_101_a.mov"}, // the edit's motion wins
+		{livePhoto, WantImage, livePhoto + "_1_102_o.jpeg"},
+	} {
+		if got := filepath.Base(Local(bundle, tc.uuid, tc.want)); (tc.file == "" && got != ".") || (tc.file != "" && got != tc.file) {
+			t.Errorf("Local(%s, %d) = %s, want %q", tc.uuid[:1], tc.want, got, tc.file)
+		}
+	}
+}
+
+// Photos is asked for access only where a library is: the root itself, or one at
+// its top
+func TestHasLibrary(t *testing.T) {
+	root := t.TempDir()
+	if HasLibrary(root) {
+		t.Error("an empty folder")
+	}
+	makeLibrary(t, root, nil)
+	if !HasLibrary(root) || !HasLibrary(filepath.Join(root, "Photos Library.photoslibrary")) {
+		t.Error("a library at the top, or the library itself")
+	}
+}
+
+// One asset's group again after Photos made a file of it local: from the DB rows
+// of the last load (its metadata) and the disk now — no walk, no DB read
+func TestRegroup(t *testing.T) {
+	root := t.TempDir()
+	bundle := makeLibrary(t, root, fixture())
+	g := NewDecorator(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	walk(t, g, root, nil)
+
+	if _, ok := g.Regroup("NOT-AN-ASSET"); ok {
+		t.Error("an unknown asset")
+	}
+	// The cloud-only asset's original arrives
+	write := func(rel string) {
+		t.Helper()
+		p := filepath.Join(bundle, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(rel), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("originals/B/" + cloudOnly + ".jpeg")
+	group, ok := g.Regroup(cloudOnly)
+	if !ok {
+		t.Fatal("no group")
+	}
+	if group.Key != cloudOnly || filepath.Base(group.Files[0].Path) != cloudOnly+".jpeg" ||
+		group.Files[0].Role != dto.RoleOriginal || group.Files[0].Size == 0 {
+		t.Errorf("group %s: main %+v, want the arrived original", group.Key, group.Files[0])
+	}
+	if len(group.Meta) == 0 || group.MetaHash == "" {
+		t.Error("the DB's metadata is missing: the files' EXIF would win")
 	}
 }

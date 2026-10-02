@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -24,6 +25,34 @@ func RegisterAssetsRoutes(segment string, e *echo.Echo, logger *l.Logger) {
 	userGroup := e.Group(segment)
 	userGroup.GET("/:item", getFile)            // the default preview
 	userGroup.GET("/:item/:file", getAssetFile) // any file of the asset (the asset contract)
+	e.GET("/items/:guid/files", getItemFiles)
+}
+
+// itemFile: one file of the item's group, for the info panel (sidecars too)
+type itemFile struct {
+	Name string `json:"name"`
+	Role string `json:"role"` // original, edit, still, motion, frames, meta; "" not media
+	Mime string `json:"mime"`
+	Size int64  `json:"size"`
+	W    int    `json:"w,omitempty"`
+	H    int    `json:"h,omitempty"`
+	URL  string `json:"url"` // relative to the API: a download
+}
+
+// getItemFiles: every file of the item's group — the original, its edits,
+// derivatives, sidecars, frames — each with a URL to download it
+func getItemFiles(c echo.Context) error {
+	guid := c.Param("guid")
+	files, err := filesProxy.GetLinkedFiles(guid)
+	if err != nil {
+		return err
+	}
+	out := []itemFile{}
+	for _, f := range files {
+		out = append(out, itemFile{Name: f.Name, Role: f.Role, Mime: f.MimeType, Size: f.Size,
+			W: f.Width, H: f.Height, URL: fmt.Sprintf("/assets/%s/%d", guid, f.ID)})
+	}
+	return c.JSON(http.StatusOK, out)
 }
 
 func getFile(c echo.Context) error {
@@ -62,6 +91,11 @@ func getAssetFile(c echo.Context) error {
 	f, err := filesProxy.GetFileByID(uint(id))
 	if err != nil || f.LinkedTo != guid {
 		return echo.NewHTTPError(http.StatusNotFound)
+	}
+	// ?download=1: saved under its own name (the download attribute does not work
+	// across origins — the API is on another port)
+	if c.QueryParam("download") == "1" {
+		return c.Attachment(f.Path, f.Name)
 	}
 	return c.File(f.Path)
 }
