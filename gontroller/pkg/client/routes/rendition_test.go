@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
 
@@ -173,8 +174,11 @@ func TestOnDemandInAsset(t *testing.T) {
 func TestHydrateWaiting(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "Photos Library.photoslibrary")
 	photos := &fakePhotos{root: root}
-	walks := 0
-	RegisterRenditionRoutes(echo.New(), photos, func() { walks++ }, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	var refreshed []string
+	RegisterRenditionRoutes(echo.New(), photos, func(uuid string, _ time.Duration) bool {
+		refreshed = append(refreshed, uuid)
+		return true
+	}, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
 	for _, it := range []*dto.ItemDto{
 		{Guid: "H1111111-WAITING", State: dto.Waiting, Kind: dto.KindPhoto, Path: filepath.Join(root, "originals/H/H1111111-WAITING.heic")},
 		{Guid: "H2222222-SHOWN", State: dto.Visible, Kind: dto.KindPhoto, Path: filepath.Join(root, "originals/H/H2222222-SHOWN.heic")},
@@ -188,8 +192,8 @@ func TestHydrateWaiting(t *testing.T) {
 	logger := l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{})
 	hydrateRound(asked, logger)
 	hydrateRound(asked, logger) // the next round: not again
-	if walks != 1 {
-		t.Errorf("the walk was asked to go sooner %d times, want once (Photos made a file local)", walks)
+	if len(refreshed) != 1 || refreshed[0] != "H1111111-WAITING" {
+		t.Errorf("refreshed %v, want the asset Photos made local, once", refreshed)
 	}
 	if len(photos.asked) != 1 || !asked["H1111111-WAITING"] {
 		t.Errorf("asked %v (%v), want the waiting Photos asset once", photos.asked, asked)

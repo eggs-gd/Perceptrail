@@ -20,19 +20,19 @@ type webService struct {
 	perceptors []api.Perceptor
 	values     routes.ValuesLoader
 	fetcher    routes.Fetcher
-	walkSoon   func()
+	refresh    func(uuid string, wait time.Duration) bool
 }
 
 // NewWebService checks cfg (see ServerConfig) and fills its defaults. perceptors:
 // the ones the client is given (/perceptors, /p/:name/order); fetcher: asks Apple
-// Photos for renditions on demand (nil: only what is on disk); walkSoon: the walk
-// goes sooner when Photos made a file local.
-func NewWebService(cfg ServerConfig, app routes.AppInfo, perceptors []api.Perceptor, values routes.ValuesLoader, fetcher routes.Fetcher, walkSoon func(), logger *l.Logger) (*webService, error) {
+// Photos for renditions on demand (nil: only what is on disk); refresh: processes
+// one asset's item again when Photos made a file of it local.
+func NewWebService(cfg ServerConfig, app routes.AppInfo, perceptors []api.Perceptor, values routes.ValuesLoader, fetcher routes.Fetcher, refresh func(uuid string, wait time.Duration) bool, logger *l.Logger) (*webService, error) {
 	cfg, err := cfg.withDefaults()
 	if err != nil {
 		return nil, err
 	}
-	return &webService{logger, cfg, app, perceptors, values, fetcher, walkSoon}, nil
+	return &webService{logger, cfg, app, perceptors, values, fetcher, refresh}, nil
 }
 
 func (s *webService) Start(parentCtx context.Context) {
@@ -60,7 +60,7 @@ func (s *webService) Start(parentCtx context.Context) {
 	routes.RegisterAssetsRoutes("/assets", e, s.logger)
 	routes.RegisterPerceptorsRoutes(e, s.perceptors, s.values, s.logger)
 	routes.RegisterAppRoutes(e, s.app)
-	routes.RegisterRenditionRoutes(e, s.fetcher, s.walkSoon, s.logger)
+	routes.RegisterRenditionRoutes(e, s.fetcher, s.refresh, s.logger)
 	// Photos assets with nothing local at all: asked for in the background
 	go routes.HydrateWaiting(ctx, time.Minute, s.logger)
 

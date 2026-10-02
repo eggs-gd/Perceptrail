@@ -45,19 +45,6 @@ func NewFsWalker(path string, interval time.Duration, progress *progress, chout 
 	return chain.NewEntryPoint(chout, &fsMonitor{logger: logger, path: path, interval: interval, progress: progress})
 }
 
-// soon: the library changed from outside (Photos downloaded what we asked for): the
-// pause before the next walk is cut short. A walk in progress finishes first.
-var soon = make(chan struct{}, 1)
-
-// WalkSoon: walk again without waiting for the pause (the new file reaches its item
-// in seconds, not after the next rescan)
-func WalkSoon() {
-	select {
-	case soon <- struct{}{}:
-	default: // one is pending already
-	}
-}
-
 func (m *fsMonitor) Start(chin chan<- inType, ctx context.Context) {
 	m.mu.Lock()
 	m.ctx, m.cancel = context.WithCancel(ctx)
@@ -77,7 +64,6 @@ func (m *fsMonitor) Start(chin chan<- inType, ctx context.Context) {
 		}
 		select {
 		case <-time.After(m.interval):
-		case <-soon:
 		case <-m.ctx.Done():
 			return
 		}

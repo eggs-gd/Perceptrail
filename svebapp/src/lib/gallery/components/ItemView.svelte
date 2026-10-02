@@ -10,6 +10,7 @@
     import {assetUrl, biggestImage, fallbackImage, hasImage, hoverUrl, mediumUrl, originalImage, originalOnDemand, playableVideos} from "./asset";
     import {viewerPrefs} from "./viewerPrefs.svelte";
     import {debug} from "$lib/app.svelte";
+    import {refreshFromServer} from "$lib/workers";
 
     interface Props {
         item: Item;
@@ -131,6 +132,7 @@
                onloadedmetadata={(e) => {
                    const v = e.currentTarget as HTMLVideoElement;
                    videoLoad = {guid: item.guid, w: v.videoWidth, h: v.videoHeight};
+                   if (videoOriginal && videoOriginal === fromPhotos?.view) refreshFromServer(true);
                }}>
             {#if videoOriginal}
                 <source src={videoOriginal}>
@@ -169,6 +171,9 @@
                  onload={(e) => {
                      const img = e.currentTarget as HTMLImageElement;
                      originalLoad = {url: original!.url, w: img.naturalWidth, h: img.naturalHeight};
+                     // From Photos: the server has processed the item again before it
+                     // answered (the original is local now) — the delta has it
+                     if (original!.url === fromPhotos?.view) refreshFromServer(true);
                  }}>
         {/if}
         {#if mode === 'tile' && hovered && hasMotion}

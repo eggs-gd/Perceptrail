@@ -48,7 +48,8 @@ func main() {
 		log.Fatalf("Failed to load plugins: %v", err)
 	}
 
-	svc.AddService(scan.NewImporterService(ctx))
+	importer := scan.NewImporterService(ctx)
+	svc.AddService(importer)
 	// Apple Photos on demand (macOS, a Photos library under the root): asks for
 	// access once — the prompt names the app that started us (the terminal)
 	if apple.HasLibrary(ctx.Config().Path) {
@@ -58,7 +59,7 @@ func main() {
 			}
 		}()
 	}
-	web, err := client.NewWebService(ctx.Config().Server, routes.AppInfo{Version: app.Version, Mode: ctx.Config().Mode}, plugins.Pm.ClientPerceptors(), plugins.Pm.LoadValues, photokit.Library{}, scan.WalkSoon, ctx.Logger(string(app.LogHTTP)))
+	web, err := client.NewWebService(ctx.Config().Server, routes.AppInfo{Version: app.Version, Mode: ctx.Config().Mode}, plugins.Pm.ClientPerceptors(), plugins.Pm.LoadValues, photokit.Library{}, importer.Refresh, ctx.Logger(string(app.LogHTTP)))
 	if err != nil {
 		log.Fatalf("Server: %v", err)
 	}

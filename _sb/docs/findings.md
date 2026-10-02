@@ -750,10 +750,18 @@ the binary by the linker; run from the user's terminal on the dev library.
   pick the originals up (items updated a few minutes later), but it walks a minute
   after the last one was processed, and the client asked for a delta only on a
   navigation or a return to the tab — back in the list before the walk, nothing
-  told it later. Now a successful request to Photos cuts the walk's pause short
-  (`scan.WalkSoon`; a walk of the dev library's 19 000 files takes under a minute),
-  and the page asks for a delta every 20 s while the tab is seen (an empty one is
-  0 bytes). The download next to Photos' original is gone: it is a JPEG every
+  told it later. First fix (a successful request cut the walk's pause short, the
+  page polled every 20 s) — rejected by the owner: a whole walk for one known
+  photo. Now **one asset is processed again**: the Apple grouper keeps the DB rows
+  of its last load and forms that asset's group from them and the disk now
+  (`Regroup` — no walk, no DB read; the DB's metadata still wins over the files'
+  EXIF); the importer hands it to the files gate like any group (`Refresh`: only
+  what changed passes; deletions are untouched — they come with the walk's marker;
+  a walk sending the same asset at the same time processes it twice into the same
+  item) and waits until the item leaves the closer. The Original's answer waits for
+  it (≤ 10 s), the client asks for the delta once the original has loaded — the
+  cloud is gone on the way back to the list. A medium or a hover refreshes in the
+  background. The download next to Photos' original is gone: it is a JPEG every
   browser shows — the download stays only as the fallback for a local original the
   browser cannot show.
 - **Viewer switches** (the owner): a Live Photo's motion has one button with three

@@ -64,8 +64,9 @@ const fetchers = 3
 
 var (
 	fetcher Fetcher
-	// changed: Photos made something local — the walk goes sooner (scan.WalkSoon)
-	changed  = func() {}
+	// refresh: Photos made a file of the asset local — its item is processed again
+	// now, without a walk (the importer's Refresh); waits at most `wait`
+	refresh  = func(uuid string, wait time.Duration) bool { return false }
 	fetchSem = make(chan struct{}, fetchers)
 	// One request per asset and want at a time: the others wait for its result
 	inFlightMu sync.Mutex
@@ -78,15 +79,19 @@ type fetching struct {
 	err  error
 }
 
-// RegisterRenditionRoutes: f may be nil (only what is on disk is served);
-// libraryChanged is called when Photos made a file local (nil: nothing)
-func RegisterRenditionRoutes(e *echo.Echo, f Fetcher, libraryChanged func(), logger *l.Logger) {
+// How long the Original waits for its item to be processed again (the cloud on the
+// tile goes as soon as the client asks for the delta after it)
+const refreshWait = 10 * time.Second
+
+// RegisterRenditionRoutes: f may be nil (only what is on disk is served); r
+// processes one asset's item again (nil: the next walk does)
+func RegisterRenditionRoutes(e *echo.Echo, f Fetcher, r func(uuid string, wait time.Duration) bool, logger *l.Logger) {
 	if itemsProxy == nil {
 		itemsProxy = model.NewProxy(logger)
 	}
 	fetcher = f
-	if libraryChanged != nil {
-		changed = libraryChanged
+	if r != nil {
+		refresh = r
 	}
 	e.GET("/items/:guid/rendition/:level", func(c echo.Context) error { return getRendition(c, logger) })
 }
@@ -117,7 +122,8 @@ func getRendition(c echo.Context, logger *l.Logger) error {
 			drawn = nil // a failed request hands over nothing to show
 			logger.Debug("Rendition not fetched", l.String("guid", uuid), l.String("level", c.Param("level")), l.Error(err))
 		} else {
-			changed()
+			// The new file reaches the item now; the viewer does not wait for that
+			go refresh(uuid, refreshWait)
 		}
 		path = apple.Local(root, uuid, want)
 	}
@@ -151,8 +157,7 @@ func getOriginal(c echo.Context, item *dto.ItemDto, logger *l.Logger) error {
 		logger.Debug("Original not fetched", l.String("guid", item.Guid), l.Error(err))
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
-	// Photos keeps the original local now: the item learns of it with the next walk
-	defer changed()
+
 	c.Response().Header().Set("Cache-Control", "private, max-age=86400")
 	switch {
 	case item.Kind == dto.KindVideo:
@@ -160,12 +165,14 @@ func getOriginal(c echo.Context, item *dto.ItemDto, logger *l.Logger) error {
 		if err != nil || path == "" {
 			return fail(err)
 		}
+		refresh(item.Guid, refreshWait) // the original is local now: the cloud goes
 		return c.File(path)
 	case c.QueryParam("file") == "1":
 		data, uti, name, err := fetcher.Original(item.Guid)
 		if err != nil {
 			return fail(err)
 		}
+		refresh(item.Guid, refreshWait)
 		if name != "" {
 			c.Response().Header().Set(echo.HeaderContentDisposition, `attachment; filename="`+strings.ReplaceAll(name, `"`, "")+`"`)
 		}
@@ -175,6 +182,9 @@ func getOriginal(c echo.Context, item *dto.ItemDto, logger *l.Logger) error {
 		if err != nil {
 			return fail(err)
 		}
+		// Drawing it made Photos download the original: the item knows before the
+		// answer goes, so the client's next delta has it (the cloud goes)
+		refresh(item.Guid, refreshWait)
 		return c.Blob(http.StatusOK, "image/jpeg", data)
 	}
 }
@@ -283,7 +293,7 @@ func hydrateRound(asked map[string]bool, logger *l.Logger) {
 		if _, err := once(it.Guid+"/medium", func() ([]byte, error) { return fetcher.Image(it.Guid, mediumSize) }); err != nil {
 			logger.Debug("Waiting asset not fetched", l.String("guid", it.Guid), l.Error(err))
 		} else {
-			changed()
+			refresh(it.Guid, refreshWait)
 		}
 	}
 }

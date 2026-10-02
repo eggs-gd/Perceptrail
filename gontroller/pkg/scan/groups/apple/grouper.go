@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"perceptrail/gontroller/pkg/model/dto"
 
@@ -34,6 +35,11 @@ import (
 type Grouper struct {
 	logger *l.Logger
 	libs   map[string]*library // by bundle path, loaded once per walk
+
+	// The libraries as last loaded, kept between walks: one asset's group can be
+	// formed again without reading the DB (Regroup)
+	lastMu sync.Mutex
+	last   map[string]*library
 }
 
 func NewGrouper(chin <-chan flow.FileEvent, chout chan<- flow.FileGroup, logger *l.Logger) chain.Processor {
@@ -42,7 +48,7 @@ func NewGrouper(chin <-chan flow.FileEvent, chout chan<- flow.FileGroup, logger 
 
 // NewDecorator: the grouper itself, for tests and custom wiring
 func NewDecorator(logger *l.Logger) *Grouper {
-	return &Grouper{logger: logger, libs: map[string]*library{}}
+	return &Grouper{logger: logger, libs: map[string]*library{}, last: map[string]*library{}}
 }
 
 func (g *Grouper) Decorate(ev flow.FileEvent) (flow.FileGroup, error) {
@@ -71,6 +77,9 @@ func (g *Grouper) Decorate(ev flow.FileEvent) (flow.FileGroup, error) {
 			lib = &library{byPath: map[string]*asset{}, failed: true}
 		} else {
 			g.logger.Info("Photos library loaded", l.String("library", root), l.Int("assets", len(lib.assets)))
+			g.lastMu.Lock()
+			g.last[root] = lib
+			g.lastMu.Unlock()
 		}
 		g.libs[root] = lib
 	}
@@ -117,8 +126,10 @@ func BundleRoot(path string) string {
 type library struct {
 	assets []*asset
 	byPath map[string]*asset
-	failed bool     // the DB did not load
-	held   []string // a failed library's files, as walked
+	root   string
+	rows   map[string]assetRow // every asset of the DB by UUID (Regroup), files or not
+	failed bool                // the DB did not load
+	held   []string            // a failed library's files, as walked
 }
 
 // pending: the files of groups that did not go out; all of a failed library's
@@ -309,29 +320,15 @@ func loadLibrary(root string) (*library, error) {
 	if err != nil {
 		return nil, err
 	}
-	lib := &library{byPath: map[string]*asset{}}
+	lib := &library{byPath: map[string]*asset{}, root: root, rows: map[string]assetRow{}}
 	for _, r := range rows {
 		if r.trashed || r.hidden || len(r.uuid) < 2 {
 			continue
 		}
-		meta := r.meta.record()
-		a := &asset{uuid: r.uuid, arrived: map[string]*dto.FileDto{}, meta: meta, kind: r.kind(),
-			metaHash: hashRecord(meta, r.kind())}
-		byRole := map[role]string{}
-		for _, c := range candidates(root, r.uuid, r.dir, r.filename) {
-			if info, err := os.Stat(c.path); err == nil && !info.IsDir() {
-				a.files = append(a.files, c)
-				byRole[c.role] = c.path
-			}
-		}
-		a.files = append(a.files, frames(root, r.uuid)...)
+		lib.rows[r.uuid] = r
+		a := newAsset(root, r)
 		if len(a.files) == 0 {
 			continue // nothing local: not even a thumbnail
-		}
-		for _, r := range showRank {
-			if p, ok := byRole[r]; ok {
-				a.show = append(a.show, p)
-			}
 		}
 		lib.assets = append(lib.assets, a)
 		for _, c := range a.files {
@@ -339,6 +336,61 @@ func loadLibrary(root string) (*library, error) {
 		}
 	}
 	return lib, nil
+}
+
+// newAsset: the asset of a DB row with the files of it that exist now
+func newAsset(root string, r assetRow) *asset {
+	meta := r.meta.record()
+	a := &asset{uuid: r.uuid, arrived: map[string]*dto.FileDto{}, meta: meta, kind: r.kind(),
+		metaHash: hashRecord(meta, r.kind())}
+	byRole := map[role]string{}
+	for _, c := range candidates(root, r.uuid, r.dir, r.filename) {
+		if info, err := os.Stat(c.path); err == nil && !info.IsDir() {
+			a.files = append(a.files, c)
+			byRole[c.role] = c.path
+		}
+	}
+	a.files = append(a.files, frames(root, r.uuid)...)
+	for _, r := range showRank {
+		if p, ok := byRole[r]; ok {
+			a.show = append(a.show, p)
+		}
+	}
+	return a
+}
+
+// Regroup: the group of one asset as it is on disk now — after Photos made a file
+// of it local (on demand), its item is processed again without a walk. The DB's
+// metadata is the one the last walk loaded (it wins over the files' EXIF). false:
+// no such asset in a loaded library, or no file of it on disk.
+func (g *Grouper) Regroup(uuid string) (flow.FileGroup, bool) {
+	g.lastMu.Lock()
+	var lib *library
+	var row assetRow
+	for _, lb := range g.last {
+		if r, ok := lb.rows[uuid]; ok {
+			lib, row = lb, r
+			break
+		}
+	}
+	g.lastMu.Unlock()
+	if lib == nil {
+		return flow.FileGroup{}, false
+	}
+	a := newAsset(lib.root, row)
+	for _, c := range a.files {
+		info, err := os.Stat(c.path)
+		if err != nil {
+			return flow.FileGroup{}, false // vanished meanwhile: the next walk sees it
+		}
+		a.arrived[c.path] = &dto.FileDto{ItemEntry: dto.ItemEntry{
+			Path: c.path, Name: filepath.Base(c.path), Size: info.Size(), ModTime: info.ModTime(),
+		}}
+	}
+	if len(a.files) == 0 {
+		return flow.FileGroup{}, false
+	}
+	return a.group(), true
 }
 
 type assetRow struct {

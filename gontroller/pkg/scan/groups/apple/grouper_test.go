@@ -377,3 +377,39 @@ func TestHasLibrary(t *testing.T) {
 		t.Error("a library at the top, or the library itself")
 	}
 }
+
+// One asset's group again after Photos made a file of it local: from the DB rows
+// of the last load (its metadata) and the disk now — no walk, no DB read
+func TestRegroup(t *testing.T) {
+	root := t.TempDir()
+	bundle := makeLibrary(t, root, fixture())
+	g := NewDecorator(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	walk(t, g, root, nil)
+
+	if _, ok := g.Regroup("NOT-AN-ASSET"); ok {
+		t.Error("an unknown asset")
+	}
+	// The cloud-only asset's original arrives
+	write := func(rel string) {
+		t.Helper()
+		p := filepath.Join(bundle, rel)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(rel), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("originals/B/" + cloudOnly + ".jpeg")
+	group, ok := g.Regroup(cloudOnly)
+	if !ok {
+		t.Fatal("no group")
+	}
+	if group.Key != cloudOnly || filepath.Base(group.Files[0].Path) != cloudOnly+".jpeg" ||
+		group.Files[0].Role != dto.RoleOriginal || group.Files[0].Size == 0 {
+		t.Errorf("group %s: main %+v, want the arrived original", group.Key, group.Files[0])
+	}
+	if len(group.Meta) == 0 || group.MetaHash == "" {
+		t.Error("the DB's metadata is missing: the files' EXIF would win")
+	}
+}

@@ -59,8 +59,9 @@ keeps in place.
   a copy whose count differs from the stream's `total` after a delta is synced again
   from nothing. Changes go to every tab's layout worker (BroadcastChannel
   `items-changes`). Refreshes come from `refreshFromServer()`
-  (proxy): the start, coming back to the tab, every navigation, every 20 s while the
-  tab is seen; at most every 5 s.
+  (proxy): the start, coming back to the tab, every navigation, at most every 5 s;
+  and right after an original from Photos has loaded (the server processed its item
+  before answering).
 - `lib/stores/internal/layoutDb.ts` — the layout is per tab (its width, its view): the
   page names its database `layout-<random>` and holds a Web Lock of that name (on
   plain HTTP: answers a roll call on a BroadcastChannel); the layout worker gets the
