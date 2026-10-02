@@ -9,7 +9,7 @@ its steps; the top knows none of the tools — the file system, the providers,
 exiftool, the plugins belong to the stage that uses them. One step does one thing.
 
 ```
-discover → identify → perceive
+discover → identify → core → plugins → commit
 ```
 
 [`entry.go`](entry.go) (`NewImporterService`) wires the stages and holds what
@@ -21,12 +21,15 @@ importer/                  the top: the stages, Refresh
 importer/flow/             what flows between the stages and steps; the walk's progress
 importer/discover/         walk → group → gate: the groups that need work, the files table up to date
 importer/discover/group/   the grouping sub-chain: the providers' switch and their groupers
-importer/identify/         read (exiftool) → classify → validate → preview: the item known
-importer/perceive/         the perceptors, then the closer: the item published
+importer/identify/         read (exiftool) → classify → validate → embedded → sizes → pick: the item known
+importer/core/             the core perceptors (built in): they write into the item
+importer/plugins/          the external perceptors (.so): they only read it
+importer/commit/           the closer: the item published
 ```
 
 Stage packages export their steps' logic (`discover.NewGate`, `identify.NewReader`,
-`identify.Classifier`, `identify.NewValidator`, `identify.NewPreview`, …) — their
+`identify.Classifier`, `identify.NewValidator`, `identify.NewEmbedded`,
+`identify.NewSizes`, `identify.Pick`, `commit.NewCloser`, …) — their
 `New` runs it between channels; the tests of the whole import run it one group at a
 time. Sub-packages cannot import `importer` (it imports them): what they share
 lives in `flow`. The sources are providers (`pkg/providers`: Apple Photos, the plain
@@ -39,8 +42,10 @@ detail).
 
 ```
 [discover: walk → group (switch → a grouper per provider) → gate]
-  → [identify: read (exiftool, N) → classify → validate → preview]
-  → [perceive: core → plugins → closer (Visible | Waiting)]
+  → [identify: read (exiftool, N) → classify → validate → embedded → sizes → pick]
+  → [core: open → date, size, … → release]
+  → [plugins: (to read-only → a .so perceptor → back) each, or pass]
+  → [commit: closer (Visible | Waiting)]
 ```
 
 ## Stages and their steps
@@ -57,8 +62,12 @@ detail).
 | read | `identify/read.go` | `FileGroup` -> `*RawItem` | `exiftool -all` for every file; N steps in parallel on the same channels, one pool. |
 | classify | `identify/classify.go` | `*RawItem` -> `*RawItem` | The kind of every file; the main file (the source) first; roles. |
 | validate | `identify/validate.go` | `*RawItem` -> `*RawItem` | Links the group, same / changed / moved / duplicate / broken -> the item. |
-| preview | `identify/preview.go` | `*RawItem` -> `*RawItem` | What the browser shows now, no transcode: the main file (JPEG, PNG, …; H.264 video), else the biggest viewable derivative, else an embedded preview extracted into `cache/previews/<guid>/` (with the RAW's Orientation copied onto it). Any size counts. |
-| **perceive** | `perceive/entry.go` | `*RawItem` -> `*dto.ItemDto` | Core plugins (date, size), external perceptors, then the closer: the item saved `Visible` (a preview) or `Waiting` (none), with its perceptors' values. |
+| embedded | `identify/embedded.go` | `*RawItem` -> `*RawItem` | Only when no file of the group shows (see pick): the main file's embedded preview (JpgFromRaw, PreviewImage, ThumbnailImage — the biggest first) extracted by exiftool into `cache/previews/<guid>/`, the RAW's Orientation copied onto it; `RawItem.Embedded`. After validate: needs the main file and the GUID. |
+| sizes | `identify/sizes.go` | `*RawItem` -> `*RawItem` | Pixels and codec of every file the client may show (the original's from the metadata, images from their header), written to the files table. |
+| pick | `identify/pick.go` | `*RawItem` -> `*RawItem` | What the browser shows now, no transcode: the source's `Show`, the main file (JPEG, PNG, …; H.264 video), the biggest viewable derivative, else the embedded one. Any size counts. |
+| **core** | `core/entry.go` | `*RawItem` -> `*RawItem` | The built-in perceptors (date + zone, size, length), a step each, between `open` (skips a non-item; read-write view) and `release`. |
+| **plugins** | `plugins/entry.go` | `*RawItem` -> `*RawItem` | The external `.so` perceptors, a step each with read-only adapters around it; none loaded: one pass step. |
+| **commit** | `commit/closer.go` | `*RawItem` -> `*dto.ItemDto` | The closer: the item saved `Visible` (a preview) or `Waiting` (none), with every import perceptor's value. |
 
 ## Types (package [`flow`](flow/flow.go))
 
@@ -67,8 +76,8 @@ detail).
   file, sidecars, derivatives), or the marker (`Done`). Before the gate the files
   carry only their stat, after it they are rows of the files table (GUIDs).
 - `RawItem` — the asset from exif to the closer: `Files`,
-  `Exif`, `Kinds` are aligned. exif fills `Files` + `Exif`, mime fills `Kinds` and
-  puts the main file first, the validator sets `Item`. Plugins see it through
+  `Exif`, `Kinds` are aligned. read fills `Files` + `Exif`, classify fills `Kinds`
+  and puts the main file first, validate sets `Item`, embedded `Embedded`. Plugins see it through
   `exif_core.RawItemRW` / `api.RawItemR`.
 - `WalkResult` — rides in the marker: root, start time,
   complete or not, unreadable directories.
@@ -131,7 +140,7 @@ detail).
   Photo, trashed, Photos' own files, a file vanishing mid-walk (held, complete next
   walk).
 - `identify/…_test.go` — kinds and the main file, roles, sizes, the cheap preview's
-  pick, an embedded preview's orientation (real exiftool), the kinds' table version.
+  pick (embedded → pick), an embedded preview's orientation (real exiftool), the kinds' table version.
 - `apple_test.go` — a fixture library through the whole import: keys, previews,
   nothing to do on the next walk, a downloaded original, an asset moved to the trash,
   the gate telling a dropped asset.

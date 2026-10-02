@@ -84,7 +84,7 @@ Item states (`dto.ItemState`): `New → Dirty → Processing → Ready`, `Delete
 | Package | What |
 |---|---|
 | `pkg/app` | app context, config, logger categories, services |
-| `pkg/importer` | the import chain: linear stages, each a sub-chain of its own — `discover` (walk, group, gate), `identify` (exiftool, kinds, the item, the cheap preview), `perceive` (perceptors, the closer); see its README |
+| `pkg/importer` | the import chain: linear stages, each a sub-chain of its own — `discover` (walk, group, gate), `identify` (exiftool, kinds, the item, sizes, the cheap preview), `core` / `plugins` (the perceptors: built in, external), `commit` (the closer); see its README |
 | `pkg/transcode` | the transcoders' switch and stubs (a chain of its own later) |
 | `pkg/plugins` | plugin manager (core + `.so`), `exif_core/{date,size}` |
 | `pkg/model` | SQLite via GORM, `ItemsApi`/`FilesApi`, DTOs |

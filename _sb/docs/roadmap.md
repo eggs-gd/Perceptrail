@@ -410,28 +410,26 @@ constructor (`New(deps, in, out, errch)`) that lists all its steps. No switches 
 branches on the top; the top knows nothing of the tools — exiftool, providers,
 transcoders, plugins belong to the stage that uses them. One step does one thing.
 
-- [ ] **The import chain — agreed, refactoring** (PR #24; `pkg/scan` did everything,
-      the cheap preview is a monster step). First commit done: `pkg/importer` with
-      the stages `discover`, `identify`, `perceive` (the logic unchanged; the DB
-      passed to the steps, their logic exported for the tests). Next: the cheap
-      preview cut into steps (the embedded preview to read), `perceive` split into
-      `core`, `plugins`, `commit`. The target:
+- [x] **The import chain — stages** (PR #24; `pkg/scan` did everything, the cheap
+      preview was a monster step). `pkg/importer` with five stages, each a
+      sub-chain in its own package; the DB passed to the steps, their logic
+      exported for the tests:
 
       discover → identify → core → plugins → commit
 
       | stage | yields | inside |
       |---|---|---|
       | discover | the groups that need work; the files table up to date | walk → group (the providers' switch → their groupers) → gate; `Refresh` lives here (one group into the channel between group and gate) |
-      | identify | the item known: identity, metadata, roles, what to show | read (exiftool, N in parallel) → embedded (an embedded preview for a group with nothing viewable) → classify (mime, main file, roles) → validate → sizes → pick (the cheap preview) — exiftool lives only here |
+      | identify | the item known: identity, metadata, roles, what to show | read (exiftool, N in parallel) → classify (mime, main file, roles) → validate → embedded (an embedded preview for a group with nothing viewable; after validate: it needs the main file and the GUID) → sizes → pick (the cheap preview) — exiftool lives only here (read, embedded) |
       | core | the core's metadata (date + zone, size, length) | the built-in perceptors, a step each |
       | plugins | the external EXIF perceptors' values (geo, colour…) | the `.so` plugins, a step each, with their read/write adapters |
       | commit | the item published | the state (Visible / Waiting), the item and the perceptors' values written together |
 
       Packages: `pkg/importer` (the top: five stages) with `discover`, `identify`,
       `core`, `plugins`, `commit`. Errors: discover reports to the walk's channel,
-      the rest to the processing one (progress is counted from the gate). In two
+      the rest to the processing one (progress is counted from the gate). Two
       commits: the move without logic changes, then the cheap preview cut into
-      steps and the commit taken out of the plugin processor.
+      steps and the plugin processor into `core`, `plugins`, `commit`.
 
 **The next chains — a starting idea to brainstorm** (the rough stages only; each
 to be worked out on its own):

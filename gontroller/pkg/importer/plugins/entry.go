@@ -1,0 +1,90 @@
+// Package plugins: the fourth stage of the import — the external perceptors (Go
+// plugins) over the item the core has perceived. They only read it (api.RawItemR):
+// what they find goes into their storages, the commit writes it.
+//
+//	each external perceptor, in the plugin manager's order: to read-only → the
+//	perceptor → back
+package plugins
+
+import (
+	"fmt"
+
+	"perceptrail/gontroller/pkg/importer/flow"
+	pm "perceptrail/gontroller/pkg/plugins"
+	"perceptrail/gontroller/pkg/plugins/exif_core"
+
+	"github.com/eggs-gd/perceplib/api"
+	"github.com/eggs-gd/perceplib/chain"
+	l "github.com/eggs-gd/perceplib/logger"
+)
+
+// New: in — the items the core has perceived; out — the same, perceived by the
+// external plugins (none loaded: passed on as they are). Its steps report to errch.
+func New(in <-chan *flow.RawItem, out chan<- *flow.RawItem, errch chan error, logger *l.Logger) chain.ChainProcessor {
+	stage := chain.NewChainProcessor(errch)
+
+	// A perceptor's step reads its own channel and writes its own; the stage wires
+	// them one after another
+	type step struct {
+		in, out chan api.RawItemR
+		proc    chain.Processor
+	}
+	var steps []step
+	for _, plugin := range pm.Pm.GetPlugins() {
+		if _, core := plugin.(exif_core.ExifCorePerceptor); core || plugin.DataProvider() != api.ExifDataProvider {
+			continue // a core one: the core stage
+		}
+		p, ok := plugin.(api.ExifPerceptor)
+		if !ok {
+			logger.Error("EXIF plugin has no NewProcessor, skipped", l.String("plugin", plugin.Name()))
+			continue
+		}
+		s := step{in: make(chan api.RawItemR, 1), out: make(chan api.RawItemR, 1)}
+		if s.proc = p.NewProcessor(s.in, s.out, logger.Named(plugin.Name())); s.proc == nil {
+			logger.Error("EXIF plugin returned no processor, skipped", l.String("plugin", plugin.Name()))
+			continue
+		}
+		steps = append(steps, s)
+	}
+	if len(steps) == 0 {
+		stage.AddStep(chain.NewDecorator(in, out, pass{}))
+		return stage
+	}
+
+	prev := in
+	for i, s := range steps {
+		stage.AddStep(chain.NewDecorator(prev, s.in, toReadOnly{}))
+		stage.AddStep(s.proc)
+		if i == len(steps)-1 { // the last one writes out
+			stage.AddStep(chain.NewDecorator(s.out, out, back{}))
+			break
+		}
+		next := make(chan *flow.RawItem, 1)
+		stage.AddStep(chain.NewDecorator(s.out, next, back{}))
+		prev = next
+	}
+	return stage
+}
+
+// toReadOnly: what an external perceptor sees
+type toReadOnly struct{}
+
+func (toReadOnly) Decorate(in *flow.RawItem) (api.RawItemR, error) { return in, nil }
+func (toReadOnly) Stop()                                           {}
+
+// back: the item an external perceptor returned
+type back struct{}
+
+func (back) Decorate(in api.RawItemR) (*flow.RawItem, error) {
+	it, ok := in.(*flow.RawItem)
+	if !ok {
+		return nil, fmt.Errorf("external EXIF plugin returned %T, want the item it got", in)
+	}
+	return it, nil
+}
+func (back) Stop() {}
+
+type pass struct{}
+
+func (pass) Decorate(in *flow.RawItem) (*flow.RawItem, error) { return in, nil }
+func (pass) Stop()                                            {}

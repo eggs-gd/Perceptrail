@@ -28,7 +28,7 @@ type pf struct {
 func pick(t *testing.T, files ...pf) (string, string, []string) {
 	t.Helper()
 	var extracted []string
-	c := &Preview{
+	e := &Embedded{
 		logger: l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}),
 		Extract: func(tag, src, guid string) (string, error) {
 			extracted = append(extracted, tag)
@@ -44,8 +44,9 @@ func pick(t *testing.T, files ...pf) (string, string, []string) {
 		it.Kinds = append(it.Kinds, f.kind)
 		it.Exif = append(it.Exif, f.exif)
 	}
-	path, mime := c.pick(it)
-	return path, mime, extracted
+	it, _ = e.Decorate(it)
+	it, _ = Pick{}.Decorate(it)
+	return it.Item.PreviewPath, it.Item.PreviewMime, extracted
 }
 
 func TestCheapPreviewPick(t *testing.T) {
@@ -126,8 +127,8 @@ func TestEmbeddedPreviewOrientation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c := &Preview{logger: logger, pool: pool, dir: filepath.Join(dir, "previews")}
-	dst, err := c.exiftoolExtract("ThumbnailImage", src, "g")
+	e := &Embedded{logger: logger, pool: pool, dir: filepath.Join(dir, "previews")}
+	dst, err := e.exiftoolExtract("ThumbnailImage", src, "g")
 	if err != nil {
 		t.Fatal(err)
 	}

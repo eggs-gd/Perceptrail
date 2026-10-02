@@ -84,6 +84,9 @@ type RawItem struct {
 	Meta     api.RawExif    // FileGroup.Meta: GetExif reads it first
 	MetaHash string
 	Kind     string // FileGroup.Kind
+	// Embedded: a preview extracted from the main file (identify), when the group has
+	// nothing the browser shows — the cheap preview's last resort
+	Embedded string
 }
 
 // IsMedia: there is something to show — the main file; in a keyed group any file

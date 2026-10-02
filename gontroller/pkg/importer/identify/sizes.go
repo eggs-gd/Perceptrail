@@ -1,0 +1,85 @@
+package identify
+
+import (
+	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
+	"os"
+	"strconv"
+
+	"perceptrail/gontroller/pkg/importer/flow"
+	"perceptrail/gontroller/pkg/model"
+	"perceptrail/gontroller/pkg/model/dto"
+
+	_ "golang.org/x/image/webp"
+)
+
+// Sizes: the sizes step's logic — the pixel size and codec of every file the client
+// may show, written to the files table (the asset contract sends them)
+type Sizes struct {
+	db model.Store
+}
+
+func NewSizes(db model.Store) *Sizes { return &Sizes{db: db} }
+
+func (s *Sizes) Decorate(it *flow.RawItem) (*flow.RawItem, error) {
+	setSizes(it)
+	if _, err := s.db.UpdateFiles(it.Files); err != nil {
+		return nil, err
+	}
+	return it, nil
+}
+
+func (s *Sizes) Stop() {}
+
+// setSizes: the original's size comes from its metadata (the source's first: the
+// Photos DB size is oriented); images from their header — no decoding
+func setSizes(it *flow.RawItem) {
+	for i, f := range it.Files {
+		if f.Role == dto.RoleMeta {
+			continue
+		}
+		if it.Exif[i] != nil {
+			f.Codec = string(it.Exif[i]["CompressorID"])
+		}
+		// The metadata describes the original: a derivative standing in as the main
+		// file (a cloud-only asset) has its own size
+		if i == 0 && f.Role == dto.RoleOriginal {
+			w, _ := strconv.Atoi(mainTag(it, "ImageWidth"))
+			h, _ := strconv.Atoi(mainTag(it, "ImageHeight"))
+			if w > 0 && h > 0 {
+				f.Width, f.Height = w, h
+				continue
+			}
+		}
+		if w, h, ok := headerSize(f.Path); ok {
+			f.Width, f.Height = w, h
+		}
+	}
+}
+
+// mainTag: a tag of the main file — the source's metadata first, then its EXIF
+func mainTag(it *flow.RawItem, tag string) string {
+	if v, ok := it.Meta[tag]; ok {
+		return string(v)
+	}
+	if it.Exif[0] != nil {
+		return string(it.Exif[0][tag])
+	}
+	return ""
+}
+
+// headerSize reads an image's size from its header (JPEG, PNG, GIF, WebP)
+func headerSize(path string) (int, int, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return 0, 0, false
+	}
+	defer f.Close()
+	cfg, _, err := image.DecodeConfig(f)
+	if err != nil {
+		return 0, 0, false
+	}
+	return cfg.Width, cfg.Height, true
+}

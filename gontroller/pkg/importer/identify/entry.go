@@ -2,9 +2,11 @@
 // its metadata, its files' kinds and roles, what it can show now.
 //
 //	read (exiftool, in parallel) → classify (kinds, the main file) → validate (the
-//	item: same / changed / moved / new / broken) → preview (what to show now)
+//	item: same / changed / moved / new / broken) → embedded (a preview extracted
+//	from the main file, when nothing else shows) → sizes (pixels, codecs) → pick
+//	(what to show now)
 //
-// exiftool lives here and nowhere else.
+// exiftool lives here and nowhere else (read, embedded).
 package identify
 
 import (
@@ -31,8 +33,12 @@ func New(cacheDir string, db model.Store, in <-chan flow.FileGroup, out chan<- *
 	read := make(chan *flow.RawItem)
 	// classify → validate: + kinds, the main file first
 	classified := make(chan *flow.RawItem)
-	// validate → preview: + the item (its GUID); not media does not get here
+	// validate → embedded: + the item (its GUID); not media does not get here
 	validated := make(chan *flow.RawItem)
+	// embedded → sizes: + the extracted preview, if one was needed
+	extracted := make(chan *flow.RawItem)
+	// sizes → pick: + every file's pixels and codec (stored)
+	sized := make(chan *flow.RawItem)
 
 	exiftool := newExiftoolPool(workers, logger)
 	reader := NewReader(exiftool, logger)
@@ -42,6 +48,8 @@ func New(cacheDir string, db model.Store, in <-chan flow.FileGroup, out chan<- *
 	}
 	stage.AddStep(chain.NewDecorator(read, classified, Classifier{}))
 	stage.AddStep(chain.NewDecorator(classified, validated, NewValidator(db, logger)))
-	stage.AddStep(chain.NewDecorator(validated, out, NewPreview(db, exiftool, cacheDir, logger)))
+	stage.AddStep(chain.NewDecorator(validated, extracted, NewEmbedded(exiftool, cacheDir, logger)))
+	stage.AddStep(chain.NewDecorator(extracted, sized, NewSizes(db)))
+	stage.AddStep(chain.NewDecorator(sized, out, Pick{}))
 	return stage
 }

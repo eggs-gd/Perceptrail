@@ -2,14 +2,16 @@
 // only linear stages, each a sub-chain of its own that knows its tools; the top
 // knows none of them (roadmap "Chains").
 //
-//	discover → identify → perceive
+//	discover → identify → core → plugins → commit
 //
 //	discover  the groups that need work; the files table up to date — walk, group
 //	          (the providers), gate (deletions after a walk)
 //	identify  the item known — exiftool, kinds and the main file, the item's
-//	          identity, the cheap preview
-//	perceive  the perceptors (core, plugins), then the item published: Visible
-//	          (a preview) or Waiting (none)
+//	          identity, sizes, the cheap preview
+//	core      the core perceptors (date, size, …): they write into the item
+//	plugins   the external perceptors (Go plugins): they only read it
+//	commit    the item published: Visible (a preview) or Waiting (none), with its
+//	          perceptors' values
 //
 // Diagrams: _sb/puml/Import chain.puml, _sb/puml/Walker.puml (gate, validator).
 //
@@ -34,10 +36,12 @@ import (
 	"time"
 
 	"perceptrail/gontroller/pkg/app"
+	"perceptrail/gontroller/pkg/importer/commit"
+	"perceptrail/gontroller/pkg/importer/core"
 	"perceptrail/gontroller/pkg/importer/discover"
 	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/importer/identify"
-	"perceptrail/gontroller/pkg/importer/perceive"
+	"perceptrail/gontroller/pkg/importer/plugins"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/providers"
@@ -99,9 +103,13 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	// Between the stages (the message types: flow)
 	// discover → identify: the groups that need work, stored (rows of the files table)
 	stored := make(chan flow.FileGroup)
-	// identify → perceive: the identified items
+	// identify → core: the identified items
 	identified := make(chan *flow.RawItem)
-	// perceive → nobody yet: published items, drained in Start (later: events to the
+	// core → plugins: + what the core perceptors found
+	cored := make(chan *flow.RawItem)
+	// plugins → commit: + what the external perceptors found
+	perceived := make(chan *flow.RawItem)
+	// commit → nobody yet: published items, drained in Start (later: events to the
 	// client); buffered so the closer does not wait for the drain
 	items := make(chan *dto.ItemDto, 1000)
 
@@ -111,7 +119,9 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	importChain := chain.NewChainProcessor(errch)
 	importChain.AddStep(disc)
 	importChain.AddStep(identify.New(ctx.Config().CacheDir(), db, stored, identified, errProcessing, logger))
-	importChain.AddStep(perceive.New(db, identified, items, errProcessing, logger))
+	importChain.AddStep(core.New(identified, cored, errProcessing, logger))
+	importChain.AddStep(plugins.New(cored, perceived, errProcessing, logger))
+	importChain.AddStep(commit.New(db, perceived, items, errProcessing, logger))
 
 	return &importerService{
 		appCtx:      ctx,

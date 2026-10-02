@@ -544,14 +544,22 @@ kinds, the validator, the cheap preview, the plugins and the closer, all wired i
 constructor that knew every tool. Renamed to `pkg/importer` and cut by what each part
 yields:
 
-- **The top has only linear stages** (`discover → identify → perceive`), each a
+- **The top has only linear stages** (`discover → identify → core → plugins →
+  commit`), each a
   sub-chain in its own package with one `New` that lists all its steps. The top knows
   no tool (file system, providers, exiftool, plugins); a stage owns the tools it uses.
 - **walk, group and gate are one stage.** The gate is the grouper's result (the groups
   that need work, the files table up to date), not a step of its own.
 - **The cheap preview belongs to identify** (what the item can show is part of knowing
-  it); plugins are split by kind into stages of their own later (core, plugins,
-  commit) — the second commit of the same PR.
+  it), cut into `embedded → sizes → pick`; only `embedded` runs exiftool (besides
+  `read`). The plan put `embedded` right after `read`; it runs **after validate**:
+  whether to extract needs the main file (classify) and the cache path needs the
+  item's GUID (validate). `RawItem.Embedded` carries the extracted path to `pick`.
+- **Perceptors by kind, a stage each**: `core` (built in, read-write
+  `exif_core.RawItemRW`), `plugins` (external `.so`, read-only `api.RawItemR`, with
+  adapters; none loaded → a pass step), `commit` (the closer). Each stage filters
+  the plugin manager's list by type, so the core ones now always run before the
+  external ones (before: the manager's order, mixed).
 - **The DB goes into constructors**, not package variables: the steps' logic is
   exported so the whole-import tests run it one group at a time.
 - Sub-packages cannot import `importer`: what they share (`FileGroup`, `RawItem`, the

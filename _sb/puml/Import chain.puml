@@ -2,7 +2,7 @@
 
 !pragma teoz true
 
-title Import chain (gontroller): stages discover -> identify -> perceive, each a sub-chain;\nevery participant is a step (own goroutine), every arrow is a channel
+title Import chain (gontroller): stages discover -> identify -> core -> plugins -> commit, each a sub-chain;\nevery participant is a step (own goroutine), every arrow is a channel
 
 box "discover: the groups that need work (walk, group by provider, gate)" #LightCyan
 control "walk\n(entry point)" as Walker
@@ -16,11 +16,17 @@ box "identify: the item known (exiftool lives here)" #Lavender
 control "read\n(exiftool, N)" as Exif
 control "classify" as Mime
 control "validate" as Validator #LightGreen
-control "preview\n(cheap)" as Preview #LightYellow
+control "embedded\n(exiftool)" as Embedded
+control "sizes" as Sizes
+control "pick\n(cheap preview)" as Preview #LightYellow
 end box
 
-box "perceive: the item published" #Honeydew
-control "plugins\n(core, then external)" as Plugins
+box "core / plugins: the perceptors" #Honeydew
+control "core\n(date, size, ...)" as Core
+control "plugins\n(external .so)" as Plugins
+end box
+
+box "commit: the item published" #MistyRose
 control "closer" as Closer
 end box
 
@@ -59,11 +65,16 @@ Mime -> Mime: kind of every file\n(exif FileType/MIMEType, own extension table,\
 Mime -> Validator: ranked group
 
 Validator -> DB: hash of the main file:\nsame / changed / moved / duplicate
-Validator -> Preview: item (GUID) + group
+Validator -> Embedded: item (GUID) + group
 
-Preview -> Preview: what the browser shows now, no transcode:\nthe main file (JPEG, PNG, ...; H.264 video) /\nthe biggest viewable derivative / an embedded preview\n(exiftool -b into the cache); any size counts
-Preview -> Plugins: item + preview ("" = nothing yet)
-Plugins -> Closer: item + metadata
+Embedded -> Embedded: nothing in the group shows:\nthe main file's embedded preview\n(exiftool -b into the cache)
+Embedded -> Sizes: + embedded ("" = none)
+Sizes -> DB: pixels, codec of every file
+Sizes -> Preview: + sizes
+Preview -> Preview: what the browser shows now, no transcode:\nShow / the main file (JPEG, PNG, ...; H.264 video) /\nthe biggest viewable derivative / the embedded one;\nany size counts
+Preview -> Core: item + preview ("" = nothing yet)
+Core -> Plugins: + date, size, length (written into the item)
+Plugins -> Closer: + the external perceptors' values (read-only)
 Closer -> DB: Visible (a preview) or Waiting (none)
 note right of Closer
 The client gets Visible (and Ready)
