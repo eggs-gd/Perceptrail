@@ -23,7 +23,7 @@ import (
 	"perceptrail/gontroller/pkg/model/dto"
 
 	"github.com/eggs-gd/perceplib/api"
-	"perceptrail/gontroller/pkg/scan/flow"
+	"perceptrail/gontroller/pkg/importer/flow"
 
 	"github.com/eggs-gd/perceplib/chain"
 

@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
+	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/scan/flow"
 )
 
 func entry(path string) dto.ItemEntry {

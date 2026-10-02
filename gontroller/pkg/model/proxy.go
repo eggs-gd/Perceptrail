@@ -61,3 +61,12 @@ func initDB(logger *l.Logger) *gorm.DB {
 	logger.Info("Database migration done!")
 	return db
 }
+
+// Store: what the import reads and writes — items, their files, the meta table
+type Store interface {
+	ItemsApi
+	FilesApi
+	MetaApi
+}
+
+var _ Store = (*proxy)(nil)

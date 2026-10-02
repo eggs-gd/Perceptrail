@@ -410,8 +410,12 @@ constructor (`New(deps, in, out, errch)`) that lists all its steps. No switches 
 branches on the top; the top knows nothing of the tools — exiftool, providers,
 transcoders, plugins belong to the stage that uses them. One step does one thing.
 
-- [ ] **The import chain — agreed, to refactor** (it exists, but `pkg/scan` does
-      everything; the cheap preview is a monster step):
+- [ ] **The import chain — agreed, refactoring** (PR #24; `pkg/scan` did everything,
+      the cheap preview is a monster step). First commit done: `pkg/importer` with
+      the stages `discover`, `identify`, `perceive` (the logic unchanged; the DB
+      passed to the steps, their logic exported for the tests). Next: the cheap
+      preview cut into steps (the embedded preview to read), `perceive` split into
+      `core`, `plugins`, `commit`. The target:
 
       discover → identify → core → plugins → commit
 

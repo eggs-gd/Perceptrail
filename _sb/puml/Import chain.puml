@@ -2,26 +2,29 @@
 
 !pragma teoz true
 
-title Import chain (gontroller): every participant is a chain step (own goroutine), every arrow is a channel
+title Import chain (gontroller): stages discover -> identify -> perceive, each a sub-chain;\nevery participant is a step (own goroutine), every arrow is a channel
 
-control "fswalker\n(entry point)" as Walker
-
-box "grouping (a sub-chain): the providers' switch, a grouper each" #LightCyan
-control "switch\n(first that claims)" as Groups
+box "discover: the groups that need work (walk, group by provider, gate)" #LightCyan
+control "walk\n(entry point)" as Walker
+control "group: switch\n(first that claims)" as Groups
 control "Apple Photos\ngrouper" as Photos
 control "plain folder\ngrouper (last)" as Generic
+control "gate" as Gate #LightGreen
 end box
 
-control "files gate" as Gate #LightGreen
-control "exif\n(N workers)" as Exif
-control "mime" as Mime
-control "validator" as Validator #LightGreen
+box "identify: the item known (exiftool lives here)" #Lavender
+control "read\n(exiftool, N)" as Exif
+control "classify" as Mime
+control "validate" as Validator #LightGreen
+control "preview\n(cheap)" as Preview #LightYellow
+end box
 
-control "cheap preview" as Preview #LightYellow
-
+box "perceive: the item published" #Honeydew
 control "plugins\n(core, then external)" as Plugins
-database "DB" as DB
 control "closer" as Closer
+end box
+
+database "DB" as DB
 
 == files flow in; groups flow out one by one, steps run concurrently ==
 

@@ -5,10 +5,10 @@ import (
 	"sync"
 	"time"
 
+	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/providers"
-	"perceptrail/gontroller/pkg/scan/flow"
 
 	l "github.com/eggs-gd/perceplib/logger"
 )

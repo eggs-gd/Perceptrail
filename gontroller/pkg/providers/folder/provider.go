@@ -3,9 +3,9 @@ package folder
 import (
 	"context"
 
+	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/providers"
-	"perceptrail/gontroller/pkg/scan/flow"
 )
 
 // Provider: the plain folder. It claims everything (it is asked last), groups by

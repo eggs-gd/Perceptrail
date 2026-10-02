@@ -8,13 +8,13 @@ import (
 	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/client"
 	"perceptrail/gontroller/pkg/client/routes"
+	"perceptrail/gontroller/pkg/importer"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/plugins"
 	"perceptrail/gontroller/pkg/providers"
 	"perceptrail/gontroller/pkg/providers/apple"
 	"perceptrail/gontroller/pkg/providers/apple/photokit"
 	"perceptrail/gontroller/pkg/providers/folder"
-	"perceptrail/gontroller/pkg/scan"
 	"syscall"
 
 	"github.com/eggs-gd/go-exiftool"
@@ -61,7 +61,7 @@ func main() {
 	ps = append(ps, folder.New())
 	providers.Enable(ps...)
 
-	importer := scan.NewImporterService(ctx)
+	importer := importer.NewImporterService(ctx)
 	svc.AddService(importer)
 	for _, p := range ps {
 		p.Start(mainCtx, importer.Refresh)
