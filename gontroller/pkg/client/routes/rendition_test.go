@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -12,12 +13,20 @@ import (
 	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/providers"
+	"perceptrail/gontroller/pkg/providers/apple"
 
 	l "github.com/eggs-gd/perceplib/logger"
 	"github.com/eggs-gd/perceplib/logger/decorators"
 
 	"github.com/labstack/echo/v4"
 )
+
+// The Apple provider through the web service: its renditions with a fake Photos,
+// its background work; the dispatch by provider
+
+// Photos' video delivery modes (photokit)
+const videoOriginal, videoFast = 1, 3
 
 // fakePhotos stands in for Photos: asked for a rendition, it writes the file where
 // Photos would (the naming layout) — or fails
@@ -63,14 +72,25 @@ func (f *fakePhotos) Full(uuid string) ([]byte, error) {
 }
 
 func (f *fakePhotos) Live(uuid string) error { return f.put(uuid, "_2_101_o.mov") }
+func (f *fakePhotos) Authorize() bool        { return true }
+
+// withApple: the Apple provider over photos, enabled for the test
+func withApple(t *testing.T, root string, photos *fakePhotos) *apple.Provider {
+	t.Helper()
+	p := apple.New(filepath.Dir(root), photos, itemsProxy, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	providers.Enable(p)
+	t.Cleanup(func() { providers.Enable() })
+	return p
+}
 
 // On demand: a rendition not on disk is asked for once, then served from the
 // library; what is local is served without asking; nothing to ask for: 404
 func TestRenditionOnDemand(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "Photos Library.photoslibrary")
 	photos := &fakePhotos{root: root}
+	withApple(t, root, photos)
 	e := echo.New()
-	RegisterRenditionRoutes(e, photos, nil, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	RegisterRenditionRoutes(e, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
 
 	put := func(guid, kind, path string) {
 		t.Helper()
@@ -144,6 +164,7 @@ func TestRenditionOnDemand(t *testing.T) {
 // what moves
 func TestOnDemandInAsset(t *testing.T) {
 	lib := "/p/Photos Library.photoslibrary/originals/A/A1.heic"
+	withApple(t, "/p/Photos Library.photoslibrary", &fakePhotos{})
 	if od := toClientAsset(&dto.ItemDto{Guid: "A1", Kind: dto.KindPhoto, Path: lib}, nil).OnDemand; od == nil ||
 		od.Medium != "/items/A1/rendition/medium?v="+contractVersion || od.Hover != "" || od.Original != "/items/A1/rendition/original?v="+contractVersion {
 		t.Errorf("photo, original in iCloud: %+v", od)
@@ -163,15 +184,14 @@ func TestOnDemandInAsset(t *testing.T) {
 }
 
 // Nothing local at all (Waiting): never on the sheet, so asked for in the
-// background — once per run, only Photos assets
+// background — once per run, only Photos assets; the item processed again after
 func TestHydrateWaiting(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "Photos Library.photoslibrary")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	photos := &fakePhotos{root: root}
-	var refreshed []string
-	RegisterRenditionRoutes(echo.New(), photos, func(uuid string, _ time.Duration) bool {
-		refreshed = append(refreshed, uuid)
-		return true
-	}, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	p := withApple(t, root, photos)
 	for _, it := range []*dto.ItemDto{
 		{Guid: "H1111111-WAITING", State: dto.Waiting, Kind: dto.KindPhoto, Path: filepath.Join(root, "originals/H/H1111111-WAITING.heic")},
 		{Guid: "H2222222-SHOWN", State: dto.Visible, Kind: dto.KindPhoto, Path: filepath.Join(root, "originals/H/H2222222-SHOWN.heic")},
@@ -181,18 +201,28 @@ func TestHydrateWaiting(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	asked := map[string]bool{}
-	logger := l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{})
-	hydrateRound(asked, logger)
-	hydrateRound(asked, logger) // the next round: not again
-	if len(refreshed) != 1 || refreshed[0] != "H1111111-WAITING" {
-		t.Errorf("refreshed %v, want the asset Photos made local, once", refreshed)
-	}
-	if len(photos.asked) != 1 || !asked["H1111111-WAITING"] {
-		t.Errorf("asked %v (%v), want the waiting Photos asset once", photos.asked, asked)
+	refreshed := make(chan string, 4)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	p.Start(ctx, func(uuid string, _ time.Duration) bool {
+		refreshed <- uuid
+		return true
+	})
+	select {
+	case uuid := <-refreshed:
+		if uuid != "H1111111-WAITING" {
+			t.Errorf("refreshed %s, want the waiting Photos asset", uuid)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the waiting asset was not asked for")
 	}
 	if _, err := os.Stat(filepath.Join(root, "resources/derivatives/H/H1111111-WAITING_1_102_o.jpeg")); err != nil {
 		t.Error("the image is not in the library")
+	}
+	select {
+	case uuid := <-refreshed:
+		t.Errorf("refreshed %s too, want only the waiting Photos asset", uuid)
+	case <-time.After(200 * time.Millisecond):
 	}
 }
 

@@ -142,8 +142,16 @@ library").
 - A cloud-only original is not described (its name, format, weight): for local
   files the original is what is on disk; a provider's own description waits for a
   second provider — the abstraction comes from two or more, not from one.
-- Generalise `rendition.go` (PR #21): a provider interface (Apple: the local file or
-  PhotoKit; an API provider: its thumbnail / preview / playback, proxied).
+- [x] **The mechanism** (PR #23): `pkg/providers` — one switch sends a found file to
+      the grouper of the first provider that claims it (the plain folder,
+      `providers/folder`, last), and the item's provider gives on-demand renditions;
+      Apple Photos is the first library (`pkg/providers/apple`), enabled by the
+      config. A provider that comes later
+      takes its files over through the usual deletions (findings "Providers as steps
+      of the chain").
+- [x] Generalise `rendition.go` (PR #23): the provider gives the rendition (Apple: the
+  local file or PhotoKit; an API provider: its thumbnail / preview / playback,
+  proxied), the web service serves it.
 
 All of them listed for now; the order is to be decided:
 
@@ -393,6 +401,81 @@ Done). We only read the library.
 - [x] Embedded RAW preview (`JpgFromRaw` / `PreviewImage`) — the cheap preview has
       extracted it since PR #15; it now gets the RAW's Orientation (portrait shots
       lay on their side). The renditions step uses it as a source too.
+
+## Chains — the shape of the processing (2026-10-02)
+
+**The contract** (agreed): the top of a chain has only linear stages, each named by
+what it yields; every stage is a sub-chain of its own, in its own package, with one
+constructor (`New(deps, in, out, errch)`) that lists all its steps. No switches or
+branches on the top; the top knows nothing of the tools — exiftool, providers,
+transcoders, plugins belong to the stage that uses them. One step does one thing.
+
+- [ ] **The import chain — agreed, to refactor** (it exists, but `pkg/scan` does
+      everything; the cheap preview is a monster step):
+
+      discover → identify → core → plugins → commit
+
+      | stage | yields | inside |
+      |---|---|---|
+      | discover | the groups that need work; the files table up to date | walk → group (the providers' switch → their groupers) → gate; `Refresh` lives here (one group into the channel between group and gate) |
+      | identify | the item known: identity, metadata, roles, what to show | read (exiftool, N in parallel) → embedded (an embedded preview for a group with nothing viewable) → classify (mime, main file, roles) → validate → sizes → pick (the cheap preview) — exiftool lives only here |
+      | core | the core's metadata (date + zone, size, length) | the built-in perceptors, a step each |
+      | plugins | the external EXIF perceptors' values (geo, colour…) | the `.so` plugins, a step each, with their read/write adapters |
+      | commit | the item published | the state (Visible / Waiting), the item and the perceptors' values written together |
+
+      Packages: `pkg/importer` (the top: five stages) with `discover`, `identify`,
+      `core`, `plugins`, `commit`. Errors: discover reports to the walk's channel,
+      the rest to the processing one (progress is counted from the gate). In two
+      commits: the move without logic changes, then the cheap preview cut into
+      steps and the commit taken out of the plugin processor.
+
+**The next chains — a starting idea to brainstorm** (the rough stages only; each
+to be worked out on its own):
+
+- **Render** (the expensive pass): `feed → render → commit`. Feed: the DB-state
+  queue of items lacking renditions — the plain folder's only (a library renders
+  itself). Render: a switch by kind (photo: libvips; video: ffmpeg, HDR → SDR, the
+  hover clip, the poster; Live Photo), hardware hidden inside. Commit: discard if
+  the item was deleted or changed meanwhile, else the renditions and Ready.
+- **Pixel perceptors (ML)**: `feed → pixels → ml → commit`. Pixels from the render
+  chain or through the provider. Open: Photos would mean asking for renditions in
+  bulk (against "never in bulk") — local thumbnails may be enough for faces.
+  Maybe a service of its own (goMLer).
+- **Group perceptors** (journeys, face clusters, series, duplicates): `feed →
+  group → commit`, over what changed, after the import or ML.
+- **Maintenance**: `find → prune` — what deleted items leave: renditions in the
+  cache (a provider taking its files over too), perceptor values, orphans.
+- **API providers** (Immich…): no files to walk. Either a second source in
+  discover (their change feed; the gate needs another sign of change than a stat),
+  or a chain of its own — `sync → identify → core → plugins → commit` — sharing
+  the stages after discover. Leaning to the latter; with the first API provider.
+- Not a chain: on demand (a request path; it re-enters the import through
+  `Refresh`).
+
+**perceplib `chain` — what the import taught** (proposals, to weigh with the
+refactor):
+
+- **A flush signal in the library**: the end-of-walk marker is a domain value
+  every step checks by hand (`ev.Done != nil` in each grouper, the gate counting
+  markers per branch). A library-level flush/barrier that passes every step (an
+  optional `Flusher` interface: flush what you hold, then pass it on) would take it
+  out of the steps.
+- **Skips are not errors**: `ErrSkippedItem` travels on the error channel, every
+  consumer filters it, and the progress counts "done" through it. A result kind of
+  its own (passed / skipped / failed) would make the counting explicit.
+- **Error channels at run time**: `AddStep` gives a step the chain's error channel
+  at the moment it is added; a sub-chain's steps keep the channel it was made with
+  (hence `errProcessing` passed around by hand). Inheriting the channel when the
+  chain runs (or per sub-chain, explicitly) would remove that trap.
+- **Typed stages**: a sub-chain is an untyped `Processor` — nothing checks at
+  compile time that a stage's in/out types match its neighbours'. A
+  `Stage[In, Out]` (a sub-chain with its typed ends) would.
+- **Parallel steps**: N workers on the same channels are built by hand
+  (`NewExifExtractor`); `chain.Parallel(n, decorator)` would say it.
+- **The switch**: `map[int]To` (random order for a broadcast, branches by bare
+  index) — a slice, or named outputs.
+- **Stop**: called from several goroutines (the walker guards it with a mutex) —
+  one lifecycle: the context ends the step, `Stop` once.
 
 ## Core — service (gontroller)
 

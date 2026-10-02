@@ -11,10 +11,11 @@ import (
 	"perceptrail/gontroller/pkg/plugins/exif_core"
 	"perceptrail/gontroller/pkg/plugins/exif_core/date"
 	"perceptrail/gontroller/pkg/plugins/exif_core/size"
+	"perceptrail/gontroller/pkg/providers"
+	"perceptrail/gontroller/pkg/providers/apple"
+	"perceptrail/gontroller/pkg/providers/folder"
 	"perceptrail/gontroller/pkg/scan/flow"
 	"perceptrail/gontroller/pkg/scan/groups"
-	"perceptrail/gontroller/pkg/scan/groups/apple"
-	"perceptrail/gontroller/pkg/scan/groups/generic"
 	"testing"
 
 	"github.com/eggs-gd/perceplib/api"
@@ -72,12 +73,10 @@ func scanWith(t *testing.T, root string, dropped func(key string)) []string {
 	t.Helper()
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
 	m := newTestMonitor(t, root)
-	groupers := map[int]chain.Decorator[flow.FileEvent, flow.FileGroup]{
-		groups.BranchGeneric: &generic.Grouper{},
-		groups.BranchApple:   apple.NewDecorator(logger),
-	}
-	gate := newFilesGate(groups.Branches, newProgress(), logger)
-	gate.dropped = dropped
+	// The providers as the chain has them: Apple, the plain folder last
+	ps := []providers.Provider{apple.New("", nil, itemsProxy, logger), folder.New()}
+	sw := groups.Switch{Providers: ps}
+	gate := newFilesGate(len(ps), newProgress(), dropped, logger)
 	exif := &exifExtractor{logger: logger, extract: fakeExif}
 	valid := newValidator(logger)
 	preview := &cheapPreview{logger: logger, dir: t.TempDir(),
@@ -94,16 +93,16 @@ func scanWith(t *testing.T, root string, dropped func(key string)) []string {
 		return true
 	}
 	toGroupers := func(ev flow.FileEvent) {
-		branches, err := groups.SourceSwitch{}.Switch(ev)
+		to, err := sw.Switch(ev)
 		if !ok(err) {
 			return
 		}
-		for b := range groups.Branches { // marker: every branch, in branch order
-			in, has := branches[b]
+		for i := range ps { // marker: every grouper, in order
+			in, has := to[i]
 			if !has {
 				continue
 			}
-			group, err := groupers[b].Decorate(in)
+			group, err := ps[i].Grouper().Decorate(in)
 			if !ok(err) {
 				continue
 			}

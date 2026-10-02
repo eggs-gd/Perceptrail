@@ -42,12 +42,9 @@ type Grouper struct {
 	last   map[string]*library
 }
 
-func NewGrouper(chin <-chan flow.FileEvent, chout chan<- flow.FileGroup, logger *l.Logger) chain.Processor {
-	return chain.NewDecorator(chin, chout, NewDecorator(logger))
-}
-
-// NewDecorator: the grouper itself, for tests and custom wiring
-func NewDecorator(logger *l.Logger) *Grouper {
+// newGrouper: the grouper's logic — the importer runs it as a step of the chain
+// (the provider hands it over: providers.Grouper)
+func newGrouper(logger *l.Logger) *Grouper {
 	return &Grouper{logger: logger, libs: map[string]*library{}, last: map[string]*library{}}
 }
 

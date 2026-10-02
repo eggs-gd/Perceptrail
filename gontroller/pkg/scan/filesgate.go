@@ -32,13 +32,14 @@ type filesGate struct {
 	dropped func(key string)
 }
 
-// NewFilesGate: branches is the number of groupers that send an end-of-walk marker
-func NewFilesGate(branches int, progress *progress, chin <-chan flow.FileGroup, chout chan<- flow.FileGroup, logger *l.Logger) chain.Processor {
-	return chain.NewDecorator(chin, chout, newFilesGate(branches, progress, logger))
+// NewFilesGate: branches is the number of groupers that send an end-of-walk marker;
+// dropped hears of a keyed group let not through (nil: nobody)
+func NewFilesGate(branches int, progress *progress, dropped func(key string), chin <-chan flow.FileGroup, chout chan<- flow.FileGroup, logger *l.Logger) chain.Processor {
+	return chain.NewDecorator(chin, chout, newFilesGate(branches, progress, dropped, logger))
 }
 
-func newFilesGate(branches int, progress *progress, logger *l.Logger) *filesGate {
-	return &filesGate{logger: logger, branches: branches, progress: progress}
+func newFilesGate(branches int, progress *progress, dropped func(key string), logger *l.Logger) *filesGate {
+	return &filesGate{logger: logger, branches: branches, progress: progress, dropped: dropped}
 }
 
 func (g *filesGate) Decorate(in flow.FileGroup) (flow.FileGroup, error) {

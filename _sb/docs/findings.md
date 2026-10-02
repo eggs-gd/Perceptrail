@@ -639,6 +639,37 @@ Design: roadmap "Expensive stage".
   `time.Time` — scanning into a float failed and would have dropped the whole
   library. Read it as `CAST(… AS REAL)`.
 
+### Providers as steps of the chain (2026-10-02, decided)
+
+- **How a library is told from a plain folder** (the owner): not by markers, not by
+  a typed list of sources in the config. Every source is a provider; one switch
+  asks the enabled ones in order and a found file goes to the grouper of the first
+  that claims it — each grouper a step of its own. The plain folder is a provider
+  too (`providers/folder`), the last: it claims what nobody else did. (First built
+  as a claim step per provider, one after another, the generic grouper apart — the
+  owner: one switch over all, and the plain folder is the same kind of grouper.)
+  Grouping is a sub-chain of its own (`groups.NewGrouping`), as processing is:
+  files in, groups out — the top of the chain reads walker → grouping → gate →
+  processing; the switch and the groupers are inside. Rejected on the way: a `sources:` list with types (folder /
+  library / api) — the user would have to know what each folder is; marker files
+  (`.immich`, `@eaDir`, …) as a filter of their own — the claim is the provider's
+  own business.
+- A provider not enabled (config `providers: {apple: {enabled: false}}`) is not in
+  the chain: its files are a plain folder's. Not wanting a library scanned is the
+  user's to say by not giving the access or not putting it under the root — not by
+  a disabled provider that still filters.
+- A provider that comes later takes its files over: they stop reaching the generic
+  grouper, the gate takes them as gone after the walk (the usual deletions), the
+  client gets the tombstones and the provider's groups instead. Our cache of the
+  gone items goes with them (a cleanup on delete — to add with the renders). The
+  GUIDs change (a link to the old item breaks); carrying them over by content hash
+  is for when a second provider exists.
+- `pkg/providers`: `Claims`, `Grouper`, `Regroup`, `Owns`, `Levels`, `Rendition`,
+  `Start`. Apple is the first: its grouper, PhotoKit and the on-demand logic moved
+  into `pkg/providers/apple`; the plain folder's grouper into `providers/folder`;
+  outside them nothing names a source (the switch, `routes/rendition.go`, the
+  importer and `main` only see providers).
+
 ### PhotoKit spike (2026-10-02)
 
 Roadmap step 0. `_sb/spikes/photokit`: Go + cgo (Objective-C), the Info.plist put into

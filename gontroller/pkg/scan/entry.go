@@ -6,10 +6,9 @@ import (
 	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/providers"
 	"perceptrail/gontroller/pkg/scan/flow"
 	"perceptrail/gontroller/pkg/scan/groups"
-	"perceptrail/gontroller/pkg/scan/groups/apple"
-	"perceptrail/gontroller/pkg/scan/groups/generic"
 	"sync"
 	"time"
 
@@ -26,7 +25,9 @@ var itemsProxy model.ItemsApi
 //
 // Enter: library root ->
 // - fswalker: every file found (path + stat), then the end-of-walk marker
-// - source switch -> groupers (generic | apple): files -> whole assets (FileGroup)
+// - grouping (a sub-chain, scan/groups): files -> whole assets (FileGroup). Inside,
+//   a switch sends a file to the grouper of the first provider that claims it
+//   (providers.Enabled: Apple Photos…, the plain folder last)
 // Exit: -> FileGroup
 //
 // Enter: FileGroup ->
@@ -52,10 +53,10 @@ var itemsProxy model.ItemsApi
 //   unreadable directory: an unmounted drive must not wipe the library.
 // - The chain is async: deletions may run before a moved file is validated, so the
 //   validator restores deleted items by hash.
-// - An Apple Photos library is grouped by its DB: the groups are formed up front
-//   (the files that exist), so each file still closes at most one group; a group
-//   that could not complete (a file vanished mid-walk) is held back, its files are
-//   not "gone". The asset UUID is the item's GUID (the key), whatever the main file.
+// - A provider not enabled is not in the chain: its files are a plain folder's.
+//   One that is groups its files its own way (Apple: by the library's DB, the groups
+//   formed up front; a group that could not complete is held back, its files are
+//   not "gone"); its key is the item's GUID, whatever the main file.
 // - The walk repeats: rescan after the last group of the previous walk is done
 //   (not after the walk — processing takes longer), so walks never overlap.
 
@@ -74,12 +75,11 @@ type importerService struct {
 
 	importChain chain.ChainProcessor
 
-	// One asset again (Refresh): the Apple grouper forms its group, the gate takes it
-	// like any other; whoever waits hears when its item leaves the chain
-	apple     *apple.Grouper
-	grouped   chan flow.FileGroup
-	waitersMu sync.Mutex
-	waiters   map[string][]chan struct{}
+	// One asset again (Refresh): its provider forms its group, the gate takes it like
+	// any other; whoever waits hears when its item leaves the chain or the gate drops
+	// the group
+	grouped chan flow.FileGroup
+	waits   *assetWaits
 }
 
 func NewImporterService(ctx app.AppContext) *importerService {
@@ -121,12 +121,10 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	// Channels between the steps: from -> to, what it carries. The message types
 	// are in the flow package (FileEvent, FileGroup, WalkResult, RawItem).
 
-	// fswalker -> source switch: one file (path + stat), or the end-of-walk marker
+	// fswalker -> grouping: one file (path + stat), or the end-of-walk marker
 	files := make(chan flow.FileEvent)
-	// source switch -> its grouper: the same, split by source; the marker goes to both
-	toGeneric, toApple := make(chan flow.FileEvent), make(chan flow.FileEvent)
-	// groupers -> files gate: a complete group (no main file yet), and/or the
-	// grouper's marker; both groupers write here
+	// grouping -> files gate: a complete group (no main file yet), and/or a
+	// grouper's marker (one from each provider's grouper)
 	grouped := make(chan flow.FileGroup)
 	// files gate -> exif: the same group, stored: rows of the files table (GUIDs);
 	// only groups that need work
@@ -147,18 +145,15 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	// Find every file under the library root
 	importChain.AddStep(NewFsWalker(ctx.Config().Path, rescan, progress, files, logger))
 
-	// Files -> whole assets, a grouper per source
-	importChain.AddStep(groups.NewSourceSwitch(files, toGeneric, toApple))
-	importChain.AddStep(generic.NewGrouper(toGeneric, grouped))
-	appleGrouper := apple.NewDecorator(logger)
-	importChain.AddStep(chain.NewDecorator(toApple, grouped, appleGrouper))
+	// Files -> whole assets: the grouping sub-chain (the providers' switch and
+	// groupers inside)
+	ps := providers.Enabled()
+	importChain.AddStep(groups.NewGrouping(ps, files, grouped, errch))
 
 	// Assets -> items: only what needs work, then metadata, kinds, identity. A keyed
 	// group it drops is told to whoever waits for that asset (Refresh)
-	svc := &importerService{waiters: map[string][]chan struct{}{}}
-	gate := newFilesGate(groups.Branches, progress, logger)
-	gate.dropped = svc.itemDone
-	importChain.AddStep(chain.NewDecorator(grouped, stored, chain.Decorator[flow.FileGroup, flow.FileGroup](gate)))
+	waits := newAssetWaits()
+	importChain.AddStep(NewFilesGate(len(ps), progress, waits.done, grouped, stored, logger))
 
 	// The rest reports to errProcessing: progress counts the groups in flight
 	processing := chain.NewChainProcessor(errProcessing)
@@ -176,29 +171,38 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	// steps keep errProcessing
 	importChain.AddStep(processing)
 
-	svc.appCtx, svc.errch, svc.items, svc.progress = ctx, errch, items, progress
-	svc.importChain, svc.apple, svc.grouped = importChain, appleGrouper, grouped
-	return svc
+	return &importerService{
+		appCtx:      ctx,
+		errch:       errch,
+		items:       items,
+		progress:    progress,
+		importChain: importChain,
+		grouped:     grouped,
+		waits:       waits,
+	}
 }
 
-// Refresh processes one Apple Photos asset again, now — Photos has just made a file
-// of it local (on demand): no walk of the whole library for one photo. Its group
-// goes to the gate like any group (only what changed passes; deletions are not
+// Refresh processes one asset of a provider's library again, now — the library (Apple
+// Photos…) has just made a file of it local (on demand): no walk of the whole library
+// for one photo. Its group goes to the gate like any group (only what changed passes; deletions are not
 // touched — they come with the walk's marker; a walk sending the same asset at the
 // same time just processes it twice into the same item). Waits until the item has
 // left the chain or the gate dropped the group (nothing changed: Photos drew from
 // what was local), at most wait; false if neither (no such asset, too slow) — the
 // next walk catches up anyway.
 func (s *importerService) Refresh(uuid string, wait time.Duration) bool {
-	group, ok := s.apple.Regroup(uuid)
+	var group flow.FileGroup
+	ok := false
+	for _, p := range providers.Enabled() {
+		if group, ok = p.Regroup(uuid); ok {
+			break
+		}
+	}
 	if !ok {
 		return false
 	}
-	done := make(chan struct{})
-	s.waitersMu.Lock()
-	s.waiters[uuid] = append(s.waiters[uuid], done)
-	s.waitersMu.Unlock()
-	defer s.dropWaiter(uuid, done)
+	done := s.waits.add(uuid)
+	defer s.waits.drop(uuid, done)
 
 	timeout := time.After(wait)
 	select {
@@ -214,29 +218,48 @@ func (s *importerService) Refresh(uuid string, wait time.Duration) bool {
 	}
 }
 
-func (s *importerService) dropWaiter(uuid string, done chan struct{}) {
-	s.waitersMu.Lock()
-	defer s.waitersMu.Unlock()
-	ws := s.waiters[uuid]
-	for i, w := range ws {
-		if w == done {
-			s.waiters[uuid] = append(ws[:i], ws[i+1:]...)
+// assetWaits: who waits for an asset's item to be done (Refresh) — told when the
+// item leaves the chain or the gate drops its group
+type assetWaits struct {
+	mu sync.Mutex
+	by map[string][]chan struct{}
+}
+
+func newAssetWaits() *assetWaits { return &assetWaits{by: map[string][]chan struct{}{}} }
+
+// add: a channel closed when the asset is done
+func (w *assetWaits) add(key string) chan struct{} {
+	ch := make(chan struct{})
+	w.mu.Lock()
+	w.by[key] = append(w.by[key], ch)
+	w.mu.Unlock()
+	return ch
+}
+
+// drop: the waiter gave up (or heard already)
+func (w *assetWaits) drop(key string, ch chan struct{}) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	chs := w.by[key]
+	for i, c := range chs {
+		if c == ch {
+			w.by[key] = append(chs[:i], chs[i+1:]...)
 			break
 		}
 	}
-	if len(s.waiters[uuid]) == 0 {
-		delete(s.waiters, uuid)
+	if len(w.by[key]) == 0 {
+		delete(w.by, key)
 	}
 }
 
-// itemDone: an item left the chain — its waiters hear of it
-func (s *importerService) itemDone(guid string) {
-	s.waitersMu.Lock()
-	defer s.waitersMu.Unlock()
-	for _, w := range s.waiters[guid] {
-		close(w)
+// done: the asset's item is done — everyone waiting hears
+func (w *assetWaits) done(key string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	for _, c := range w.by[key] {
+		close(c)
 	}
-	delete(s.waiters, guid)
+	delete(w.by, key)
 }
 
 func (s *importerService) Start(parentCtx context.Context) {
@@ -250,7 +273,7 @@ func (s *importerService) Start(parentCtx context.Context) {
 			select {
 			case it := <-s.items:
 				s.progress.finished()
-				s.itemDone(it.Guid)
+				s.waits.done(it.Guid)
 			case <-ctx.Done():
 				return
 			}

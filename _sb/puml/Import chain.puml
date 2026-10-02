@@ -6,10 +6,10 @@ title Import chain (gontroller): every participant is a chain step (own goroutin
 
 control "fswalker\n(entry point)" as Walker
 
-box "groups (switch by source)" #LightCyan
-control "switch" as Groups
-control "generic" as Generic
-control "Apple Photos" as Photos
+box "grouping (a sub-chain): the providers' switch, a grouper each" #LightCyan
+control "switch\n(first that claims)" as Groups
+control "Apple Photos\ngrouper" as Photos
+control "plain folder\ngrouper (last)" as Generic
 end box
 
 control "files gate" as Gate #LightGreen
@@ -33,17 +33,16 @@ loop every file under the root
     end note
 end
 
-alt plain folder
-    Groups -> Generic: file
-    Generic -> Generic: sidecars by name, next to each other\n(buffer: one open group; a complete group goes out)
-    Generic -> Gate: group
-else inside *.photoslibrary
+alt Apple claims it (inside *.photoslibrary)
     Groups -> Photos: file
     Photos -> Photos: first file: asset links from Photos.sqlite\n(original, render, Live Photo video); buffer of open\ngroups, a group goes out when all its files arrived
     Photos -> Gate: group (asset UUID)
-else other formats (Takeout, ...)
-    Groups ->x Groups: later
+else nobody else claims it (other providers: Immich, ... later)
+    Groups -> Generic: file
+    Generic -> Generic: sidecars by name, next to each other\n(buffer: one open group; a complete group goes out)
+    Generic -> Gate: group
 end
+note over Groups: a provider not enabled is not asked:\nits files are a plain folder's
 
 Gate -> DB: stat vs files table,\nCheckTime of every file
 alt unchanged and the item is Ready
@@ -73,9 +72,9 @@ end note
 == end of walk ==
 
 Walker -> Groups: marker (walk result)
-Groups -> Generic: marker
-& Groups -> Photos: marker
-note right of Groups: broadcast to every branch
+Groups -> Photos: marker
+& Groups -> Generic: marker
+note right of Groups: to every grouper
 Generic -> Gate: last groups, marker
 Photos -> Gate: last groups, marker
 Gate -> DB: after the marker from every branch:\ndeletions (V2), only after a complete walk,\nnot under unreadable directories

@@ -23,6 +23,9 @@ const (
 // Library asks Photos; the zero value is ready
 type Library struct{}
 
+// Authorize asks for read access to Photos once (see Authorize)
+func (Library) Authorize() bool { return Authorize() }
+
 // Image makes the asset's image of at most size×size local (Photos' ~2048 px
 // rendition when only in iCloud) and returns it as JPEG: drawn from a local
 // original (a HEIC) Photos writes no file — the JPEG is all there is to show
