@@ -710,6 +710,15 @@ the binary by the linker; run from the user's terminal on the dev library.
   opens it (7 of 6 427 in the dev library). `HydrateWaiting` asks Photos for their
   image in the background (every minute, each asset once per run); the next walk
   shows them. Not bulk: only what cannot be shown at all.
+- **First run on the owner's server — nothing changed in the UI** (PR #21): the
+  server sent `asset.onDemand`, but a delta brings only changed items — the client's
+  kept copy never got the new field, so nothing asked. The sync epoch now carries a
+  contract version (`items.go` `contractVersion`): a change to what an item carries
+  bumps it, and every client syncs from nothing once.
+- **A local HEIC original leaves no file**: asked for the image, Photos draws it
+  from the original on disk and writes no derivative — the viewer got a 404. The
+  image PhotoKit hands over comes back as JPEG (`pk_image`) and is served when no
+  file appeared (not kept; the browser caches it). A failed request serves nothing.
 - **In the server** (PR #21): the request does not reprocess anything — the
   endpoint serves the file from the library right after Photos made it local, and
   the next walk adds it to the group (a new file), so the item and the other tabs get
