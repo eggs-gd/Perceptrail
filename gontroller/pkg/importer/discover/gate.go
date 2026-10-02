@@ -5,14 +5,12 @@ import (
 	"time"
 
 	"perceptrail/gontroller/pkg/importer/flow"
+	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/plugins"
 
 	"github.com/eggs-gd/perceplib/chain"
 
 	l "github.com/eggs-gd/perceplib/logger"
-
-	"gorm.io/gorm"
 )
 
 // GateStore: what the gate reads and writes — the files table, and an item's state
@@ -30,17 +28,30 @@ type Store interface {
 	SweepStore
 }
 
+// Unprocessed: whether a perceptor still has to process an item (its schema is new
+// or changed) — the group goes through the import once more
+type Unprocessed interface {
+	Unprocessed(guid string) bool
+}
+
+// Perceptors: what discover asks of the perceptors — the gate and the deletions
+type Perceptors interface {
+	Unprocessed
+	Pruner
+}
+
 // files gate: keeps the files table (identity, stat, CheckTime) and lets through
 // only groups that need work — so unchanged files never reach exiftool. After the
 // end-of-walk marker from every grouper it derives deletions.
 type Gate struct {
-	db       GateStore
-	sweep    sweep
-	logger   *l.Logger
-	branches int // markers to wait for
-	markers  int
-	held     []string // files the groupers held back in this walk: not gone
-	progress *flow.Progress
+	db         GateStore
+	perceptors Unprocessed
+	sweep      sweep
+	logger     *l.Logger
+	branches   int // markers to wait for
+	markers    int
+	held       []string // files the groupers held back in this walk: not gone
+	progress   *flow.Progress
 	// dropped hears of a keyed group the gate let not through (nothing to do): one
 	// asset processed again on demand (importer Refresh) answers at once
 	dropped func(key string)
@@ -48,8 +59,11 @@ type Gate struct {
 
 // NewGate: the gate step's logic. branches is the number of groupers that send an
 // end-of-walk marker; dropped hears of a keyed group let not through (nil: nobody).
-func NewGate(db Store, branches int, progress *flow.Progress, dropped func(key string), logger *l.Logger) *Gate {
-	return &Gate{db: db, sweep: sweep{db: db, logger: logger}, logger: logger, branches: branches, progress: progress, dropped: dropped}
+func NewGate(db Store, perceptors Perceptors, branches int, progress *flow.Progress, dropped func(key string), logger *l.Logger) *Gate {
+	return &Gate{
+		db: db, perceptors: perceptors, sweep: sweep{db: db, perceptors: perceptors, logger: logger},
+		logger: logger, branches: branches, progress: progress, dropped: dropped,
+	}
 }
 
 func (g *Gate) Decorate(in flow.FileGroup) (flow.FileGroup, error) {
@@ -122,7 +136,7 @@ func (g *Gate) store(found []*dto.FileDto) ([]*dto.FileDto, bool, error) {
 		e := fe.ItemEntry
 		f, err := g.db.GetFileByPath(e.Path)
 		switch {
-		case errors.Is(err, gorm.ErrRecordNotFound):
+		case errors.Is(err, model.ErrNotFound):
 			if f, err = g.db.CreateFile(e); err != nil {
 				return nil, false, err
 			}
@@ -178,21 +192,11 @@ func (g *Gate) needsProcessing(files []*dto.FileDto, key, metaHash string) bool 
 	}
 	item, err := g.db.GetItemByGuid(main)
 	if err != nil {
-		return errors.Is(err, gorm.ErrRecordNotFound)
+		return errors.Is(err, model.ErrNotFound)
 	}
 	// The source's metadata changed (a date corrected in Photos), the files did not;
 	// or a perceptor has not processed it (new, or its schema changed)
-	return !cheapStageDone(item) || item.MetaHash != metaHash || g.perceptorMissing(item.Guid)
-}
-
-// perceptorMissing: an import perceptor has no row for the item
-func (g *Gate) perceptorMissing(guid string) bool {
-	for _, st := range plugins.Pm.ImportStores() {
-		if has, err := st.Has(guid); err == nil && !has {
-			return true
-		}
-	}
-	return false
+	return !cheapStageDone(item) || item.MetaHash != metaHash || g.perceptors.Unprocessed(item.Guid)
 }
 
 // cheapStageDone: the item went through the cheap stage (Visible, Waiting) or is

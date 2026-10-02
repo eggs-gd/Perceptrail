@@ -29,7 +29,7 @@ type Stage struct {
 // (progress); out gets the groups that need work; dropped hears of a keyed group
 // the gate let not through (nothing changed). Its steps report to errch.
 func New(root string, rescan time.Duration, ps []providers.Provider, progress *flow.Progress,
-	dropped func(key string), db Store, out chan<- flow.FileGroup, errch chan error, logger *l.Logger) *Stage {
+	dropped func(key string), db Store, perceptors Perceptors, out chan<- flow.FileGroup, errch chan error, logger *l.Logger) *Stage {
 
 	// walk → group: one file (path + stat), or the end-of-walk marker
 	found := make(chan flow.FileEvent)
@@ -39,7 +39,7 @@ func New(root string, rescan time.Duration, ps []providers.Provider, progress *f
 	stage := chain.NewChainProcessor(errch)
 	stage.AddStep(NewFsWalker(root, rescan, progress, found, logger))
 	stage.AddStep(group.NewGrouping(ps, found, groups, errch))
-	stage.AddStep(chain.NewDecorator(groups, out, NewGate(db, len(ps), progress, dropped, logger)))
+	stage.AddStep(chain.NewDecorator(groups, out, NewGate(db, perceptors, len(ps), progress, dropped, logger)))
 	return &Stage{ChainProcessor: stage, providers: ps, groups: groups}
 }
 

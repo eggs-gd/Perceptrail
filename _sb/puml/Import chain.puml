@@ -27,7 +27,8 @@ control "plugins\n(external .so)" as Plugins
 end box
 
 box "commit: the item published" #MistyRose
-control "closer" as Closer
+control "keep\n(the perceptors' values)" as Keep
+control "close" as Closer
 end box
 
 database "DB" as DB
@@ -74,7 +75,9 @@ Sizes -> Preview: + sizes
 Preview -> Preview: what the browser shows now, no transcode:\nShow / the main file (JPEG, PNG, ...; H.264 video) /\nthe biggest viewable derivative / the embedded one;\nany size counts
 Preview -> Core: item + preview ("" = nothing yet)
 Core -> Plugins: + date, size, length (written into the item)
-Plugins -> Closer: + the external perceptors' values (read-only)
+Plugins -> Keep: + the external perceptors' values (read-only)
+Keep -> DB: a row in every import perceptor's storage
+Keep -> Closer: item
 Closer -> DB: Visible (a preview) or Waiting (none)
 note right of Closer
 The client gets Visible (and Ready)

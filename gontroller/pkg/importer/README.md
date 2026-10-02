@@ -24,17 +24,21 @@ importer/discover/group/   the grouping sub-chain: the providers' switch and the
 importer/identify/         read (exiftool) → classify → validate → embedded → sizes → pick: the item known
 importer/core/             the core perceptors (built in): they write into the item
 importer/plugins/          the external perceptors (.so): they only read it
-importer/commit/           the closer: the item published
+importer/commit/           keep (the perceptors' values) → close (the item): the item published
 ```
 
 Stage packages export their steps' logic (`discover.NewGate`, `identify.NewReader`,
 `identify.Classifier`, `identify.NewValidator`, `identify.NewEmbedded`,
-`identify.NewSizes`, `identify.Pick`, `commit.NewCloser`, …) — their
+`identify.NewSizes`, `identify.Pick`, `commit.NewKeep`, `commit.NewCloser`, …) — their
 `New` runs it between channels; the tests of the whole import run it one group at a
 time. Sub-packages cannot import `importer` (it imports them): what they share
 lives in `flow`. Every step declares the DB methods it calls as its own small
 interface (`GateStore`, `SweepStore`, `ValidatorStore`, `SizesStore`, `KindsStore`,
-`CloserStore`); a stage's `Store` embeds its steps'; the top passes the proxy. The sources are providers (`pkg/providers`: Apple Photos, the plain
+`CloserStore`); a stage's `Store` embeds its steps'; the top passes the proxy.
+**No step knows the plugin manager**: the top (`entry.go`) is the only one that reads
+`plugins.Pm` and hands each stage what it needs — `core` and `plugins` their lists of
+perceptors, the gate `Unprocessed`, the sweep `Prune`, `keep` `SaveValues`, each as a
+small interface. The sources are providers (`pkg/providers`: Apple Photos, the plain
 folder last); the transcoders (`pkg/transcode`, not wired yet) are a chain of their
 own later (fed from the DB).
 
@@ -47,7 +51,7 @@ detail).
   → [identify: read (exiftool, N) → classify → validate → embedded → sizes → pick]
   → [core: open → date, size, … → release]
   → [plugins: (to read-only → a .so perceptor → back) each, or pass]
-  → [commit: closer (Visible | Waiting)]
+  → [commit: keep (the perceptors' values) → close (Visible | Waiting)]
 ```
 
 ## Stages and their steps
@@ -69,7 +73,9 @@ detail).
 | pick | `identify/pick.go` | `*RawItem` -> `*RawItem` | What the browser shows now, no transcode: the source's `Show`, the main file (JPEG, PNG, …; H.264 video), the biggest viewable derivative, else the embedded one. Any size counts. |
 | **core** | `core/entry.go` | `*RawItem` -> `*RawItem` | The built-in perceptors (date + zone, size, length), a step each, between `open` (skips a non-item; read-write view) and `release`. |
 | **plugins** | `plugins/entry.go` | `*RawItem` -> `*RawItem` | The external `.so` perceptors, a step each with read-only adapters around it; none loaded: one pass step. |
-| **commit** | `commit/closer.go` | `*RawItem` -> `*dto.ItemDto` | The closer: the item saved `Visible` (a preview) or `Waiting` (none), with every import perceptor's value. |
+| **commit** | `commit/entry.go` | `*RawItem` -> `*dto.ItemDto` | The item published. |
+| keep | `commit/keep.go` | `*RawItem` -> `*RawItem` | A row in every import perceptor's storage: its value, or "processed, nothing found". Before close: an item published without them would be taken as done. |
+| close | `commit/close.go` | `*RawItem` -> `*dto.ItemDto` | The item saved `Visible` (a preview) or `Waiting` (none). |
 
 ## Types (package [`flow`](flow/flow.go))
 

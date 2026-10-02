@@ -41,9 +41,10 @@ import (
 	"perceptrail/gontroller/pkg/importer/discover"
 	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/importer/identify"
-	"perceptrail/gontroller/pkg/importer/plugins"
+	external "perceptrail/gontroller/pkg/importer/plugins"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/plugins"
 	"perceptrail/gontroller/pkg/providers"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -114,14 +115,14 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	items := make(chan *dto.ItemDto, 1000)
 
 	waits := newAssetWaits()
-	disc := discover.New(ctx.Config().Path, rescan, providers.Enabled(), progress, waits.done, db, stored, errch, logger)
+	disc := discover.New(ctx.Config().Path, rescan, providers.Enabled(), progress, waits.done, db, plugins.Pm, stored, errch, logger)
 
 	importChain := chain.NewChainProcessor(errch)
 	importChain.AddStep(disc)
 	importChain.AddStep(identify.New(ctx.Config().CacheDir(), db, stored, identified, errProcessing, logger))
-	importChain.AddStep(core.New(identified, cored, errProcessing, logger))
-	importChain.AddStep(plugins.New(cored, perceived, errProcessing, logger))
-	importChain.AddStep(commit.New(db, perceived, items, errProcessing, logger))
+	importChain.AddStep(core.New(plugins.Pm.Core(), identified, cored, errProcessing, logger))
+	importChain.AddStep(external.New(plugins.Pm.External(), cored, perceived, errProcessing, logger))
+	importChain.AddStep(commit.New(db, plugins.Pm, perceived, items, errProcessing, logger))
 
 	return &importerService{
 		appCtx:      ctx,

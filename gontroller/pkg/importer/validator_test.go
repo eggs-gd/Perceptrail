@@ -6,12 +6,14 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"perceptrail/gontroller/pkg/importer/commit"
 	"perceptrail/gontroller/pkg/importer/discover"
 	"perceptrail/gontroller/pkg/importer/discover/group"
 	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/importer/identify"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/plugins"
 	"perceptrail/gontroller/pkg/plugins/exif_core"
 	"perceptrail/gontroller/pkg/plugins/exif_core/date"
 	"perceptrail/gontroller/pkg/plugins/exif_core/size"
@@ -87,10 +89,10 @@ func scanWith(t *testing.T, root string, dropped func(key string)) []string {
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
 	// The stages' steps as the chain has them, run one group at a time: the providers
 	// (Apple, the plain folder last), the gate; read (a fake exiftool), classify,
-	// validate, embedded, sizes, pick; the core perceptors; the closer
+	// validate, embedded, sizes, pick; the core perceptors; close
 	ps := []providers.Provider{apple.New("", nil, itemsProxy, logger), folder.New()}
 	sw := group.Switch{Providers: ps}
-	gate := discover.NewGate(testDB, len(ps), flow.NewProgress(), dropped, logger)
+	gate := discover.NewGate(testDB, plugins.Pm, len(ps), flow.NewProgress(), dropped, logger)
 	exif := identify.NewReader(nil, logger)
 	exif.Extract = fakeExif
 	valid := identify.NewValidator(testDB, logger)
@@ -142,11 +144,7 @@ func scanWith(t *testing.T, root string, dropped func(key string)) []string {
 				}
 				it, _ = identify.Pick{}.Decorate(it)
 				runCorePlugins(t, it)
-				it.Item.State = dto.Waiting // the closer
-				if it.Item.PreviewPath != "" {
-					it.Item.State = dto.Visible
-				}
-				if _, err := itemsProxy.UpdateItem(it.Item); err != nil {
+				if _, err := commit.NewCloser(itemsProxy).Decorate(it); err != nil {
 					t.Fatal(err)
 				}
 				processed = append(processed, it.Files[0].Path)

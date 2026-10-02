@@ -571,6 +571,15 @@ yields:
   full API (routes, tests); `model.Store` is gone. The gate needed ten methods for
   two jobs: the deletions after a walk moved to `sweep` (its own store), the gate
   keeps the files table.
+- **No step knows the plugin manager.** The closer used to write the perceptors'
+  values (`Pm.ImportStores`), the gate asked `Pm` whether a perceptor missed an
+  item, the sweep pruned `Pm`'s storages, core / plugins filtered `Pm.GetPlugins()`.
+  Now `pkg/plugins` owns that knowledge (`Core`, `External`, `Unprocessed`,
+  `SaveValues`, `Prune`), the top passes `plugins.Pm` in, each step sees a one-method
+  interface. commit is `keep → close`: the values first — a crash between the two
+  leaves an item that is not done, the next walk sends it again; the other order
+  would publish an item the gate takes as done without its values. `model.ErrNotFound`
+  replaces `gorm.ErrRecordNotFound` in the gate (the DB stays behind `model`).
 
 ### Broken files (2026-10-01)
 

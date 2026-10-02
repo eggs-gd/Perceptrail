@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/plugins/exif_core"
 
 	"github.com/eggs-gd/perceplib/api"
 )
@@ -182,5 +181,4 @@ var (
 	_ api.ItemDataProvider = (*RawItem)(nil)
 	_ api.ItemDataEditor   = (*RawItem)(nil)
 	_ api.RawItemR         = (*RawItem)(nil)
-	_ exif_core.RawItemRW  = (*RawItem)(nil)
 )

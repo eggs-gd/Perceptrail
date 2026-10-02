@@ -82,8 +82,8 @@ Target architecture — the diagrams in [`../puml`](../puml).
   directly), the gallery shows the photo it closed on.
 - Perceptor data (PR #17): a perceptor declares its data as a struct
   (`api.NewStore[T]`, typed `Put` / `Get`); the core keeps it — SQLite, a file per
-  perceptor in `data_dir/perceptors/` (Postgres: not yet). Values are committed with
-  the item; an item a perceptor has no row for is processed again; gone items are
+  perceptor in `data_dir/perceptors/` (Postgres: not yet). Values are kept right
+  before the item is published (commit: keep → close); an item a perceptor has no row for is processed again; gone items are
   pruned after a walk. Geo is its first user: coordinates from EXIF or the Photos DB,
   the sheet on a Hilbert curve with every city and region in one piece, sections
   region → city from the time zone. A photo may start a path of sections; the side
@@ -423,7 +423,7 @@ transcoders, plugins belong to the stage that uses them. One step does one thing
       | identify | the item known: identity, metadata, roles, what to show | read (exiftool, N in parallel) → classify (mime, main file, roles) → validate → embedded (an embedded preview for a group with nothing viewable; after validate: it needs the main file and the GUID) → sizes → pick (the cheap preview) — exiftool lives only here (read, embedded) |
       | core | the core's metadata (date + zone, size, length) | the built-in perceptors, a step each |
       | plugins | the external EXIF perceptors' values (geo, colour…) | the `.so` plugins, a step each, with their read/write adapters |
-      | commit | the item published | the state (Visible / Waiting), the item and the perceptors' values written together |
+      | commit | the item published | keep (the perceptors' values) → close (the state: Visible / Waiting) |
 
       Packages: `pkg/importer` (the top: five stages) with `discover`, `identify`,
       `core`, `plugins`, `commit`. Errors: discover reports to the walk's channel,

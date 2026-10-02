@@ -8,7 +8,6 @@ import (
 
 	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/plugins"
 
 	l "github.com/eggs-gd/perceplib/logger"
 )
@@ -25,11 +24,17 @@ type SweepStore interface {
 	GetAllGuids() ([]string, error)
 }
 
+// Pruner: the perceptors' rows of items not kept are dropped
+type Pruner interface {
+	Prune(keep func(guid string) bool)
+}
+
 // sweep: the deletions after a complete walk — the gate runs it once every
 // grouper's marker has reached it (all files stamped)
 type sweep struct {
-	db     SweepStore
-	logger *l.Logger
+	db         SweepStore
+	perceptors Pruner
+	logger     *l.Logger
 }
 
 // finalizeWalk derives deletions: files not stamped by this walk are gone.
@@ -104,10 +109,6 @@ func (g *sweep) finalizeWalk(result flow.WalkResult, held []string) {
 
 // pruneStores: the perceptors' rows of items that are gone
 func (g *sweep) pruneStores() {
-	stores := plugins.Pm.Stores()
-	if len(stores) == 0 {
-		return
-	}
 	guids, err := g.db.GetAllGuids()
 	if err != nil {
 		g.logger.Error("Perceptor storage: can't read items", l.Error(err))
@@ -117,14 +118,7 @@ func (g *sweep) pruneStores() {
 	for _, guid := range guids {
 		keep[guid] = true
 	}
-	for _, st := range stores {
-		n, err := st.Prune(func(guid string) bool { return keep[guid] })
-		if err != nil {
-			g.logger.Error("Perceptor storage: prune failed", l.String("store", st.Name()), l.Error(err))
-		} else if n > 0 {
-			g.logger.Info("Perceptor storage: pruned", l.String("store", st.Name()), l.Int("rows", n))
-		}
-	}
+	g.perceptors.Prune(func(guid string) bool { return keep[guid] })
 }
 
 // goneFiles keeps the stale files that belong to this root and were not hidden by

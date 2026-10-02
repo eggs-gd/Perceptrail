@@ -10,17 +10,16 @@ import (
 	"fmt"
 
 	"perceptrail/gontroller/pkg/importer/flow"
-	pm "perceptrail/gontroller/pkg/plugins"
-	"perceptrail/gontroller/pkg/plugins/exif_core"
 
 	"github.com/eggs-gd/perceplib/api"
 	"github.com/eggs-gd/perceplib/chain"
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
-// New: in — the items the core has perceived; out — the same, perceived by the
-// external plugins (none loaded: passed on as they are). Its steps report to errch.
-func New(in <-chan *flow.RawItem, out chan<- *flow.RawItem, errch chan error, logger *l.Logger) chain.ChainProcessor {
+// New: perceptors — the external perceptors, in order; in — the items the core has
+// perceived; out — the same, perceived by the external ones (none: passed on as they
+// are). Its steps report to errch.
+func New(perceptors []api.ExifPerceptor, in <-chan *flow.RawItem, out chan<- *flow.RawItem, errch chan error, logger *l.Logger) chain.ChainProcessor {
 	stage := chain.NewChainProcessor(errch)
 
 	// A perceptor's step reads its own channel and writes its own; the stage wires
@@ -30,18 +29,10 @@ func New(in <-chan *flow.RawItem, out chan<- *flow.RawItem, errch chan error, lo
 		proc    chain.Processor
 	}
 	var steps []step
-	for _, plugin := range pm.Pm.GetPlugins() {
-		if _, core := plugin.(exif_core.ExifCorePerceptor); core || plugin.DataProvider() != api.ExifDataProvider {
-			continue // a core one: the core stage
-		}
-		p, ok := plugin.(api.ExifPerceptor)
-		if !ok {
-			logger.Error("EXIF plugin has no NewProcessor, skipped", l.String("plugin", plugin.Name()))
-			continue
-		}
+	for _, p := range perceptors {
 		s := step{in: make(chan api.RawItemR, 1), out: make(chan api.RawItemR, 1)}
-		if s.proc = p.NewProcessor(s.in, s.out, logger.Named(plugin.Name())); s.proc == nil {
-			logger.Error("EXIF plugin returned no processor, skipped", l.String("plugin", plugin.Name()))
+		if s.proc = p.NewProcessor(s.in, s.out, logger.Named(p.Name())); s.proc == nil {
+			logger.Error("EXIF plugin returned no processor, skipped", l.String("plugin", p.Name()))
 			continue
 		}
 		steps = append(steps, s)
