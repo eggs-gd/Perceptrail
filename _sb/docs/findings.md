@@ -736,6 +736,12 @@ the binary by the linker; run from the user's terminal on the dev library.
   loaded, as big as the screen until then; stretched if switched on). A Live Photo's
   motion was 300×150 in a corner: the stage's `.stage video { width: auto }` beat
   `.live { width: 100% }` on specificity — `.asset.view video` fills the box now.
+- **A cached answer looked like a bug**: after the Original became the current
+  version, the owner still saw edited screenshots unedited — the browser served the
+  old answer of the same URL (cached for a day); the server's own answer matched the
+  edit's render (checked pixel by pixel). The contract version is part of the
+  on-demand URLs now (`?v=4`): what they answer changes only with the contract, and
+  a new one is a new URL.
 - **The Original is the biggest of what the user sees** (the owner, decided): edits
   and their history are the library's feature, not ours — we do not follow each
   provider's specifics. From Photos: its current version (the edit, cropped) at full

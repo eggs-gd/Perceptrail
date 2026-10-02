@@ -143,7 +143,7 @@ func TestRenditionOnDemand(t *testing.T) {
 func TestOnDemandInAsset(t *testing.T) {
 	lib := "/p/Photos Library.photoslibrary/originals/A/A1.heic"
 	if od := toClientAsset(&dto.ItemDto{Guid: "A1", Kind: dto.KindPhoto, Path: lib}, nil).OnDemand; od == nil ||
-		od.Medium != "/items/A1/rendition/medium" || od.Hover != "" || od.Original != "/items/A1/rendition/original" {
+		od.Medium != "/items/A1/rendition/medium?v="+contractVersion || od.Hover != "" || od.Original != "/items/A1/rendition/original?v="+contractVersion {
 		t.Errorf("photo, original in iCloud: %+v", od)
 	}
 	here := []*dto.FileDto{{ID: 1, Role: dto.RoleOriginal, LinkedTo: "A2"}}
@@ -152,7 +152,7 @@ func TestOnDemandInAsset(t *testing.T) {
 		t.Errorf("photo, original here: %+v, want the original still asked from Photos (it may be edited)", od)
 	}
 	if od := toClientAsset(&dto.ItemDto{Guid: "V1", Kind: dto.KindVideo, Path: lib}, nil).OnDemand; od == nil ||
-		od.Hover != "/items/V1/rendition/hover" {
+		od.Hover != "/items/V1/rendition/hover?v="+contractVersion {
 		t.Errorf("video: %+v", od)
 	}
 	if od := toClientAsset(&dto.ItemDto{Guid: "F1", Path: "/photos/f.jpg"}, nil).OnDemand; od != nil {

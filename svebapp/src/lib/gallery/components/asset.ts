@@ -119,7 +119,7 @@ function videoType(r: Rendition): string {
 export function mediumUrl(asset: Asset): string | undefined {
     if (!asset.onDemand) return undefined;
     const url = `${PUBLIC_API_PATH}${asset.onDemand.medium}`;
-    return asset.kind === 'video' && !playsHevc() ? `${url}?hevc=0` : url;
+    return asset.kind === 'video' && !playsHevc() ? `${url}${url.includes('?') ? '&' : '?'}hevc=0` : url;
 }
 
 /** A video's 360p or a Live Photo's motion, for a tile's hover */

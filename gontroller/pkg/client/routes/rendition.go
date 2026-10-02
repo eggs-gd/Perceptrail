@@ -276,11 +276,14 @@ func onDemandOf(item *dto.ItemDto) *onDemand {
 		return nil
 	}
 	base := "/items/" + item.Guid + "/rendition/"
-	od := &onDemand{Medium: base + "medium"}
+	// The contract version in the URL: the browser caches these for a day, and what
+	// one answers may change with the contract (the Original was the unedited
+	// original before 4) — a new contract is a new URL
+	v := "?v=" + contractVersion
+	od := &onDemand{Medium: base + "medium" + v, Original: base + "original" + v}
 	if item.Kind == dto.KindVideo || item.Kind == dto.KindLive {
-		od.Hover = base + "hover"
+		od.Hover = base + "hover" + v
 	}
-	od.Original = base + "original"
 	return od
 }
 
