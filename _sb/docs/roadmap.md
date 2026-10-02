@@ -236,11 +236,15 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
              it has them. **Hover prefers the video**: once the 360p is local it
              plays, the frames are not shown;
            - **a video in the viewer**: `medium` on open, as a photo's medium
-             rendition — HEVC or H.264 720p; a browser that cannot play HEVC
-             (Firefox, Chrome without the hardware decoder) gets the `fast` 360p
-             (`<source type>`). Never `automatic` / `high`: they download the
-             original. An H.264 720p of our own only if 360p proves not enough
-             there — the video step; Photos keeps no such file locally;
+             rendition — HEVC or H.264 720p. HEVC plays in every current browser
+             with a hardware decoder (findings "HEVC in browsers, 2026"); the rare
+             one without (Chrome on Linux, old hardware) gets the `fast` 360p — the
+             client decides (`canPlayType('video/mp4; codecs="hvc1"')`), the asset
+             contract already sends each file's codec. Never `automatic` / `high`:
+             they download the original. No H.264 720p of our own (decided);
+           - the server's cheap stage counts only H.264 as browser-playable (HEVC
+             waits for a transcode): let the client decide by `canPlayType`
+             instead;
            - **a Live Photo**: `requestLivePhotoForAsset` — its motion, H.264, for
              hover and the viewer;
            - the grouper learns the video renditions' names (`_2_3_o.mp4`,

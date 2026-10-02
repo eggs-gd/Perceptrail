@@ -690,6 +690,13 @@ the binary by the linker; run from the user's terminal on the dev library.
 - The grouper does not know the video renditions' names yet (`_2_3_o.mp4`,
   `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`): the walk would not find what Photos
   downloaded.
+- **HEVC in browsers, 2026** (checked on the user's word: "as basic as H.264 by
+  now"): Safari always; Chrome / Edge since 107 on Windows and macOS (hardware
+  decode); Firefox 134 Windows, 136 macOS, 137 Linux (VA-API, MP4 only). Gaps: Chrome
+  on Linux (VA-API only, extra packages and flags), no software decoder in Chrome or
+  Firefox (old hardware), some Windows installs need the HEVC extension. So HEVC is
+  the viewer's default; the 360p H.264 we fetch for the sheet covers the gaps; no
+  H.264 720p transcode of our own.
 - **Videos, decided** (the user): the sheet's hover needs only `fast` (360p),
   asked for on hover; when both the video and `cvt` frames are there, hover plays
   the video. `medium` on open, as a photo's medium rendition.
