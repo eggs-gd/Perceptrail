@@ -699,7 +699,8 @@ the binary by the linker; run from the user's terminal on the dev library.
   H.264 720p transcode of our own.
 - **Videos, decided** (the user): the sheet's hover needs only `fast` (360p),
   asked for on hover; when both the video and `cvt` frames are there, hover plays
-  the video. `medium` on open, as a photo's medium rendition.
+  the video. `medium` on open, as a photo's medium rendition. A Live Photo's motion
+  likewise: asked for on hover, played on hover.
 - **On demand, never in bulk** (the user): the sheet has its tiles already, the
   medium rendition is needed only when a photo opens — that request triggers the
   download, the viewer swaps the image in when it comes; 1–3 rows around it are asked

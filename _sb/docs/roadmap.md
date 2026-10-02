@@ -245,8 +245,10 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
            - the server's cheap stage counts only H.264 as browser-playable (HEVC
              waits for a transcode): let the client decide by `canPlayType`
              instead;
-           - **a Live Photo**: `requestLivePhotoForAsset` — its motion, H.264, for
-             hover and the viewer;
+           - **a Live Photo** (decided): as a video on the sheet — its motion is
+             asked for on hover (`requestLivePhotoForAsset`, H.264 ~650×870,
+             ~1.8 MB, ~0.9 s) and plays there once local; the same file in the
+             viewer;
            - the grouper learns the video renditions' names (`_2_3_o.mp4`,
              `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`).
          - [ ] Still open: the permission when not started from a terminal
