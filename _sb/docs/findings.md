@@ -740,7 +740,8 @@ the binary by the linker; run from the user's terminal on the dev library.
   states — off → once → loop (`viewerPrefs.liveMode`; the old switch carries over:
   off stays off, on is once); the wheel does not zoom a video.
 - **Hover UX** (the owner, as Immich and Google Photos): the badge stays while the
-  tile moves, a ring turns around its mark while the video comes, the video fades in
+  tile moves, a ring turns around its mark while the video comes (shown only after
+  300 ms: a video that starts at once made it blink), the video fades in
   over the frames (200 ms).
 - **A local HEIC original leaves no file**: asked for the image, Photos draws it
   from the original on disk and writes no derivative — the viewer got a 404. The

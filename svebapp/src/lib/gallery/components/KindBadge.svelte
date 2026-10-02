@@ -88,13 +88,22 @@
         display: flex;
     }
 
-    /* Around the mark while its video comes (as Immich and Google Photos do) */
+    /* Around the mark while its video comes (as Immich and Google Photos do) —
+       only if it takes a while: a video that starts at once (here already, or in the
+       browser's cache) would make it blink for a frame or two */
     .spinner {
         position: absolute;
         inset: -3px;
         width: 22px;
         height: 22px;
-        animation: spin 0.9s linear infinite;
+        opacity: 0;
+        animation: appear 0s 300ms forwards, spin 0.9s linear infinite;
+    }
+
+    @keyframes appear {
+        to {
+            opacity: 1;
+        }
     }
 
     @keyframes spin {
