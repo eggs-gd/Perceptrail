@@ -49,10 +49,14 @@ func RunMain(done <-chan struct{}) {
 	}
 }
 
-func image(uuid string, size int) ([]byte, error) {
+func image(uuid string, size int, original bool) ([]byte, error) {
 	var buf unsafe.Pointer
 	var n C.long
-	err := call(uuid, func(u *C.char) *C.char { return C.pk_image(u, C.int(size), &buf, &n) })
+	o := C.int(0)
+	if original {
+		o = 1
+	}
+	err := call(uuid, func(u *C.char) *C.char { return C.pk_image(u, C.int(size), o, &buf, &n) })
 	if buf == nil {
 		return nil, err
 	}
@@ -60,8 +64,32 @@ func image(uuid string, size int) ([]byte, error) {
 	return C.GoBytes(buf, C.int(n)), err
 }
 
-func video(uuid string, mode int) error {
-	return call(uuid, func(u *C.char) *C.char { return C.pk_video(u, C.int(mode)) })
+func original(uuid string) (data []byte, uti, name string, err error) {
+	var buf unsafe.Pointer
+	var n C.long
+	var cuti, cname *C.char
+	err = call(uuid, func(u *C.char) *C.char { return C.pk_original(u, &buf, &n, &cuti, &cname) })
+	if buf != nil {
+		data = C.GoBytes(buf, C.int(n))
+		C.free(buf)
+	}
+	uti, name = take(cuti), take(cname)
+	return data, uti, name, err
+}
+
+func video(uuid string, mode int) (string, error) {
+	var path *C.char
+	err := call(uuid, func(u *C.char) *C.char { return C.pk_video(u, C.int(mode), &path) })
+	return take(path), err
+}
+
+// take: a C string the caller frees, as Go ("" for NULL)
+func take(s *C.char) string {
+	if s == nil {
+		return ""
+	}
+	defer C.free(unsafe.Pointer(s))
+	return C.GoString(s)
 }
 
 func live(uuid string) error {

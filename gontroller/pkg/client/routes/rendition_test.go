@@ -44,11 +44,23 @@ func (f *fakePhotos) Image(uuid string, size int) ([]byte, error) {
 	}
 	return []byte("JPEG"), f.put(uuid, "_1_102_o.jpeg")
 }
-func (f *fakePhotos) Video(uuid string, mode int) error {
-	if mode == videoFast {
-		return f.put(uuid, "_2_4_o.mp4")
+func (f *fakePhotos) Video(uuid string, mode int) (string, error) {
+	name := "_2_201_o.mov"
+	switch mode {
+	case videoFast:
+		name = "_2_4_o.mp4"
+	case videoOriginal:
+		name = "_ORIGINAL.mov"
 	}
-	return f.put(uuid, "_2_201_o.mov")
+	return filepath.Join(f.root, "resources", "derivatives", uuid[:1], uuid+name), f.put(uuid, name)
+}
+func (f *fakePhotos) Full(uuid string) ([]byte, error) {
+	f.asked = append(f.asked, "full")
+	return []byte("FULL JPEG"), nil
+}
+func (f *fakePhotos) Original(uuid string) ([]byte, string, string, error) {
+	f.asked = append(f.asked, "original file")
+	return []byte("HEIC"), "public.heic", "IMG_1.HEIC", nil
 }
 func (f *fakePhotos) Live(uuid string) error { return f.put(uuid, "_2_101_o.mov") }
 
@@ -102,6 +114,21 @@ func TestRenditionOnDemand(t *testing.T) {
 		}
 	}
 
+	// The original: a photo's at full resolution as JPEG, its file on ?file=1, a
+	// video's file
+	if code, body := get("/items/A1111111-PHOTO/rendition/original"); code != 200 || body != "FULL JPEG" {
+		t.Errorf("original: %d %q, want the full JPEG", code, body)
+	}
+	rec := httptest.NewRecorder()
+	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/items/A1111111-PHOTO/rendition/original?file=1", nil))
+	if rec.Code != 200 || rec.Body.String() != "HEIC" || rec.Header().Get("Content-Type") != "image/heic" ||
+		rec.Header().Get("Content-Disposition") != `attachment; filename="IMG_1.HEIC"` {
+		t.Errorf("original file: %d %q %v", rec.Code, rec.Body.String(), rec.Header())
+	}
+	if code, body := get("/items/B2222222-VIDEO/rendition/original"); code != 200 || body != "_ORIGINAL.mov" {
+		t.Errorf("video original: %d %q", code, body)
+	}
+
 	// Drawn from a local original (a HEIC): no file — the JPEG Photos handed over
 	photos.draw = true
 	put("F6666666-HEIC", dto.KindPhoto, filepath.Join(root, "originals/F/F6666666-HEIC.heic"))
@@ -124,8 +151,13 @@ func TestRenditionOnDemand(t *testing.T) {
 func TestOnDemandInAsset(t *testing.T) {
 	lib := "/p/Photos Library.photoslibrary/originals/A/A1.heic"
 	if od := toClientAsset(&dto.ItemDto{Guid: "A1", Kind: dto.KindPhoto, Path: lib}, nil).OnDemand; od == nil ||
-		od.Medium != "/items/A1/rendition/medium" || od.Hover != "" {
-		t.Errorf("photo: %+v", od)
+		od.Medium != "/items/A1/rendition/medium" || od.Hover != "" || od.Original != "/items/A1/rendition/original" {
+		t.Errorf("photo, original in iCloud: %+v", od)
+	}
+	here := []*dto.FileDto{{ID: 1, Role: dto.RoleOriginal, LinkedTo: "A2"}}
+	here[0].MimeType = "image/heic"
+	if od := toClientAsset(&dto.ItemDto{Guid: "A2", Kind: dto.KindPhoto, Path: lib}, here).OnDemand; od == nil || od.Original != "" {
+		t.Errorf("photo, original here: %+v, want no on-demand original", od)
 	}
 	if od := toClientAsset(&dto.ItemDto{Guid: "V1", Kind: dto.KindVideo, Path: lib}, nil).OnDemand; od == nil ||
 		od.Hover != "/items/V1/rendition/hover" {
