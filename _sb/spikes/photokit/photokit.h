@@ -21,3 +21,19 @@ typedef struct {
 // pk_request: an image of at most target×target pixels, as the viewer would ask;
 // network: may Photos download it
 pk_result pk_request(const char *uuid, int target, int network);
+
+typedef struct {
+    double seconds;
+    int width, height;  // the video track's size
+    double duration;    // seconds
+    int inCloud;
+    char *url;          // where AVFoundation reads it from (a file in the library?), or NULL
+    char *error;
+} pk_video_result;
+
+// pk_video: the asset's video as a player would ask (medium quality)
+pk_video_result pk_video(const char *uuid, int network);
+
+// pk_live: a Live Photo of at most target×target, as the viewer would ask; the
+// result's width/height are the still's (an unknown size: 0)
+pk_result pk_live(const char *uuid, int target, int network);

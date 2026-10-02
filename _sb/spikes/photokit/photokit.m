@@ -1,10 +1,25 @@
+// A spike: the synchronous AVAsset accessors are fine here
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #import <AppKit/AppKit.h>
 #import <Photos/Photos.h>
+#import <AVFoundation/AVFoundation.h>
 #include <stdlib.h>
 #include <string.h>
 #include "photokit.h"
 
 static char *dupstr(NSString *s) { return strdup(s.UTF8String ?: ""); }
+
+// wait: until done or the timeout. Some PhotoKit results come on the main queue: on
+// the main thread (the Go side locks main there) its run loop is turned meanwhile
+static BOOL pk_wait(dispatch_semaphore_t done, double seconds) {
+    NSDate *until = [NSDate dateWithTimeIntervalSinceNow:seconds];
+    while ([until timeIntervalSinceNow] > 0) {
+        if (dispatch_semaphore_wait(done, DISPATCH_TIME_NOW) == 0) return YES;
+        if ([NSThread isMainThread]) CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.02, true);
+        else usleep(20000);
+    }
+    return NO;
+}
 
 int pk_status(void) {
     return (int)[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
@@ -85,6 +100,85 @@ pk_result pk_request(const char *uuid, int target, int network) {
         }
     }];
     if (r.seconds == 0) r.seconds = -[start timeIntervalSinceNow];
+    r.progress = progress;
+    return r;
+}
+
+pk_video_result pk_video(const char *uuid, int network) {
+    pk_video_result res = {0};
+    PHAsset *a = asset(uuid);
+    if (!a) {
+        res.error = dupstr(@"asset not found");
+        return res;
+    }
+    PHVideoRequestOptions *opt = [PHVideoRequestOptions new];
+    opt.deliveryMode = PHVideoRequestOptionsDeliveryModeMediumQualityFormat;
+    opt.networkAccessAllowed = network != 0;
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+    __block pk_video_result r = res;
+    NSDate *start = [NSDate date];
+    [[PHImageManager defaultManager] requestAVAssetForVideo:a options:opt
+                                              resultHandler:^(AVAsset *av, AVAudioMix *mix, NSDictionary *info) {
+        r.seconds = -[start timeIntervalSinceNow];
+        r.inCloud = [info[PHImageResultIsInCloudKey] boolValue];
+        NSError *err = info[PHImageErrorKey];
+        if (err) r.error = dupstr(err.description);
+        if ([av isKindOfClass:[AVURLAsset class]]) r.url = dupstr(((AVURLAsset *)av).URL.absoluteString);
+        else if (av) r.url = dupstr(NSStringFromClass([av class]));
+        AVAssetTrack *t = [av tracksWithMediaType:AVMediaTypeVideo].firstObject;
+        if (t) {
+            r.width = (int)t.naturalSize.width;
+            r.height = (int)t.naturalSize.height;
+        }
+        if (av) r.duration = CMTimeGetSeconds(av.duration);
+        dispatch_semaphore_signal(done);
+    }];
+    if (!pk_wait(done, 180)) {
+        r.seconds = -[start timeIntervalSinceNow];
+        r.error = dupstr(@"timeout");
+    }
+    return r;
+}
+
+pk_result pk_live(const char *uuid, int target, int network) {
+    pk_result res = {0};
+    res.progress = -1;
+    PHAsset *a = asset(uuid);
+    if (!a) {
+        res.error = dupstr(@"asset not found");
+        return res;
+    }
+    PHLivePhotoRequestOptions *opt = [PHLivePhotoRequestOptions new];
+    opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
+    opt.networkAccessAllowed = network != 0;
+    __block double progress = -1;
+    opt.progressHandler = ^(double p, NSError *err, BOOL *stop, NSDictionary *info) { progress = p; };
+    dispatch_semaphore_t done = dispatch_semaphore_create(0);
+    __block pk_result r = res;
+    NSDate *start = [NSDate date];
+    [[PHImageManager defaultManager] requestLivePhotoForAsset:a
+                                                   targetSize:CGSizeMake(target, target)
+                                                  contentMode:PHImageContentModeAspectFit
+                                                      options:opt
+                                                resultHandler:^(PHLivePhoto *live, NSDictionary *info) {
+        if ([info[PHImageResultIsDegradedKey] boolValue]) {
+            r.degraded++;
+            return;
+        }
+        r.seconds = -[start timeIntervalSinceNow];
+        r.inCloud = [info[PHImageResultIsInCloudKey] boolValue];
+        NSError *err = info[PHImageErrorKey];
+        if (err) r.error = dupstr(err.description);
+        if (live) {
+            r.width = (int)live.size.width;
+            r.height = (int)live.size.height;
+        }
+        dispatch_semaphore_signal(done);
+    }];
+    if (!pk_wait(done, 180)) {
+        r.seconds = -[start timeIntervalSinceNow];
+        r.error = dupstr(@"timeout");
+    }
     r.progress = progress;
     return r;
 }

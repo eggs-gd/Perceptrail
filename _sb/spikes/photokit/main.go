@@ -13,7 +13,7 @@ package main
 
 /*
 #cgo CFLAGS: -x objective-c -fobjc-arc
-#cgo LDFLAGS: -framework Foundation -framework AppKit -framework Photos
+#cgo LDFLAGS: -framework Foundation -framework AppKit -framework Photos -framework AVFoundation -framework CoreMedia
 #cgo LDFLAGS: -Wl,-sectcreate,__TEXT,__info_plist,${SRCDIR}/Info.plist
 #include <stdlib.h>
 #include "photokit.h"
@@ -26,10 +26,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 	"unsafe"
 )
+
+// main on the main thread: some PhotoKit results (Live Photos) come on the main
+// queue, and the waits turn the main run loop for them
+func init() { runtime.LockOSThread() }
 
 var statuses = map[int]string{0: "not determined", 1: "restricted", 2: "denied", 3: "authorized", 4: "limited"}
 
@@ -39,6 +44,7 @@ func main() {
 	size := flag.Int("size", 2048, "the image asked for: at most size×size pixels (the viewer's medium)")
 	wait := flag.Duration("wait", 10*time.Second, "how long to let Photos write its DB after the request")
 	statusOnly := flag.Bool("status", false, "print the authorization status and stop (no prompt)")
+	kind := flag.String("kind", "photo", "what to ask for: photo (an image), video (the video), live (a Live Photo)")
 	flag.Parse()
 
 	fmt.Printf("Photos access: %s\n", statuses[int(C.pk_status())])
@@ -59,14 +65,18 @@ func main() {
 		fmt.Println("-- before")
 		report(*lib, uuid)
 
-		r := request(uuid, *size, false)
-		fmt.Printf("-- local only:  %s\n", r)
-
-		r = request(uuid, *size, true)
-		fmt.Printf("-- network:     %s\n", r)
-
-		r = request(uuid, *size, false)
-		fmt.Printf("-- local again: %s\n", r)
+		ask := func(network bool) fmt.Stringer {
+			switch *kind {
+			case "video":
+				return video(uuid, network)
+			case "live":
+				return live(uuid, *size, network)
+			}
+			return request(uuid, *size, network)
+		}
+		fmt.Printf("-- local only:  %s\n", ask(false))
+		fmt.Printf("-- network:     %s\n", ask(true))
+		fmt.Printf("-- local again: %s\n", ask(false))
 
 		time.Sleep(*wait)
 		fmt.Printf("-- after (%s)\n", *wait)
@@ -110,6 +120,60 @@ func request(uuid string, size int, network bool) result {
 	return out
 }
 
+func live(uuid string, size int, network bool) result {
+	cu := C.CString(uuid)
+	defer C.free(unsafe.Pointer(cu))
+	n := 0
+	if network {
+		n = 1
+	}
+	r := C.pk_live(cu, C.int(size), C.int(n))
+	out := result{float64(r.seconds), int(r.width), int(r.height), r.inCloud != 0, int(r.degraded), float64(r.progress), ""}
+	if r.error != nil {
+		out.err = C.GoString(r.error)
+		C.free(unsafe.Pointer(r.error))
+	}
+	return out
+}
+
+type videoResult struct {
+	seconds, duration float64
+	w, h              int
+	inCloud           bool
+	url, err          string
+}
+
+func (r videoResult) String() string {
+	s := fmt.Sprintf("%.2fs %dx%d %.1fs-long inCloud=%v", r.seconds, r.w, r.h, r.duration, r.inCloud)
+	if r.url != "" {
+		s += " url=" + r.url
+	}
+	if r.err != "" {
+		s += " ERROR " + r.err
+	}
+	return s
+}
+
+func video(uuid string, network bool) videoResult {
+	cu := C.CString(uuid)
+	defer C.free(unsafe.Pointer(cu))
+	n := 0
+	if network {
+		n = 1
+	}
+	r := C.pk_video(cu, C.int(n))
+	out := videoResult{seconds: float64(r.seconds), duration: float64(r.duration), w: int(r.width), h: int(r.height), inCloud: r.inCloud != 0}
+	if r.url != nil {
+		out.url = C.GoString(r.url)
+		C.free(unsafe.Pointer(r.url))
+	}
+	if r.error != nil {
+		out.err = C.GoString(r.error)
+		C.free(unsafe.Pointer(r.error))
+	}
+	return out
+}
+
 // report: what PhotoKit, the DB and the disk say about the asset's renditions
 func report(lib, uuid string) {
 	cu := C.CString(uuid)
@@ -125,6 +189,8 @@ func report(lib, uuid string) {
 	for _, pattern := range []string{
 		filepath.Join(lib, "resources", "derivatives", x, uuid+"*"),
 		filepath.Join(lib, "resources", "derivatives", "masters", x, uuid+"*"),
+		filepath.Join(lib, "resources", "derivatives", "cvt", x, uuid, "*"), // a video's frames
+		filepath.Join(lib, "resources", "renders", x, uuid+"*"),
 		filepath.Join(lib, "originals", x, uuid+"*"),
 	} {
 		m, _ := filepath.Glob(pattern)

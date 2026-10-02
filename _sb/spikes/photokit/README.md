@@ -16,10 +16,12 @@ It only reads the library; Photos itself may download renditions into it.
 go build -o photokit-spike .
 ./photokit-spike -status                 # the permission, without asking
 ./photokit-spike <asset UUID>...         # asks once, then per asset:
+./photokit-spike -kind video <UUID>...   # the video, as a player asks (medium quality)
+./photokit-spike -kind live <UUID>...    # a Live Photo, as the viewer asks
 ```
 
 Per asset: PhotoKit's resources, the DB rows (`ZINTERNALRESOURCE`) and the files on
-disk; a request without network, with network (timed), without network again; after
+disk (derivatives, a video's `cvt` frames, renders); a request without network, with network (timed), without network again; after
 `-wait` the resources, the DB and the files again. Run it from the terminal that runs
 gontroller (it can read the library — the agent's shell cannot).
 
