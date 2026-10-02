@@ -39,7 +39,7 @@ func (s *webService) Start(parentCtx context.Context) {
 		AllowOrigins: s.cfg.AllowedOrigins,
 		AllowMethods: []string{echo.GET, echo.POST, echo.PUT, echo.DELETE},
 		// The client reads the delta sync's cursor and epoch (/items)
-		ExposeHeaders: []string{"X-Sync-Epoch", "X-Sync-Cursor"},
+		ExposeHeaders: []string{"X-Sync-Epoch"},
 	}))
 	// A line per request (every tile image too): debug only
 	if s.app.Mode == "debug" {

@@ -69,7 +69,6 @@ async function sync(signal: AbortSignal, apiPath: string): Promise<number> {
         full = true;
     }
     if (!response.ok) throw new Error(`${apiPath}: ${response.status}`);
-    const cursor = response.headers.get('X-Sync-Cursor') ?? '';
 
     if (full) {
         // From an empty table. Before the hooks, or clear() would report every
@@ -81,18 +80,27 @@ async function sync(signal: AbortSignal, apiPath: string): Promise<number> {
     itemsDb.items.hook.updating.subscribe(hookUpdate);
     itemsDb.items.hook.deleting.subscribe(hookDelete);
     let changed = 0;
+    let cursor = '';
     try {
-        changed = await readLines(signal, response, async (line) => {
+        await readLines(signal, response, async (line) => {
+            if ('cursor' in line) {
+                cursor = line.cursor;
+                return;
+            }
             if (line.removed) await itemsDb.items.delete(line.guid);
             else await itemsDb.items.put(line as Item);
+            changed++;
         });
     } finally {
         itemsDb.items.hook.creating.unsubscribe(hookCreate);
         itemsDb.items.hook.updating.unsubscribe(hookUpdate);
         itemsDb.items.hook.deleting.unsubscribe(hookDelete);
     }
-    // Kept only once everything is in: an interrupted sync starts again from the old cursor
-    if (epoch && cursor) await itemsDb.sync.put({key: 'state', epoch, cursor});
+    // The cursor is the stream's last line: none means it was cut short (the server
+    // failed after the 200, the connection dropped). Kept only once everything is in:
+    // a failed sync starts again from the old cursor.
+    if (!cursor) throw new Error(`${apiPath}: the stream ended without its cursor`);
+    if (epoch) await itemsDb.sync.put({key: 'state', epoch, cursor});
     if (full) updatesPort.postMessage({action: 'sync-done'});
     return changed;
 }
@@ -114,23 +122,22 @@ function hookDelete(key: string, item: Item) {
     updatesPort.postMessage(msg);
 }
 
-/** NDJSON, line by line as it streams; returns how many lines came */
+type SyncLine = (Item & {removed?: boolean}) | {cursor: string};
+
+/**
+ * NDJSON, line by line as it streams. A line that cannot be read or stored fails the
+ * whole read: the sync keeps its old cursor and retries.
+ */
 async function readLines(signal: AbortSignal, response: Response,
-                         each: (line: Item & {removed?: boolean}) => Promise<void>): Promise<number> {
+                         each: (line: SyncLine) => Promise<void>): Promise<void> {
     if (!response.body) throw new Error('Streaming data is not supported');
     const reader = response.body.getReader();
     const decoder = new TextDecoder("utf-8");
     let buffer = "";
-    let count = 0;
 
     const take = async (text: string) => {
         if (!text.trim()) return;
-        try {
-            await each(JSON.parse(text));
-            count++;
-        } catch (error) {
-            logger.error("Error saving to Dexie:", error);
-        }
+        await each(JSON.parse(text));
     };
 
     while (true) {
@@ -145,5 +152,4 @@ async function readLines(signal: AbortSignal, response: Response,
         if (done) break;
     }
     await take(buffer);
-    return count;
 }

@@ -131,11 +131,10 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
       `PHAssetResourceManager`, network access allowed); the next walk sees it and
       reprocesses the group. PhotoKit exists only on the Mac that owns the library,
       in a user session (not Docker, not a NAS reading a share or a copy). So an
-      optional capability: a small Swift helper (CLI first, later a launchd agent with
-      the Photos permission), called by the server; the viewer's Original button asks
-      it when the original is not local. First a spike: does the request leave the
-      original in the library, or only hand the data to the caller? Photos may purge
-      it again (Optimize Mac Storage): then the asset falls back to its derivative.
+      optional capability of the native macOS build (Go + cgo, see step 0 below);
+      the viewer's Original button asks it when the original is not local. Photos may
+      purge it again (Optimize Mac Storage): then the asset falls back to its
+      derivative.
 - Supported schema: `ZASSET` (macOS 11+); older (`ZGENERICASSET`) — not planned.
 - Later: albums, people (`ZPERSON` / `ZDETECTEDFACE`) → perceptors.
 
@@ -146,26 +145,76 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
       0. **Apple Photos first — a spike, then a fork** (the dev library is mostly
          iCloud-only, and Photos' DB knows every asset's renditions —
          `ZINTERNALRESOURCE`: recipe, size, local / in iCloud; recipe 65741, up to
-         ~2048 px, is in iCloud for nearly every asset — 3 240 have it only there):
-         - **spike**: a small Swift tool asks PhotoKit for a cloud-only asset's
-           medium image (network allowed) — does Photos make the rendition local in
-           the library (`resources/derivatives`, the DB's local availability), or
-           only hand us the bytes? Also: time and traffic per asset, limits when
-           asking for thousands, the Photos permission from a terminal tool;
+         ~2048 px, is in iCloud for nearly every asset — 3 240 have it only there).
+         - **The principle: one copy.** Whatever Photos keeps, we do not keep again —
+           a cache of our own beside the library does not save disk, it adds a
+           second copy. What is local we serve as it is; what is not we ask Photos for
+           (PhotoKit), and Photos stores it in its own library, under its own
+           storage policy (Optimize Mac Storage purges it when space runs low — we
+           then fall back to a smaller rendition and ask again). The most we may
+           keep: a bounded working set (an LRU with a size limit, e.g. 2 GB) so the
+           viewer's neighbours open at once — any entry may vanish, it is not a copy
+           of the library. Our own renditions only for what Photos does not have
+           (generic folders; formats a browser cannot show).
+         - **By level, on demand** — not "make everything medium": recipe 65741
+           averages ~1 MB (~2.6 bits/pixel — a high-quality JPEG, Photos shows and
+           edits from it), ~100 GB per 100 k photos, ~40 % of the originals:
+
+           | for | rendition | when |
+           |---|---|---|
+           | tiles | small (65743 360×480 ~76 KB, 65747 768×1024 ~300 KB — often local already) | ahead, in the background |
+           | the viewer | medium, ~2048 | when a photo opens, plus its neighbours |
+           | the original | the full file | the Original button |
+
+           (Our own webp at 1600 px would be ~250 KB — fewer pixels ×0.6, quality
+           ~q80 ×0.6, the codec ×0.7 — but that saves space on a copy beside theirs:
+           not an argument.)
+         - **Rejected: "turn on Download Originals to this Mac".** One checkbox
+           solves it for a small library, but people with decades of photos (hundreds
+           of thousands) would be forced to sync the whole library — and Photos has no
+           "keep renditions, originals on request" mode: it is either everything or
+           renditions at its own discretion. Asking Photos per level is exactly that
+           missing mode, and a reason to have the helper at all.
+         - **Go, not Swift.** PhotoKit is Objective-C: Go calls it through cgo (an
+           `.m` file beside the Go code), in the gontroller process — no second
+           process, no second language. cgo is there already (Go plugins need it);
+           the code sits behind `//go:build darwin`, the Linux build has no Apple
+           step. The Photos permission needs `NSPhotoLibraryUsageDescription`: a bare
+           binary gets an Info.plist through the linker
+           (`-sectcreate __TEXT __info_plist`). To check: who the permission is
+           granted to when started from a terminal (the binary or the terminal), and
+           whether each rebuild (a new ad-hoc signature) drops it — if it does,
+           development needs a stable signature, or the PhotoKit part becomes a small
+           process of its own after all.
+         - **Where it runs.** Reading the library (`groups/apple`: a copy of
+           `Photos.sqlite` + the files on disk) is pure Go and stays in every build:
+           an archived library after leaving Apple, a library on an external disk, a
+           copy on a NAS — what is on disk is shown, what is missing is marked.
+           Asking Photos is the native macOS build only. **Docker on a Mac** (Docker
+           Desktop is a Linux VM) has no PhotoKit, and macOS does not let it into a
+           `.photoslibrary` without Full Disk Access: a Mac with Photos runs the native
+           binary, Docker is for servers — the Docker step says so in its docs.
+         - **spike** (Go + cgo, `_sb/spikes/photokit`, its own branch): ask PhotoKit
+           for a cloud-only asset's medium image (network allowed) — does Photos make
+           the rendition local in the library (`resources/derivatives`, the DB's local
+           availability), or only hand us the bytes? Also: time and traffic per asset
+           (can the viewer wait for it on open?), limits when asking for thousands,
+           the permission questions above;
          - **it normalises the library** → an Apple step in our chain of
-           responsibility: the helper asks Photos to make the medium rendition local
-           for the assets that lack it (the work list straight from its DB); the next
-           walk finds the files — nothing rendered or stored by us, nothing written
-           to the library by us;
-         - **it only hands the bytes** → decide separately: copying images Apple
-           already keeps into a folder of our own is not wanted. To brainstorm — e.g.
-           an instruction for the user ("turn on Download Originals to this Mac").
+           responsibility: ask Photos for the level that is missing — small ahead for
+           the tiles, medium on demand (the work list straight from its DB); the next
+           walk finds the files — nothing rendered or stored by us, nothing written to
+           the library by us;
+         - **it only hands the bytes** → decide separately, still without a second
+           copy: serve them straight through (slow but no copies), or the bounded
+           working set above.
       1. **photo renditions** — libvips on the CPU, the source chosen to avoid a full
          decode, the DB-state queue, benchmarks on the real library (generic folders,
          and Apple assets that still lack a viewable size);
       2. **video, software** — `libx264`, HDR → SDR, hover clip, poster; the codec →
          encoder table and the probe with a software fallback from day one;
       3. **Docker** — the image (jellyfin-ffmpeg), a base compose with software encoding;
+         the docs say a Mac with Photos runs the native binary (no PhotoKit in Docker);
       4. **hardware acceleration** — video: QSV (`hwaccel.qsv.yml`, the i5),
          VideoToolbox (native on a Mac), NVENC when there is one to test on; photos: a
          macOS ImageIO decoder for HEIC only if the benchmarks show HEIC is the

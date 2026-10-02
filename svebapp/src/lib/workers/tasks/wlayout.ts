@@ -143,7 +143,9 @@ let orderFetch: AbortController | undefined;
  * A perceptor's order: the items are re-sorted and laid out again around the
  * anchor (the photo the user is at stays in view, the rest is rearranged). The
  * view's last order (kept) is applied at once, the server's when it comes — only if
- * it differs. Only the latest request is applied; a failure leaves the sheet as it was.
+ * it differs. Only the latest request is applied. A failure with nothing kept leaves
+ * the sheet as it was (the switch fails); with the kept order applied, the switch
+ * stands on it — the sheet already shows that view.
  */
 async function applyOrder({view, url, anchor}: OrderPayload) {
     orderFetch?.abort();
@@ -153,9 +155,16 @@ async function applyOrder({view, url, anchor}: OrderPayload) {
     fetching.signal.throwIfAborted();
     if (cached) useOrder(cached.entries, anchor);
 
-    const response = await fetch(url, {signal: fetching.signal});
-    if (!response.ok) throw new Error(`${url}: ${response.status}`);
-    const text = await response.text();
+    let text: string;
+    try {
+        const response = await fetch(url, {signal: fetching.signal});
+        if (!response.ok) throw new Error(`${url}: ${response.status}`);
+        text = await response.text();
+    } catch (error) {
+        if (!cached || (error as Error)?.name === 'AbortError') throw error;
+        logger.warn('order not refreshed, the kept one stays', error);
+        return;
+    }
     fetching.signal.throwIfAborted(); // a newer request came while reading
     const entries: OrderEntry[] = text
         .split('\n')

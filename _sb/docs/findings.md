@@ -312,6 +312,15 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
     by hand.
   - A refresh of the order after a sync must not run during a switch: it aborts the
     switch's request, which then counts as failed.
+  - The cursor is the stream's **last line** (`{cursor}`), not a header (Codex, PR
+    #18): once the 200 and its headers are out, a DB error mid-stream cannot turn into
+    an error status — the client would keep a header cursor from a cut-short stream
+    and never ask for what it missed. No last line = cut short = the old cursor stays.
+    Likewise a line that cannot be parsed or stored fails the sync (it was only
+    logged — the cursor moved past the item).
+  - Switching to a view with a kept order shows that order at once; if the refresh
+    from the server then fails, the switch stands on the kept order (the URL was
+    being rolled back while the sheet already showed the new view).
 - A perceptor's icon is SVG from a plugin: shown as a CSS `mask-image` — no script in
   it runs, and the button's colour paints it (`currentColor` does not reach an
   `<img>`).
@@ -425,6 +434,31 @@ Design: roadmap "Expensive stage".
   library the bigger win is the source: Photos' JPEG, the HEIC's embedded thumbnail,
   the full original last. Benchmark (images/s, CPU, peak RSS) before adding a macOS
   ImageIO HEIC decoder; its hardware path is an assumption to check.
+- **Apple Photos: one copy** (2026-10-02, decided; roadmap step 0). A cache of our
+  own beside the library does not save disk, it adds a second copy — whatever Photos
+  keeps is served as it is, what it lacks is asked of Photos (PhotoKit) and lands in
+  its library, under its storage policy. At most a bounded working set (LRU, size
+  limit). By level, on demand: small renditions ahead for the tiles, the medium one
+  (~2048, ~1 MB — ~40 % of the originals for a whole library) when a photo opens,
+  the original on its button. Our webp at 1600 would be ~4× smaller (fewer pixels,
+  q80 against Apple's ~q90+, a better codec) — a saving on a duplicate, so no reason.
+- **"Turn on Download Originals" is not an answer** (the user): fine for a small
+  library, but for decades of photos it forces the whole library onto the disk, and
+  Photos has no "renditions local, originals on request" mode — all or its own
+  choice. Asking Photos per level is that missing mode.
+- **PhotoKit from Go, not a Swift helper**: it is Objective-C, cgo calls it in the
+  gontroller process (cgo is there for the plugins anyway), behind
+  `//go:build darwin`. Open for the spike: the Photos permission for a bare binary
+  (Info.plist through `-sectcreate`), whom it is granted to when started from a
+  terminal, and whether a rebuild (new ad-hoc signature) drops it.
+- **Reading the library stays in every build** (`groups/apple` is pure Go): an
+  archived library after leaving Apple, an external disk, a NAS copy. Only asking
+  Photos is native macOS. Docker on a Mac is a Linux VM — no PhotoKit, and no access
+  to the `.photoslibrary` without Full Disk Access: a Mac with Photos runs the native
+  binary.
+- The agent's shell cannot read `Photos Library.photoslibrary` (macOS privacy): the
+  JPEG quality of Apple's renditions was estimated from the sizes in the DB
+  (~2.6 bits/pixel), not measured — the spike has the same permission question.
 
 ## Backend: gontroller, plugins, exiftool
 

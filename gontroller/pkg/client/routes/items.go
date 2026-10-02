@@ -31,14 +31,20 @@ type clientItem struct {
 }
 
 // The client keeps its items between visits and asks only for what changed:
-// /items?since=<cursor>. The cursor is the server's time when a response began; the
-// epoch names this database — another one (recreated, another library) means the
-// client's copy is not a base for a delta, it fetches everything.
+// /items?since=<cursor>. The cursor is the server's time when a response began; it
+// comes as the stream's last line ({cursor}), so a stream cut short (a DB error after
+// the 200 went out, a dropped connection) has none and the client keeps its old one.
+// The epoch (a header) names this database — another one (recreated, another library)
+// means the client's copy is not a base for a delta, it fetches everything.
 const (
-	headerEpoch  = "X-Sync-Epoch"
-	headerCursor = "X-Sync-Cursor"
-	epochKey     = "sync_epoch"
+	headerEpoch = "X-Sync-Epoch"
+	epochKey    = "sync_epoch"
 )
+
+// endLine: the stream's last line, only after every item went out
+type endLine struct {
+	Cursor string `json:"cursor"`
+}
 
 var syncEpoch string
 
@@ -73,10 +79,9 @@ func getItems(c echo.Context) error {
 		}
 		since = &t
 	}
-	h := c.Response().Header()
-	h.Set(headerEpoch, syncEpoch)
-	h.Set(headerCursor, time.Now().UTC().Format(time.RFC3339Nano))
-	return streamClientItems(c.Response().Writer, since)
+	c.Response().Header().Set(headerEpoch, syncEpoch)
+	cursor := time.Now().UTC().Format(time.RFC3339Nano)
+	return streamClientItems(c.Response().Writer, since, cursor)
 }
 
 // removedItem: a tombstone in a delta
@@ -109,7 +114,7 @@ func toClientItem(dbItem *dto.ItemDto, files []*dto.FileDto) clientItem {
 	return item
 }
 
-func streamClientItems(w http.ResponseWriter, since *time.Time) error {
+func streamClientItems(w http.ResponseWriter, since *time.Time, cursor string) error {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		return fmt.Errorf("streaming not supported")
@@ -121,9 +126,9 @@ func streamClientItems(w http.ResponseWriter, since *time.Time) error {
 	flusher.Flush()
 
 	encoder := json.NewEncoder(w)
-
+	var err error
 	if since == nil {
-		return itemsProxy.StreamAllItems(func(dbItem *dto.ItemDto, files []*dto.FileDto) error {
+		err = itemsProxy.StreamAllItems(func(dbItem *dto.ItemDto, files []*dto.FileDto) error {
 			if !shown(dbItem) {
 				return nil
 			}
@@ -133,18 +138,23 @@ func streamClientItems(w http.ResponseWriter, since *time.Time) error {
 			flusher.Flush()
 			return nil
 		})
+	} else {
+		err = itemsProxy.StreamItemsSince(*since, func(dbItem *dto.ItemDto, files []*dto.FileDto) error {
+			var out any = toClientItem(dbItem, files)
+			if dbItem.DeletedAt.Valid || !shown(dbItem) {
+				out = removedItem{Guid: dbItem.Guid, Removed: true}
+			}
+			if err := encoder.Encode(out); err != nil {
+				return err
+			}
+			flusher.Flush()
+			return nil
+		})
 	}
-	return itemsProxy.StreamItemsSince(*since, func(dbItem *dto.ItemDto, files []*dto.FileDto) error {
-		var out any = toClientItem(dbItem, files)
-		if dbItem.DeletedAt.Valid || !shown(dbItem) {
-			out = removedItem{Guid: dbItem.Guid, Removed: true}
-		}
-		if err := encoder.Encode(out); err != nil {
-			return err
-		}
-		flusher.Flush()
-		return nil
-	})
+	if err != nil {
+		return err
+	}
+	return encoder.Encode(endLine{Cursor: cursor})
 }
 
 // shown: the client gets items it can display — Visible (a cheap preview) and Ready;

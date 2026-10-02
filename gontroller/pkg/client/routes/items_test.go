@@ -18,9 +18,9 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// The delta: after a full fetch, ?since=<its cursor> gives only what changed — a
-// changed or new shown item as an item, a deleted or hidden one as removed; the
-// epoch stays the same
+// The delta: after a full fetch, ?since=<its cursor> (the stream's last line) gives
+// only what changed — a changed or new shown item as an item, a deleted or hidden one
+// as removed; the epoch stays the same
 func TestItemsDelta(t *testing.T) {
 	e := echo.New()
 	RegisterItemsRoutes("/items", e, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
@@ -39,7 +39,7 @@ func TestItemsDelta(t *testing.T) {
 	hide := put(&dto.ItemDto{Guid: "d-hide", State: dto.Visible})
 	_ = keep
 
-	get := func(query string) (map[string]bool, http.Header) {
+	get := func(query string) (map[string]bool, string, http.Header) {
 		t.Helper()
 		rec := httptest.NewRecorder()
 		e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/items"+query, nil))
@@ -47,27 +47,32 @@ func TestItemsDelta(t *testing.T) {
 			t.Fatalf("%s: %d", query, rec.Code)
 		}
 		got := map[string]bool{} // guid → removed
+		cursor := ""
 		sc := bufio.NewScanner(rec.Body)
 		for sc.Scan() {
+			if cursor != "" {
+				t.Fatalf("%s: a line after the cursor: %s", query, sc.Text())
+			}
 			var line struct {
 				Guid    string `json:"guid"`
 				Removed bool   `json:"removed"`
+				Cursor  string `json:"cursor"`
 			}
 			if err := json.Unmarshal(sc.Bytes(), &line); err != nil {
 				t.Fatal(err)
 			}
+			cursor = line.Cursor
 			if strings.HasPrefix(line.Guid, "d-") {
 				got[line.Guid] = line.Removed
 			}
 		}
-		return got, rec.Header()
+		return got, cursor, rec.Header()
 	}
 
-	full, h := get("")
-	if len(full) != 4 || h.Get(headerEpoch) == "" || h.Get(headerCursor) == "" {
-		t.Fatalf("full: %v, headers %v", full, h)
+	full, cursor, h := get("")
+	if len(full) != 4 || h.Get(headerEpoch) == "" || cursor == "" {
+		t.Fatalf("full: %v, cursor %q, headers %v", full, cursor, h)
 	}
-	cursor := h.Get(headerCursor)
 	time.Sleep(10 * time.Millisecond)
 
 	change.MimeType = "image/jpeg"
@@ -79,7 +84,7 @@ func TestItemsDelta(t *testing.T) {
 	put(hide)
 	put(&dto.ItemDto{Guid: "d-new", State: dto.Visible})
 
-	delta, h2 := get("?since=" + url.QueryEscape(cursor))
+	delta, _, h2 := get("?since=" + url.QueryEscape(cursor))
 	want := map[string]bool{"d-change": false, "d-new": false, "d-gone": true, "d-hide": true}
 	if len(delta) != len(want) {
 		t.Errorf("delta %v, want %v", delta, want)
