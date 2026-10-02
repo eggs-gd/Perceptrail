@@ -11,9 +11,9 @@ import (
 	"perceptrail/gontroller/pkg/plugins/exif_core"
 	"perceptrail/gontroller/pkg/plugins/exif_core/date"
 	"perceptrail/gontroller/pkg/plugins/exif_core/size"
+	"perceptrail/gontroller/pkg/providers/apple"
 	"perceptrail/gontroller/pkg/scan/flow"
 	"perceptrail/gontroller/pkg/scan/groups"
-	"perceptrail/gontroller/pkg/scan/groups/apple"
 	"perceptrail/gontroller/pkg/scan/groups/generic"
 	"testing"
 

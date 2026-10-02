@@ -10,7 +10,7 @@ import (
 
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/scan/groups/apple"
+	"perceptrail/gontroller/pkg/providers/apple"
 
 	l "github.com/eggs-gd/perceplib/logger"
 

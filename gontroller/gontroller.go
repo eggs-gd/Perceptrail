@@ -9,10 +9,10 @@ import (
 	"perceptrail/gontroller/pkg/client"
 	"perceptrail/gontroller/pkg/client/routes"
 	"perceptrail/gontroller/pkg/model"
-	"perceptrail/gontroller/pkg/photokit"
 	"perceptrail/gontroller/pkg/plugins"
+	"perceptrail/gontroller/pkg/providers/apple"
+	"perceptrail/gontroller/pkg/providers/apple/photokit"
 	"perceptrail/gontroller/pkg/scan"
-	"perceptrail/gontroller/pkg/scan/groups/apple"
 	"syscall"
 
 	"github.com/eggs-gd/go-exiftool"
