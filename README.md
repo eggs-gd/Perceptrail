@@ -25,6 +25,20 @@ The core concept is to provide an infinite way to explore content. By navigating
 - Filtering based on various criteria depending on installed **Perceptors**.
 - Support for batch operations for bulk metadata editing.
 
+## Development
+
+Git hooks (fast local checks before CI) — enable once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+- `pre-commit`: refuses commits on `master`/`develop`, requires `gofmt` for staged Go files.
+- `pre-push`: runs the CI checks (Go vet/tests + plugin build, `svelte-check`) for the
+  parts changed since `develop`.
+
+Skip in an emergency with `--no-verify`.
+
 ## Documentation
 
 - [Roadmap](_sb/docs/roadmap.md) and [findings & decisions](_sb/docs/findings.md)

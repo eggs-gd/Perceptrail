@@ -1,5 +1,9 @@
 .DS_Store
+# build artifacts: binary, plugins/*.so
+/.build
+# runtime data: config.yml, database, caches
+/.var
+# fallback ./config.yml and its default data_dir (the config's directory)
 /config.yml
 /media_library.db*
-/build
 __debug*

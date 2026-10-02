@@ -12,10 +12,20 @@ type ItemState int
 
 const (
 	New        ItemState = iota // Just have source path and not veryfied size/date from raw source (View can show preloaders)
-	Dirty                       // Something changed and have to be rechecked
+	Dirty                       // Something changed and have to be rechecked (the walker re-emits it)
 	Processing                  // transcoding in progress but real size is veryfied
 	Ready                       // all done
 	Deleted                     // Deleted
+	// Values are stored: new states go at the end
+	Visible // the cheap stage found something the browser shows (Preview*); transcode later
+	Waiting // nothing to show without a transcode: hidden until the expensive stage
+)
+
+// Kinds of an asset: the gallery marks moving ones on the tile
+const (
+	KindPhoto = "photo"
+	KindLive  = "live" // a photo with a short video (Live Photo)
+	KindVideo = "video"
 )
 
 type ItemDto struct {
@@ -32,8 +42,30 @@ type ItemDto struct {
 	MimeType string    `gorm:"index"` //
 	State    ItemState `gorm:"index"` // Current state of item
 
-	Date time.Time // CreationDate of asset
-	Path string    // Source path
+	// What the client is shown until our own previews exist: a file of the group
+	// the browser can show (the original, a derivative) or an extracted embedded
+	// preview in the cache. "" = nothing (Waiting)
+	PreviewPath string
+	PreviewMime string
+	// Hash of the source's own metadata (Apple Photos DB) this item was built from
+	MetaHash string
+	// A video's length, seconds; 0: not a video or unknown
+	Duration float64
+	// What the asset is (Kind*) when the source says it (Apple Photos); "": the
+	// client API derives it from the roles of the files
+	Kind string
+
+	Date time.Time `gorm:"index"` // CreationDate of asset: the instant (the DB returns it in UTC); the default sheet's order
+	// Local zone of the shot, minutes east of UTC: sqlite and Postgres timestamptz
+	// drop the zone of Date, so it is kept separately
+	DateOffset int
+	DateSource string // the tag Date came from; "" = no date
+	DateZone   string // how DateOffset was found: tag, gps, coords, file, server (assumed)
+	Path       string // Source path
+
+	// The perceptors' values for this item, by store (not a column: each perceptor's
+	// storage keeps them — committed with the item, loaded for Order)
+	values map[string]api.Values `gorm:"-"`
 
 	Size  api.Size `gorm:"embedded;embeddedPrefix:size_"`
 	Ratio api.Size `gorm:"embedded;embeddedPrefix:ratio_"`
@@ -51,6 +83,35 @@ type ItemDto struct {
 
 func (ItemDto) TableName() string {
 	return "items"
+}
+
+// The item as plugins read it (api.ItemDataProvider): perceptors get the library
+// as these
+
+func (i *ItemDto) GetGuid() string { return i.Guid }
+
+// GetDate returns the date in the local zone of the shot; no date: the zero time
+func (i *ItemDto) GetDate() time.Time {
+	if i.DateSource == "" {
+		return i.Date
+	}
+	return i.Date.In(time.FixedZone("", i.DateOffset*60))
+}
+
+func (i *ItemDto) GetSize() api.Size    { return i.Size }
+func (i *ItemDto) GetRatio() api.Size   { return i.Ratio }
+func (i *ItemDto) GetDuration() float64 { return i.Duration }
+
+func (i *ItemDto) StoreValues(store string) (api.Values, bool) {
+	v, ok := i.values[store]
+	return v, ok
+}
+
+func (i *ItemDto) SetStoreValues(store string, v api.Values) {
+	if i.values == nil {
+		i.values = map[string]api.Values{}
+	}
+	i.values[store] = v
 }
 
 // type Tag struct {

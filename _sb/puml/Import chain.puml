@@ -1,0 +1,90 @@
+@startuml Import chain
+
+!pragma teoz true
+
+title Import chain (gontroller): every participant is a chain step (own goroutine), every arrow is a channel
+
+control "fswalker\n(entry point)" as Walker
+
+box "grouping (a sub-chain): the providers' switch, a grouper each" #LightCyan
+control "switch\n(first that claims)" as Groups
+control "Apple Photos\ngrouper" as Photos
+control "plain folder\ngrouper (last)" as Generic
+end box
+
+control "files gate" as Gate #LightGreen
+control "exif\n(N workers)" as Exif
+control "mime" as Mime
+control "validator" as Validator #LightGreen
+
+control "cheap preview" as Preview #LightYellow
+
+control "plugins\n(core, then external)" as Plugins
+database "DB" as DB
+control "closer" as Closer
+
+== files flow in; groups flow out one by one, steps run concurrently ==
+
+loop every file under the root
+    Walker -> Groups: file (path, stat)
+    note left of Walker
+    Unreadable directory:
+    skipped, recorded (V1)
+    end note
+end
+
+alt Apple claims it (inside *.photoslibrary)
+    Groups -> Photos: file
+    Photos -> Photos: first file: asset links from Photos.sqlite\n(original, render, Live Photo video); buffer of open\ngroups, a group goes out when all its files arrived
+    Photos -> Gate: group (asset UUID)
+else nobody else claims it (other providers: Immich, ... later)
+    Groups -> Generic: file
+    Generic -> Generic: sidecars by name, next to each other\n(buffer: one open group; a complete group goes out)
+    Generic -> Gate: group
+end
+note over Groups: a provider not enabled is not asked:\nits files are a plain folder's
+
+Gate -> DB: stat vs files table,\nCheckTime of every file
+alt unchanged and the item is Ready
+    Gate ->x Gate: drop
+else new / changed / not Ready
+    Gate -> Exif: group
+end
+
+Exif -> Mime: group + exif
+Mime -> Mime: kind of every file\n(exif FileType/MIMEType, own extension table,\ncontent sniff), rank: main file
+Mime -> Validator: ranked group
+
+Validator -> DB: hash of the main file:\nsame / changed / moved / duplicate
+Validator -> Preview: item (GUID) + group
+
+Preview -> Preview: what the browser shows now, no transcode:\nthe main file (JPEG, PNG, ...; H.264 video) /\nthe biggest viewable derivative / an embedded preview\n(exiftool -b into the cache); any size counts
+Preview -> Plugins: item + preview ("" = nothing yet)
+Plugins -> Closer: item + metadata
+Closer -> DB: Visible (a preview) or Waiting (none)
+note right of Closer
+The client gets Visible (and Ready)
+items at once. Ready comes later from
+the expensive chain (transcode, fed
+from the DB; roadmap: thumbnails)
+end note
+
+== end of walk ==
+
+Walker -> Groups: marker (walk result)
+Groups -> Photos: marker
+& Groups -> Generic: marker
+note right of Groups: to every grouper
+Generic -> Gate: last groups, marker
+Photos -> Gate: last groups, marker
+Gate -> DB: after the marker from every branch:\ndeletions (V2), only after a complete walk,\nnot under unreadable directories
+Closer --> Walker: the last group of the walk is done (items + errors counted)
+Walker -> Walker: rescan pause (1 min), then walk again
+
+== One asset again (Apple Photos on demand) ==
+note over Photos: Photos made a file of an asset local\n(the viewer asked for it: PhotoKit)
+Photos -> Photos: Regroup(uuid): the last load's DB rows\n+ the disk now (no walk, no DB read)
+Photos -> Gate: group (asset UUID): like any group,\nonly what changed passes; no marker,\ndeletions untouched
+Closer --> Photos: the item is done: the request waiting\nfor it answers (importer Refresh)
+
+@enduml

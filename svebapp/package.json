@@ -1,6 +1,6 @@
 {
   "name": "@perceptrail/svebapp",
-  "version": "0.0.1",
+  "version": "0.0.0",
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
@@ -24,7 +24,7 @@
   },
   "type": "module",
   "dependencies": {
-    "dexie": "^4.4.6",
-    "dexie-observable": "^4.0.1-beta.13"
-  }
+    "dexie": "^4.4.6"
+  },
+  "private": true
 }

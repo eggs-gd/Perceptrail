@@ -9,7 +9,7 @@ as a **git subtree** under `perceplib/`.
 
 | Package | What |
 |---|---|
-| `api` | perceptor contract (`Perceptor`, `ExifPerceptor`), data types (`RawExif`, `Size`), item access interfaces (`RawItemR`, `ItemDataProvider/Editor`), `GetRatio` |
+| `api` | perceptor contract (`Perceptor`, `ExifPerceptor`, every perceptor also navigates: `View` (its button) + `Order` (the gallery's sheet in its order, with sections); what it knows about an item: `Info` (facts for the info panel); its data: `Schema` + a typed `Store[T]` (`NewStore`, `Put`, `Get` — the host keeps the storage)), `Coordinates` (GPS from EXIF), data types (`RawExif`, `Size`), item access interfaces (`RawItemR`, `ItemDataProvider/Editor`), `GetRatio` |
 | `chain` | channel-based pipeline: `NewChainProcessor`, `NewEntryPoint`, `NewDecorator`, `NewSwitch`; `ErrSkippedItem` |
 | `logger` | zap wrapper with a custom console encoder |
 | `logger/decorators` | `GontrollerDecorator` — tree-style fields, SQL highlighting |

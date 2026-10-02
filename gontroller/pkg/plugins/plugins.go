@@ -2,11 +2,14 @@ package plugins
 
 import (
 	"fmt"
+	"path/filepath"
 	"plugin"
 	"sync"
 
 	"perceptrail/gontroller/pkg/app"
+	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/plugins/exif_core/date"
+	"perceptrail/gontroller/pkg/plugins/exif_core/duration"
 	"perceptrail/gontroller/pkg/plugins/exif_core/size"
 
 	"github.com/eggs-gd/perceplib/api"
@@ -19,6 +22,8 @@ type pluginManager struct {
 	pluginsMu sync.RWMutex
 	plugins   []api.Perceptor
 	loaded    bool
+	// The storage of each perceptor that keeps data (its Schema), by perceptor name
+	stores map[string]*model.PerceptorStore
 }
 
 var Pm *pluginManager = &pluginManager{}
@@ -49,6 +54,7 @@ func (pm *pluginManager) LoadPlugins(ctx app.AppContext) error {
 	corePlugins := []api.Perceptor{
 		date.Perceptor,
 		size.Perceptor,
+		duration.Perceptor,
 	}
 
 	// Load external plugins
@@ -58,13 +64,85 @@ func (pm *pluginManager) LoadPlugins(ctx app.AppContext) error {
 		return err
 	}
 
-	// Combine all plugins
-	pm.plugins = append(corePlugins, externalPlugins...)
+	// Combine all plugins; the ones switched off in the config do not run
+	cfg := ctx.Config().Perceptors
+	pm.plugins = nil
+	for _, p := range append(corePlugins, externalPlugins...) {
+		if !cfg.Enabled(p.Name()) {
+			pm.logger.Info("Perceptor disabled", l.String("name", p.Name()))
+			continue
+		}
+		pm.plugins = append(pm.plugins, p)
+	}
 	pm.loaded = true
+	pm.openStores()
 
 	pm.logger.Info("Loaded plugins", l.Any("core", len(corePlugins)), l.Any("external", len(externalPlugins)), l.Any("total", len(pm.plugins)))
 
 	return nil
+}
+
+// openStores: a storage per perceptor that declares data — data_dir/perceptors/
+// (SQLite: a file each). One that cannot be opened is logged: its perceptor runs,
+// its values are not kept.
+func (pm *pluginManager) openStores() {
+	pm.stores = map[string]*model.PerceptorStore{}
+	cfg := pm.ctx.Config()
+	for _, p := range pm.plugins {
+		s := p.Schema()
+		if s.Store == "" {
+			continue
+		}
+		st, err := model.OpenPerceptorStore(cfg.Database.Driver, filepath.Join(cfg.DataDir, "perceptors"), s)
+		if err != nil {
+			pm.logger.Error("Perceptor storage not opened", l.String("perceptor", p.Name()), l.Error(err))
+			continue
+		}
+		pm.stores[p.Name()] = st
+	}
+}
+
+// ImportStores: the storages of the perceptors that run in the import chain (EXIF
+// data): every processed item gets a row in each (a value, or "nothing found")
+func (pm *pluginManager) ImportStores() []*model.PerceptorStore {
+	var out []*model.PerceptorStore
+	for _, p := range pm.GetPlugins() {
+		if st, ok := pm.stores[p.Name()]; ok && p.DataProvider() == api.ExifDataProvider {
+			out = append(out, st)
+		}
+	}
+	return out
+}
+
+// Stores: every perceptor storage (pruning gone items)
+func (pm *pluginManager) Stores() []*model.PerceptorStore {
+	var out []*model.PerceptorStore
+	for _, st := range pm.stores {
+		out = append(out, st)
+	}
+	return out
+}
+
+// LoadValues: a perceptor's values for these items (none if it keeps nothing)
+func (pm *pluginManager) LoadValues(perceptor string, guids []string) (string, map[string]api.Values, error) {
+	st, ok := pm.stores[perceptor]
+	if !ok {
+		return "", nil, nil
+	}
+	v, err := st.Load(guids)
+	return st.Name(), v, err
+}
+
+// ClientPerceptors: the loaded perceptors whose view the client is given (config
+// `client`), core first — the first is the gallery's default view
+func (pm *pluginManager) ClientPerceptors() []api.Perceptor {
+	var out []api.Perceptor
+	for _, p := range pm.GetPlugins() {
+		if pm.ctx.Config().Perceptors.Client(p.Name()) {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func (pm *pluginManager) loadExternalPlugins() ([]api.Perceptor, error) {

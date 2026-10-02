@@ -16,33 +16,49 @@ Requirements:
 
 - Go 1.27.1 (`go` downloads the toolchain itself);
 - `exiftool` in `PATH` (or a distribution from the
-  [`eggs-gd/go-exiftool` `dist-*` releases](https://github.com/eggs-gd/go-exiftool/releases));
-- `.env` with `GONTROLLER_CONFIG=<path to config.yml>`.
+  [`eggs-gd/go-exiftool` `dist-*` releases](https://github.com/eggs-gd/go-exiftool/releases),
+  set with `exiftool:` in the config).
 
 ```bash
-go run .
+mkdir -p .var && cp config.example.yml .var/config.yml   # once, then edit path:
+make run
 ```
 
-Plugins are built from the repo root: `make build-plugins` → `build/plugins/*.so`.
+`make run` builds the binary and the plugins, then runs
+`./.build/gontroller --config .var/config.yml`. Everything is under `gontroller/`
+(both directories are git-ignored):
+
+```
+.build/           build artifacts
+  gontroller
+  plugins/*.so    make build-plugins (repo root)
+.var/             runtime data
+  config.yml
+  media_library.db*
+  cache/          generated files (thumbnails)
+```
+
+Config lookup: `--config <file>`, then `$GONTROLLER_CONFIG`, then `./config.yml`.
+Relative paths in the config are resolved against the config's directory, so the
+same config gives the same database and caches from any working directory. See
+[`config.example.yml`](config.example.yml) for the fields (`path`, `plugins`,
+`data_dir`, `exiftool`, `server` with CORS `allowed_origins`, `database`).
+
 Host and plugins must be built with the same Go and the same versions of shared
 packages — see [findings](../_sb/docs/findings.md#go-plugins-2026-09-28).
-
-`config.yml` (only these fields are used):
-
-```yaml
-path: "/Users/me/Pictures/"      # library root
-plugins:                          # external perceptors
-  - build/plugins/exif_geo.so
-```
-
-`server`, `database`, `allowed_hosts`, `api_keys` are not read yet: HTTP listens on
-`:1323`, the database is `media_library.db` in the working directory.
 
 ## HTTP API
 
 | Method | Path | Returns |
 |---|---|---|
-| GET | `/items` | All items as an NDJSON stream (`id, guid, date, mimeType, width, height`; `width/height` is the reduced aspect ratio) |
+| GET | `/items` | All shown items as an NDJSON stream, newest first (`id, guid, date, mimeType, width, height, asset`; `width/height` is the reduced aspect ratio). Header `X-Sync-Epoch` (this database); the last line is `{cursor, total}` — only a complete stream has it, `total` = shown items (the client checks its copy against it); `?since=<cursor>`: only the changes, a removed item as `{guid, removed}` |
+| GET | `/items?since=<cursor>` | The delta: changed shown items as above, `{guid, removed: true}` for deleted or hidden ones |
+| GET | `/perceptors` | The perceptors given to the client (config `perceptors.<name>.client`): `slug (the view in URLs), title, icon (SVG), help, relative` — a button each |
+| GET | `/items/:guid/rendition/:level` | Apple Photos on demand: `medium` (the viewer: the image ~2048 px or the edit; a video's 720p, `?hevc=0` H.264 only), `hover` (a video's 360p, a Live Photo's motion), `original` (the biggest of what is seen: a photo's current version — the edit — at full resolution as JPEG; a video's original file). Serves the file from the library; asks Photos (PhotoKit, macOS) when it is not local; 404 when nothing is there |
+| GET | `/items/:guid/files` | Every file of the item's group (original, edits, derivatives, motion, frames, sidecars): `[{name, role, mime, size, w, h, url}]`; `url` + `?download=1` saves it under its name |
+| GET | `/items/:guid/info` | What each perceptor knows about the item (the viewer's info panel): `[{slug, title, icon, facts: [{label, value}]}]` |
+| GET | `/app` | The server's `version` and `mode` (debug / release) |
+| GET | `/p/:view/order?anchor=` | The sheet in that perceptor's order, NDJSON `{guid, sections?: [{level, label}]}` — the sections this photo starts, coarsest first (a path or one tag) |
 | GET | `/assets/:guid` | The original file of an item |
 
 ## Import pipeline
@@ -71,7 +87,8 @@ Item states (`dto.ItemState`): `New → Dirty → Processing → Ready`, `Delete
 | `pkg/scan` | import steps: `fswalker`, `exifextractor`, `exifpluginprocessor` |
 | `pkg/plugins` | plugin manager (core + `.so`), `exif_core/{date,size}` |
 | `pkg/model` | SQLite via GORM, `ItemsApi`/`FilesApi`, DTOs |
-| `pkg/client` | Echo, `/items` and `/assets` routes |
+| `pkg/client` | Echo, `/items`, `/assets`, `/perceptors` and `/p/:view/order` routes |
+| `pkg/providers` | the sources: one switch sends a file to the grouper of the first provider that claims it, and on-demand renditions come from the item's provider; `providers/folder`: the plain folder (last, takes the rest); `providers/apple`: Apple Photos (its DB, the grouper, on demand), `providers/apple/photokit`: PhotoKit (cgo, macOS only; a stub elsewhere; the main thread serves its main queue) |
 | `pkg/transcoder` | thumbnail stub (needs libvips) |
 
 ## Worth knowing

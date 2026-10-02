@@ -33,7 +33,7 @@ export function isAbortError(error: Error): error is AbortError {
     return error instanceof AbortError;
 }
 
-export type WorkerTaskType = 'init' | 'start' | 'update';
+export type WorkerTaskType = 'init' | 'start' | 'update' | 'order' | 'mode';
 
 export interface WorkerMessage<T, T1> {
     task: T;
@@ -43,9 +43,38 @@ export interface WorkerMessage<T, T1> {
 export interface UpdateLayoutPayload {
     screenWidth: number;
     rowHeight: number;
+    /** guid of the first visible item: the relayout reports where it moved */
+    anchor?: string;
 }
 
-export type InitMessage = WorkerMessage<'init', MessagePort[]>;
+/** The sheet's order from a perceptor (GET /p/:name/order), kept around the anchor */
+export interface OrderPayload {
+    /** Echoed in the OrderResult */
+    id: number;
+    /** The view (its order is kept per view) */
+    view: string;
+    url: string;
+    /** guid to keep in view: the relayout reports where it moved */
+    anchor?: string;
+}
+
+/** One line of /p/:name/order */
+export interface OrderEntry {
+    guid: string;
+    /** The sections this item starts, coarsest first (a path, or one tag) */
+    sections?: {level: number, label: string}[];
+}
+
+/** init: for wlayout, its page's layout database */
+export type InitMessage = WorkerMessage<'init', {layoutDb?: string}>;
+export type OrderMessage = WorkerMessage<'order', OrderPayload>;
+
+/** wlayout → page: whether an order was applied (a later one supersedes it: false) */
+export interface OrderResult {
+    task: 'order';
+    id: number;
+    ok: boolean;
+}
 export type UpdateLayoutMessage = WorkerMessage<'update', UpdateLayoutPayload>
 export type StartSyncMessage = WorkerMessage<'start', string>
 
@@ -53,12 +82,17 @@ export interface WorkerEventData {
     status: string,
 }
 
+/**
+ * wsync → every tab's wlayout, over a BroadcastChannel: the items are one copy for all
+ * tabs, so a sync one tab ran reaches the layouts of the others (a private channel
+ * left them on the items they had loaded). The layout itself reaches the page
+ * through layoutDb (liveQuery).
+ */
+export const ITEMS_CHANNEL = 'items-changes';
+
 export interface MessageFromSync {
-    /** wsync → wlayout: one item per create/update/delete */
     item?: Item | LayoutItem,
-    /** wlayout → view: laid out items (replace = the complete layout) */
-    items?: LayoutItem[],
-    action: 'create' | 'update' | 'delete' | 'reset' | 'replace' | 'upsert' | 'sync-start' | 'sync-done',
+    action: 'create' | 'update' | 'delete' | 'sync-start' | 'sync-done',
 }
 
 export type CurrentWorkerTask = { controller: AbortController; promise: Promise<void> } | null;

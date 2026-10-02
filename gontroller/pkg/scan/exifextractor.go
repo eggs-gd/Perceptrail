@@ -1,7 +1,9 @@
 package scan
 
 import (
-	"perceptrail/gontroller/pkg/model/dto"
+	"fmt"
+	"perceptrail/gontroller/pkg/scan/flow"
+	"slices"
 
 	"github.com/eggs-gd/go-exiftool"
 
@@ -11,128 +13,79 @@ import (
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
-var commonArgs []string = []string{ // all sidecars
-	//"-j",
-}
+// exif: exiftool for every file of the group. The main file is not known yet (mime
+// ranks the group from this metadata), so every file gets the full set; the main
+// file's set is what the short hash is computed from, as before.
 
-// exiftool -all --File:all --ExifToolVersion -s2 ./_D3A9906.JPG
-var mainTags []string = []string{
-	// todo: check with and without
-	// "-a",
+// exiftool -all --ExifToolVersion -s2 ./_D3A9906.JPG
+var allTags []string = []string{
 	"-all",
-	//"--File:all",
 	"--ExifToolVersion",
 	"-s2",
 }
 
-var metaTags []string = []string{ // Generic tags needed for db.Item
-	//"-FileType",
-	//"-MIMEType",
-	"-ExifImageWidth",
-	"-ExifImageHeight",
-	"-ImageWidth",
-	"-ImageHeight",
-	// "-ThumbnailImageWidth",
-	// "-ThumbnailImageHeight",
-	// "-DisplayWidth",
-	// "-DisplayHeight",
-	// "-ImageSize",
-	// "-SourceImageWidth",
-	// "-SourceImageHeight",
-	"-Duration",
-	"-AvgBitrate",
-	"-VideoCodec",
-	"-AudioCodec",
-}
-
 type exifExtractor struct {
 	logger  *l.Logger
-	workers []*exiftool.Server
-	freeCh  chan *exiftool.Server
+	extract func(path string) (api.RawExif, error)
+	pool    *exiftoolPool
 }
 
-func (cd *exifExtractor) Decorate(in []*dto.FileDto) (*RawItem, error) {
-	var result []api.RawExif
+// NewExifExtractor: count steps on the same channels, sharing the exiftool pool
+// (groups are independent, so they are read in parallel)
+func NewExifExtractor(count int, pool *exiftoolPool, chin <-chan flow.FileGroup, chout chan<- *flow.RawItem, errch chan error, logger *l.Logger) chain.Processor {
+	e := &exifExtractor{logger: logger, pool: pool}
+	e.extract = e.exiftool
 
-	for i, item := range in {
-		var args []string
-		if i == 0 {
-			args = append(mainTags, item.Path)
-		} else {
-			args = append(metaTags, item.Path)
+	workers := chain.NewChainProcessor(errch)
+	for range count {
+		workers.AddStep(chain.NewDecorator(chin, chout, e))
+	}
+	return workers
+}
+
+// Decorate starts the item of the group: its files and their metadata (a nil
+// Exif: exiftool returned nothing). The item itself comes from the validator.
+func (e *exifExtractor) Decorate(g flow.FileGroup) (*flow.RawItem, error) {
+	files := g.Files
+	out := &flow.RawItem{Files: files, Exif: make([]api.RawExif, len(files)), Key: g.Key, Show: g.Show, Meta: g.Meta, MetaHash: g.MetaHash, Kind: g.Kind}
+	found := false
+	for i, f := range files {
+		if g.Key != "" && i > 0 {
+			break // a keyed group: the grouper knows the files, only the main one is read
 		}
-
-		cd.logger.Info("Command", l.Any("args", args))
-
-		et := cd.getWorker()
-		out, err := et.Command(args...)
-		cd.releaseWorker(et)
+		res, err := e.extract(f.Path)
+		if len(res) == 0 {
+			// Nothing usable: mime falls back to the extension for this file; the
+			// validator skips the group if this turns out to be the main file
+			e.logger.Warn("exiftool: no metadata", l.String("file", f.Path), l.Error(err))
+			continue
+		}
 		if err != nil {
-			cd.logger.Error("Command", l.Any("out", out), l.String("file", item.Path), l.Error(err))
+			// ExifTool reported a problem but still returned data: use it
+			e.logger.Warn("exiftool reported a problem", l.String("file", f.Path), l.Error(err))
 		}
+		out.Exif[i] = res
+		found = true
+	}
+	if !found {
+		return nil, fmt.Errorf("exiftool: no metadata for the group of %s", files[0].Path)
+	}
+	return out, nil
+}
 
-		res := map[string][]byte{}
-		if err := exiftool.Unmarshal(out, res); err != nil {
-			return &RawItem{}, err
+func (e *exifExtractor) exiftool(path string) (api.RawExif, error) {
+	out, err := e.pool.Command(slices.Concat(allTags, []string{path})...)
+	res := map[string][]byte{}
+	if len(out) > 0 {
+		if uerr := exiftool.Unmarshal(out, res); uerr != nil && err == nil {
+			err = uerr
 		}
-
-		if err == nil {
-			result = append(result, api.RawExif(res))
-		}
 	}
-
-	return cd.processMeta(in[0], result)
+	return api.RawExif(res), err
 }
 
-func (cd *exifExtractor) Stop() {
-	close(cd.freeCh)
-
-	for _, et := range cd.workers {
-		et.Close()
+func (e *exifExtractor) Stop() {
+	if e.pool != nil {
+		e.pool.Close()
 	}
-}
-
-func NewExifExtractor(count int, chin <-chan []*dto.FileDto, chout chan<- *RawItem, logger *l.Logger) chain.Processor {
-	workers := make([]*exiftool.Server, count)
-	freeCh := make(chan *exiftool.Server, count)
-	for i := 0; i < count; i++ {
-		var et, err = exiftool.NewServer(commonArgs...)
-		logger.Info("NewWorker", l.Any("et", et), l.Error(err))
-		if err != nil {
-			logger.Panic("NewWorker", l.Any("et", et), l.Error(err))
-		}
-		workers[i] = et
-		freeCh <- et
-	}
-
-	processor := &exifExtractor{logger, workers, freeCh}
-
-	return chain.NewDecorator(chin, chout, processor)
-}
-
-func (cd *exifExtractor) getWorker() *exiftool.Server {
-	return <-cd.freeCh
-}
-
-func (cd *exifExtractor) releaseWorker(worker *exiftool.Server) {
-	cd.freeCh <- worker
-}
-
-func (cd *exifExtractor) processMeta(in *dto.FileDto, exifs []api.RawExif) (*RawItem, error) {
-	res, err := itemsProxy.ValidateFile(in, exifs[0])
-	if err != nil {
-		return &RawItem{}, err
-	}
-
-	item := &RawItem{
-		Exif: exifs,
-		Item: res,
-	}
-
-	//todo ignore if updated?
-	if res.State > dto.Dirty {
-		//return nil, chain.ErrSkippedItem
-	}
-
-	return item, nil
 }

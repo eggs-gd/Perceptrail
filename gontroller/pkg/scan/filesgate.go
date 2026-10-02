@@ -1,0 +1,320 @@
+package scan
+
+import (
+	"errors"
+	"path/filepath"
+	"slices"
+	"strings"
+	"time"
+
+	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/plugins"
+	"perceptrail/gontroller/pkg/scan/flow"
+
+	"github.com/eggs-gd/perceplib/chain"
+
+	l "github.com/eggs-gd/perceplib/logger"
+
+	"gorm.io/gorm"
+)
+
+// files gate: keeps the files table (identity, stat, CheckTime) and lets through
+// only groups that need work — so unchanged files never reach exiftool. After the
+// end-of-walk marker from every grouper it derives deletions.
+type filesGate struct {
+	logger   *l.Logger
+	branches int // markers to wait for
+	markers  int
+	held     []string // files the groupers held back in this walk: not gone
+	progress *progress
+	// dropped hears of a keyed group the gate let not through (nothing to do): one
+	// asset processed again on demand (importer Refresh) answers at once
+	dropped func(key string)
+}
+
+// NewFilesGate: branches is the number of groupers that send an end-of-walk marker;
+// dropped hears of a keyed group let not through (nil: nobody)
+func NewFilesGate(branches int, progress *progress, dropped func(key string), chin <-chan flow.FileGroup, chout chan<- flow.FileGroup, logger *l.Logger) chain.Processor {
+	return chain.NewDecorator(chin, chout, newFilesGate(branches, progress, dropped, logger))
+}
+
+func newFilesGate(branches int, progress *progress, dropped func(key string), logger *l.Logger) *filesGate {
+	return &filesGate{logger: logger, branches: branches, progress: progress, dropped: dropped}
+}
+
+func (g *filesGate) Decorate(in flow.FileGroup) (flow.FileGroup, error) {
+	// A grouper's last group comes with its end-of-walk marker: the group first
+	out, err := g.pass(in.Files, in.Key, in.MetaHash)
+	if err == nil {
+		out.Key, out.Show = in.Key, stored(in.Show, out.Files)
+		out.Meta, out.MetaHash, out.Kind = in.Meta, in.MetaHash, in.Kind
+		g.progress.passed()
+	} else if in.Key != "" && in.Files != nil && g.dropped != nil {
+		g.dropped(in.Key)
+	}
+	if in.Done != nil {
+		g.held = append(g.held, in.Held...)
+		g.markers++
+		if g.markers == g.branches { // every grouper has flushed: all files are stamped
+			g.markers = 0
+			g.finalizeWalk(*in.Done, g.held)
+			g.held = nil
+			g.progress.walkGated()
+		}
+	}
+	return out, err
+}
+
+// stored maps the grouper's files to the stored rows of the group (by path): the
+// later steps fill the rows (MimeType, links)
+func stored(files, rows []*dto.FileDto) []*dto.FileDto {
+	if files == nil {
+		return nil
+	}
+	byPath := make(map[string]*dto.FileDto, len(rows))
+	for _, r := range rows {
+		byPath[r.Path] = r
+	}
+	out := make([]*dto.FileDto, 0, len(files))
+	for _, f := range files {
+		if r, ok := byPath[f.Path]; ok {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// pass stores the group and lets it through if it needs work
+func (g *filesGate) pass(found []*dto.FileDto, key, metaHash string) (flow.FileGroup, error) {
+	if len(found) == 0 {
+		return flow.FileGroup{}, chain.ErrSkippedItem
+	}
+	files, changed, err := g.store(found)
+	if err != nil {
+		return flow.FileGroup{}, err
+	}
+	if changed || g.needsProcessing(files, key, metaHash) {
+		return flow.FileGroup{Files: files}, nil
+	}
+	return flow.FileGroup{}, chain.ErrSkippedItem
+}
+
+func (g *filesGate) Stop() {}
+
+// store finds or creates the rows of the group (found: files with their stat only),
+// refreshes their stat and stamps them as seen. changed: a new file, or size/mtime differ.
+func (g *filesGate) store(found []*dto.FileDto) ([]*dto.FileDto, bool, error) {
+	now := time.Now()
+	changed := false
+	files := make([]*dto.FileDto, 0, len(found))
+
+	for _, fe := range found {
+		e := fe.ItemEntry
+		f, err := filesProxy.GetFileByPath(e.Path)
+		switch {
+		case errors.Is(err, gorm.ErrRecordNotFound):
+			if f, err = filesProxy.CreateFile(e); err != nil {
+				return nil, false, err
+			}
+			changed = true
+		case err != nil:
+			return nil, false, err
+		case !f.ModTime.Equal(e.ModTime) || f.Size != e.Size:
+			// Store the fresh stat, or every walk sees the file as changed again
+			// (and the short hash would use the stale size)
+			f.Size, f.ModTime = e.Size, e.ModTime
+			changed = true
+		}
+		// The source's grouper knows the role (Apple): a new role is new work
+		if fe.Role != "" && f.Role != fe.Role {
+			f.Role = fe.Role
+			changed = true
+		}
+		f.CheckTime = now
+		files = append(files, f)
+	}
+
+	if _, err := filesProxy.UpdateFiles(files); err != nil {
+		return nil, false, err
+	}
+	return files, changed, nil
+}
+
+// needsProcessing: nothing changed on disk, but the group is not done — a file
+// was never linked or is linked outside the group (its main file is gone: a RAW
+// deleted, its JPEG left), or the item is missing or not Ready (new, Dirty,
+// interrupted). Groups that are known not to be media stay ignored.
+func (g *filesGate) needsProcessing(files []*dto.FileDto, key, metaHash string) bool {
+	inGroup := map[string]bool{key: key != ""}
+	for _, f := range files {
+		inGroup[f.GUID] = true
+	}
+	main := ""
+	for _, f := range files {
+		switch {
+		case f.LinkedTo == "":
+			return true
+		case !f.IsIgnored() && f.Role == "":
+			return true // from before roles existed: classified once more
+		case f.IsIgnored():
+		case !inGroup[f.LinkedTo]:
+			return true
+		case main == "":
+			main = f.LinkedTo
+		}
+	}
+	if main == "" {
+		return false // the whole group is ignored
+	}
+	item, err := itemsProxy.GetItemByGuid(main)
+	if err != nil {
+		return errors.Is(err, gorm.ErrRecordNotFound)
+	}
+	// The source's metadata changed (a date corrected in Photos), the files did not;
+	// or a perceptor has not processed it (new, or its schema changed)
+	return !cheapStageDone(item) || item.MetaHash != metaHash || g.perceptorMissing(item.Guid)
+}
+
+// perceptorMissing: an import perceptor has no row for the item
+func (g *filesGate) perceptorMissing(guid string) bool {
+	for _, st := range plugins.Pm.ImportStores() {
+		if has, err := st.Has(guid); err == nil && !has {
+			return true
+		}
+	}
+	return false
+}
+
+// pruneStores: the perceptors' rows of items that are gone
+func (g *filesGate) pruneStores() {
+	stores := plugins.Pm.Stores()
+	if len(stores) == 0 {
+		return
+	}
+	guids, err := itemsProxy.GetAllGuids()
+	if err != nil {
+		g.logger.Error("Perceptor storage: can't read items", l.Error(err))
+		return
+	}
+	keep := make(map[string]bool, len(guids))
+	for _, guid := range guids {
+		keep[guid] = true
+	}
+	for _, st := range stores {
+		n, err := st.Prune(func(guid string) bool { return keep[guid] })
+		if err != nil {
+			g.logger.Error("Perceptor storage: prune failed", l.String("store", st.Name()), l.Error(err))
+		} else if n > 0 {
+			g.logger.Info("Perceptor storage: pruned", l.String("store", st.Name()), l.Int("rows", n))
+		}
+	}
+}
+
+// cheapStageDone: the item went through the cheap stage (Visible, Waiting) or is
+// fully done (Ready). An item shown without a preview is from before the cheap
+// stage existed: it goes through once more.
+func cheapStageDone(item *dto.ItemDto) bool {
+	switch item.State {
+	case dto.Visible, dto.Ready:
+		return item.PreviewPath != ""
+	case dto.Waiting:
+		return true
+	}
+	return false
+}
+
+// finalizeWalk derives deletions: files not stamped by this walk are gone.
+func (g *filesGate) finalizeWalk(result flow.WalkResult, held []string) {
+	if !result.Complete {
+		g.logger.Warn("Walk incomplete: deletions are not checked")
+		return
+	}
+	if result.Files == 0 {
+		// An empty root (e.g. an unmounted drive's mount point) must not delete the library
+		g.logger.Warn("Walk found no files: deletions are not checked", l.String("path", result.Root))
+		return
+	}
+	g.logger.Info("Walk complete", l.Int("files", result.Files), l.Int("unreadable", len(result.Unreadable)))
+
+	stale, err := filesProxy.GetFilesCheckedBefore(result.Started)
+	if err != nil {
+		g.logger.Error("Deletions: can't read files", l.Error(err))
+		return
+	}
+	gone := goneFiles(stale, result.Root, result.Unreadable, held)
+	deletedItems, dirtyItems := 0, 0
+
+	for _, f := range gone {
+		switch {
+		case f.IsIgnored() || f.LinkedTo == "":
+		case f.LinkedTo == f.GUID: // main file: the item is gone
+			item, err := itemsProxy.GetItemByGuid(f.GUID)
+			if err != nil {
+				continue // never became an item, or already deleted
+			}
+			if err := itemsProxy.DeleteItem(item); err != nil {
+				g.logger.Error("Deletions: can't delete item", l.String("guid", item.Guid), l.Error(err))
+				continue
+			}
+			deletedItems++
+		default: // sidecar: its item must be processed again
+			item, err := itemsProxy.GetItemByGuid(f.LinkedTo)
+			if err != nil {
+				continue
+			}
+			item.State = dto.Dirty
+			if _, err := itemsProxy.UpdateItem(item); err != nil {
+				g.logger.Error("Deletions: can't mark item dirty", l.String("guid", item.Guid), l.Error(err))
+				continue
+			}
+			dirtyItems++
+		}
+	}
+
+	if err := filesProxy.DeleteFiles(gone); err != nil {
+		g.logger.Error("Deletions: can't delete files", l.Error(err))
+		return
+	}
+	// An item with no files left is gone too (a keyed asset: every file is "linked",
+	// none is "main" by its own GUID)
+	for _, f := range gone {
+		if f.LinkedTo == "" || f.IsIgnored() {
+			continue
+		}
+		if n, err := filesProxy.CountLinkedFiles(f.LinkedTo); err == nil && n == 0 {
+			if item, err := itemsProxy.GetItemByGuid(f.LinkedTo); err == nil {
+				if err := itemsProxy.DeleteItem(item); err == nil {
+					deletedItems++
+				}
+			}
+		}
+	}
+	g.logger.Info("Deletions", l.Int("files", len(gone)), l.Int("items", deletedItems), l.Int("dirty", dirtyItems))
+	g.pruneStores()
+}
+
+// goneFiles keeps the stale files that belong to this root and were not hidden by
+// an unreadable directory: only those are known to be deleted.
+func goneFiles(stale []*dto.FileDto, root string, unreadable, held []string) []*dto.FileDto {
+	isHeld := make(map[string]bool, len(held))
+	for _, p := range held {
+		isHeld[p] = true
+	}
+	var gone []*dto.FileDto
+	for _, f := range stale {
+		if !isUnder(f.Path, root) {
+			continue // another library root (config changed): not ours to judge
+		}
+		if isHeld[f.Path] || slices.ContainsFunc(unreadable, func(dir string) bool { return f.Path == dir || isUnder(f.Path, dir) }) {
+			continue
+		}
+		gone = append(gone, f)
+	}
+	return gone
+}
+
+// isUnder reports whether path is inside dir
+func isUnder(path, dir string) bool {
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}

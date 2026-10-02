@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Local fast checks. Enable once per clone: git config core.hooksPath .githooks
+# Skip in an emergency: git commit --no-verify
+set -euo pipefail
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null || true)
+if [ "$branch" = "master" ] || [ "$branch" = "develop" ]; then
+  echo "pre-commit: do not commit to $branch directly — use a feature/* branch (see AGENTS.md)" >&2
+  exit 1
+fi
+
+# Check the staged (index) version — that is what gets committed, not the working copy
+unformatted=""
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  if [ -n "$(git show ":$f" | gofmt -l)" ]; then
+    unformatted="$unformatted $f"
+  fi
+done < <(git diff --cached --name-only --diff-filter=ACM -- '*.go')
+
+if [ -n "$unformatted" ]; then
+  echo "pre-commit: staged Go files need gofmt:$unformatted" >&2
+  echo "run: gofmt -w$unformatted && git add$unformatted" >&2
+  exit 1
+fi
