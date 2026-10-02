@@ -73,10 +73,13 @@ keeps in place.
   HEVC); the viewer page asks for the neighbours' (±6 in the view's order) ahead; a
   moving tile asks for its hover video after the pointer stayed 250 ms (`Motion`),
   showing the frames until it plays; the badge stays, a ring turns around its mark
-  while the video comes, the video fades in. The Original switch shows the biggest
-  of what is seen: from Photos its current version (the edit) at full resolution
-  (`originalOnDemand`; a video's original file), elsewhere the biggest edit or the
-  original.
+  while the video comes, the video fades in. The viewer opens on what is here
+  (`viewerChoice`: the smallest local image covering ~2048 px or the full size; the
+  medium is asked for only if none does); as big as the full size it is the
+  Original — the switch is lit; else the switch shows the biggest of what is seen:
+  from Photos its current version (the edit) at full resolution (`originalOnDemand`;
+  a video's original file), elsewhere the biggest edit or the original. The tile's
+  cloud: `fullHere` false. Info → Files: every file of the group, downloadable.
 - `lib/workers/tasks/wlayout.ts` (start) — loads the kept items and the view's kept
   order (`itemsDb.orders` `order:<view>`, shared by the tabs), so the sheet shows without the network; a
   change that keeps an item's size patches its row in place.

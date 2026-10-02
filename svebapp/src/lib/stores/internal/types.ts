@@ -34,6 +34,8 @@ export interface Asset {
      * Relative to the API, like the renditions' urls.
      */
     onDemand?: {medium: string, hover?: string, original?: string};
+    /** The full size of what is seen (oriented; an edited Photos asset: its current version) */
+    full?: {w: number, h: number};
 }
 
 export interface Item {

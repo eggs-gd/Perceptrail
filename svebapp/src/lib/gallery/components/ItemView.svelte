@@ -7,7 +7,7 @@
     import Picture from "./Picture.svelte";
     import Motion from "./Motion.svelte";
     import KindBadge from "./KindBadge.svelte";
-    import {assetUrl, biggestImage, fallbackImage, hasImage, hoverUrl, mediumUrl, originalImage, originalOnDemand, playableVideos} from "./asset";
+    import {assetUrl, biggestImage, fallbackImage, hasImage, hoverUrl, localFullVideo, mediumUrl, originalImage, originalOnDemand, playableVideos, viewerChoice} from "./asset";
     import {viewerPrefs} from "./viewerPrefs.svelte";
     import {debug} from "$lib/app.svelte";
     import {refreshFromServer} from "$lib/workers";
@@ -51,8 +51,11 @@
     // the user sees, over the preview — from Photos its current version (the edit) at
     // full resolution; elsewhere the biggest edit or the original
     let fromPhotos = $derived(asset ? originalOnDemand(asset) : undefined);
+    // What the viewer shows when it opens: the local image of our comfortable size
+    // (full: it is the Original already — nothing to switch to)
+    let choice = $derived(asset && mode === 'view' && asset.kind !== 'video' ? viewerChoice(asset) : undefined);
     let original = $derived.by((): {url: string, w?: number, h?: number} | undefined => {
-        if (mode !== 'view' || !showOriginal || !asset || asset.kind === 'video') return undefined;
+        if (mode !== 'view' || !showOriginal || !asset || asset.kind === 'video' || choice?.full) return undefined;
         if (fromPhotos) return {url: fromPhotos};
         const local = originalImage(asset);
         return local && {url: assetUrl(local), w: local.w, h: local.h};
@@ -60,10 +63,12 @@
     let originalLoad = $state<{url: string, w: number, h: number}>();
     let originalReady = $derived(!!original && originalLoad?.url === original.url);
     let originalDims = $derived(originalReady ? originalLoad : original?.w ? original : undefined);
-    // A video's Original: its own file (here, or from Photos)
-    let videoOriginal = $derived(mode === 'view' && showOriginal && asset?.kind === 'video'
-        ? (asset.original?.mime.startsWith('video/') ? assetUrl(asset.original) : fromPhotos)
-        : undefined);
+    // A video's Original: its own file — played at once when it is here and plays (it
+    // is the best there is), else from Photos when switched on
+    let fullVideo = $derived(mode === 'view' && asset ? localFullVideo(asset) : undefined);
+    let videoOriginal = $derived(mode !== 'view' || asset?.kind !== 'video' ? undefined
+        : fullVideo ? assetUrl(fullVideo)
+        : showOriginal ? fromPhotos : undefined);
 
     // A Live Photo in the viewer: its motion plays over the photo once when it opens
     // (if autoplay is on) and again on hover, then the photo is back. With sound: the
@@ -88,7 +93,9 @@
 
     // Apple Photos: the viewer's medium rendition (the image, a video's 720p), asked
     // for when it opens — the image goes over what the asset has once it loads
-    let medium = $derived(asset && mode === 'view' ? mediumUrl(asset) : undefined);
+    // Only when nothing here is big enough (a video: no original here)
+    let medium = $derived(asset && mode === 'view' && (asset.kind === 'video' ? !fullVideo : choice?.ask)
+        ? mediumUrl(asset) : undefined);
     let mediumLoad = $state<{url: string, w?: number, h?: number}>();
     let better = $derived(medium && mediumLoad?.url === medium && mediumLoad.w ? mediumLoad : undefined);
     // Asked for and not answered yet (a failure answers too); the original as well
@@ -107,7 +114,8 @@
 
     let shown = $derived(asset && mode === 'view'
         ? (playsVideo ? (videoDims ?? {w: item.width, h: item.height})
-            : original ? (originalDims ?? better ?? biggestImage(asset)) : (better ?? biggestImage(asset)))
+            : original ? (originalDims ?? better ?? choice?.image ?? biggestImage(asset))
+            : (better ?? choice?.image ?? biggestImage(asset)))
         : undefined);
     let fit = $derived(shown?.w && shown.h
         ? {
@@ -155,7 +163,12 @@
          style:aspect-ratio={fit?.ratio}
          onmouseenter={() => { hovered = true; if (mode === 'view') liveReplay = item.guid; }}
          onmouseleave={() => (hovered = false)}>
-        <Picture {asset} {sizes} alt={item.guid} width={item.width} height={item.height}/>
+        {#if choice?.image}
+            <!-- The viewer: the local image of our comfortable size, as it is -->
+            <img src={assetUrl(choice.image)} alt={item.guid}>
+        {:else}
+            <Picture {asset} {sizes} alt={item.guid} width={item.width} height={item.height}/>
+        {/if}
         {#if medium}
             <img class="medium" class:ready={better} src={medium} alt=""
                  onload={(e) => {

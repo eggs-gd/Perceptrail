@@ -1,7 +1,8 @@
 <script lang="ts">
     import {PUBLIC_API_PATH} from '$env/static/public';
-    import type {Asset, Rendition} from '$lib/stores';
+    import type {Asset} from '$lib/stores';
     import {iconMask} from '../perceptors.svelte';
+    import {fullHere} from './asset';
 
     interface Props {
         guid: string;
@@ -12,7 +13,8 @@
     let {guid, asset, onclose}: Props = $props();
 
     // The viewer's info panel: what each perceptor knows about the photo
-    // (GET /items/:guid/info) and the asset's files (the client has them already)
+    // (GET /items/:guid/info) and every file of its group — the original, edits,
+    // derivatives, motion, frames, sidecars — each to download (GET /items/:guid/files)
 
     interface Info {
         slug: string;
@@ -27,25 +29,32 @@
             .then((r) => (r.ok ? r.json() as Promise<Info[]> : []));
     });
 
-    const kind = (r: Rendition) => r.mime.replace(/^(image|video)\//, '').toUpperCase();
-    const dims = (r: Rendition) => (r.w && r.h ? ` · ${r.w} × ${r.h}` : '');
+    interface GroupFile {
+        name: string;
+        role: string;
+        mime: string;
+        size: number;
+        w?: number;
+        h?: number;
+        url: string;
+    }
 
-    // The files: the source (or that it is only in iCloud), the edit, previews, motion
     let files = $derived.by(() => {
-        if (!asset) return [];
-        const out: {label: string, value: string}[] = [];
-        out.push(asset.original
-            ? {label: 'Original', value: kind(asset.original) + dims(asset.original)}
-            : {label: 'Original', value: 'in iCloud only'});
-        if (asset.edit.length) out.push({label: 'Edited', value: asset.edit.map(kind).join(', ')});
-        if (asset.stills.length) {
-            const biggest = [...asset.stills].sort((a, b) => (b.w ?? 0) - (a.w ?? 0))[0];
-            out.push({label: 'Previews', value: `${asset.stills.length}, up to ${biggest.w ?? '?'} px`});
-        }
-        if (asset.motion.length) out.push({label: 'Motion', value: asset.motion.map(kind).join(', ')});
-        if (asset.frames.length) out.push({label: 'Frames', value: String(asset.frames.length)});
-        return out;
+        const g = guid;
+        return fetch(`${PUBLIC_API_PATH}/items/${encodeURIComponent(g)}/files`)
+            .then((r) => (r.ok ? r.json() as Promise<GroupFile[]> : []));
     });
+
+    const ROLES: Record<string, string> = {
+        original: 'Original', edit: 'Edit', still: 'Preview', motion: 'Motion', frames: 'Frame', meta: 'Sidecar',
+    };
+    const ORDER = ['original', 'edit', 'still', 'motion', 'frames', 'meta'];
+    const byRole = (fs: GroupFile[]) =>
+        [...fs].sort((a, b) => (ORDER.indexOf(a.role) + 1 || 99) - (ORDER.indexOf(b.role) + 1 || 99));
+    const type = (f: GroupFile) => (f.mime.split('/')[1] ?? f.mime).replace(/^x-|^vnd\./, '').toUpperCase();
+    const bytes = (n: number) => n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`;
+    const details = (f: GroupFile) =>
+        [type(f), f.w && f.h ? `${f.w} × ${f.h}` : '', bytes(f.size)].filter(Boolean).join(' · ');
 </script>
 
 {#snippet block(title: string, icon: string | undefined, facts: {label: string, value: string}[])}
@@ -78,9 +87,32 @@
             {@render block(p.title, p.icon, p.facts)}
         {/each}
     {/await}
-    {#if files.length}
-        {@render block('Files', undefined, files)}
-    {/if}
+    <section>
+        <h3>Files</h3>
+        {#if asset}
+            <p class="note">Full resolution {fullHere(asset) ? 'here' : 'in iCloud only'}</p>
+        {/if}
+        {#await files then list}
+            <ul class="files">
+                {#each byRole(list) as f (f.url)}
+                    <li>
+                        <span class="file">
+                            <span class="role">{ROLES[f.role] ?? 'Other'}</span>
+                            <span class="name" title={f.name}>{f.name}</span>
+                            <span class="details">{details(f)}</span>
+                        </span>
+                        <a class="download" href={`${PUBLIC_API_PATH}${f.url}?download=1`}
+                           title="Download {f.name}" aria-label="Download {f.name}">
+                            <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14" fill="none" stroke="currentColor"
+                                      stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </a>
+                    </li>
+                {/each}
+            </ul>
+        {/await}
+    </section>
 </aside>
 
 <style>
@@ -172,5 +204,63 @@
     dd {
         margin: 0;
         overflow-wrap: anywhere;
+    }
+
+    .note {
+        margin: 0 1rem 0.4rem;
+        color: #aaa;
+    }
+
+    .files {
+        margin: 0;
+        padding: 0 0.6rem 0 1rem;
+        list-style: none;
+    }
+
+    .files li {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.25rem 0;
+        border-top: 1px solid rgb(255 255 255 / 0.06);
+    }
+
+    .file {
+        display: grid;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .role {
+        color: #aaa;
+        font-size: 0.75rem;
+    }
+
+    .name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .details {
+        color: #aaa;
+        font-size: 0.75rem;
+    }
+
+    .download {
+        display: flex;
+        padding: 0.3rem;
+        border-radius: 50%;
+        color: #ccc;
+    }
+
+    .download:hover {
+        color: #fff;
+        background: rgb(255 255 255 / 0.1);
+    }
+
+    .download svg {
+        width: 18px;
+        height: 18px;
     }
 </style>

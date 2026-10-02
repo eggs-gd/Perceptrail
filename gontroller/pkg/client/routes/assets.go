@@ -92,5 +92,10 @@ func getAssetFile(c echo.Context) error {
 	if err != nil || f.LinkedTo != guid {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
+	// ?download=1: saved under its own name (the download attribute does not work
+	// across origins — the API is on another port)
+	if c.QueryParam("download") == "1" {
+		return c.Attachment(f.Path, f.Name)
+	}
 	return c.File(f.Path)
 }

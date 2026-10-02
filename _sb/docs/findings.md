@@ -736,6 +736,20 @@ the binary by the linker; run from the user's terminal on the dev library.
   loaded, as big as the screen until then; stretched if switched on). A Live Photo's
   motion was 300×150 in a corner: the stage's `.stage video { width: auto }` beat
   `.live { width: 100% }` on specificity — `.asset.view video` fills the box now.
+- **The viewer picks from what is here; the cloud means "full resolution not here"**
+  (the owner, decided). The asset carries its full size (`full`: the current
+  version's, oriented — contract 6). Opening: the smallest local image covering our
+  comfortable size (the preview's ~2048 px long side, or the full size if smaller)
+  is shown as it is — no 360 px first, no request; only when nothing here is that
+  big is the medium asked for. As big as the full size: it is the Original, the
+  switch is lit (nothing to switch to); else the switch asks for it. A video whose
+  original is here and plays: played at once, lit. The tile's cloud: no file of the
+  asset is as big as the full size (an original, an edit's render, a full-size
+  derivative all count). Info → Files lists every file of the group (sidecars too,
+  `/items/:guid/files`), each downloadable (`?download=1`: `Content-Disposition`,
+  the download attribute does not work across origins). Checked on the test pair: a
+  local 1600 px original — shown at once, lit, "full resolution here"; a cloud-only
+  photo with 480 px local — shown, the medium asked over it, the switch off.
 - **A full-size derivative is not the original**: a cloud-only PNG screenshot
   (1 206 × 2 622) has a local JPEG derivative of the same size (recipe 65739,
   `_1_101_o.jpeg`): the Original (Photos' current version at full size) is drawn

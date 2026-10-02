@@ -110,6 +110,60 @@ function videoType(r: Rendition): string {
     return r.codec ? `${mime}; codecs="${fullCodec(r.codec)}"` : mime;
 }
 
+// The viewer picks from what is here first. Our comfortable size is the preview's
+// (a long side of ~2048 px, Photos' medium rendition): the smallest local image that
+// covers it — or the full size, if that is smaller — is shown as it is, no 360 px
+// first. As big as the full size: that is the Original (its switch is lit); bigger
+// is asked for with the switch.
+const COMFORT_PX = 2048;
+// Sizes from different sources round differently (an edit's render, the DB's size)
+const FULL_SLACK = 0.98;
+
+const longSide = (r: {w?: number, h?: number}) => Math.max(r.w ?? 0, r.h ?? 0);
+
+/** The images the viewer may show here: the edit if there is one, else the stills
+ * and an original every browser shows — smallest first, sized only */
+function localImages(asset: Asset): Rendition[] {
+    const images = asset.edit.length ? [...asset.edit] : [...asset.stills];
+    if (!asset.edit.length && asset.original && VIEWABLE_IMAGES.has(asset.original.mime)) images.push(asset.original);
+    return images.filter((r) => VIEWABLE_IMAGES.has(r.mime) && r.w && r.h)
+        .sort((a, b) => longSide(a) - longSide(b));
+}
+
+/** A video's original, here and playable: shown at once, as the Original */
+export function localFullVideo(asset: Asset): Rendition | undefined {
+    const o = asset.original;
+    return asset.kind === 'video' && o?.mime.startsWith('video/') && canPlayVideo(o) ? o : undefined;
+}
+
+/**
+ * The full resolution is here (the tile's cloud says when not): a video's original;
+ * for an image, any file of the asset as big as the full size — the original, the
+ * edit's render, a full-size derivative
+ */
+export function fullHere(asset: Asset): boolean {
+    if (asset.kind === 'video') return !!asset.original?.mime.startsWith('video/');
+    if (!asset.full) return !!asset.original;
+    const full = longSide(asset.full) * FULL_SLACK;
+    return [...asset.edit, ...asset.stills, ...(asset.original ? [asset.original] : [])]
+        .some((r) => longSide(r) >= full);
+}
+
+/**
+ * What the viewer shows of an image when it opens: the smallest local image that
+ * covers our comfortable size (or the full size, if smaller); full — it is as big as
+ * the full size (the Original switch is lit); ask — nothing here is that big, the
+ * medium rendition is asked for (Photos)
+ */
+export function viewerChoice(asset: Asset): {image?: Rendition, full: boolean, ask: boolean} {
+    const images = localImages(asset);
+    const fullLong = asset.full ? longSide(asset.full) : longSide(images.at(-1) ?? {});
+    const want = Math.min(COMFORT_PX, fullLong || COMFORT_PX) * FULL_SLACK;
+    const image = images.find((r) => longSide(r) >= want) ?? images.at(-1);
+    const size = image ? longSide(image) : 0;
+    return {image, full: !!image && fullLong > 0 && size >= fullLong * FULL_SLACK, ask: size < want};
+}
+
 // Apple Photos on demand (the server's rendition.go): asked for when needed — the
 // medium when the viewer opens, the hover when a moving tile is pointed at; the
 // file comes when Photos has downloaded it (~1 s), 404 if it cannot

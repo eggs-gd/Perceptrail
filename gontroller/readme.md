@@ -55,6 +55,7 @@ packages — see [findings](../_sb/docs/findings.md#go-plugins-2026-09-28).
 | GET | `/items?since=<cursor>` | The delta: changed shown items as above, `{guid, removed: true}` for deleted or hidden ones |
 | GET | `/perceptors` | The perceptors given to the client (config `perceptors.<name>.client`): `slug (the view in URLs), title, icon (SVG), help, relative` — a button each |
 | GET | `/items/:guid/rendition/:level` | Apple Photos on demand: `medium` (the viewer: the image ~2048 px or the edit; a video's 720p, `?hevc=0` H.264 only), `hover` (a video's 360p, a Live Photo's motion), `original` (the biggest of what is seen: a photo's current version — the edit — at full resolution as JPEG; a video's original file). Serves the file from the library; asks Photos (PhotoKit, macOS) when it is not local; 404 when nothing is there |
+| GET | `/items/:guid/files` | Every file of the item's group (original, edits, derivatives, motion, frames, sidecars): `[{name, role, mime, size, w, h, url}]`; `url` + `?download=1` saves it under its name |
 | GET | `/items/:guid/info` | What each perceptor knows about the item (the viewer's info panel): `[{slug, title, icon, facts: [{label, value}]}]` |
 | GET | `/app` | The server's `version` and `mode` (debug / release) |
 | GET | `/p/:view/order?anchor=` | The sheet in that perceptor's order, NDJSON `{guid, sections?: [{level, label}]}` — the sections this photo starts, coarsest first (a path or one tag) |

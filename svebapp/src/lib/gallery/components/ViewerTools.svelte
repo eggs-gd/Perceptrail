@@ -1,6 +1,6 @@
 <script lang="ts">
     import type {Asset} from '$lib/stores';
-    import {assetUrl, canShowImage, hasImage, originalImage, originalOnDemand, playableVideos} from './asset';
+    import {assetUrl, canShowImage, hasImage, localFullVideo, originalImage, originalOnDemand, playableVideos, viewerChoice} from './asset';
     import {cycleLiveMode, toggleViewerPref, viewerPrefs} from './viewerPrefs.svelte';
     import PerceptorButtons from './PerceptorButtons.svelte';
 
@@ -32,6 +32,10 @@
     let other = $derived(!video && !image && !fromPhotos ? asset.original : null);
     // A video's Original: its own file, here or from Photos
     let videoOriginal = $derived(video && (!!fromPhotos || !!asset.original?.mime.startsWith('video/')));
+    // What the viewer shows at once is the full resolution already: the switch is lit
+    // and there is nothing bigger to switch to
+    let full = $derived(asset.kind === 'video' ? !!localFullVideo(asset) : viewerChoice(asset).full);
+    let originalOn = $derived(full || showOriginal);
     // A photo or a video is shown: its size can be stretched
     let still = $derived(video || hasImage(asset));
 
@@ -56,9 +60,9 @@
 {/snippet}
 
 {#snippet originalSwitch()}
-    <button class="tool" class:on={showOriginal}
-            title={showOriginal ? 'Showing the original' : 'Show the original'}
-            aria-label="Original" aria-pressed={showOriginal} onclick={ontoggleoriginal}>
+    <button class="tool" class:on={originalOn}
+            title={full ? 'The original: shown at full resolution' : showOriginal ? 'Showing the original' : 'Show the original'}
+            aria-label="Original" aria-pressed={originalOn} onclick={() => { if (!full) ontoggleoriginal(); }}>
         <svg viewBox="0 0 24 24" aria-hidden="true">
             <rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor"
                   stroke-width="1.6"/>
@@ -128,7 +132,9 @@
             </svg>
         </button>
     {/if}
-    {#if image}
+    {#if full}
+        {@render originalSwitch()}
+    {:else if image}
         <!-- Tested when the item opens: the switch if the browser shows it, else a download -->
         {#await canShowImage(image) then shown}
             {#if shown}

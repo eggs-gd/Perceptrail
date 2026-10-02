@@ -1,6 +1,6 @@
 <script lang="ts">
     import type {Asset, AssetKind} from '$lib/stores';
-    import {formatDuration} from './asset';
+    import {formatDuration, fullHere} from './asset';
 
     interface Props {
         asset: Asset;
@@ -14,11 +14,11 @@
 
     const TITLES: Record<AssetKind, string> = {photo: 'Photo', live: 'Live Photo', video: 'Video'};
 
-    // The original is only in iCloud — the same for every kind: what is shown or
-    // played comes from Photos on demand, the cloud says where the original is
-    // (a Live Photo's original is its video)
-    let cloud = $derived(!asset.original);
-    let title = $derived(TITLES[asset.kind] + (cloud ? ' (in iCloud only)' : ''));
+    // The full resolution is not here (only in iCloud) — the same for every kind:
+    // gone once any file of it is that big (the original, the edit's render, a
+    // full-size derivative)
+    let cloud = $derived(!fullHere(asset));
+    let title = $derived(TITLES[asset.kind] + (cloud ? ' (full resolution in iCloud only)' : ''));
 </script>
 
 <!-- What moves and what is only in iCloud is marked; a local photo has no mark -->
