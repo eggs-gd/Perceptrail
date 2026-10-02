@@ -461,6 +461,26 @@ Design: roadmap "Expensive stage".
   JPEG quality of Apple's renditions was estimated from the sizes in the DB
   (~2.6 bits/pixel), not measured — the spike has the same permission question.
 
+### Plugins and RAW previews: two holes (2026-10-02)
+
+- `TestLoadExternalPlugins` loaded a `test_plugin.so` that did not exist and only
+  logged — a plugin built against other versions than the host was caught only by
+  running the server. Now it builds each perceptor and loads it. Checked: a plugin
+  pointed at a perceplib copy with one constant added fails with "plugin was built
+  with a different version of package". Traps:
+  - `go test` caches the result and ignores files outside the test's module, even
+    the ones the test stats itself — `perceptors/` and `perceplib/` are other
+    modules. After changing a plugin: `-count=1`; CI does that after
+    `make build-plugins` (setup-go keeps the Go cache between runs).
+  - The plugin must come from the same Go as the test binary: the test runs
+    `$(GOROOT)/bin/go`, not whatever `go` is on the PATH.
+- An embedded RAW preview (`JpgFromRaw` / `PreviewImage`) is stored as the sensor
+  saw it, with no EXIF of its own: extracted as is, a portrait shot lies on its side.
+  The RAW's Orientation is copied onto it (`-TagsFromFile`); the browser turns an
+  `<img>` by its EXIF, and the item's size is already swapped by the size perceptor.
+  Tested with a real exiftool (a JPEG with an embedded thumbnail stands in for the
+  RAW — there are no RAWs in the dev library); skipped where exiftool is missing (CI).
+
 ### A viewer over a library, not a library (2026-10-02)
 
 - The product's place (the owner): Immich, PhotoPrism, Lightroom, Apple Photos keep

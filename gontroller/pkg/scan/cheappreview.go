@@ -173,7 +173,10 @@ func pixels(exif map[string][]byte, f *dto.FileDto) int64 {
 	return f.Size
 }
 
-// exiftoolExtract writes the embedded preview tag of src to <dir>/<guid>/embedded.jpg
+// exiftoolExtract writes the embedded preview tag of src to <dir>/<guid>/embedded.jpg.
+// The embedded JPEG is stored as the sensor saw it, with no EXIF of its own; the
+// RAW's Orientation is copied onto it, or a portrait shot shows on its side (the
+// browser turns an <img> by its EXIF)
 func (c *cheapPreview) exiftoolExtract(tag, src, guid string) (string, error) {
 	dst := filepath.Join(c.dir, guid, "embedded.jpg")
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
@@ -184,6 +187,10 @@ func (c *cheapPreview) exiftoolExtract(tag, src, guid string) (string, error) {
 	}
 	if info, err := os.Stat(dst); err != nil || info.Size() == 0 {
 		return "", os.ErrNotExist
+	}
+	// No Orientation in the RAW is fine: the preview stays as it is
+	if _, err := c.pool.Command("-overwrite_original", "-n", "-TagsFromFile", src, "-Orientation", dst); err != nil {
+		c.logger.Debug("Orientation not copied to the embedded preview", l.String("file", src), l.Error(err))
 	}
 	return dst, nil
 }

@@ -292,7 +292,9 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 
 - Own media-type table and the main file of a group → **C5** (import chain).
 - [ ] One main item merged from all sidecars → "The asset from all its files" (Next).
-- Embedded RAW preview → the photo renditions step (a source).
+- [x] Embedded RAW preview (`JpgFromRaw` / `PreviewImage`) — the cheap preview has
+      extracted it since PR #15; it now gets the RAW's Orientation (portrait shots
+      lay on their side). The renditions step uses it as a source too.
 
 ## Core — service (gontroller)
 
@@ -303,9 +305,10 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
       Apple assets are not judged by their file. A group exiftool returns nothing for
       at all is still retried (that may be a passing failure).
 - [x] Fewer Info logs in `fswalker` — none per file since the import chain (C1).
-- [ ] **`TestLoadExternalPlugins` should load real `.so` files** — today it does not,
-      so a plugin built against other dependency versions than the host (it happened:
-      `x/sync`, `testify`) is caught only by running the server. To do.
+- [x] **`TestLoadExternalPlugins` loads real `.so` files**: every perceptor in
+      `perceptors/` (stubs aside) is built with the test's own Go and loaded with
+      `plugin.Open` — a plugin built against other dependency versions than the host
+      (it happened: `x/sync`, `testify`) fails it. CI runs it uncached.
 
 ## Deployment (first release)
 

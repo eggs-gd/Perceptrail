@@ -1,54 +1,65 @@
-// gontroller/pkg/plugins/plugins_test.go
 package plugins
 
 import (
-	"perceptrail/gontroller/pkg/app"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"testing"
-
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
 )
 
-type mockAppContext struct{}
+// Not written yet: a bare `package main`, no Perceptor symbol
+var stubPerceptors = map[string]bool{"ml_faces": true, "ml_objects": true}
 
-func (m *mockAppContext) Config() *app.Config {
-	return &app.Config{
-		Path:    "/test/path",
-		Plugins: []string{"test_plugin.so"},
-	}
-}
-
-func (m *mockAppContext) Logger(category string) *l.Logger {
-	logger := l.NewLogger(l.DebugLevel, &decorators.GontrollerDecorator{})
-	return logger
-}
-
-func (m *mockAppContext) SetLogLevel(level l.LogLevel) {}
-
+// Every perceptor in perceptors/ is built as a plugin and loaded into this process,
+// as the server does. plugin.Open refuses a plugin built against other versions of a
+// package the host has (it happened: x/sync, testify) — `go build` alone does not
+// catch that, only loading does.
+//
+// go test caches the result and does not see the plugins change (they are outside
+// this module): after changing one, run it with -count=1 — CI does.
 func TestLoadExternalPlugins(t *testing.T) {
-
-	ctx := &mockAppContext{}
-
-	// Завантажуємо плагіни
-	err := Pm.LoadPlugins(ctx)
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("Go plugins: Linux and macOS only")
+	}
+	if testing.Short() {
+		t.Skip("builds every perceptor")
+	}
+	// The Go that built this test: a plugin must come from the same toolchain
+	goBin := filepath.Join(runtime.GOROOT(), "bin", "go")
+	root, err := filepath.Abs("../../../perceptors")
 	if err != nil {
-		t.Fatalf("Failed to load plugins: %v", err)
+		t.Fatal(err)
 	}
-
-	// Отримуємо список завантажених плагінів
-	loadedPlugins := Pm.GetPlugins()
-
-	// Виводимо інформацію про кожен плагін
-	for i, p := range loadedPlugins {
-		t.Logf("Plugin %d: Name=%s, Type=%T, Provider=%v, Mode=%v",
-			i, p.Name(), p, p.DataProvider(), p.ProcessingMode())
+	dirs, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	// Перевіряємо, чи є зовнішні плагіни
-	coreCount := 2 // date + size
-	if len(loadedPlugins) <= coreCount {
-		t.Logf("Warning: No external plugins loaded. Total plugins: %d", len(loadedPlugins))
-	} else {
-		t.Logf("External plugins loaded: %d", len(loadedPlugins)-coreCount)
+	out := t.TempDir()
+	built := 0
+	for _, d := range dirs {
+		name := d.Name()
+		if _, err := os.Stat(filepath.Join(root, name, "go.mod")); err != nil || stubPerceptors[name] {
+			continue
+		}
+		built++
+		t.Run(name, func(t *testing.T) {
+			so := filepath.Join(out, name+".so")
+			cmd := exec.Command(goBin, "build", "-buildmode=plugin", "-o", so)
+			cmd.Dir = filepath.Join(root, name)
+			if b, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("build: %v\n%s", err, b)
+			}
+			p, err := loadPlugin(so)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if p.Name() == "" || p.View().Slug == "" {
+				t.Errorf("loaded, but no name or view slug: %q %q", p.Name(), p.View().Slug)
+			}
+		})
+	}
+	if built == 0 {
+		t.Fatal("no perceptors found in " + root)
 	}
 }

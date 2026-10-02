@@ -2,6 +2,12 @@ package scan
 
 import (
 	"errors"
+	"image"
+	"image/jpeg"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"perceptrail/gontroller/pkg/model/dto"
@@ -89,5 +95,47 @@ func TestCheapPreviewPick(t *testing.T) {
 
 	if _, _, tags := pick(t, pf{"d.nef", "image/x-nikon-nef", flow.KindRaw, api.RawExif{"JpgFromRaw": []byte("x"), "PreviewImage": []byte("x")}}); len(tags) != 2 || tags[0] != "JpgFromRaw" {
 		t.Errorf("embedded previews tried %v, want JpgFromRaw first", tags)
+	}
+}
+
+// An embedded preview gets the RAW's orientation (with a real exiftool; a JPEG with
+// an embedded thumbnail stands in for the RAW)
+func TestEmbeddedPreviewOrientation(t *testing.T) {
+	if _, err := exec.LookPath("exiftool"); err != nil {
+		t.Skip("exiftool not installed")
+	}
+	dir := t.TempDir()
+	writeJPEG := func(name string, w, h int) string {
+		t.Helper()
+		p := filepath.Join(dir, name)
+		f, err := os.Create(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer f.Close()
+		if err := jpeg.Encode(f, image.NewGray(image.Rect(0, 0, w, h)), nil); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	src, thumb := writeJPEG("raw.jpg", 64, 48), writeJPEG("thumb.jpg", 16, 12)
+	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
+	pool := newExiftoolPool(1, logger)
+	defer pool.Close()
+	if _, err := pool.Command("-overwrite_original", "-ThumbnailImage<="+thumb, "-Orientation#=6", src); err != nil {
+		t.Fatal(err)
+	}
+
+	c := &cheapPreview{logger: logger, pool: pool, dir: filepath.Join(dir, "previews")}
+	dst, err := c.exiftoolExtract("ThumbnailImage", src, "g")
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := pool.Command("-s3", "-n", "-Orientation", dst)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(out)); got != "6" {
+		t.Errorf("preview orientation %q, want 6 (the RAW's)", got)
 	}
 }
