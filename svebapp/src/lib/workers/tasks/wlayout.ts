@@ -1,4 +1,5 @@
 import {
+    ITEMS_CHANNEL,
     type MessageFromSync,
     type OrderEntry,
     type OrderPayload,
@@ -115,9 +116,10 @@ self.onmessage = function (msg: { data: WorkerMessage<any, any> }) {
     if (task === 'mode') {
         setLogLevel(payload);
     } else if (task === 'init') {
-        const itemsDbPort: MessagePort = payload[0];
-        if (payload[1]) useLayoutDb(payload[1]); // the page's own layout database
-        itemsDbPort.onmessage = onItemsDbMessage;
+        if (payload?.layoutDb) useLayoutDb(payload.layoutDb); // the page's own layout database
+        // Every tab's syncs (one copy of the items); after the database is set: the
+        // messages write the layout
+        new BroadcastChannel(ITEMS_CHANNEL).onmessage = onItemsDbMessage;
         logger.debug('Inited')
     } else if (task === 'update') {
         const p: UpdateLayoutPayload = payload;

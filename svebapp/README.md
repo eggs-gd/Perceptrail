@@ -53,12 +53,15 @@ keeps in place.
   database (its epoch) asks `/items?since=`, applies puts and removals; otherwise
   clears `itemsDb` and takes everything. The new cursor is the stream's last line and
   is kept only if it came and every line was stored — else the next sync retries.
-  One sync at a time across tabs (Web Locks); a copy whose count differs from the
-  stream's `total` after a delta is synced again from nothing. Refreshes come from `refreshFromServer()`
+  One sync at a time across tabs (Web Locks; none on plain HTTP — then unserialized);
+  a copy whose count differs from the stream's `total` after a delta is synced again
+  from nothing. Changes go to every tab's layout worker (BroadcastChannel
+  `items-changes`). Refreshes come from `refreshFromServer()`
 - `lib/stores/internal/layoutDb.ts` — the layout is per tab (its width, its view): the
-  page names its database `layout-<random>` and holds a Web Lock of that name; the
-  layout worker gets the name with `init`. A new page drops the databases nobody
-  holds (closed tabs) and the old shared `layout`.
+  page names its database `layout-<random>` and holds a Web Lock of that name (on
+  plain HTTP: answers a roll call on a BroadcastChannel); the layout worker gets the
+  name with `init`. A new page drops the databases of pages no longer alive and the
+  old shared `layout`.
   (proxy): the start, coming back to the tab, every navigation, at most every 5 s.
 - `lib/workers/tasks/wlayout.ts` (start) — loads the kept items and the view's kept
   order (`itemsDb.orders` `order:<view>`, shared by the tabs), so the sheet shows without the network; a

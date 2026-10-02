@@ -13,14 +13,13 @@ let workers: {
     workerLayout: Worker,
 }
 
-let workersChannel: MessageChannel;
 let syncStarted = false;
 
 if (browser) {
     logger.info(`svebapp ${__APP_VERSION__}`);
 
-    // wsync → wlayout; wlayout writes the layout to layoutDb, the page reads it with liveQuery
-    workersChannel = new MessageChannel();
+    // wsync → every tab's wlayout (a BroadcastChannel, ITEMS_CHANNEL); wlayout writes
+    // the layout to this page's layoutDb, the page reads it with liveQuery
 
     workers = {
         workerSync: new UpdateDbWorker(),
@@ -29,17 +28,17 @@ if (browser) {
 
     const msg1: InitMessage = {
         task: "init",
-        payload: [workersChannel.port1]
+        payload: {}
     }
 
     // The layout worker writes this page's own layout database
     const msg2: InitMessage = {
         task: "init",
-        payload: [workersChannel.port2, layoutDbName]
+        payload: {layoutDb: layoutDbName}
     }
 
-    workers.workerSync.postMessage(msg1, [workersChannel.port1]);
-    workers.workerLayout.postMessage(msg2, [workersChannel.port2]);
+    workers.workerSync.postMessage(msg1);
+    workers.workerLayout.postMessage(msg2);
 
     workers.workerSync.onmessage = handleWorkerMessage;
     workers.workerLayout.onmessage = handleWorkerMessage;

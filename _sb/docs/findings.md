@@ -342,6 +342,22 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
     date tab and a 500 px place tab — each its own width and first mark ("2026" /
     "Europe"); a closed tab's database gone on the next load; the viewer's direct
     link and arrows.
+  - **Changes reach every tab** (Codex, PR #20): the sync told only its own tab's
+    layout worker (a private MessageChannel). With the lock, a second tab's sync
+    finds the cursor already moved, gets an empty delta and keeps the items it
+    loaded. Now wsync broadcasts every change on a BroadcastChannel
+    (`items-changes`) and every tab's layout worker listens. Checked: an item hidden
+    on the server, one tab synced — both tabs' layouts lost it.
+  - **Plain HTTP on a LAN address** (Codex, PR #20) — the likely self-hosted setup —
+    is not a secure context: no `navigator.locks`, no `crypto.randomUUID` (the client
+    would have died on load). Without Web Locks syncs run unserialized (the count
+    check heals what two tabs break), live pages answer a roll call on a
+    BroadcastChannel instead of holding a lock (a page whose database is dropped all
+    the same reloads itself), the database id is not a UUID. Checked on
+    `http://192.168.x.x` (`isSecureContext` false): full sync, layout, earlier
+    databases dropped, two tabs kept. The browser pane blocks a LAN page's requests
+    to another port (`ERR_BLOCKED_BY_CLIENT`): tested with Vite proxying the API
+    on the same origin.
   - Switching to a view with a kept order shows that order at once; if the refresh
     from the server then fails, the switch stands on the kept order (the URL was
     being rolled back while the sheet already showed the new view).

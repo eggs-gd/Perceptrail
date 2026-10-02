@@ -1,11 +1,12 @@
 import {type Item, itemsDb} from "$lib/stores";
-import {type CurrentWorkerTask, type MessageFromSync, type WorkerMessage} from "./types";
+import {type CurrentWorkerTask, ITEMS_CHANNEL, type MessageFromSync, type WorkerMessage} from "./types";
 import {getLogger, setLogLevel} from "$lib/logger";
 
 const logger = getLogger();
 let currentTask: CurrentWorkerTask = null;
 
-let updatesPort: MessagePort;
+// To every tab's layout worker (see ITEMS_CHANNEL)
+const updatesPort = new BroadcastChannel(ITEMS_CHANNEL);
 
 self.onmessage = async function (msg: { data: WorkerMessage<any, any> }) {
     const {task, payload} = msg.data;
@@ -13,7 +14,6 @@ self.onmessage = async function (msg: { data: WorkerMessage<any, any> }) {
     if (task === 'mode') {
         setLogLevel(payload);
     } else if (task === 'init') {
-        updatesPort = payload[0];
         logger.debug('Inited');
     } else if (task === 'start' && !currentTask) {
         currentTask = startNewTask(payload);
@@ -44,8 +44,12 @@ function startNewTask(apiPath: string) {
         controller,
         promise: (async () => {
             try {
-                const changed = await navigator.locks.request('items-sync', {signal: controller.signal},
-                    () => sync(controller.signal, apiPath));
+                // No Web Locks outside a secure context (plain HTTP on a LAN address):
+                // unserialized then, and the count check heals what two tabs break
+                const changed = navigator.locks
+                    ? await navigator.locks.request('items-sync', {signal: controller.signal},
+                        () => sync(controller.signal, apiPath))
+                    : await sync(controller.signal, apiPath);
                 postMessage({task: 'sync', status: 'completed', changed});
             } catch (error) {
                 postMessage({task: 'sync', status: 'error', changed: 0});
