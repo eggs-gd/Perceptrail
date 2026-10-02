@@ -751,6 +751,12 @@ the binary by the linker; run from the user's terminal on the dev library.
   the download attribute does not work across origins). Checked on the test pair: a
   local 1600 px original — shown at once, lit, "full resolution here"; a cloud-only
   photo with 480 px local — shown, the medium asked over it, the switch off.
+- **A cloud-only original is not described** (decided, the owner): we keep no row
+  for a file that is not on disk — the item knows only its full size (`full`), kind
+  and metadata, not its name, format or weight. Describing a provider's original
+  (`source: {name, mime, size, here}` from Photos' DB) waits for a second provider:
+  for local files the original is what is on disk, every provider has its own
+  shape, and the abstraction comes from two or more of them, not from one.
 - **A full-size derivative is not the original**: a cloud-only PNG screenshot
   (1 206 × 2 622) has a local JPEG derivative of the same size (recipe 65739,
   `_1_101_o.jpeg`): the Original (Photos' current version at full size) is drawn
