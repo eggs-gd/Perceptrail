@@ -13,6 +13,7 @@ import {
     LAYOUT_SIZE_KEY,
     itemsDb,
     layoutDb,
+    useLayoutDb,
     type LayoutItem,
     type LayoutOrder,
     type LayoutMeta,
@@ -115,6 +116,7 @@ self.onmessage = function (msg: { data: WorkerMessage<any, any> }) {
         setLogLevel(payload);
     } else if (task === 'init') {
         const itemsDbPort: MessagePort = payload[0];
+        if (payload[1]) useLayoutDb(payload[1]); // the page's own layout database
         itemsDbPort.onmessage = onItemsDbMessage;
         logger.debug('Inited')
     } else if (task === 'update') {
@@ -151,7 +153,7 @@ async function applyOrder({view, url, anchor}: OrderPayload) {
     orderFetch?.abort();
     const fetching = orderFetch = new AbortController();
     const key = `order:${view}` as const;
-    const cached = await layoutDb.meta.get(key) as LayoutOrder | undefined;
+    const cached = await itemsDb.orders.get(key);
     fetching.signal.throwIfAborted();
     if (cached) useOrder(cached.entries, anchor);
 
@@ -172,7 +174,7 @@ async function applyOrder({view, url, anchor}: OrderPayload) {
         .map((line) => JSON.parse(line));
     if (cached && JSON.stringify(cached.entries) === JSON.stringify(entries)) return;
     useOrder(entries, anchor);
-    enqueue(() => layoutDb.meta.put({key, entries} as LayoutOrder));
+    enqueue(() => itemsDb.orders.put({key, entries} as LayoutOrder));
 }
 
 function useOrder(entries: OrderEntry[], anchor: string | undefined) {

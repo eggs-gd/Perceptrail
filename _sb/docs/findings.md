@@ -329,6 +329,19 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
     differs only warns (what changed while it ran comes with the next delta) — no
     loop. Checked: 79 kept of 6 990 → healed on reload; two tabs from an empty copy →
     6 990.
+  - **The layout was shared too**: `layoutDb` (positions, the side panel's sections,
+    the views' kept orders) was one database for all tabs, each tab's layout worker
+    rewriting it for its own width and view — a date tab next to a place tab showed
+    the place view's sections ("Europe"). Now one layout database per tab
+    (`layout-<random>`, named by the page at load, passed to its worker with `init`);
+    the page holds a Web Lock of that name while it lives, and a new page deletes
+    the `layout-*` databases nobody holds (closed tabs, earlier loads) and the old
+    shared `layout`. The views' kept orders are the server's data, the same for every
+    tab: they moved to `itemsDb.orders` (v5). Not sessionStorage for the name: a
+    duplicated tab copies it, and two tabs would share again. Checked: a 1024 px
+    date tab and a 500 px place tab — each its own width and first mark ("2026" /
+    "Europe"); a closed tab's database gone on the next load; the viewer's direct
+    link and arrows.
   - Switching to a view with a kept order shows that order at once; if the refresh
     from the server then fails, the switch stands on the kept order (the URL was
     being rolled back while the sheet already showed the new view).

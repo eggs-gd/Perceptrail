@@ -65,7 +65,8 @@ export interface OrderEntry {
     sections?: {level: number, label: string}[];
 }
 
-export type InitMessage = WorkerMessage<'init', MessagePort[]>;
+/** init: the channel between the workers; for wlayout also its page's layout database */
+export type InitMessage = WorkerMessage<'init', [MessagePort, string?]>;
 export type OrderMessage = WorkerMessage<'order', OrderPayload>;
 
 /** wlayout → page: whether an order was applied (a later one supersedes it: false) */

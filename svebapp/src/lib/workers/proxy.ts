@@ -4,6 +4,7 @@ import UpdateLayoutWorker from './tasks/wlayout?worker';
 import {browser} from "$app/environment";
 import {PUBLIC_API_PATH} from "$env/static/public";
 import {getLogger} from "$lib/logger";
+import {layoutDbName} from "$lib/stores";
 
 const logger = getLogger();
 
@@ -31,9 +32,10 @@ if (browser) {
         payload: [workersChannel.port1]
     }
 
+    // The layout worker writes this page's own layout database
     const msg2: InitMessage = {
         task: "init",
-        payload: [workersChannel.port2]
+        payload: [workersChannel.port2, layoutDbName]
     }
 
     workers.workerSync.postMessage(msg1, [workersChannel.port1]);

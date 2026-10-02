@@ -34,7 +34,7 @@ wlayout (worker)   all photos in memory, in the active perceptor's order
    │  writes layoutDb: a full relayout = ONE transaction (items + meta + sections),
    │  a streamed photo = one small transaction
    ▼
-layoutDb (Dexie "layout": items by y/order, meta {rev, height, anchor}, sections)
+layoutDb (Dexie "layout-<random>", one per tab: items by y/order, meta {rev, height, anchor}, sections)
    │  liveQuery over the VISIBLE WINDOW only (layoutWindow.ts)
    ▼
 Gallery.svelte     renders the window: absolutely positioned tiles, keyed by guid;
@@ -55,9 +55,13 @@ keeps in place.
   is kept only if it came and every line was stored — else the next sync retries.
   One sync at a time across tabs (Web Locks); a copy whose count differs from the
   stream's `total` after a delta is synced again from nothing. Refreshes come from `refreshFromServer()`
+- `lib/stores/internal/layoutDb.ts` — the layout is per tab (its width, its view): the
+  page names its database `layout-<random>` and holds a Web Lock of that name; the
+  layout worker gets the name with `init`. A new page drops the databases nobody
+  holds (closed tabs) and the old shared `layout`.
   (proxy): the start, coming back to the tab, every navigation, at most every 5 s.
 - `lib/workers/tasks/wlayout.ts` (start) — loads the kept items and the view's kept
-  order (`layoutDb.meta` `order:<view>`), so the sheet shows without the network; a
+  order (`itemsDb.orders` `order:<view>`, shared by the tabs), so the sheet shows without the network; a
   change that keeps an item's size patches its row in place.
 - `lib/workers/tasks/wlayout.ts` — row layout (greedy: fits → into the row;
   overflow < ½ of the photo → close the row without it; otherwise add it and shrink
