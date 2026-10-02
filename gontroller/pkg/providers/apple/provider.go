@@ -10,7 +10,6 @@ import (
 	"perceptrail/gontroller/pkg/providers"
 	"perceptrail/gontroller/pkg/scan/flow"
 
-	"github.com/eggs-gd/perceplib/chain"
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
@@ -54,7 +53,7 @@ func (p *Provider) Name() string { return "apple" }
 // Claims: a file inside a Photos library bundle
 func (p *Provider) Claims(path string) bool { return BundleRoot(path) != "" }
 
-func (p *Provider) Grouper() chain.Decorator[flow.FileEvent, flow.FileGroup] { return p.grouper }
+func (p *Provider) Grouper() providers.Grouper { return p.grouper }
 
 func (p *Provider) Regroup(key string) (flow.FileGroup, bool) { return p.grouper.Regroup(key) }
 

@@ -22,6 +22,9 @@ import (
 	"github.com/eggs-gd/perceplib/chain"
 )
 
+// Grouper: a provider's step of the chain — found files in, whole assets out
+type Grouper = chain.Decorator[flow.FileEvent, flow.FileGroup]
+
 type Provider interface {
 	Name() string
 
@@ -29,7 +32,7 @@ type Provider interface {
 	Claims(path string) bool
 	// Grouper: its files into whole assets; one instance per run (it keeps what
 	// Regroup needs)
-	Grouper() chain.Decorator[flow.FileEvent, flow.FileGroup]
+	Grouper() Grouper
 	// Regroup: one asset's group as it is on disk now (processed again on demand);
 	// false if the asset is not this provider's or has no file
 	Regroup(key string) (flow.FileGroup, bool)
