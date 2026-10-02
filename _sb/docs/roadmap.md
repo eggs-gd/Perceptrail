@@ -142,7 +142,9 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
 ### Then
 
 - [ ] **The expensive stage: previews and transcode** — design below ("Expensive
-      stage"). Regenerated for `Dirty`, dropped for `Deleted`. Transcoders take the
+      stage"). In steps, each its own PR (the cut may still change): **photos**
+      (libvips previews, the DB-state queue) → **video** (ffmpeg, QSV, tone mapping) →
+      **Docker** (the image, compose + accelerator overrides) → 0.2.0. Regenerated for `Dirty`, dropped for `Deleted`. Transcoders take the
       whole asset (group), not a file. Motion previews for videos and Live Photos: a
       short muted clip that plays on mouseover, the poster otherwise.
 
