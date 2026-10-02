@@ -15,33 +15,33 @@ database "DB" as DB
 == Start ==
 Page -> API: GET /perceptors
 API -> Nav: View()
-API --> Page: [{name, title, icon (SVG), help, relative}]
+API --> Page: [{slug, title, icon (SVG), help, relative}]
 note right of Page: buttons: gallery toolbar\nand viewer toolbar;\nthe icon is a CSS mask\n(no script runs)
-Page -> Layout: order(saved perceptor, else date)
-Layout -> API: GET /p/:name/order?anchor=
+Page -> Layout: order(the URL's view: /v/<slug>?at=<guid>)
+Layout -> LDB: the view's kept order, at once
+Layout -> API: GET /p/:view/order?anchor=
 API -> DB: shown items (Visible, Ready)
 API -> Nav: Order(anchor, items)
 Nav --> API: entries (guid, sections?)
 API --> Layout: ndjson
-note over Layout: /items streams newest first,\nso photos show before the order;\nunlisted items follow it
+note over Layout: the items are kept between visits\n(/items?since=: only the changes);\nthe server's order replaces the kept one\nonly if it differs
 Layout -> LDB: items (x, y, order) + meta + sections (y)
 LDB --> Page: visible window (liveQuery)
 LDB --> Panel: section marks
 
 == Switch in the gallery ==
 User -> Page: perceptor button
-Page -> Page: anchor = photo in the middle
-Page -> Layout: order(name, anchor)
-Layout -> API: GET /p/:name/order?anchor=
+Page -> Page: anchor = photo in the middle;\ngo to /v/<slug>?at=<anchor>
+Page -> Layout: order(slug, anchor)
+Layout -> API: GET /p/:view/order?anchor=
 API --> Layout: entries
 Layout -> LDB: relayout, meta.anchor = new position
 LDB --> Page: window + scrollTo: the anchor stays in place
 
 == Switch from the viewer ==
 User -> Page: perceptor button (in the viewer)
-Page -> Page: anchor = the viewed photo (centred)
-Page -> Layout: order(name, anchor)
-Page -> Page: close the viewer
+Page -> Page: /v/<view>/<guid> replaced by\n/v/<slug>?at=<guid> (the viewer closes)
+Page -> Layout: order(slug, the photo: centred)
 LDB --> Page: the sheet around that photo
 
 == Side panel ==
