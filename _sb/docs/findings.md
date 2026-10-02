@@ -666,6 +666,30 @@ the binary by the linker; run from the user's terminal on the dev library.
   app): a terminal with Photos access ran it without a prompt, a new one asked for
   the terminal itself. So a rebuild does not drop it; the embedded Info.plist does not
   matter there. Not started from a terminal (launchd) — still to check.
+- **Videos and Live Photos — the same: Photos normalises the library**, the file
+  comes as `file://…/resources/derivatives/…` (not streamed); the original stays in
+  iCloud unless the mode asks for it. By `PHVideoRequestOptions.deliveryMode`
+  (short iPhone videos, cloud-only):
+
+  | mode | recipe → file | codec | size | time |
+  |---|---|---|---|---|
+  | fast | 131081 → `_2_4_o.mp4` | H.264 640×360 | ~0.7 MB | 0.9 s |
+  | medium | 131475 → `_2_201_o.mov` (iPhone), 131079 → `_2_3_o.mp4` (others) | **HEVC** / H.264 720p | 2–5 MB | 1.2–1.6 s |
+  | automatic, high | the original → `originals/<X>/<UUID>.mov` | HEVC 1080p | 8–12 MB | 2.3–2.8 s |
+
+  For an iPhone video no mode hands over the H.264 720p (131079), though iCloud has
+  it. Automatic / high download the original (it becomes local): avoid them except
+  for the Original button. A Live Photo (`requestLivePhotoForAsset`, 0.9–1 s) makes
+  its motion local: 131275 → `_2_101_o.mov`, H.264 ~650×870, ~1.8 MB; the original
+  `.MOV` stays in iCloud.
+- **The `cvt` frames** (`derivatives/cvt/<X>/<UUID>/…_cvt_tNNNN.jpeg`, 400×600,
+  ~48 KB) are not a recipe in the DB and no request makes them: they come from
+  Photos' own background analysis. Their number follows the length (up to 10;
+  0–2 for a few seconds), and a third of the videos have none, whatever the length;
+  Live Photos never.
+- The grouper does not know the video renditions' names yet (`_2_3_o.mp4`,
+  `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`): the walk would not find what Photos
+  downloaded.
 - **On demand, never in bulk** (the user): the sheet has its tiles already, the
   medium rendition is needed only when a photo opens — that request triggers the
   download, the viewer swaps the image in when it comes; 1–3 rows around it are asked
