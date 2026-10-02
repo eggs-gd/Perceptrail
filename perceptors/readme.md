@@ -66,6 +66,9 @@ make build-plugins
 Output: `gontroller/.build/plugins/<name>.so`, enabled in `config.yml` (`plugins:`).
 Host and plugin must be built with **the same Go** and **the same versions** of
 `perceplib`, zap, multierr — update all modules together.
+`TestLoadExternalPlugins` (gontroller, `pkg/plugins`) builds every perceptor here and
+loads it into the test process — a mismatch fails it. After changing a plugin run it
+with `-count=1` (the test cache does not see other modules change).
 
 ## Status
 

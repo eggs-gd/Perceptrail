@@ -501,6 +501,40 @@ Design: roadmap "Expensive stage".
   JPEG quality of Apple's renditions was estimated from the sizes in the DB
   (~2.6 bits/pixel), not measured — the spike has the same permission question.
 
+### Plugins and RAW previews: two holes (2026-10-02)
+
+- `TestLoadExternalPlugins` loaded a `test_plugin.so` that did not exist and only
+  logged — a plugin built against other versions than the host was caught only by
+  running the server. Now it builds each perceptor and loads it. Checked: a plugin
+  pointed at a perceplib copy with one constant added fails with "plugin was built
+  with a different version of package". Traps:
+  - `go test` caches the result and ignores files outside the test's module, even
+    the ones the test stats itself — `perceptors/` and `perceplib/` are other
+    modules. After changing a plugin: `-count=1`; CI does that after
+    `make build-plugins` (setup-go keeps the Go cache between runs).
+  - The plugin must come from the same Go as the test binary: the test runs
+    `$(GOROOT)/bin/go`, not whatever `go` is on the PATH.
+- An embedded RAW preview (`JpgFromRaw` / `PreviewImage`) is stored as the sensor
+  saw it, with no EXIF of its own: extracted as is, a portrait shot lies on its side.
+  The RAW's Orientation is copied onto it (`-TagsFromFile`); the browser turns an
+  `<img>` by its EXIF, and the item's size is already swapped by the size perceptor.
+  Tested with a real exiftool (a JPEG with an embedded thumbnail stands in for the
+  RAW — there are no RAWs in the dev library); skipped where exiftool is missing (CI).
+
+### A viewer over a library, not a library (2026-10-02)
+
+- The product's place (the owner): Immich, PhotoPrism, Lightroom, Apple Photos keep
+  the library — sync, albums, tags, the heavy UX. Perceptrail is another way through
+  the same photos, a rediscovery of them, not a replacement. So we read what those
+  libraries leave (Photos' DB, the sidecars Immich / PhotoPrism / Lightroom write) and
+  never become a second copy of it (see "Apple Photos: one copy").
+- Hence the grouping collects the whole asset package — originals, edits, RAW +
+  JPEG, sidecars — and an item is meant to be merged from all of it (roadmap "The
+  asset from all its files"). Today the metadata comes from the main file only.
+- The optimal (Dijkstra) layout does not reorder photos, it only picks row breaks;
+  what ruled it out is that it needs the whole set (one photo may move the rows
+  above), not the views' fixed orders.
+
 ## Backend: gontroller, plugins, exiftool
 
 ### Broken files (2026-10-01)

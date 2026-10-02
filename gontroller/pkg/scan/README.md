@@ -49,7 +49,7 @@ later, its own chain:  feeder (DB) -> transcode switch (photo | video | Live Pho
 | exif | `exifextractor.go` | `FileGroup` -> `*RawItem` | `exiftool -all` for every file; N steps in parallel on the same channels. |
 | mime | `mimeranker.go` | `*RawItem` -> `*RawItem` | The kind of every file; the main file (the source) first. |
 | validator | `validator.go` | `*RawItem` -> `*RawItem` | Links the group, same / changed / moved / duplicate -> the item. |
-| cheap preview | `cheappreview.go` | `*RawItem` -> `*RawItem` | What the browser shows now, no transcode: the main file (JPEG, PNG, …; H.264 video), else the biggest viewable derivative, else an embedded preview extracted into `cache/previews/<guid>/`. Any size counts. |
+| cheap preview | `cheappreview.go` | `*RawItem` -> `*RawItem` | What the browser shows now, no transcode: the main file (JPEG, PNG, …; H.264 video), else the biggest viewable derivative, else an embedded preview extracted into `cache/previews/<guid>/` (with the RAW's Orientation copied onto it). Any size counts. |
 | plugins, closer | `exifpluginprocessor.go` | `*RawItem` -> `*dto.ItemDto` | Core plugins (date, size), external perceptors, then the item is saved `Visible` (a preview) or `Waiting` (none). |
 | transcode switch + transcoders | `transcode/…` | `*RawItem` -> `*RawItem` | Not wired: the expensive chain (fed from the DB) comes with thumbnails and sets `Ready`. |
 

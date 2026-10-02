@@ -41,9 +41,12 @@ jobs:
         go vet $pkgs
         go test $pkgs
 
-    # Plugins must build against the same perceplib/zap versions as the host
+    # Plugins must build against the same perceplib/zap versions as the host — and
+    # load into it: -count=1, the test cache does not see the plugins change
     - name: perceptors
-      run: make build-plugins
+      run: |
+        make build-plugins
+        cd gontroller && go test -count=1 -run TestLoadExternalPlugins ./pkg/plugins/
 
   svebapp:
     runs-on: ubuntu-latest
