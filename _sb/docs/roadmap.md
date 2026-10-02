@@ -169,12 +169,15 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
            (Our own webp at 1600 px would be ~250 KB — fewer pixels ×0.6, quality
            ~q80 ×0.6, the codec ×0.7 — but that saves space on a copy beside theirs:
            not an argument.)
-         - **Rejected: "turn on Download Originals to this Mac".** One checkbox
-           solves it for a small library, but people with decades of photos (hundreds
-           of thousands) would be forced to sync the whole library — and Photos has no
-           "keep renditions, originals on request" mode: it is either everything or
-           renditions at its own discretion. Asking Photos per level is exactly that
-           missing mode, and a reason to have the helper at all.
+         - **"Download Originals to this Mac" — supported, not the only way.** For
+           most libraries (the dev one too) it is the simplest: one checkbox,
+           everything local, nothing to ask Photos for. But people with decades of
+           photos (hundreds of thousands) would be forced to sync the whole library —
+           and Photos has no "keep renditions, originals on request" mode: it is
+           either everything or renditions at its own discretion. For them (Optimize
+           Mac Storage) asking Photos per level is exactly that missing mode, and the
+           reason to have the PhotoKit step at all. The docs give both: the checkbox
+           for who can afford the disk, the step for who cannot.
          - **Go, not Swift.** PhotoKit is Objective-C: Go calls it through cgo (an
            `.m` file beside the Go code), in the gontroller process — no second
            process, no second language. cgo is there already (Go plugins need it);

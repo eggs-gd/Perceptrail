@@ -442,10 +442,11 @@ Design: roadmap "Expensive stage".
   (~2048, ~1 MB — ~40 % of the originals for a whole library) when a photo opens,
   the original on its button. Our webp at 1600 would be ~4× smaller (fewer pixels,
   q80 against Apple's ~q90+, a better codec) — a saving on a duplicate, so no reason.
-- **"Turn on Download Originals" is not an answer** (the user): fine for a small
-  library, but for decades of photos it forces the whole library onto the disk, and
-  Photos has no "renditions local, originals on request" mode — all or its own
-  choice. Asking Photos per level is that missing mode.
+- **"Download Originals" — one option, not the only strategy** (the user): for most
+  libraries one checkbox makes everything local and is the simplest; for decades of
+  photos it forces the whole library onto the disk, and Photos has no "renditions
+  local, originals on request" mode — all or its own choice. Asking Photos per level
+  is that missing mode, for the libraries that stay on Optimize Mac Storage.
 - **PhotoKit from Go, not a Swift helper**: it is Objective-C, cgo calls it in the
   gontroller process (cgo is there for the plugins anyway), behind
   `//go:build darwin`. Open for the spike: the Photos permission for a bare binary
