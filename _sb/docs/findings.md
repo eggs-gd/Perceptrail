@@ -705,9 +705,22 @@ the binary by the linker; run from the user's terminal on the dev library.
   medium rendition is needed only when a photo opens — that request triggers the
   download, the viewer swaps the image in when it comes; 1–3 rows around it are asked
   for ahead. So the limits of asking for thousands were not measured: nothing will.
+- **In the server** (PR #21): the request does not reprocess anything — the
+  endpoint serves the file from the library right after Photos made it local, and
+  the next walk adds it to the group (a new file), so the item and the other tabs get
+  it through the delta. The video renditions go after the stills in the group: a
+  cloud-only video's main file stays its still. Asking for access is done only when
+  a `*.photoslibrary` is under the root (no prompt for a folder library). Not
+  checked in the agent's shell (no Photos access there); the user's server is the
+  test.
 - Traps: asynchronous PhotoKit results are delivered on the main queue, which a
   command-line tool does not run — the request never came back (synchronous requests
-  from a cgo thread work); yet Photos finished the download it had started. `NSImage`
+  from a cgo thread work); yet Photos finished the download it had started. In the
+  server: images synchronous, videos come on any queue, Live Photos on the main queue
+  — `photokit` locks main to the main thread (`LockOSThread` in `init`) and
+  `RunMain` turns its run loop in place of waiting for a stop. The `.m` file is
+  `photokit_darwin.m`: without the suffix a Linux build (no cgo in the package)
+  refuses it. `NSImage`
   sizes are points (×2 on Retina): the bitmap's pixels come from its `CGImage`.
 
 ### Apple Photos library: spike (2026-09-30)

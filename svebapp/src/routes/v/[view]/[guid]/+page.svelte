@@ -9,7 +9,13 @@
     import {layoutDb} from "$lib/stores";
     // Not re-exported from $lib/stores: the workers import that, this is page-only (svelte/reactivity)
     import {LiveQuery} from "$lib/stores/internal/liveQuery";
+    import {mediumUrl} from "$lib/gallery/components/asset";
     import type {Attachment} from "svelte/attachments";
+
+    // Apple Photos: the neighbours' medium renditions are asked for ahead (about a row
+    // or two of the sheet each way), so the arrows open them at once; not videos
+    const PREFETCH = 6;
+    const prefetched = new Set<string>();
 
     const MIN_ZOOM = 0.25;
     const MAX_ZOOM = 8;
@@ -28,6 +34,19 @@
     });
     let item = $derived(itemQuery.current);
     let index = $derived(item?.order ?? 0);
+
+    $effect(() => {
+        if (!item?.asset?.onDemand) return;
+        const at = item.order;
+        layoutDb.items.where('order').between(at - PREFETCH, at + PREFETCH, true, true).toArray().then((near) => {
+            for (const it of near) {
+                const url = it.asset && it.asset.kind !== 'video' ? mediumUrl(it.asset) : undefined;
+                if (!url || it.order === at || prefetched.has(url)) continue;
+                prefetched.add(url);
+                new Image().src = url;
+            }
+        });
+    });
 
     // The info panel: its button is a switch kept like the others (photo to photo,
     // between visits)

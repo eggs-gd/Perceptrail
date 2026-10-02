@@ -363,3 +363,16 @@ func TestGrouperVideoRenditions(t *testing.T) {
 		}
 	}
 }
+
+// Photos is asked for access only where a library is: the root itself, or one at
+// its top
+func TestHasLibrary(t *testing.T) {
+	root := t.TempDir()
+	if HasLibrary(root) {
+		t.Error("an empty folder")
+	}
+	makeLibrary(t, root, nil)
+	if !HasLibrary(root) || !HasLibrary(filepath.Join(root, "Photos Library.photoslibrary")) {
+		t.Error("a library at the top, or the library itself")
+	}
+}

@@ -217,7 +217,8 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
            it local in the DB; the original stays in iCloud. 0.6–0.9 s per photo; "is
            it local" answers at once (error 3164 without network). The permission goes
            to the terminal that starts the binary, not to the binary.
-         - **→ the Apple step in our chain of responsibility** (the fork taken):
+         - [x] **→ the Apple step** (the fork taken; done in PR #21 — the spike and
+           its implementation in one):
            nothing rendered or stored by us, nothing written to the library by us —
            Photos downloads, the walk finds the file (the grouper already knows
            `_1_102_o.jpeg`). Only on demand, never in bulk (decided):
@@ -251,6 +252,13 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
              viewer;
            - the grouper learns the video renditions' names (`_2_3_o.mp4`,
              `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`).
+           Done as: `pkg/photokit` (cgo, macOS; a stub elsewhere; the main thread
+           turns the main run loop), `GET /items/:guid/rendition/{medium,hover}`
+           (serves the local file, asks Photos when there is none: one request per
+           asset and level, three at once), `asset.onDemand` for Photos items; the
+           client lays the medium over the image, plays the hover video after 250 ms,
+           asks for ±6 neighbours ahead. Access is asked for only when a Photos
+           library is under the root.
          - [ ] Still open: the permission when not started from a terminal
            (launchd); the Original button (the same request for recipe 0, the full
            file). Asking for thousands in a row is not needed (nothing asks in bulk).

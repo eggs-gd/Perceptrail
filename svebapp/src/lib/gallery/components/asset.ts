@@ -110,6 +110,30 @@ function videoType(r: Rendition): string {
     return r.codec ? `${mime}; codecs="${r.codec}"` : mime;
 }
 
+// Apple Photos on demand (the server's rendition.go): asked for when needed — the
+// medium when the viewer opens, the hover when a moving tile is pointed at; the
+// file comes when Photos has downloaded it (~1 s), 404 if it cannot
+
+/** The viewer's rendition: the image (~2048 px or the edit), a video's 720p — H.264
+ * only (?hevc=0) for a browser that plays no HEVC */
+export function mediumUrl(asset: Asset): string | undefined {
+    if (!asset.onDemand) return undefined;
+    const url = `${PUBLIC_API_PATH}${asset.onDemand.medium}`;
+    return asset.kind === 'video' && !playsHevc() ? `${url}?hevc=0` : url;
+}
+
+/** A video's 360p or a Live Photo's motion, for a tile's hover */
+export function hoverUrl(asset: Asset): string | undefined {
+    return asset.onDemand?.hover && `${PUBLIC_API_PATH}${asset.onDemand.hover}`;
+}
+
+let hevc: boolean | undefined;
+function playsHevc(): boolean {
+    if (typeof document === 'undefined') return false;
+    hevc ??= document.createElement('video').canPlayType('video/mp4; codecs="hvc1"') !== '';
+    return hevc;
+}
+
 /** Can this browser play the video (none on the server) */
 export function canPlayVideo(r: Rendition): boolean {
     return typeof document !== 'undefined' && document.createElement('video').canPlayType(videoType(r)) !== '';

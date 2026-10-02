@@ -57,12 +57,18 @@ keeps in place.
   a copy whose count differs from the stream's `total` after a delta is synced again
   from nothing. Changes go to every tab's layout worker (BroadcastChannel
   `items-changes`). Refreshes come from `refreshFromServer()`
+  (proxy): the start, coming back to the tab, every navigation, at most every 5 s.
 - `lib/stores/internal/layoutDb.ts` — the layout is per tab (its width, its view): the
   page names its database `layout-<random>` and holds a Web Lock of that name (on
   plain HTTP: answers a roll call on a BroadcastChannel); the layout worker gets the
   name with `init`. A new page drops the databases of pages no longer alive and the
   old shared `layout`.
-  (proxy): the start, coming back to the tab, every navigation, at most every 5 s.
+- Apple Photos on demand (`asset.onDemand`, `asset.ts` `mediumUrl` / `hoverUrl`): the
+  viewer asks for the medium rendition when it opens and lays it over the asset's
+  image once loaded (a video: its 720p first, `?hevc=0` where the browser plays no
+  HEVC); the viewer page asks for the neighbours' (±6 in the view's order) ahead; a
+  moving tile asks for its hover video after the pointer stayed 250 ms (`Motion`),
+  showing the frames until it plays.
 - `lib/workers/tasks/wlayout.ts` (start) — loads the kept items and the view's kept
   order (`itemsDb.orders` `order:<view>`, shared by the tabs), so the sheet shows without the network; a
   change that keeps an item's size patches its row in place.

@@ -93,6 +93,16 @@ func (g *Grouper) Decorate(ev flow.FileEvent) (flow.FileGroup, error) {
 
 func (g *Grouper) Stop() {}
 
+// HasLibrary: root is a Photos library or holds one at its top (where Photos keeps
+// it: ~/Pictures) — then Photos is worth asking for access
+func HasLibrary(root string) bool {
+	if strings.HasSuffix(strings.ToLower(root), ".photoslibrary") {
+		return true
+	}
+	m, _ := filepath.Glob(filepath.Join(root, "*.photoslibrary"))
+	return len(m) > 0
+}
+
 // BundleRoot: the *.photoslibrary directory path contains, "" if none
 func BundleRoot(path string) string {
 	parts := strings.Split(filepath.ToSlash(path), "/")

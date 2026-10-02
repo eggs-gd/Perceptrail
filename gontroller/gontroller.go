@@ -12,6 +12,7 @@ import (
 	"perceptrail/gontroller/pkg/photokit"
 	"perceptrail/gontroller/pkg/plugins"
 	"perceptrail/gontroller/pkg/scan"
+	"perceptrail/gontroller/pkg/scan/groups/apple"
 	"syscall"
 
 	"github.com/eggs-gd/go-exiftool"
@@ -48,13 +49,15 @@ func main() {
 	}
 
 	svc.AddService(scan.NewImporterService(ctx))
-	// Apple Photos on demand (macOS): asks for access once — the prompt names the app
-	// that started us (the terminal)
-	go func() {
-		if photokit.Authorize() {
-			log.Printf("Photos: renditions on demand")
-		}
-	}()
+	// Apple Photos on demand (macOS, a Photos library under the root): asks for
+	// access once — the prompt names the app that started us (the terminal)
+	if apple.HasLibrary(ctx.Config().Path) {
+		go func() {
+			if photokit.Authorize() {
+				log.Printf("Photos: renditions on demand")
+			}
+		}()
+	}
 	web, err := client.NewWebService(ctx.Config().Server, routes.AppInfo{Version: app.Version, Mode: ctx.Config().Mode}, plugins.Pm.ClientPerceptors(), plugins.Pm.LoadValues, photokit.Library{}, ctx.Logger(string(app.LogHTTP)))
 	if err != nil {
 		log.Fatalf("Server: %v", err)

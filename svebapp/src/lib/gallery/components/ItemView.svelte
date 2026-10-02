@@ -7,7 +7,7 @@
     import Picture from "./Picture.svelte";
     import Motion from "./Motion.svelte";
     import KindBadge from "./KindBadge.svelte";
-    import {assetUrl, biggestImage, fallbackImage, hasImage, originalImage, playableVideos} from "./asset";
+    import {assetUrl, biggestImage, fallbackImage, hasImage, hoverUrl, mediumUrl, originalImage, playableVideos} from "./asset";
     import {viewerPrefs} from "./viewerPrefs.svelte";
     import {debug} from "$lib/app.svelte";
 
@@ -29,7 +29,8 @@
     // An original the browser shows counts too (a generic PNG/JPEG with no smaller copy)
     let hasStill = $derived(!!asset && hasImage(asset));
     let videos = $derived(asset ? playableVideos(asset) : []);
-    let hasMotion = $derived(videos.length > 0 || (asset?.frames.length ?? 0) > 1);
+    // Apple Photos: a moving tile may ask for its video on hover (Motion)
+    let hasMotion = $derived(videos.length > 0 || (asset?.frames.length ?? 0) > 1 || !!asset?.onDemand?.hover);
     let hovered = $state(false);
 
     // A video with no image (a plain .mp4 in a folder): the tile is the video itself,
@@ -50,7 +51,13 @@
     // A Live Photo in the viewer: its motion plays over the photo once when it opens
     // (if autoplay is on) and again on hover, then the photo is back. With sound: the
     // click that opened the viewer allows it; if not, muted.
-    let liveVideos = $derived(mode === 'view' && asset?.kind === 'live' ? videos : []);
+    // Apple Photos: no motion here yet — the server asks Photos for it
+    let liveVideos = $derived.by(() => {
+        if (mode !== 'view' || asset?.kind !== 'live') return [];
+        if (videos.length) return videos;
+        const hover = hoverUrl(asset);
+        return hover ? [{src: hover, type: ''}] : [];
+    });
     let liveDone = $state<string | null>(null);   // the item whose autoplay has ended
     let liveReplay = $state<string | null>(null); // the item hovered to play again
     let livePlaying = $derived(liveVideos.length > 0 && (liveReplay === item.guid
@@ -62,24 +69,38 @@
         });
     };
 
+    // Apple Photos: the viewer's medium rendition (the image, a video's 720p), asked
+    // for when it opens — the image goes over what the asset has once it loads
+    let medium = $derived(asset && mode === 'view' && !original ? mediumUrl(asset) : undefined);
+    let mediumLoad = $state<{url: string, w?: number, h?: number}>();
+    let better = $derived(medium && mediumLoad?.url === medium && mediumLoad.w ? mediumLoad : undefined);
+    // Asked for and not answered yet (a failure answers too)
+    let waiting = $derived(!!medium && mediumLoad?.url !== medium);
+
     // The viewer: the image at its own pixel size, fitted into the screen — stretched
     // only if the user switched that on. srcset makes an <img> as wide as `sizes`
-    // (100vw), so the box is sized here from the image the asset has. Unknown size:
-    // the image's natural size.
-    let shown = $derived(asset && mode === 'view' ? (original ?? biggestImage(asset)) : undefined);
+    // (100vw), so the box is sized here from the image the asset has (the medium
+    // once it came; while it comes, as big as the screen allows: it will be).
+    // Unknown size: the image's natural size.
+    let shown = $derived(asset && mode === 'view' ? (original ?? better ?? biggestImage(asset)) : undefined);
     let fit = $derived(shown?.w && shown.h
         ? {
-            width: `min(${viewerPrefs.stretchSmall ? '' : `${shown.w}px, `}100vw, calc(100vh * ${shown.w} / ${shown.h}))`,
+            width: `min(${viewerPrefs.stretchSmall || waiting ? '' : `${shown.w}px, `}100vw, calc(100vh * ${shown.w} / ${shown.h}))`,
             ratio: `${shown.w} / ${shown.h}`,
         }
         : undefined);
 </script>
 
-<!-- The viewer plays a video; a Live Photo is a photo there (its motion is the tile's hover) -->
-{#if asset && mode === 'view' && videos.length && asset.kind !== 'live'}
+<!-- The viewer plays a video; a Live Photo is a photo there (its motion is the tile's hover).
+     Apple Photos: the 720p asked for first, what is here after it (a failed source
+     falls through to the next) -->
+{#if asset && mode === 'view' && asset.kind !== 'live' && (videos.length || (asset.kind === 'video' && medium))}
     {@const poster = fallbackImage(asset)}
     <video controls autoplay={viewerPrefs.autoplayVideo} playsinline poster={poster && assetUrl(poster)}
            onclick={(e) => e.stopPropagation()}>
+        {#if medium}
+            <source src={medium}>
+        {/if}
         {#each videos as video (video.src)}
             <source src={video.src} type={video.type}>
         {/each}
@@ -97,6 +118,14 @@
             <img class="original-image" src={assetUrl(original)} alt={item.guid}>
         {:else}
             <Picture {asset} {sizes} alt={item.guid} width={item.width} height={item.height}/>
+            {#if medium}
+                <img class="medium" class:ready={better} src={medium} alt=""
+                     onload={(e) => {
+                         const img = e.currentTarget as HTMLImageElement;
+                         mediumLoad = {url: medium!, w: img.naturalWidth, h: img.naturalHeight};
+                     }}
+                     onerror={() => (mediumLoad = {url: medium!})}>
+            {/if}
         {/if}
         {#if mode === 'tile' && hovered && hasMotion}
             <div class="motion"><Motion {asset}/></div>
@@ -108,7 +137,7 @@
             <video class="live" {@attach playLive} playsinline
                    onended={() => { liveDone = item.guid; liveReplay = null; }}>
                 {#each liveVideos as video (video.src)}
-                    <source src={video.src} type={video.type}>
+                    <source src={video.src} type={video.type || undefined}>
                 {/each}
             </video>
         {/if}
@@ -183,6 +212,19 @@
     .motion {
         position: absolute;
         inset: 0;
+    }
+
+    /* Apple Photos' medium rendition, over the asset's own image once it loaded */
+    .medium {
+        position: absolute;
+        inset: 0;
+        object-fit: contain;
+        opacity: 0;
+        transition: opacity 150ms;
+    }
+
+    .medium.ready {
+        opacity: 1;
     }
 
     .original-image {
