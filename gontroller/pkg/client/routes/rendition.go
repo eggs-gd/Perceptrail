@@ -26,10 +26,10 @@ import (
 //	                                   a video's 720p (?hevc=0: H.264 only)
 //	GET /items/:guid/rendition/hover   a tile's hover: a video's 360p, a Live Photo's
 //	                                   motion
-//	GET /items/:guid/rendition/original  the original: a photo's (a Live Photo's
-//	                                   photo's) at full resolution as JPEG, unedited —
-//	                                   any browser shows it; ?file=1 the file itself
-//	                                   (HEIC, RAW: a download); a video's original file
+//	GET /items/:guid/rendition/original  the biggest of what the user sees: a photo's
+//	                                   (a Live Photo's photo's) current version — the
+//	                                   edit, cropped — at full resolution as JPEG, any
+//	                                   browser shows it; a video's original file
 //
 // What is on disk is served without asking; nothing local and nothing to ask (not
 // macOS, no access, not a Photos item): 404, the client keeps what it shows. An
@@ -37,13 +37,11 @@ import (
 // handed over is served (not kept — the browser caches it).
 
 // Fetcher asks the source for a rendition it does not keep locally (photokit.Library).
-// Image returns the image as JPEG too (nil if none); Full the unedited original at
-// full resolution as JPEG; Original the original file with its type (UTI) and name;
-// Video the file it made local.
+// Image returns the image as JPEG too (nil if none); Full the current version (the
+// edit) at full resolution as JPEG; Video the file it made local.
 type Fetcher interface {
 	Image(uuid string, size int) ([]byte, error)
 	Full(uuid string) ([]byte, error)
-	Original(uuid string) ([]byte, string, string, error)
 	Video(uuid string, mode int) (string, error)
 	Live(uuid string) error
 }
@@ -167,45 +165,16 @@ func getOriginal(c echo.Context, item *dto.ItemDto, logger *l.Logger) error {
 		}
 		refresh(item.Guid, refreshWait) // the original is local now: the cloud goes
 		return c.File(path)
-	case c.QueryParam("file") == "1":
-		data, uti, name, err := fetcher.Original(item.Guid)
-		if err != nil {
-			return fail(err)
-		}
-		refresh(item.Guid, refreshWait)
-		if name != "" {
-			c.Response().Header().Set(echo.HeaderContentDisposition, `attachment; filename="`+strings.ReplaceAll(name, `"`, "")+`"`)
-		}
-		return c.Blob(http.StatusOK, mimeOfUTI(uti), data)
 	default:
 		data, err := fetcher.Full(item.Guid)
 		if err != nil {
 			return fail(err)
 		}
-		// Drawing it made Photos download the original: the item knows before the
-		// answer goes, so the client's next delta has it (the cloud goes)
+		// Drawing it may have made Photos download the original: the item knows before
+		// the answer goes, so the client's next delta has it (the cloud goes)
 		refresh(item.Guid, refreshWait)
 		return c.Blob(http.StatusOK, "image/jpeg", data)
 	}
-}
-
-// mimeOfUTI: the original's type for the browser (a download names it right)
-func mimeOfUTI(uti string) string {
-	switch uti {
-	case "public.jpeg":
-		return "image/jpeg"
-	case "public.png":
-		return "image/png"
-	case "public.heic":
-		return "image/heic"
-	case "public.heif":
-		return "image/heif"
-	case "public.tiff":
-		return "image/tiff"
-	case "com.compuserve.gif":
-		return "image/gif"
-	}
-	return "application/octet-stream" // RAW and the rest
 }
 
 // wantOf: what a level means for the item's kind, and how to ask Photos for it
@@ -299,9 +268,10 @@ func hydrateRound(asked map[string]bool, logger *l.Logger) {
 }
 
 // onDemandOf: the client's on-demand renditions of an item from Photos (nil for
-// others): the viewer's medium, a hover for what moves, the original when it is not
-// here (a Live Photo's original is its video: its photo's is always asked for)
-func onDemandOf(item *dto.ItemDto, originalHere bool) *onDemand {
+// others): the viewer's medium, a hover for what moves, and the Original — always:
+// the biggest of what the user sees is Photos' current version (the edit), not a
+// local unedited original (edits and their history are Photos' business, not ours)
+func onDemandOf(item *dto.ItemDto) *onDemand {
 	if apple.BundleRoot(item.Path) == "" {
 		return nil
 	}
@@ -310,14 +280,12 @@ func onDemandOf(item *dto.ItemDto, originalHere bool) *onDemand {
 	if item.Kind == dto.KindVideo || item.Kind == dto.KindLive {
 		od.Hover = base + "hover"
 	}
-	if !originalHere || item.Kind == dto.KindLive {
-		od.Original = base + "original"
-	}
+	od.Original = base + "original"
 	return od
 }
 
 type onDemand struct {
 	Medium   string `json:"medium"`             // relative to the API
 	Hover    string `json:"hover,omitempty"`    // a video or a Live Photo
-	Original string `json:"original,omitempty"` // + "?file=1": the file itself (a photo)
+	Original string `json:"original,omitempty"` // the biggest of what is seen (a video: its file)
 }

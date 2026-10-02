@@ -25,9 +25,10 @@
     // A playable video is shown as itself: no switch; one the browser cannot play
     // is downloaded
     let video = $derived(asset.kind === 'video' && (playable || !!asset.onDemand));
-    // The original from Photos when it is not here (a Live Photo's photo: always)
+    // From Photos: the biggest of what is seen (its current version) — always asked
+    // there; elsewhere the biggest edit or the original here
     let fromPhotos = $derived(originalOnDemand(asset));
-    let image = $derived(video || (asset.kind === 'live' && fromPhotos) ? undefined : originalImage(asset));
+    let image = $derived(video || fromPhotos ? undefined : originalImage(asset));
     let other = $derived(!video && !image && !fromPhotos ? asset.original : null);
     // A video's Original: its own file, here or from Photos
     let videoOriginal = $derived(video && (!!fromPhotos || !!asset.original?.mime.startsWith('video/')));

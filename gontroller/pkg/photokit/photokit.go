@@ -26,15 +26,12 @@ type Library struct{}
 // Image makes the asset's image of at most size×size local (Photos' ~2048 px
 // rendition when only in iCloud) and returns it as JPEG: drawn from a local
 // original (a HEIC) Photos writes no file — the JPEG is all there is to show
-func (Library) Image(uuid string, size int) ([]byte, error) { return image(uuid, size, false) }
+func (Library) Image(uuid string, size int) ([]byte, error) { return image(uuid, size) }
 
-// Full is the unedited original at its full resolution, as JPEG (any browser shows
-// it; Photos downloads the original into its library to draw it)
-func (Library) Full(uuid string) ([]byte, error) { return image(uuid, 0, true) }
-
-// Original is the original file of a photo (a Live Photo's photo) as it is — HEIC,
-// JPEG, RAW — with its type (UTI) and name; Photos downloads it into its library
-func (Library) Original(uuid string) ([]byte, string, string, error) { return original(uuid) }
+// Full is the biggest of what the user sees — the current version (the edit,
+// cropped) at full resolution — as JPEG: any browser shows it. Photos downloads the
+// original into its library to draw it when it has nothing local that big.
+func (Library) Full(uuid string) ([]byte, error) { return image(uuid, 0) }
 
 // Video makes the asset's video in that mode local and returns its file
 func (Library) Video(uuid string, mode int) (string, error) { return video(uuid, mode) }

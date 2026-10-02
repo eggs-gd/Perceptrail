@@ -59,10 +59,7 @@ func (f *fakePhotos) Full(uuid string) ([]byte, error) {
 	f.asked = append(f.asked, "full")
 	return []byte("FULL JPEG"), nil
 }
-func (f *fakePhotos) Original(uuid string) ([]byte, string, string, error) {
-	f.asked = append(f.asked, "original file")
-	return []byte("HEIC"), "public.heic", "IMG_1.HEIC", nil
-}
+
 func (f *fakePhotos) Live(uuid string) error { return f.put(uuid, "_2_101_o.mov") }
 
 // On demand: a rendition not on disk is asked for once, then served from the
@@ -115,16 +112,10 @@ func TestRenditionOnDemand(t *testing.T) {
 		}
 	}
 
-	// The original: a photo's at full resolution as JPEG, its file on ?file=1, a
-	// video's file
+	// The original: a photo's current version at full resolution as JPEG, a video's
+	// file
 	if code, body := get("/items/A1111111-PHOTO/rendition/original"); code != 200 || body != "FULL JPEG" {
 		t.Errorf("original: %d %q, want the full JPEG", code, body)
-	}
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/items/A1111111-PHOTO/rendition/original?file=1", nil))
-	if rec.Code != 200 || rec.Body.String() != "HEIC" || rec.Header().Get("Content-Type") != "image/heic" ||
-		rec.Header().Get("Content-Disposition") != `attachment; filename="IMG_1.HEIC"` {
-		t.Errorf("original file: %d %q %v", rec.Code, rec.Body.String(), rec.Header())
 	}
 	if code, body := get("/items/B2222222-VIDEO/rendition/original"); code != 200 || body != "_ORIGINAL.mov" {
 		t.Errorf("video original: %d %q", code, body)
@@ -157,8 +148,8 @@ func TestOnDemandInAsset(t *testing.T) {
 	}
 	here := []*dto.FileDto{{ID: 1, Role: dto.RoleOriginal, LinkedTo: "A2"}}
 	here[0].MimeType = "image/heic"
-	if od := toClientAsset(&dto.ItemDto{Guid: "A2", Kind: dto.KindPhoto, Path: lib}, here).OnDemand; od == nil || od.Original != "" {
-		t.Errorf("photo, original here: %+v, want no on-demand original", od)
+	if od := toClientAsset(&dto.ItemDto{Guid: "A2", Kind: dto.KindPhoto, Path: lib}, here).OnDemand; od == nil || od.Original == "" {
+		t.Errorf("photo, original here: %+v, want the original still asked from Photos (it may be edited)", od)
 	}
 	if od := toClientAsset(&dto.ItemDto{Guid: "V1", Kind: dto.KindVideo, Path: lib}, nil).OnDemand; od == nil ||
 		od.Hover != "/items/V1/rendition/hover" {

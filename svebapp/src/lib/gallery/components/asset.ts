@@ -128,15 +128,12 @@ export function hoverUrl(asset: Asset): string | undefined {
 }
 
 /**
- * The viewer's Original from Photos (it is not here): what to show — a photo's (a
- * Live Photo's photo's) at full resolution as JPEG, any browser shows it; a video's
- * file — and a photo's file itself to download (HEIC, RAW)
+ * The viewer's Original from Photos: the biggest of what the user sees — a photo's
+ * (a Live Photo's photo's) current version, the edit, at full resolution as JPEG
+ * (any browser shows it); a video's original file
  */
-export function originalOnDemand(asset: Asset): {view: string, file?: string} | undefined {
-    const o = asset.onDemand?.original;
-    if (!o) return undefined;
-    const url = `${PUBLIC_API_PATH}${o}`;
-    return asset.kind === 'video' ? {view: url} : {view: url, file: `${url}?file=1`};
+export function originalOnDemand(asset: Asset): string | undefined {
+    return asset.onDemand?.original && `${PUBLIC_API_PATH}${asset.onDemand.original}`;
 }
 
 let hevc: boolean | undefined;
@@ -161,12 +158,17 @@ export function canPlayVideo(r: Rendition): boolean {
 }
 
 /**
- * The image the viewer's Original switch shows: the original if it is an image; a
- * Live Photo whose original is its video (Apple): its biggest photo
+ * The image the viewer's Original switch shows here (not from Photos): the biggest
+ * of what the user sees — the biggest edit if there is one, else the original if it
+ * is an image; a Live Photo whose original is its video: its biggest photo. Edits
+ * and their history belong to the library, not to us: no unedited original over an
+ * edit.
  */
 export function originalImage(asset: Asset): Rendition | undefined {
+    const bySize = (rs: Rendition[]) => [...rs].sort((a, b) => (b.w ?? 0) - (a.w ?? 0))[0];
+    if (asset.edit.length) return bySize(asset.edit);
     if (asset.original?.mime.startsWith('image/')) return asset.original;
-    if (asset.kind === 'live') return [...asset.stills].sort((a, b) => (b.w ?? 0) - (a.w ?? 0))[0];
+    if (asset.kind === 'live') return bySize(asset.stills);
     return undefined;
 }
 

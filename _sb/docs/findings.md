@@ -736,6 +736,12 @@ the binary by the linker; run from the user's terminal on the dev library.
   loaded, as big as the screen until then; stretched if switched on). A Live Photo's
   motion was 300×150 in a corner: the stage's `.stage video { width: auto }` beat
   `.live { width: 100% }` on specificity — `.asset.view video` fills the box now.
+- **The Original is the biggest of what the user sees** (the owner, decided): edits
+  and their history are the library's feature, not ours — we do not follow each
+  provider's specifics. From Photos: its current version (the edit, cropped) at full
+  resolution, asked for every Photos item (a local unedited original is not what is
+  seen); elsewhere the biggest edit, else the original. The unedited original and
+  its file download (`?file=1`) are gone (contract version 4).
 - **The cloud and the Original** (the owner asked what each means): the tile's cloud
   meant "no original" for a photo but "no video at all" for a video or a Live
   Photo — it vanished after the first hover. Now one meaning for every kind: the

@@ -77,7 +77,7 @@ func toClientAsset(item *dto.ItemDto, files []*dto.FileDto) clientAsset {
 	bySize(a.Edit)
 	bySize(a.Stills)
 	a.Kind, a.Duration = assetKind(item, a), item.Duration
-	a.OnDemand = onDemandOf(item, a.Original != nil)
+	a.OnDemand = onDemandOf(item)
 	return a
 }
 

@@ -49,32 +49,15 @@ func RunMain(done <-chan struct{}) {
 	}
 }
 
-func image(uuid string, size int, original bool) ([]byte, error) {
+func image(uuid string, size int) ([]byte, error) {
 	var buf unsafe.Pointer
 	var n C.long
-	o := C.int(0)
-	if original {
-		o = 1
-	}
-	err := call(uuid, func(u *C.char) *C.char { return C.pk_image(u, C.int(size), o, &buf, &n) })
+	err := call(uuid, func(u *C.char) *C.char { return C.pk_image(u, C.int(size), &buf, &n) })
 	if buf == nil {
 		return nil, err
 	}
 	defer C.free(buf)
 	return C.GoBytes(buf, C.int(n)), err
-}
-
-func original(uuid string) (data []byte, uti, name string, err error) {
-	var buf unsafe.Pointer
-	var n C.long
-	var cuti, cname *C.char
-	err = call(uuid, func(u *C.char) *C.char { return C.pk_original(u, &buf, &n, &cuti, &cname) })
-	if buf != nil {
-		data = C.GoBytes(buf, C.int(n))
-		C.free(buf)
-	}
-	uti, name = take(cuti), take(cname)
-	return data, uti, name, err
 }
 
 func video(uuid string, mode int) (string, error) {

@@ -47,23 +47,22 @@
         else video.pause();
     };
 
-    // The viewer's Original switch (the buttons are ViewerTools): the original over the
-    // preview — the local one the browser shows, else Photos' (on demand: a photo's at
-    // full resolution; a Live Photo's photo always comes from there, its own original
-    // is its video)
+    // The viewer's Original switch (the buttons are ViewerTools): the biggest of what
+    // the user sees, over the preview — from Photos its current version (the edit) at
+    // full resolution; elsewhere the biggest edit or the original
     let fromPhotos = $derived(asset ? originalOnDemand(asset) : undefined);
     let original = $derived.by((): {url: string, w?: number, h?: number} | undefined => {
         if (mode !== 'view' || !showOriginal || !asset || asset.kind === 'video') return undefined;
-        const local = asset.kind === 'live' && fromPhotos ? undefined : originalImage(asset);
-        if (local) return {url: assetUrl(local), w: local.w, h: local.h};
-        return fromPhotos && {url: fromPhotos.view};
+        if (fromPhotos) return {url: fromPhotos};
+        const local = originalImage(asset);
+        return local && {url: assetUrl(local), w: local.w, h: local.h};
     });
     let originalLoad = $state<{url: string, w: number, h: number}>();
     let originalReady = $derived(!!original && originalLoad?.url === original.url);
     let originalDims = $derived(originalReady ? originalLoad : original?.w ? original : undefined);
     // A video's Original: its own file (here, or from Photos)
     let videoOriginal = $derived(mode === 'view' && showOriginal && asset?.kind === 'video'
-        ? (asset.original?.mime.startsWith('video/') ? assetUrl(asset.original) : fromPhotos?.view)
+        ? (asset.original?.mime.startsWith('video/') ? assetUrl(asset.original) : fromPhotos)
         : undefined);
 
     // A Live Photo in the viewer: its motion plays over the photo once when it opens
@@ -132,7 +131,7 @@
                onloadedmetadata={(e) => {
                    const v = e.currentTarget as HTMLVideoElement;
                    videoLoad = {guid: item.guid, w: v.videoWidth, h: v.videoHeight};
-                   if (videoOriginal && videoOriginal === fromPhotos?.view) refreshFromServer(true);
+                   if (videoOriginal && videoOriginal === fromPhotos) refreshFromServer(true);
                }}>
             {#if videoOriginal}
                 <source src={videoOriginal}>
@@ -173,7 +172,7 @@
                      originalLoad = {url: original!.url, w: img.naturalWidth, h: img.naturalHeight};
                      // From Photos: the server has processed the item again before it
                      // answered (the original is local now) — the delta has it
-                     if (original!.url === fromPhotos?.view) refreshFromServer(true);
+                     if (original!.url === fromPhotos) refreshFromServer(true);
                  }}>
         {/if}
         {#if mode === 'tile' && hovered && hasMotion}

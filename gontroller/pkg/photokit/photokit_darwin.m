@@ -50,7 +50,7 @@ static char *pk_wait(dispatch_semaphore_t done, char **err) {
     return *err;
 }
 
-char *pk_image(const char *uuid, int size, int original, void **jpeg, long *len) {
+char *pk_image(const char *uuid, int size, void **jpeg, long *len) {
     *jpeg = NULL;
     *len = 0;
     PHAsset *a = asset(uuid);
@@ -58,7 +58,8 @@ char *pk_image(const char *uuid, int size, int original, void **jpeg, long *len)
     PHImageRequestOptions *opt = [PHImageRequestOptions new];
     opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
     opt.resizeMode = size ? PHImageRequestOptionsResizeModeFast : PHImageRequestOptionsResizeModeNone;
-    opt.version = original ? PHImageRequestOptionsVersionOriginal : PHImageRequestOptionsVersionCurrent;
+    // The current version: what the user sees in Photos (the edit, cropped)
+    opt.version = PHImageRequestOptionsVersionCurrent;
     opt.networkAccessAllowed = YES;
     // Synchronous: off the main thread it answers here (asynchronous results would
     // come on the main queue)
@@ -83,45 +84,6 @@ char *pk_image(const char *uuid, int size, int original, void **jpeg, long *len)
         *jpeg = malloc(data.length);
         memcpy(*jpeg, data.bytes, data.length);
         *len = (long)data.length;
-    }
-    return err;
-}
-
-char *pk_original(const char *uuid, void **data, long *len, char **uti, char **name) {
-    *data = NULL;
-    *len = 0;
-    *uti = NULL;
-    *name = NULL;
-    PHAsset *a = asset(uuid);
-    if (!a) return dupstr(@"asset not found");
-    PHImageRequestOptions *opt = [PHImageRequestOptions new];
-    opt.version = PHImageRequestOptionsVersionOriginal;
-    opt.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
-    opt.networkAccessAllowed = YES;
-    opt.synchronous = YES;
-    __block char *err = NULL;
-    __block NSData *got = nil;
-    __block NSString *type = nil;
-    [[PHImageManager defaultManager] requestImageDataAndOrientationForAsset:a options:opt
-                                                              resultHandler:^(NSData *d, NSString *t, CGImagePropertyOrientation o, NSDictionary *info) {
-        err = errstr(info);
-        got = d;
-        type = t;
-    }];
-    if (!err && got.length) {
-        *data = malloc(got.length);
-        memcpy(*data, got.bytes, got.length);
-        *len = (long)got.length;
-        *uti = dupstr(type ?: @"");
-        // The file's own name, as Photos keeps it (IMG_1234.HEIC)
-        for (PHAssetResource *r in [PHAssetResource assetResourcesForAsset:a]) {
-            if (r.type == PHAssetResourceTypePhoto) {
-                *name = dupstr(r.originalFilename);
-                break;
-            }
-        }
-    } else if (!err) {
-        err = dupstr(@"no data");
     }
     return err;
 }

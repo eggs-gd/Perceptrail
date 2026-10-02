@@ -54,8 +54,9 @@ var syncEpoch string
 // contractVersion: bumped when what an item carries changes (a new field of the
 // asset): it is part of the epoch, so every client syncs from nothing once — a
 // delta brings only changed items, the kept ones would never get the field.
-// 2: asset.onDemand (Apple Photos); 3: asset.onDemand.original.
-const contractVersion = "3"
+// 2: asset.onDemand (Apple Photos); 3: asset.onDemand.original; 4: the original
+// for every Photos item (the biggest of what is seen, the edit).
+const contractVersion = "4"
 
 func RegisterItemsRoutes(segment string, e *echo.Echo, logger *l.Logger) {
 	if itemsProxy == nil {
