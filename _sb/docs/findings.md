@@ -318,6 +318,17 @@ Diagram: [`Perceptors.puml`](../puml/Perceptors.puml).
     and never ask for what it missed. No last line = cut short = the old cursor stays.
     Likewise a line that cannot be parsed or stored fails the sync (it was only
     logged — the cursor moved past the item).
+  - **Two tabs broke the copy** (2026-10-02): every tab has its own sync worker over
+    the one IndexedDB. A full sync in one tab cleared the table while another was
+    filling it, and that one kept its cursor over what was left — Chrome showed 79
+    photos of 6 993 and the deltas never brought the rest (Safari, Cursor: one tab,
+    fine). Now syncs take a lock shared by the tabs (Web Locks,
+    `navigator.locks.request('items-sync')`, works in workers), and the stream's last
+    line carries `total` (shown items, counted with the cursor): after a delta a copy
+    holding another count drops its state and syncs from nothing. A full sync that
+    differs only warns (what changed while it ran comes with the next delta) — no
+    loop. Checked: 79 kept of 6 990 → healed on reload; two tabs from an empty copy →
+    6 990.
   - Switching to a view with a kept order shows that order at once; if the refresh
     from the server then fails, the switch stands on the kept order (the URL was
     being rolled back while the sheet already showed the new view).

@@ -52,7 +52,9 @@ keeps in place.
 - `lib/workers/tasks/wsync.ts` — the delta sync: with a cursor from the same server
   database (its epoch) asks `/items?since=`, applies puts and removals; otherwise
   clears `itemsDb` and takes everything. The new cursor is the stream's last line and
-  is kept only if it came and every line was stored — else the next sync retries. Refreshes come from `refreshFromServer()`
+  is kept only if it came and every line was stored — else the next sync retries.
+  One sync at a time across tabs (Web Locks); a copy whose count differs from the
+  stream's `total` after a delta is synced again from nothing. Refreshes come from `refreshFromServer()`
   (proxy): the start, coming back to the tab, every navigation, at most every 5 s.
 - `lib/workers/tasks/wlayout.ts` (start) — loads the kept items and the view's kept
   order (`layoutDb.meta` `order:<view>`), so the sheet shows without the network; a

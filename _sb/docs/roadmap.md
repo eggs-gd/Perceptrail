@@ -317,7 +317,8 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
       items and the view's kept order (then the server's, applied only if it differs).
       Refreshed on the page's own moments: the start, coming back to the tab, every
       navigation (at most every 5 s). A reload: tiles and marks in ~0.2 s, a direct
-      link ~0.3 s; an empty delta is 0 bytes instead of 3.5 MB.
+      link ~0.3 s; an empty delta is 0 bytes instead of 3.5 MB. Several tabs: one sync at a time (Web Locks), and a copy
+      whose count differs from the server's `total` heals itself with a full sync.
 
 - [x] **Item info panel** in the viewer (PR #18): a toolbar switch, kept like the
       other viewer switches (open photo to photo and between visits, until switched
