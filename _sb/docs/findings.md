@@ -746,7 +746,8 @@ the binary by the linker; run from the user's terminal on the dev library.
   original is here and plays: played at once, lit. The tile's cloud: no file of the
   asset is as big as the full size (an original, an edit's render, a full-size
   derivative all count). Info → Files lists every file of the group (sidecars too,
-  `/items/:guid/files`), each downloadable (`?download=1`: `Content-Disposition`,
+  `/items/:guid/files`; a video's frames as one set — "10 frames · 360 × 640 ·
+  372 KB" — unfolding to each), each downloadable (`?download=1`: `Content-Disposition`,
   the download attribute does not work across origins). Checked on the test pair: a
   local 1600 px original — shown at once, lit, "full resolution here"; a cloud-only
   photo with 480 px local — shown, the medium asked over it, the switch off.

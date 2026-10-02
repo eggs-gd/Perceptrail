@@ -55,6 +55,11 @@
     const bytes = (n: number) => n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`;
     const details = (f: GroupFile) =>
         [type(f), f.w && f.h ? `${f.w} × ${f.h}` : '', bytes(f.size)].filter(Boolean).join(' · ');
+    // A video's frames are one set (the hover's flip-book), not ten files in a row
+    const frames = (fs: GroupFile[]) => fs.filter((f) => f.role === 'frames');
+    const setDetails = (fs: GroupFile[]) =>
+        [`${fs.length} frames`, fs[0].w && fs[0].h ? `${fs[0].w} × ${fs[0].h}` : '',
+            bytes(fs.reduce((n, f) => n + f.size, 0))].filter(Boolean).join(' · ');
 </script>
 
 {#snippet block(title: string, icon: string | undefined, facts: {label: string, value: string}[])}
@@ -70,6 +75,23 @@
             {/each}
         </dl>
     </section>
+{/snippet}
+
+{#snippet file(f: GroupFile, role: string)}
+    <li>
+        <span class="file">
+            {#if role}<span class="role">{role}</span>{/if}
+            <span class="name" title={f.name}>{f.name}</span>
+            <span class="details">{details(f)}</span>
+        </span>
+        <a class="download" href={`${PUBLIC_API_PATH}${f.url}?download=1`}
+           title="Download {f.name}" aria-label="Download {f.name}">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14" fill="none" stroke="currentColor"
+                      stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </a>
+    </li>
 {/snippet}
 
 <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
@@ -93,23 +115,28 @@
             <p class="note">Full resolution {fullHere(asset) ? 'here' : 'in iCloud only'}</p>
         {/if}
         {#await files then list}
+            {@const set = frames(list)}
             <ul class="files">
-                {#each byRole(list) as f (f.url)}
-                    <li>
-                        <span class="file">
-                            <span class="role">{ROLES[f.role] ?? 'Other'}</span>
-                            <span class="name" title={f.name}>{f.name}</span>
-                            <span class="details">{details(f)}</span>
-                        </span>
-                        <a class="download" href={`${PUBLIC_API_PATH}${f.url}?download=1`}
-                           title="Download {f.name}" aria-label="Download {f.name}">
-                            <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 19.5h14" fill="none" stroke="currentColor"
-                                      stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                            </svg>
-                        </a>
-                    </li>
+                {#each byRole(list.filter((f) => f.role !== 'frames')) as f (f.url)}
+                    {@render file(f, ROLES[f.role] ?? 'Other')}
                 {/each}
+                {#if set.length}
+                    <li class="set">
+                        <details>
+                            <summary>
+                                <span class="file">
+                                    <span class="role">Frames</span>
+                                    <span class="details">{setDetails(set)}</span>
+                                </span>
+                            </summary>
+                            <ul class="files">
+                                {#each set as f (f.url)}
+                                    {@render file(f, '')}
+                                {/each}
+                            </ul>
+                        </details>
+                    </li>
+                {/if}
             </ul>
         {/await}
     </section>
@@ -245,6 +272,19 @@
     .details {
         color: #aaa;
         font-size: 0.75rem;
+    }
+
+    .set {
+        display: block;
+    }
+
+    .set summary {
+        cursor: pointer;
+        list-style-position: outside;
+    }
+
+    .set .files {
+        padding: 0 0 0 0.6rem;
     }
 
     .download {
