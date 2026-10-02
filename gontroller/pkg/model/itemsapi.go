@@ -32,8 +32,8 @@ type ItemsApi interface {
 	// per page)
 	StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) error
 	// GetItemsInStates: the items in these states, newest first, with what
-	// perceptors read to order them (guid, date and its zone, size, duration) — not
-	// the whole rows
+	// perceptors read to order them (guid, date and its zone, size, duration) and
+	// where they come from (path, kind) — not the whole rows
 	GetItemsInStates(states ...dto.ItemState) ([]*dto.ItemDto, error)
 	// CountItemsInStates: how many items are in these states (deleted ones excluded)
 	CountItemsInStates(states ...dto.ItemState) (int64, error)
@@ -131,7 +131,7 @@ func (p *proxy) streamIDs(db *gorm.DB, ids []uint, fn func(*dto.ItemDto, []*dto.
 
 func (p *proxy) GetItemsInStates(states ...dto.ItemState) ([]*dto.ItemDto, error) {
 	var items []*dto.ItemDto
-	return items, p.db.Select("id", "guid", "date", "date_offset", "date_source", "size_w", "size_h", "ratio_w", "ratio_h", "duration").
+	return items, p.db.Select("id", "guid", "date", "date_offset", "date_source", "size_w", "size_h", "ratio_w", "ratio_h", "duration", "path", "kind").
 		Where("state IN ?", states).Order("date DESC, id DESC").Find(&items).Error
 }
 

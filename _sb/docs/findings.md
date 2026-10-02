@@ -705,6 +705,11 @@ the binary by the linker; run from the user's terminal on the dev library.
   medium rendition is needed only when a photo opens — that request triggers the
   download, the viewer swaps the image in when it comes; 1–3 rows around it are asked
   for ahead. So the limits of asking for thousands were not measured: nothing will.
+- **Assets with nothing local** (Codex, PR #21): on-open-only would never reach
+  them — without a viewable file an item is Waiting, not on the sheet, so nobody
+  opens it (7 of 6 427 in the dev library). `HydrateWaiting` asks Photos for their
+  image in the background (every minute, each asset once per run); the next walk
+  shows them. Not bulk: only what cannot be shown at all.
 - **In the server** (PR #21): the request does not reprocess anything — the
   endpoint serves the file from the library right after Photos made it local, and
   the next walk adds it to the group (a new file), so the item and the other tabs get

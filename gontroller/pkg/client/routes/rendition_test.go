@@ -120,3 +120,30 @@ func TestOnDemandInAsset(t *testing.T) {
 		t.Errorf("a folder's photo: %+v, want none", od)
 	}
 }
+
+// Nothing local at all (Waiting): never on the sheet, so asked for in the
+// background — once per run, only Photos assets
+func TestHydrateWaiting(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "Photos Library.photoslibrary")
+	photos := &fakePhotos{root: root}
+	RegisterRenditionRoutes(echo.New(), photos, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	for _, it := range []*dto.ItemDto{
+		{Guid: "H1111111-WAITING", State: dto.Waiting, Kind: dto.KindPhoto, Path: filepath.Join(root, "originals/H/H1111111-WAITING.heic")},
+		{Guid: "H2222222-SHOWN", State: dto.Visible, Kind: dto.KindPhoto, Path: filepath.Join(root, "originals/H/H2222222-SHOWN.heic")},
+		{Guid: "H3333333-FOLDER", State: dto.Waiting, Kind: dto.KindPhoto, Path: "/photos/h3.heic"},
+	} {
+		if _, err := itemsProxy.UpdateItem(it); err != nil {
+			t.Fatal(err)
+		}
+	}
+	asked := map[string]bool{}
+	logger := l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{})
+	hydrateRound(asked, logger)
+	hydrateRound(asked, logger) // the next round: not again
+	if len(photos.asked) != 1 || !asked["H1111111-WAITING"] {
+		t.Errorf("asked %v (%v), want the waiting Photos asset once", photos.asked, asked)
+	}
+	if _, err := os.Stat(filepath.Join(root, "resources/derivatives/H/H1111111-WAITING_1_102_o.jpeg")); err != nil {
+		t.Error("the image is not in the library")
+	}
+}

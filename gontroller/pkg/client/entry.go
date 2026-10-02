@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"perceptrail/gontroller/pkg/client/routes"
+	"time"
 
 	"github.com/eggs-gd/perceplib/api"
 	l "github.com/eggs-gd/perceplib/logger"
@@ -58,6 +59,8 @@ func (s *webService) Start(parentCtx context.Context) {
 	routes.RegisterPerceptorsRoutes(e, s.perceptors, s.values, s.logger)
 	routes.RegisterAppRoutes(e, s.app)
 	routes.RegisterRenditionRoutes(e, s.fetcher, s.logger)
+	// Photos assets with nothing local at all: asked for in the background
+	go routes.HydrateWaiting(ctx, time.Minute, s.logger)
 
 	e.Logger.Fatal(e.Start(s.cfg.Addr()))
 

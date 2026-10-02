@@ -223,8 +223,10 @@ see Done and findings "Apple Photos library: spike"). We only read the library.
            Photos downloads, the walk finds the file (the grouper already knows
            `_1_102_o.jpeg`). Only on demand, never in bulk (decided):
            - **the sheet** asks for nothing: Photos keeps
-             `masters/<X>/<UUID>_4_5005_c.jpeg` (~100 KB) local for every asset,
-             cloud-only ones too;
+             `masters/<X>/<UUID>_4_5005_c.jpeg` (~100 KB) local for nearly every
+             asset, cloud-only ones too. The exception (Codex): an asset with nothing
+             local at all (7 of 6 427 here) is Waiting — never on the sheet, never
+             opened — so those are asked for in the background, each once per run;
            - **opening a photo** triggers it: the viewer shows what there is (the
              tile's image) at once, the server asks Photos for the medium rendition
              (~1 s) — the request waits for it and serves the file, the viewer swaps

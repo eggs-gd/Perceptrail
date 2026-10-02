@@ -1,10 +1,12 @@
 package routes
 
 import (
+	"context"
 	"net/http"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
@@ -143,6 +145,44 @@ func viewableOriginal(path string) bool {
 		return true
 	}
 	return false
+}
+
+// HydrateWaiting: an asset from Photos with nothing viewable on disk (Optimize Mac
+// Storage purged even its thumbnail — 7 of 6 427 in the dev library) is Waiting:
+// never on the sheet, so never opened, so never asked for. Those are asked for
+// here, in the background, each once per run; when Photos has downloaded the image
+// the next walk finds it and the item shows. Every `every` until ctx ends.
+func HydrateWaiting(ctx context.Context, every time.Duration, logger *l.Logger) {
+	if fetcher == nil {
+		return
+	}
+	asked := map[string]bool{}
+	for {
+		hydrateRound(asked, logger)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(every):
+		}
+	}
+}
+
+func hydrateRound(asked map[string]bool, logger *l.Logger) {
+	items, err := itemsProxy.GetItemsInStates(dto.Waiting)
+	if err != nil {
+		logger.Error("Waiting items not read", l.Error(err))
+		return
+	}
+	for _, it := range items {
+		if asked[it.Guid] || apple.BundleRoot(it.Path) == "" {
+			continue
+		}
+		asked[it.Guid] = true
+		// The image even for a video: its poster is what the tile shows
+		if err := once(it.Guid+"/medium", func() error { return fetcher.Image(it.Guid, mediumSize) }); err != nil {
+			logger.Debug("Waiting asset not fetched", l.String("guid", it.Guid), l.Error(err))
+		}
+	}
 }
 
 // onDemandOf: the client's on-demand renditions of an item from Photos (nil for
