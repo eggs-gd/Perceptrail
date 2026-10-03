@@ -10,72 +10,71 @@ import (
 	"time"
 )
 
-// collect: the values that reach out, and whether a flush came after them
-type collect[T any] struct {
-	mu      sync.Mutex
-	got     []T
-	flushes []int // len(got) at each flush
-	done    chan struct{}
-}
-
-func newCollect[T any]() *collect[T] { return &collect[T]{done: make(chan struct{}, 10)} }
-
-func (c *collect[T]) sink(in *Pipe[T]) Processor {
-	return Sink(in, func(v T) {
-		c.mu.Lock()
-		c.got = append(c.got, v)
-		c.mu.Unlock()
-	}, func() {
-		c.mu.Lock()
-		c.flushes = append(c.flushes, len(c.got))
-		c.mu.Unlock()
-		c.done <- struct{}{}
-	})
-}
-
-func (c *collect[T]) wait(t *testing.T) {
-	t.Helper()
-	select {
-	case <-c.done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("no flush reached the end")
-	}
-}
-
-// source: emits vs, then flushes
-type source[T any] struct{ vs []T }
-
-func (s source[T]) Run(ctx context.Context, out Emitter[T]) {
-	for _, v := range s.vs {
-		out.Emit(v)
-	}
-	out.Flush()
-	<-ctx.Done()
-}
-
 type fn[Ti, To any] func(Ti) (To, error)
 
 func (f fn[Ti, To]) Decorate(v Ti) (To, error) { return f(v) }
 
-func run(t *testing.T, c *Chain) context.CancelFunc {
-	t.Helper()
-	ctx, cancel := context.WithCancel(t.Context())
-	go c.Process(ctx)
-	return cancel
+// collect: the values an end consumed
+type collect[T any] struct {
+	mu  sync.Mutex
+	got []T
 }
 
-// Every value comes out before the flush that followed it
-func TestFlushAfterValues(t *testing.T) {
-	in, out := NewPipe[int](0), NewPipe[int](0)
-	got := newCollect[int]()
+func (c *collect[T]) Consume(v T) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.got = append(c.got, v)
+	return nil
+}
+
+func (c *collect[T]) values() []T {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.got)
+}
+
+// count: a request spreads into 1..n
+type count struct{ n int }
+
+func (c count) Spread(_ context.Context, _ struct{}, emit func(int) bool) error {
+	for i := 1; i <= c.n; i++ {
+		emit(i)
+	}
+	return nil
+}
+
+func start(t *testing.T, c *Chain) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	go c.Process(ctx)
+}
+
+func waitDone(t *testing.T, c *Chain) {
+	t.Helper()
+	select {
+	case <-c.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("the flush never reached the ends")
+	}
+}
+
+// A request spreads into a batch; the chain is Done when its flush reached the end —
+// every value went through by then
+func TestSpreadAndDone(t *testing.T) {
+	req, in, out := NewPipe[struct{}](0), NewPipe[int](0), NewPipe[int](0)
+	got := &collect[int]{}
 	c := New(nil)
-	c.AddStep(Entry(in, source[int]{[]int{1, 2, 3}}))
+	c.AddStep(Spread[struct{}, int](req, in, count{3}))
 	c.AddStep(Decorate(in, out, fn[int, int](func(v int) (int, error) { return v * 10, nil })))
-	c.AddStep(got.sink(out))
-	defer run(t, c)()
-	got.wait(t)
-	if !slices.Equal(got.got, []int{10, 20, 30}) || got.flushes[0] != 3 {
-		t.Errorf("got %v, flushes %v", got.got, got.flushes)
+	c.AddStep(End[int](out, got))
+	start(t, c)
+	for range 2 { // a request per batch, the owner decides when
+		req.Send(t.Context(), struct{}{})
+		waitDone(t, c)
+	}
+	if !slices.Equal(got.values(), []int{10, 20, 30, 10, 20, 30}) {
+		t.Errorf("got %v", got.values())
 	}
 }
 
@@ -86,17 +85,18 @@ func (h *holder) Decorate(v int) (int, error) { h.held = append(h.held, v); retu
 func (h *holder) Flush() ([]int, error)       { out := h.held; h.held = nil; return out, nil }
 
 // A Flusher's values go out on the flush, before it
-func TestFlusherBeforeFlush(t *testing.T) {
-	in, out := NewPipe[int](0), NewPipe[int](0)
-	got := newCollect[int]()
+func TestFlusher(t *testing.T) {
+	req, in, out := NewPipe[struct{}](0), NewPipe[int](0), NewPipe[int](0)
+	got := &collect[int]{}
 	c := New(nil)
-	c.AddStep(Entry(in, source[int]{[]int{1, 2}}))
+	c.AddStep(Spread[struct{}, int](req, in, count{2}))
 	c.AddStep(Decorate[int, int](in, out, &holder{}))
-	c.AddStep(got.sink(out))
-	defer run(t, c)()
-	got.wait(t)
-	if !slices.Equal(got.got, []int{1, 2}) || got.flushes[0] != 2 {
-		t.Errorf("got %v, flushes %v", got.got, got.flushes)
+	c.AddStep(End[int](out, got))
+	start(t, c)
+	req.Send(t.Context(), struct{}{})
+	waitDone(t, c)
+	if !slices.Equal(got.values(), []int{1, 2}) {
+		t.Errorf("got %v", got.values())
 	}
 }
 
@@ -104,61 +104,55 @@ type parity struct{}
 
 func (parity) Route(v int) (int, error) { return v % 2, nil }
 
-// Route: a value to one output, the flush to every one; where branches join, the
-// flush passes once every branch has flushed
-func TestRouteAndBarrier(t *testing.T) {
-	in, even, odd, joined := NewPipe[int](0), NewPipe[int](0), NewPipe[int](0), NewPipe[int](0)
-	got := newCollect[int]()
-	slow := fn[int, int](func(v int) (int, error) { time.Sleep(20 * time.Millisecond); return v, nil })
-	fast := fn[int, int](func(v int) (int, error) { return v, nil })
+// Route: a value to one output, the flush to all; a join passes the flush once
+// every branch flushed
+func TestRouteJoinAndEnds(t *testing.T) {
+	req, in, even, odd := NewPipe[struct{}](0), NewPipe[int](0), NewPipe[int](0), NewPipe[int](0)
+	joined, tail := NewPipe[int](0), NewPipe[int](0)
+	slow := fn[int, int](func(v int) (int, error) { time.Sleep(10 * time.Millisecond); return v, nil })
+	pass := fn[int, int](func(v int) (int, error) { return v, nil })
+	a := &collect[int]{}
 	c := New(nil)
-	c.AddStep(Entry(in, source[int]{[]int{1, 2, 3, 4}}))
+	c.AddStep(Spread[struct{}, int](req, in, count{4}))
 	c.AddStep(Route(in, []*Pipe[int]{even, odd}, parity{}))
 	c.AddStep(Decorate(even, joined, slow))
-	c.AddStep(Decorate(odd, joined, fast))
-	c.AddStep(got.sink(joined))
-	defer run(t, c)()
-	got.wait(t)
-	if len(got.flushes) != 1 || got.flushes[0] != 4 {
-		t.Errorf("flushes %v (values before each), want one after all 4: %v", got.flushes, got.got)
-	}
-	select {
-	case <-got.done:
-		t.Error("a second flush passed the barrier")
-	case <-time.After(50 * time.Millisecond):
+	c.AddStep(Decorate(odd, joined, pass))
+	c.AddStep(Decorate(joined, tail, pass))
+	c.AddStep(End[int](tail, a))
+	start(t, c)
+	req.Send(t.Context(), struct{}{})
+	waitDone(t, c)
+	if got := a.values(); len(got) != 4 {
+		t.Errorf("the join passed the flush before every branch: %v", got)
 	}
 }
 
-// Parallel: every value done before the flush passes
-func TestParallelFlushWaits(t *testing.T) {
-	in, out := NewPipe[int](0), NewPipe[int](0)
-	got := newCollect[int]()
+// Parallel: the flush waits for every value before it
+func TestParallel(t *testing.T) {
+	req, in, out := NewPipe[struct{}](0), NewPipe[int](0), NewPipe[int](0)
+	got := &collect[int]{}
 	var busy atomic.Int32
 	c := New(nil)
-	c.AddStep(Entry(in, source[int]{[]int{1, 2, 3, 4, 5, 6}}))
+	c.AddStep(Spread[struct{}, int](req, in, count{6}))
 	c.AddStep(Parallel(3, in, out, fn[int, int](func(v int) (int, error) {
 		busy.Add(1)
-		time.Sleep(time.Duration(7-v) * 5 * time.Millisecond)
-		busy.Add(-1)
+		defer busy.Add(-1)
+		time.Sleep(time.Duration(7-v) * 3 * time.Millisecond)
 		return v, nil
 	})))
-	c.AddStep(got.sink(out))
-	defer run(t, c)()
-	got.wait(t)
-	if got.flushes[0] != 6 {
-		t.Errorf("flush after %d values, want 6", got.flushes[0])
-	}
-	if busy.Load() != 0 {
-		t.Error("a worker was still busy at the flush")
+	c.AddStep(End[int](out, got))
+	start(t, c)
+	req.Send(t.Context(), struct{}{})
+	waitDone(t, c)
+	if len(got.values()) != 6 || busy.Load() != 0 {
+		t.Errorf("got %v, busy %d at the flush", got.values(), busy.Load())
 	}
 }
 
-// A skip never reaches the error channel; an error does; a sub-chain without its own
-// channel uses the one of the chain it runs in
-func TestErrorsAndSkips(t *testing.T) {
+// A skip is never an error; an error is; a sub-chain uses its parent's channel
+func TestErrors(t *testing.T) {
 	errch := make(chan error, 10)
 	in, out := NewPipe[int](0), NewPipe[int](0)
-	got := newCollect[int]()
 	boom := errors.New("boom")
 	sub := New(nil)
 	sub.AddStep(Decorate(in, out, fn[int, int](func(v int) (int, error) {
@@ -170,17 +164,18 @@ func TestErrorsAndSkips(t *testing.T) {
 		}
 		return v, nil
 	})))
+	got := &collect[int]{}
 	c := New(errch)
-	c.AddStep(Entry(in, source[int]{[]int{1, 2, 3}}))
 	c.AddStep(sub)
-	c.AddStep(got.sink(out))
-	defer run(t, c)()
-	got.wait(t)
-	if len(errch) != 1 || !errors.Is(<-errch, boom) {
-		t.Error("want exactly the error, not the skip")
+	c.AddStep(End[int](out, got))
+	start(t, c)
+	for _, v := range []int{1, 2, 3} {
+		in.Send(t.Context(), v)
 	}
-	if !slices.Equal(got.got, []int{3}) {
-		t.Errorf("got %v", got.got)
+	in.Flush(t.Context())
+	waitDone(t, c)
+	if len(errch) != 1 || !errors.Is(<-errch, boom) || !slices.Equal(got.values(), []int{3}) {
+		t.Errorf("errors %d, got %v", len(errch), got.values())
 	}
 }
 
@@ -190,16 +185,15 @@ func (s stopCount) Decorate(v int) (int, error) { return v, nil }
 func (s stopCount) Stop()                       { s.n.Add(1) }
 
 // Cancel ends a step blocked on a send nobody reads; its logic is stopped once
-func TestCancelUnblocksAndStopsOnce(t *testing.T) {
+func TestCancel(t *testing.T) {
 	in, out := NewPipe[int](0), NewPipe[int](0) // nobody reads out
 	var stops atomic.Int32
 	c := New(nil)
-	c.AddStep(Entry(in, source[int]{[]int{1, 2}}))
 	c.AddStep(Decorate[int, int](in, out, stopCount{&stops}))
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
 	go func() { c.Process(ctx); close(done) }()
-	time.Sleep(20 * time.Millisecond)
+	in.Send(ctx, 1)
 	cancel()
 	select {
 	case <-done:
@@ -207,145 +201,6 @@ func TestCancelUnblocksAndStopsOnce(t *testing.T) {
 		t.Fatal("the chain did not stop")
 	}
 	if stops.Load() != 1 {
-		t.Errorf("Stop called %d times, want 1", stops.Load())
-	}
-}
-
-// Series: logics one after another; none: values pass
-func TestSeries(t *testing.T) {
-	for _, n := range []int{0, 1, 3} {
-		in, out := NewPipe[int](0), NewPipe[int](0)
-		got := newCollect[int]()
-		var logics []Decorator[int, int]
-		for range n {
-			logics = append(logics, fn[int, int](func(v int) (int, error) { return v + 1, nil }))
-		}
-		c := New(nil)
-		c.AddStep(Entry(in, source[int]{[]int{0}}))
-		c.AddStep(Series(in, out, logics...))
-		c.AddStep(got.sink(out))
-		cancel := run(t, c)
-		got.wait(t)
-		cancel()
-		if !slices.Equal(got.got, []int{n}) {
-			t.Errorf("%d logics: got %v", n, got.got)
-		}
-	}
-}
-
-// Send: a value from outside the chain reaches it, and is not a writer (no flush is
-// waited for from it)
-func TestSendFromOutside(t *testing.T) {
-	in, out := NewPipe[int](0), NewPipe[int](0)
-	got := newCollect[int]()
-	c := New(nil)
-	c.AddStep(Entry(in, source[int]{nil})) // flushes at once
-	c.AddStep(Decorate(in, out, fn[int, int](func(v int) (int, error) { return v, nil })))
-	c.AddStep(got.sink(out))
-	defer run(t, c)()
-	got.wait(t)
-	if !in.Send(t.Context(), 7) {
-		t.Fatal("send failed")
-	}
-	time.Sleep(20 * time.Millisecond)
-	got.mu.Lock()
-	defer got.mu.Unlock()
-	if !slices.Equal(got.got, []int{7}) {
-		t.Errorf("got %v", got.got)
-	}
-}
-
-// Flush from outside: a sub-chain driven value by value — a skipped value still ends
-// with the flush, so the driver knows it is done
-func TestFlushFromOutside(t *testing.T) {
-	in, out := NewPipe[int](0), NewPipe[int](0)
-	got := newCollect[int]()
-	c := New(nil)
-	c.AddStep(Decorate(in, out, fn[int, int](func(v int) (int, error) {
-		if v < 0 {
-			return 0, ErrSkippedItem
-		}
-		return v, nil
-	})))
-	c.AddStep(got.sink(out))
-	defer run(t, c)()
-	for _, v := range []int{-1, 5} {
-		in.Send(t.Context(), v)
-		in.Flush(t.Context())
-		got.wait(t)
-	}
-	if !slices.Equal(got.got, []int{5}) || !slices.Equal(got.flushes, []int{0, 1}) {
-		t.Errorf("got %v, flushes %v", got.got, got.flushes)
-	}
-}
-
-// drained: a source that records, after each Flush returns, how many values the ends
-// had consumed by then
-type drained struct {
-	vs   []int
-	seen *atomic.Int32
-	at   chan int32
-}
-
-func (d drained) Run(ctx context.Context, out Emitter[int]) {
-	for _, v := range d.vs {
-		out.Emit(v)
-	}
-	if out.Flush() {
-		d.at <- d.seen.Load()
-	}
-	<-ctx.Done()
-}
-
-type count struct{ seen *atomic.Int32 }
-
-func (c count) Consume(int) error { time.Sleep(5 * time.Millisecond); c.seen.Add(1); return nil }
-
-// Flush returns once the flush has left every end of the chain — through a Route, two
-// branches, two ends — so every value of the batch has been consumed by then
-func TestFlushWaitsForEveryEnd(t *testing.T) {
-	in, even, odd := NewPipe[int](0), NewPipe[int](0), NewPipe[int](0)
-	var seen atomic.Int32
-	at := make(chan int32, 1)
-	c := New(nil)
-	c.AddStep(Entry(in, drained{vs: []int{1, 2, 3, 4, 5}, seen: &seen, at: at}))
-	c.AddStep(Route(in, []*Pipe[int]{even, odd}, parity{}))
-	c.AddStep(End[int](even, count{&seen}))
-	c.AddStep(End[int](odd, count{&seen}))
-	defer run(t, c)()
-	select {
-	case n := <-at:
-		if n != 5 {
-			t.Errorf("Flush returned with %d of 5 values consumed", n)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("Flush never returned")
-	}
-}
-
-type failOdd struct{}
-
-func (failOdd) Consume(v int) error {
-	if v%2 == 1 {
-		return errors.New("odd")
-	}
-	return nil
-}
-
-// End: a chain's last step — its errors go to the chain's channel
-func TestEndReportsErrors(t *testing.T) {
-	errch := make(chan error, 10)
-	in := NewPipe[int](0)
-	c := New(errch)
-	c.AddStep(End[int](in, failOdd{}))
-	defer run(t, c)()
-	for _, v := range []int{1, 2, 3} {
-		in.Send(t.Context(), v)
-	}
-	if !in.Flush(t.Context()) {
-		t.Fatal("flush not done")
-	}
-	if len(errch) != 2 {
-		t.Errorf("%d errors, want 2", len(errch))
+		t.Errorf("Stop called %d times", stops.Load())
 	}
 }

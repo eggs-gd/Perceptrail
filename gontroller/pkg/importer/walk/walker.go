@@ -1,8 +1,7 @@
-// Package walk: the first step of the import — the library's files, walk after walk:
-// every file with its stat, then the chain's flush; once the walk has gone through
-// the whole chain (the flush returns), what it did not see that it says is gone is
-// deleted (the model's rules); after the rescan pause, the next walk. Walks never
-// overlap: no group is in the chain twice.
+// Package walk: the first step of the import — the library's files, a walk per
+// request: every file with its stat, then the chain's flush; the walk's result goes
+// to whoever judges the deletions on that flush (the gate). When a walk comes is the
+// chain's owner's business.
 package walk
 
 import (
@@ -43,31 +42,22 @@ type Store interface {
 	Gone(files []*dto.FileDto) (deleted, dirty int, err error)
 }
 
-// Walker: the chain's entry point (a chain.Source)
+// Walker: the walk step's logic (a chain.Spreader: a request in, the files out)
 type Walker struct {
 	logger *l.Logger
 	root   string
-	rescan time.Duration // the pause after a walk's work is done
-	db     Store
+	result *Result
 }
 
-func New(root string, rescan time.Duration, db Store, logger *l.Logger) *Walker {
-	return &Walker{logger: logger, root: root, rescan: rescan, db: db}
+// New: in — a walk request; out — every file found, then the flush. result gets the
+// walk's result before the flush (the owner shares it with the gate)
+func New(root string, result *Result, logger *l.Logger, in *chain.Pipe[struct{}], out *chain.Pipe[dto.ItemEntry]) chain.Processor {
+	return chain.Spread(in, out, &Walker{logger: logger, root: root, result: result})
 }
 
-func (m *Walker) Run(ctx context.Context, out chain.Emitter[dto.ItemEntry]) {
-	for {
-		r := m.walk(ctx, out.Emit)
-		if !out.Flush() { // returns once the walk went through the whole chain
-			return
-		}
-		Delete(m.db, r, m.logger)
-		select {
-		case <-time.After(m.rescan):
-		case <-ctx.Done():
-			return
-		}
-	}
+func (m *Walker) Spread(ctx context.Context, _ struct{}, emit func(dto.ItemEntry) bool) error {
+	*m.result = m.walk(ctx, emit)
+	return nil
 }
 
 func (m *Walker) walk(ctx context.Context, emit func(dto.ItemEntry) bool) Result {

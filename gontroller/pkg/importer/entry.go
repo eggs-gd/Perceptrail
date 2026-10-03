@@ -4,31 +4,32 @@
 //
 //	walk → group → gate → identify → exif → commit
 //
-//	walk       the library's files (path + stat), walk after walk: a flush, the
-//	           deletions once it went through the chain, the rescan pause
+//	walk       the library's files (path + stat), a walk per request, then a flush
 //	group      whole assets: the providers' groupers (the plain folder last)
-//	gate       the files table up to date; only the groups that need work pass
+//	gate       the files table up to date; only the groups that need work pass;
+//	           on a walk's flush, its deletions
 //	identify   the item known — exiftool, kinds and the main file, the item's
 //	           identity, sizes, the cheap preview
 //	exif       the EXIF perceptors: the built-in ones write into the item (date,
 //	           size, length), the external Go plugins only read it; their values kept
 //	commit     the chain's end: the item published, Visible (a preview) or Waiting
 //
-// The chain starts, walks, repeats and stops by itself; the top only wires it and
-// holds what spans it: one asset again (Refresh) and who waits for it.
+// The service runs the chain and its cycle: a walk request, the chain Done (the
+// walk's flush reached the end), the rescan pause, the next request; and what spans
+// it: one asset again (Refresh, sent straight into the gate's input) and who waits
+// for it.
 //
 // Diagrams: _sb/puml/Import chain.puml, _sb/puml/Walker.puml (gate, validator).
 //
 // Not obvious:
-//   - The walker flushes the chain after a walk: every step passes the flush on after
-//     the values before it, a grouper first gives what it holds; where branches join
-//     (the groupers into the gate) it passes once every branch has flushed; the exif
-//     step prunes the perceptors' rows of gone items on it. The walker's Flush returns
-//     once the flush has left the chain's end (commit): the walk's work is done — then
-//     its deletions, the pause, the next walk. Walks never overlap.
-//   - Deletions come after the walk's groups went through the whole chain; a moved
-//     file was validated before its old path is deleted, and validate restores a
-//     deleted item by fingerprint anyway: the GUID stays.
+//   - The walk flushes the chain: every step passes the flush on after the values
+//     before it, a grouper first gives what it holds; where branches join (the
+//     groupers into the gate) it passes once every branch has flushed. The gate runs
+//     the walk's deletions on it (every group of the walk has passed it), the exif
+//     step prunes the perceptors' rows of gone items. Once it reached commit the
+//     chain is Done: then the pause, the next walk. Walks never overlap.
+//   - A moved file: its old path may be deleted before the new one is identified;
+//     validate restores a deleted item by fingerprint: the GUID stays.
 //   - One asset again without a walk (Refresh): its provider forms its group, the top
 //     sends it into the gate's input asked for (Requested: processed even if nothing
 //     changed), and waits for its item at the end.
@@ -60,6 +61,8 @@ const defaultRescan = time.Minute
 
 type importerService struct {
 	importChain *chain.Chain
+	walks       *chain.Pipe[struct{}] // a walk request
+	rescan      time.Duration         // the pause between the end of one walk and the next
 
 	// One asset again (Refresh): its provider forms its group, it goes into the
 	// gate's input; whoever waits hears when its item is published
@@ -85,6 +88,10 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	}
 
 	// Between the steps (each message type belongs to the step that yields it)
+	// the service → walk: a walk request
+	walks := chain.NewPipe[struct{}](0)
+	// walk → gate: the walk's result, for the deletions on its flush
+	var walked walk.Result
 	// walk → group: one file (path + stat); the walk's flush
 	found := chain.NewPipe[dto.ItemEntry](0)
 	// group → gate: a whole asset; on the flush, what each grouper held. Refresh
@@ -101,15 +108,17 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	waits := newAssetWaits()
 
 	importChain := chain.New(errch)
-	importChain.AddStep(chain.Entry(found, walk.New(ctx.Config().Path, rescan, db, logger)))
+	importChain.AddStep(walk.New(ctx.Config().Path, &walked, logger, walks, found))
 	importChain.AddStep(group.New(ps, found, grouped))
-	importChain.AddStep(gate.New(db, logger, grouped, stored))
+	importChain.AddStep(gate.New(db, logger, &walked, grouped, stored))
 	importChain.AddStep(identify.New(db, ctx.Config().CacheDir(), logger, stored, identified))
 	importChain.AddStep(exif.New(db, identified, perceived, logger))
 	importChain.AddStep(commit.New(db, waits.done, perceived))
 
 	return &importerService{
 		importChain: importChain,
+		walks:       walks,
+		rescan:      rescan,
 		providers:   ps,
 		grouped:     grouped,
 		waits:       waits,
@@ -191,6 +200,23 @@ func (w *assetWaits) done(key string) {
 	delete(w.by, key)
 }
 
+// Start: the chain runs; walk after walk — a request, the chain Done, the rescan
+// pause — until ctx ends
 func (s *importerService) Start(ctx context.Context) {
-	s.importChain.Process(ctx)
+	stopped := make(chan struct{})
+	go func() {
+		s.importChain.Process(ctx)
+		close(stopped)
+	}()
+	for s.walks.Send(ctx, struct{}{}) {
+		select {
+		case <-s.importChain.Done():
+		case <-ctx.Done():
+		}
+		select {
+		case <-time.After(s.rescan):
+		case <-ctx.Done():
+		}
+	}
+	<-stopped
 }

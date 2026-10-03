@@ -537,20 +537,30 @@ Design: roadmap "Expensive stage".
 
 ## Backend: gontroller, plugins, exiftool
 
-### The chain runs itself: the walker cycles, commit is the end (2026-10-03, decided)
+### The chain's owner cycles it; the chain library lean again (2026-10-03, decided)
 
-The walker stuck out of the importer (`Next`, `Last`), a `cycle.go` at the top ran
-the deletions, the pruning and the pause, and a `Sink` step at the end told the top
-"the walk is done". All of it is the chain's own: the library's `Emitter.Flush` now
-returns once the flush has left every end of the chain (it counts the flush's copies:
-a `Route` multiplies them, a barrier joins them, an end consumes them), so the walker
-cycles by itself — walk, flush and wait, delete what it says is gone (walk owns
-what a walk means; the model applies it), pause, again. `commit` is the chain's end
-(`chain.End`); the exif step checks the perceptors' rows at start and prunes on each
-flush (one walk late for this walk's deletions, harmless). The top only wires the
-steps and keeps Refresh. While writing it the import tests' harness had a race of
-its own (a `select` over "item" and "flushed", both ready): read deterministically
-now that `Flush` returns after the end saw everything.
+A first try had the chain run itself: the walker was a `Source` whose `Flush`
+returned once the flush had left every end (the library counted the flush's
+copies), so the walker walked, waited, deleted and paused in a loop; the library
+grew `Entry`, `Source`, `Emitter`, `Sink`, `Series`, `Pass` and a flush counter to
+match (499 lines, develop had 302). Rejected: the cycle is not the walker's, it is
+the whole chain's, and the chain's owner (the importer service) already starts it.
+Now:
+
+- **The library** has five step kinds, a file each: `Decorate`, `Parallel`,
+  `Route`, `Spread` (one value in, many out, then a flush: a walk request → the
+  files) and `End`; `Chain.Done()` fires when a flush has reached every `End` (the
+  chain counts its ends, nothing else). `Pipe.Send` / `Pipe.Flush` inject from
+  outside at any time: the chain stays running. 348 lines.
+- **The owner cycles**: send a walk request into `walk`'s input, wait for `Done`,
+  pause (`rescan`), again. Refresh sends a group into the gate's input.
+- **Deletions back in the gate, on the walk's flush** (as before the stages): the
+  walk writes its `walk.Result` (shared by the owner with the gate) before it
+  flushes; the gate judges and deletes on the flush. A moved file's old path may go
+  before the new path is validated; the validator restores the soft-deleted item by
+  fingerprint, so the GUID stays (smoke: move / add / delete as before).
+- `Series` became a loop of `Decorate` steps in the exif step; the import tests'
+  harness ends identify's chain with an `End` and waits on `Done`.
 
 ### One exif step; the perceptors' contract in plugins (2026-10-03, decided)
 

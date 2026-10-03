@@ -1,13 +1,14 @@
 // Package gate: the third step of the import — keeps the files table (identity,
 // stat, CheckTime) and lets through only the groups that need work (the model says
-// which), in our format: so unchanged files never reach exiftool. It knows nothing
-// of walks or deletions: those are the importer's, after a walk.
+// which), in our format: so unchanged files never reach exiftool. On a walk's flush,
+// the files the walk did not see that it says are gone are deleted (walk.Delete).
 package gate
 
 import (
 	"errors"
 	"time"
 
+	"perceptrail/gontroller/pkg/importer/walk"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/providers"
@@ -21,6 +22,7 @@ import (
 // Store: what the gate reads and writes — the files table, and whether a group
 // needs work (the model's rule)
 type Store interface {
+	walk.Store
 	GetFileByPath(path string) (*dto.FileDto, error)
 	CreateFile(entry dto.ItemEntry) (*dto.FileDto, error)
 	UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error)
@@ -60,16 +62,25 @@ type Group struct {
 type Gate struct {
 	db     Store
 	logger *l.Logger
+	walked *walk.Result // the last walk's, written before its flush
 }
 
-func NewGate(db Store, logger *l.Logger) *Gate {
-	return &Gate{db: db, logger: logger}
+// NewGate: walked — the walk step's result, read on its flush
+func NewGate(db Store, logger *l.Logger, walked *walk.Result) *Gate {
+	return &Gate{db: db, logger: logger, walked: walked}
 }
 
 // New: in — whole assets (the groupers', and one asked again on demand); out — the
 // ones that need work
-func New(db Store, logger *l.Logger, in *chain.Pipe[providers.Group], out *chain.Pipe[Group]) chain.Processor {
-	return chain.Decorate(in, out, NewGate(db, logger))
+func New(db Store, logger *l.Logger, walked *walk.Result, in *chain.Pipe[providers.Group], out *chain.Pipe[Group]) chain.Processor {
+	return chain.Decorate(in, out, NewGate(db, logger, walked))
+}
+
+// Flush: a walk's flush — every group it found has passed the gate; its deletions
+func (g *Gate) Flush() ([]Group, error) {
+	walk.Delete(g.db, *g.walked, g.logger)
+	*g.walked = walk.Result{} // judged once
+	return nil, nil
 }
 
 func (g *Gate) Decorate(in providers.Group) (Group, error) {

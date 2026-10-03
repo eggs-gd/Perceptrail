@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"perceptrail/gontroller/pkg/importer/gate"
+	"perceptrail/gontroller/pkg/importer/walk"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/providers"
 )
@@ -106,7 +107,7 @@ func TestNotMediaIgnored(t *testing.T) {
 	if f, err := filesProxy.GetFileByPath(notes); err != nil || !f.IsIgnored() {
 		t.Fatalf("not ignored: %+v %v", f, err)
 	}
-	gate := gate.NewGate(testDB, nil)
+	gate := gate.NewGate(testDB, nil, &walk.Result{})
 	if _, err := gate.Decorate(providers.Group{Asset: providers.Asset{Files: []*dto.FileDto{{ItemEntry: statEntry(t, notes)}}}}); err == nil {
 		t.Error("the gate let an unchanged ignored group through")
 	}

@@ -5,31 +5,18 @@ import (
 	"os"
 	"path/filepath"
 	"perceptrail/gontroller/pkg/model/dto"
-	"sync"
 	"testing"
-	"time"
 
+	"github.com/eggs-gd/perceplib/chain"
 	l "github.com/eggs-gd/perceplib/logger"
 	"github.com/eggs-gd/perceplib/logger/decorators"
 )
 
+var testLogger = l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
+
 func newTestWalker(root string) *Walker {
-	return New(root, time.Millisecond, &deletions{}, l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	return &Walker{logger: testLogger, root: root}
 }
-
-// deletions: a Store that records which walks asked for their deletions
-type deletions struct {
-	mu    sync.Mutex
-	walks []time.Time
-}
-
-func (d *deletions) GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	d.walks = append(d.walks, t)
-	return nil, nil
-}
-func (d *deletions) Gone([]*dto.FileDto) (int, int, error) { return 0, 0, nil }
 
 // runWalk collects what walk sends and returns it with the result
 func runWalk(m *Walker) (Result, []string) {
@@ -109,52 +96,29 @@ func TestWalkCancelled(t *testing.T) {
 	}
 }
 
-// emitter: what the walker sends; its Flush returns when the test lets it (the walk
-// "went through the chain")
-type emitter struct {
-	flushes chan struct{}
-	through chan struct{}
-}
+// files: the end of a test chain — the paths it got
+type files struct{ paths []string }
 
-func (emitter) Emit(dto.ItemEntry) bool { return true }
-func (e emitter) Flush() bool           { e.flushes <- struct{}{}; <-e.through; return true }
+func (f *files) Consume(e dto.ItemEntry) error { f.paths = append(f.paths, e.Path); return nil }
 
-// The walker walks at once, waits until its walk went through the chain (Flush
-// returns), asks for the deletions, pauses, walks again — never two at a time
-func TestWalkerCycle(t *testing.T) {
+// A walk per request: the files, its result, then the flush (the chain is Done)
+func TestWalkStep(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "a.jpg"))
-	w := newTestWalker(root)
-	out := emitter{flushes: make(chan struct{}), through: make(chan struct{})}
-	go w.Run(t.Context(), out)
-
-	wait := func(what string) {
-		t.Helper()
-		select {
-		case <-out.flushes:
-		case <-time.After(5 * time.Second):
-			t.Fatal(what)
-		}
+	req, found := chain.NewPipe[struct{}](0), chain.NewPipe[dto.ItemEntry](0)
+	var result Result
+	got := &files{}
+	c := chain.New(nil)
+	c.AddStep(New(root, &result, testLogger, req, found))
+	c.AddStep(chain.End[dto.ItemEntry](found, got))
+	go c.Process(t.Context())
+	for range 2 {
+		req.Send(t.Context(), struct{}{})
+		<-c.Done()
 	}
-	wait("no first walk")
-	select {
-	case <-out.flushes:
-		t.Fatal("walked again while the first walk was in the chain")
-	case <-time.After(30 * time.Millisecond):
+	if !result.Complete || result.Files != 1 || len(got.paths) != 2 {
+		t.Errorf("result %+v, paths %v", result, got.paths)
 	}
-	if n := len(w.db.(*deletions).walks); n != 0 {
-		t.Errorf("deletions before the walk went through: %d", n)
-	}
-	out.through <- struct{}{} // the first walk went through the chain
-	wait("no second walk after the pause")
-	d := w.db.(*deletions)
-	d.mu.Lock()
-	n := len(d.walks)
-	d.mu.Unlock()
-	if n != 1 {
-		t.Errorf("deletions asked %d times, want once (after the first walk)", n)
-	}
-	close(out.through)
 }
 
 // Gone: only a complete walk that found files speaks; only under its root; never

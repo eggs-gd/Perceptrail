@@ -50,7 +50,16 @@ func New(db Items, in, out *chain.Pipe[*identify.Item], logger *l.Logger) chain.
 			logger.Error("EXIF plugin has no decorator, skipped", l.String("plugin", p.Name()))
 		}
 	}
-	return chain.Series(in, out, append(steps, keep{db: db, logger: logger})...)
+	// One after another, a step each
+	c := chain.New(nil)
+	from := in
+	for _, d := range steps {
+		to := chain.NewPipe[*identify.Item](0)
+		c.AddStep(chain.Decorate(from, to, d))
+		from = to
+	}
+	c.AddStep(chain.Decorate(from, out, keep{db: db, logger: logger}))
+	return c
 }
 
 // perceive: a perceptor's logic over the item the steps carry, seen as T (read-write

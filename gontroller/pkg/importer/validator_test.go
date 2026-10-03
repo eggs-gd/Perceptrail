@@ -82,17 +82,18 @@ func fakeExif(path string) (api.RawExif, error) {
 // harness: the import's steps as the chain has them, run one group at a time — the
 // providers (Apple, the plain folder last), the gate, identify's steps (a fake
 // exiftool), the core perceptors, close; after a walk its flush (every grouper gives
-// what it holds) and the cycle's deletions
+// what it holds) and the gate's (the walk's deletions)
 type harness struct {
 	t      *testing.T
 	logger *l.Logger
 	ps     []providers.Provider
 	sw     group.Switch
 	gate   *gate.Gate
-	// identify's own chain, driven a group at a time (Send, Flush)
+	walked walk.Result
+	// identify's own chain, driven a group at a time (Send, Flush, Done)
+	chain      *chain.Chain
 	stored     *chain.Pipe[gate.Group]
 	identified chan *identify.Item
-	flushed    chan struct{}
 	errs       chan error
 	// the main files that reached the perceptors
 	processed []string
@@ -101,23 +102,29 @@ type harness struct {
 func newHarness(t *testing.T) *harness {
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
 	ps := []providers.Provider{apple.New("", nil, itemsProxy, logger), folder.New()}
-	h := &harness{t: t, logger: logger, ps: ps, sw: group.Switch{Providers: ps}, gate: gate.NewGate(testDB, logger),
-		stored: chain.NewPipe[gate.Group](0), identified: make(chan *identify.Item, 1),
-		flushed: make(chan struct{}, 1), errs: make(chan error, 10)}
+	h := &harness{t: t, logger: logger, ps: ps, sw: group.Switch{Providers: ps},
+		stored: chain.NewPipe[gate.Group](0), identified: make(chan *identify.Item, 1), errs: make(chan error, 10)}
+	h.gate = gate.NewGate(testDB, logger, &h.walked)
 	out := chain.NewPipe[*identify.Item](0)
-	c := chain.New(h.errs)
-	c.AddStep(identify.New(testDB, t.TempDir(), logger, h.stored, out, identify.WithExiftool(fakeTool{})))
-	c.AddStep(chain.Sink(out, func(it *identify.Item) { h.identified <- it }, func() { h.flushed <- struct{}{} }))
-	go c.Process(t.Context())
+	h.chain = chain.New(h.errs)
+	h.chain.AddStep(identify.New(testDB, t.TempDir(), logger, h.stored, out, identify.WithExiftool(fakeTool{})))
+	h.chain.AddStep(chain.End[*identify.Item](out, h))
+	go h.chain.Process(t.Context())
 	return h
+}
+
+// Consume: identify's chain ends here
+func (h *harness) Consume(it *identify.Item) error {
+	h.identified <- it
+	return nil
 }
 
 // identify: one group through identify's chain — what came out before its flush
 // (nothing: the group was skipped)
 func (h *harness) identify(g gate.Group) (*identify.Item, bool) {
 	h.stored.Send(h.t.Context(), g)
-	h.stored.Flush(h.t.Context()) // returns once the group went through: the end has seen it all
-	<-h.flushed
+	h.stored.Flush(h.t.Context())
+	<-h.chain.Done() // the group went through: the end has seen it all
 	var it *identify.Item
 	select {
 	case it = <-h.identified:
@@ -177,7 +184,7 @@ func (h *harness) toGate(g providers.Group) {
 // scan: one walk of root; the main files processed in it
 func (h *harness) scan(root string) []string {
 	h.processed = nil
-	r := walk.Once(h.t.Context(), root, h.logger, func(e dto.ItemEntry) {
+	h.walked = walk.Once(h.t.Context(), root, h.logger, func(e dto.ItemEntry) {
 		i, err := h.sw.Route(e)
 		if !h.ok(err) {
 			return
@@ -186,7 +193,7 @@ func (h *harness) scan(root string) []string {
 			h.toGate(g)
 		}
 	})
-	// The walk's flush: every grouper gives what it holds; then the cycle's deletions
+	// The walk's flush: every grouper gives what it holds; then the gate's: the deletions
 	for _, p := range h.ps {
 		held, err := p.Grouper().(chain.Flusher[providers.Group]).Flush()
 		if err != nil {
@@ -196,7 +203,9 @@ func (h *harness) scan(root string) []string {
 			h.toGate(g)
 		}
 	}
-	walk.Delete(testDB, r, h.logger)
+	if _, err := h.gate.Flush(); err != nil {
+		h.t.Fatal(err)
+	}
 	return h.processed
 }
 
