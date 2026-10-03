@@ -12,20 +12,17 @@ import (
 )
 
 // SweepStore: what the deletions read and write — the files a walk did not stamp,
-// what their being gone means (the model's rule), every item's GUID (the
-// perceptors' rows to keep)
+// what their being gone means (the model's rule)
 type SweepStore interface {
 	GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error)
 	Gone(files []*dto.FileDto) (deleted, dirty int, err error)
-	GetAllGuids() ([]string, error)
 }
 
 // sweep: the deletions after a complete walk — the gate runs it once every
 // grouper's marker has reached it (all files stamped)
 type sweep struct {
-	db         SweepStore
-	perceptors Perceptors
-	logger     *l.Logger
+	db     SweepStore
+	logger *l.Logger
 }
 
 // finalizeWalk derives deletions: files not stamped by this walk are gone.
@@ -53,21 +50,6 @@ func (g *sweep) finalizeWalk(result Walk, held []string) {
 		return
 	}
 	g.logger.Info("Deletions", l.Int("files", len(gone)), l.Int("items", deletedItems), l.Int("dirty", dirtyItems))
-	g.pruneStores()
-}
-
-// pruneStores: the perceptors' rows of items that are gone
-func (g *sweep) pruneStores() {
-	guids, err := g.db.GetAllGuids()
-	if err != nil {
-		g.logger.Error("Perceptor storage: can't read items", l.Error(err))
-		return
-	}
-	keep := make(map[string]bool, len(guids))
-	for _, guid := range guids {
-		keep[guid] = true
-	}
-	g.perceptors.Prune(func(guid string) bool { return keep[guid] })
 }
 
 // goneFiles keeps the stale files that belong to this root and were not hidden by

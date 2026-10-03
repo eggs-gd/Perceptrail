@@ -29,35 +29,25 @@ type Store interface {
 }
 
 // needsWork: nothing changed on disk — the model says whether the group still needs
-// work; a perceptor that has not processed its item (new, or its schema changed)
-// sends it too
+// work
 func (g *Gate) needsWork(files []*dto.FileDto, key, metaHash string) bool {
-	needs, guid, err := g.db.NeedsWork(files, key, metaHash)
+	needs, _, err := g.db.NeedsWork(files, key, metaHash)
 	if err != nil {
 		g.logger.Error("Gate: can't tell whether a group needs work", l.String("file", files[0].Path), l.Error(err))
 		return false
 	}
-	return needs || (guid != "" && g.perceptors.Unprocessed(guid))
-}
-
-// Perceptors: what discover asks of the perceptors — whether one still has to
-// process an item (its schema is new or changed: the group goes through the import
-// once more, the gate), and to drop the rows of items not kept (the deletions)
-type Perceptors struct {
-	Unprocessed func(guid string) bool
-	Prune       func(keep func(guid string) bool)
+	return needs
 }
 
 // files gate: keeps the files table (identity, stat, CheckTime) and lets through
 // only groups that need work — so unchanged files never reach exiftool. On the walk's
 // flush (once every grouper has flushed) it derives deletions.
 type Gate struct {
-	db         GateStore
-	perceptors Perceptors
-	sweep      sweep
-	logger     *l.Logger
-	held       []string  // files the groupers held back in this walk: not gone
-	progress   *Progress // the walk the deletions are derived from
+	db       GateStore
+	sweep    sweep
+	logger   *l.Logger
+	held     []string  // files the groupers held back in this walk: not gone
+	progress *Progress // the walk the deletions are derived from
 	// dropped hears of a keyed group the gate let not through (nothing to do): one
 	// asset processed again on demand (importer Refresh) answers at once
 	dropped func(key string)
@@ -67,8 +57,8 @@ type Gate struct {
 // derived from
 func NewGate(deps Deps, progress *Progress) *Gate {
 	return &Gate{
-		db: deps.DB, perceptors: deps.Perceptors, logger: deps.Logger, dropped: deps.Dropped,
-		sweep:    sweep{db: deps.DB, perceptors: deps.Perceptors, logger: deps.Logger},
+		db: deps.DB, logger: deps.Logger, dropped: deps.Dropped,
+		sweep:    sweep{db: deps.DB, logger: deps.Logger},
 		progress: progress,
 	}
 }

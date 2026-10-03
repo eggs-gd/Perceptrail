@@ -155,10 +155,17 @@ func (s *PerceptorStore) Load(guids []string) (map[string]api.Values, error) {
 	return out, nil
 }
 
+// Guids: every item this perceptor has processed (a row, with or without a value)
+func (s *PerceptorStore) Guids() ([]string, error) {
+	var guids []string
+	err := s.db.Raw(`SELECT guid FROM ` + valuesTable).Scan(&guids).Error
+	return guids, err
+}
+
 // Prune: drops the rows of items that are gone (keep says which stay)
 func (s *PerceptorStore) Prune(keep func(guid string) bool) (int, error) {
-	var guids []string
-	if err := s.db.Raw(`SELECT guid FROM ` + valuesTable).Scan(&guids).Error; err != nil {
+	guids, err := s.Guids()
+	if err != nil {
 		return 0, err
 	}
 	var gone []string

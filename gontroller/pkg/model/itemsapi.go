@@ -24,6 +24,7 @@ type ItemsApi interface {
 	Gone(files []*dto.FileDto) (deleted, dirty int, err error)
 	Ignore(files []*dto.FileDto) error
 	Publish(item *dto.ItemDto) (*dto.ItemDto, error)
+	MarkRework(guids []string) (int64, error)
 	Unshown() ([]*dto.ItemDto, error)
 
 	GetAllItems() ([]*dto.ItemDto, error)

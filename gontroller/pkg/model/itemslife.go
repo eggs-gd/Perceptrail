@@ -19,9 +19,9 @@ import (
 // main file is gone: a RAW deleted, its JPEG left), a file has no role (from before
 // roles existed), the item is missing or not through the cheap stage, it has no
 // fingerprint (the fingerprint changed: it gets the new one), or the source's
-// metadata changed while the files did not (metaHash). guid: the group's item, for
-// what the model does not know (the perceptors' rows); "" when the whole group is
-// ignored (not media, broken).
+// metadata changed while the files did not (metaHash), or it is marked for rework
+// (MarkRework). guid: the group's item; "" when the whole group is ignored (not media,
+// broken).
 func (p *proxy) NeedsWork(files []*dto.FileDto, key, metaHash string) (needs bool, guid string, err error) {
 	inGroup := map[string]bool{key: key != ""}
 	for _, f := range files {
@@ -50,7 +50,7 @@ func (p *proxy) NeedsWork(files []*dto.FileDto, key, metaHash string) (needs boo
 	if err != nil {
 		return false, guid, err
 	}
-	return !cheapStageDone(item) || item.HashShort == "" || item.MetaHash != metaHash, guid, nil
+	return !cheapStageDone(item) || item.HashShort == "" || item.MetaHash != metaHash || item.Rework, guid, nil
 }
 
 // cheapStageDone: the item went through the cheap stage (Visible, Waiting) or is
@@ -176,11 +176,27 @@ func (p *proxy) ValidateAsset(key string, files []*dto.FileDto, hash string) (*d
 // Publish: the item at the end of the import's cheap stage — Visible when it has
 // something the browser shows (a preview), else Waiting (the expensive stage later)
 func (p *proxy) Publish(item *dto.ItemDto) (*dto.ItemDto, error) {
+	item.Rework = false
 	item.State = dto.Waiting
 	if item.PreviewPath != "" {
 		item.State = dto.Visible
 	}
 	return p.UpdateItem(item)
+}
+
+// MarkRework: these items are processed again on the next walk (NeedsWork), their
+// files unchanged — e.g. a perceptor has no row for them; publishing clears the mark
+func (p *proxy) MarkRework(guids []string) (int64, error) {
+	var n int64
+	for start := 0; start < len(guids); start += 500 { // under SQLite's variable limit
+		page := guids[start:min(start+500, len(guids))]
+		res := p.db.Model(&dto.ItemDto{}).Where("guid IN ?", page).Update("rework", true)
+		if res.Error != nil {
+			return n, res.Error
+		}
+		n += res.RowsAffected
+	}
+	return n, nil
 }
 
 // Unshown: the items nothing can show yet (no file the browser shows, no preview:

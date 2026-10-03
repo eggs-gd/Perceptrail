@@ -49,6 +49,9 @@ type ItemDto struct {
 	PreviewMime string
 	// Hash of the source's own metadata (Apple Photos DB) this item was built from
 	MetaHash string
+	// Rework: something outside the item's files wants it processed again (a perceptor
+	// that has no row for it); publishing clears it
+	Rework bool
 	// A video's length, seconds; 0: not a video or unknown
 	Duration float64
 	// What the asset is (Kind*) when the source says it (Apple Photos); "": the

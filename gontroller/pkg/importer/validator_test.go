@@ -114,10 +114,9 @@ func scanWith(t *testing.T, root string, dropped func(key string)) []string {
 	sw := group.Switch{Providers: ps}
 	progress := discover.NewProgress()
 	gate := discover.NewGate(discover.Deps{
-		DB:         testDB,
-		Perceptors: discover.Perceptors{Unprocessed: unprocessed, Prune: pruner(logger)},
-		Dropped:    dropped,
-		Logger:     logger,
+		DB:      testDB,
+		Dropped: dropped,
+		Logger:  logger,
 	}, progress)
 	steps := identify.NewSteps(nil, identify.Config{Tags: coreTags(), CacheDir: t.TempDir(), DB: testDB, Logger: logger})
 	steps.Read.Extract = perFile(fakeExif)

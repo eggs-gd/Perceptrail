@@ -92,12 +92,15 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	items := chain.NewPipe[*dto.ItemDto](1000)
 
 	waits := newAssetWaits()
+	// A perceptor new or changed since the last run: its items are processed again
+	if err := markUnprocessed(db, logger); err != nil {
+		logger.Error("Perceptors' rows not checked", l.Error(err))
+	}
 	disc := discover.New(ctx.Config().Path, rescan, discover.Deps{
-		Providers:  providers.Enabled(),
-		DB:         db,
-		Perceptors: discover.Perceptors{Unprocessed: unprocessed, Prune: pruner(logger)},
-		Dropped:    waits.done,
-		Logger:     logger,
+		Providers: providers.Enabled(),
+		DB:        db,
+		Dropped:   waits.done,
+		Logger:    logger,
 	}, stored)
 
 	importChain := chain.New(errch)
@@ -107,7 +110,12 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	importChain.AddStep(external.New(externalPerceptors(), cored, perceived, logger))
 	importChain.AddStep(commit.New(db, saveValues, perceived, items))
 	// The end: an item's waiters hear it; the walk's flush here means its work is done
-	importChain.AddStep(chain.Sink(items, func(it *dto.ItemDto) { waits.done(it.Guid) }, disc.WalkDone))
+	// (its deletions too): the perceptors' rows of gone items go, the next walk may
+	// start
+	importChain.AddStep(chain.Sink(items, func(it *dto.ItemDto) { waits.done(it.Guid) }, func() {
+		prune(db, logger)
+		disc.WalkDone()
+	}))
 
 	return &importerService{
 		appCtx:      ctx,

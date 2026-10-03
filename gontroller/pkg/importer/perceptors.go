@@ -75,17 +75,6 @@ func importStores() []*model.PerceptorStore {
 	return out
 }
 
-// unprocessed: an import perceptor has no row for the item (new, or its schema
-// changed): the item goes through the import once more (the gate)
-func unprocessed(guid string) bool {
-	for _, st := range importStores() {
-		if has, err := st.Has(guid); err == nil && !has {
-			return true
-		}
-	}
-	return false
-}
-
 // saveValues: a row in each import perceptor's storage for the item — its value, or
 // "processed, nothing found" (no GPS); values gives a storage's value (commit)
 func saveValues(guid string, values func(store string) (api.Values, bool)) error {
@@ -98,21 +87,72 @@ func saveValues(guid string, values func(store string) (api.Values, bool)) error
 	return nil
 }
 
-// pruner: drops every perceptor's rows of items not kept (gone) — the deletions after
-// a walk (discover's sweep)
-func pruner(logger *l.Logger) func(keep func(guid string) bool) {
-	return func(keep func(guid string) bool) {
-		for _, p := range plugins.All() {
-			st, ok := plugins.Store(p.Name())
-			if !ok {
-				continue
+// Items: what the perceptors' bookkeeping asks of the model — every item, and the
+// ones to process again
+type Items interface {
+	GetAllGuids() ([]string, error)
+	MarkRework(guids []string) (int64, error)
+}
+
+// markUnprocessed runs at start: an item an import perceptor has no row for (the
+// perceptor is new, or its schema changed: its storage was recreated) is marked for
+// rework — the gate sends its group once more, its files unchanged. Once at start,
+// not per group per walk: a perceptor's rows change only with the perceptors.
+func markUnprocessed(db Items, logger *l.Logger) error {
+	guids, err := db.GetAllGuids()
+	if err != nil {
+		return err
+	}
+	missing := map[string]bool{}
+	for _, st := range importStores() {
+		has, err := st.Guids()
+		if err != nil {
+			return fmt.Errorf("perceptor %s: %w", st.Name(), err)
+		}
+		done := make(map[string]bool, len(has))
+		for _, g := range has {
+			done[g] = true
+		}
+		for _, g := range guids {
+			if !done[g] {
+				missing[g] = true
 			}
-			n, err := st.Prune(keep)
-			if err != nil {
-				logger.Error("Perceptor storage: prune failed", l.String("store", st.Name()), l.Error(err))
-			} else if n > 0 {
-				logger.Info("Perceptor storage: pruned", l.String("store", st.Name()), l.Int("rows", n))
-			}
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	rework := make([]string, 0, len(missing))
+	for g := range missing {
+		rework = append(rework, g)
+	}
+	n, err := db.MarkRework(rework)
+	logger.Info("Perceptors without a row: items processed again", l.Int("items", int(n)))
+	return err
+}
+
+// prune drops every perceptor's rows of items that are gone — after a walk, once its
+// flush reached the end of the chain (its deletions are done)
+func prune(db Items, logger *l.Logger) {
+	guids, err := db.GetAllGuids()
+	if err != nil {
+		logger.Error("Perceptor storage: can't read items", l.Error(err))
+		return
+	}
+	keep := make(map[string]bool, len(guids))
+	for _, g := range guids {
+		keep[g] = true
+	}
+	for _, p := range plugins.All() {
+		st, ok := plugins.Store(p.Name())
+		if !ok {
+			continue
+		}
+		n, err := st.Prune(func(guid string) bool { return keep[guid] })
+		if err != nil {
+			logger.Error("Perceptor storage: prune failed", l.String("store", st.Name()), l.Error(err))
+		} else if n > 0 {
+			logger.Info("Perceptor storage: pruned", l.String("store", st.Name()), l.Int("rows", n))
 		}
 	}
 }

@@ -40,12 +40,13 @@ interface (`GateStore`, `SweepStore`, `ValidatorStore`, `SizesStore`, `KindsStor
 `CloserStore`); a stage's `Store` embeds its steps'; the top passes the proxy.
 **What a perceptor means to the import lives here, not in the registry**
 ([`perceptors.go`](perceptors.go)): which ones run in the chain (EXIF data: core,
-external), the tags they read, whether one missed an item, their rows written and
-pruned — over `plugins.All` / `plugins.Store`, which is all `pkg/plugins` offers. No
-step knows the registry: the top hands each stage what it needs — `core` and
-`plugins` their lists of perceptors, the gate and the sweep
-`discover.Perceptors{Unprocessed, Prune}`, `keep` its `Values` — functions, so a
-step sees exactly one call. The sources are providers (`pkg/providers`: Apple Photos, the plain
+external), the tags they read, their rows written (`keep` gets `saveValues`), and
+two bits of bookkeeping the top does itself — **at start**, an item an import
+perceptor has no row for (the perceptor is new, or its schema changed) is marked
+for rework (`MarkRework`: the gate sends its group once more; publishing clears the
+mark); **after each walk** (its flush at the end of the chain) the rows of gone
+items are pruned. discover knows nothing of perceptors. All over `plugins.All` /
+`plugins.Store`, which is all `pkg/plugins` offers. The sources are providers (`pkg/providers`: Apple Photos, the plain
 folder last); the transcoders (`pkg/transcode`, not wired yet) are a chain of their
 own later (fed from the DB).
 
@@ -71,7 +72,7 @@ detail).
 | group | `discover/group/switch.go` | `providers.Found` -> `providers.Group` | A sub-chain: a switch sends a file to the grouper of the first enabled provider that claims it (the plain folder last: everything else), the walk's flush to every grouper (a `chain.Route`); each grouper is a step of it. |
 | (plain folder grouper) | `pkg/providers/folder` | `providers.Found` -> `providers.Group` | Sidecars by name, next to each other: one open group; a complete group goes out, the last one on the walk's flush. |
 | (Apple Photos grouper) | `pkg/providers/apple` | `providers.Found` -> `providers.Group` | The first file of a library loads the assets from a copy of `Photos.sqlite` and forms the groups (files that exist, per the naming layout); a group goes out when its last file arrives. Key = asset UUID; the main file = the source; `Show` = the edit, the original, then Apple's derivatives. Trashed / hidden assets are not sent; incomplete groups' files are `Held`, given on the walk's flush. Video renditions Photos downloads on request (`_2_3_o.mp4`, `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`; `_a` instead of `_o` for an edit, preferred) are `motion`, after the stills; `apple.Local` finds the best file for an on-demand want; `Regroup` forms one asset again (the last load's DB rows + the disk now). |
-| gate | `discover/gate.go` | `providers.Group` -> `discover.Group` | The files table (rows, stat, `CheckTime`); a group whose files did not change passes only if the model says it needs work (`NeedsWork`) or a perceptor missed its item; tells a dropped keyed group's waiters; turns a provider's asset into our format (stored rows); on the walk's flush (once every grouper has flushed) runs the deletions (`discover/sweep.go`: the walk's safety — complete, not under an unreadable directory, under the root — then the model's `Gone`; the perceptors' rows pruned). |
+| gate | `discover/gate.go` | `providers.Group` -> `discover.Group` | The files table (rows, stat, `CheckTime`); a group whose files did not change passes only if the model says it needs work (`NeedsWork`: not linked, not through the cheap stage, no fingerprint, the source's metadata changed, marked for rework); tells a dropped keyed group's waiters; turns a provider's asset into our format (stored rows); on the walk's flush (once every grouper has flushed) runs the deletions (`discover/sweep.go`: the walk's safety — complete, not under an unreadable directory, under the root — then the model's `Gone`). |
 | **identify** | `identify/entry.go` | `discover.Group` -> `*identify.Item` | The item known: identity, metadata, kinds and roles, what to show now. exiftool lives here; its working item (`draft`: every file, its exif and kind) never leaves it. |
 | read | `identify/read.go` | `discover.Group` -> draft | One `exiftool -j -n` call for the whole group (a keyed group: the main file only), only the declared tags (see [exif](#exif-what-is-read-and-who-gets-it)), a map per file; N steps in parallel on the same channels, one pool. |
 | classify | `identify/classify.go` | draft -> draft | The kind of every file; the main file (the source) first; roles. |

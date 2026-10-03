@@ -38,15 +38,14 @@ type Group struct {
 	Kind string
 }
 
-// Deps: what discover works with — the libraries' providers, the model, the
-// perceptors' two calls, who hears of a keyed group the gate drops (nothing
-// changed: one asset again on demand answers at once), the logger
+// Deps: what discover works with — the libraries' providers, the model, who hears
+// of a keyed group the gate drops (nothing changed: one asset again on demand
+// answers at once), the logger
 type Deps struct {
-	Providers  []providers.Provider
-	DB         Store
-	Perceptors Perceptors
-	Dropped    func(key string) // nil: nobody
-	Logger     *l.Logger
+	Providers []providers.Provider
+	DB        Store
+	Dropped   func(key string) // nil: nobody
+	Logger    *l.Logger
 }
 
 // Stage: the discover sub-chain, its way in for one group (Regroup), and the walk's

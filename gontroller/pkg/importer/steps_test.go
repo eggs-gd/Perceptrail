@@ -74,6 +74,29 @@ func TestFingerprintChangeReidentifies(t *testing.T) {
 	}
 }
 
+// An item marked for rework (a perceptor without its row) is processed once more, its
+// files unchanged; publishing clears the mark
+func TestReworkReprocessesOnce(t *testing.T) {
+	root := t.TempDir()
+	a := filepath.Join(root, "a.jpg")
+	write(t, a, "rework me")
+	scan(t, root)
+	guid := itemAt(t, a).Guid
+
+	if n, err := testDB.MarkRework([]string{guid}); err != nil || n != 1 {
+		t.Fatalf("marked %d, %v", n, err)
+	}
+	if got := scan(t, root); len(got) != 1 {
+		t.Fatalf("processed %v, want the marked one", got)
+	}
+	if item := itemAt(t, a); item.Rework || item.Guid != guid {
+		t.Errorf("after: %+v", item)
+	}
+	if got := scan(t, root); len(got) != 0 {
+		t.Errorf("walked again: %v", got)
+	}
+}
+
 // Not media: remembered as ignored, not read again on the next walk
 func TestNotMediaIgnored(t *testing.T) {
 	root := t.TempDir()
@@ -83,7 +106,7 @@ func TestNotMediaIgnored(t *testing.T) {
 	if f, err := filesProxy.GetFileByPath(notes); err != nil || !f.IsIgnored() {
 		t.Fatalf("not ignored: %+v %v", f, err)
 	}
-	gate := discover.NewGate(discover.Deps{DB: testDB, Perceptors: discover.Perceptors{Unprocessed: unprocessed}}, discover.NewProgress())
+	gate := discover.NewGate(discover.Deps{DB: testDB}, discover.NewProgress())
 	if _, err := gate.Decorate(providers.Group{Asset: providers.Asset{Files: []*dto.FileDto{{ItemEntry: statEntry(t, notes)}}}}); err == nil {
 		t.Error("the gate let an unchanged ignored group through")
 	}

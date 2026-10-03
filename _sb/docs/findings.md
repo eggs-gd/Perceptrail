@@ -560,6 +560,15 @@ stages? Then a step.
   non-column map of the perceptors' values and implemented `api.ItemDataProvider`.
   The values live in `identify.Item` (the import) and in the web's `perceived`
   wrapper (Order, Info); `GetDate` (the date in the shot's zone) stays on the item.
+- **discover no longer knows the perceptors.** The gate asked every perceptor's
+  storage, for every unchanged group on every walk, whether it had a row for the
+  item (thousands of queries a minute) — yet a row goes missing only when a
+  perceptor is new or its schema changed, i.e. at start. Now the importer checks
+  once at start and asks the model to mark those items (`MarkRework`, a column;
+  `NeedsWork` sees it, `Publish` clears it); pruning the rows of gone items moved
+  from the sweep to the end of the walk (the top's `Sink`). Checked live: two items'
+  rows removed by hand → exactly those two processed again on restart, the rest
+  untouched.
 - 27 of 38 log categories were never used (the old opener / closer among them):
   removed.
 
