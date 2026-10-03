@@ -14,12 +14,15 @@ import (
 // The length of a video (or an animation), for the tile. exiftool prints it as
 // "24.40 s" under 30 s, "0:01:23" above (without -n); the Apple Photos record
 // writes it the same way.
+// durationTags: where a length is, the best first
+var durationTags = []string{"Duration", "MediaDuration", "TrackDuration"}
+
 type durationExtractor struct {
 	logger *l.Logger
 }
 
 func (d *durationExtractor) Decorate(in exif_core.RawItemRW) (exif_core.RawItemRW, error) {
-	for _, tag := range []string{"Duration", "MediaDuration", "TrackDuration"} {
+	for _, tag := range durationTags {
 		if s := parse(in.GetExif(tag)); s > 0 {
 			in.SetDuration(s)
 			break

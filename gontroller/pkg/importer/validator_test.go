@@ -75,6 +75,29 @@ func fakeExif(path string) (api.RawExif, error) {
 	return api.RawExif{"Content": content, "ImageSize": []byte("4x3")}, nil
 }
 
+// perFile: a group's read as one call, from a read of one file
+func perFile(read func(path string) (api.RawExif, error)) func([]string) ([]api.RawExif, error) {
+	return func(paths []string) ([]api.RawExif, error) {
+		out := make([]api.RawExif, len(paths))
+		for i, p := range paths {
+			if m, err := read(p); err == nil {
+				out[i] = m
+			}
+		}
+		return out, nil
+	}
+}
+
+// coreTags: what the core perceptors the tests run declare (the chain gets the
+// enabled ones' from the plugin manager)
+func coreTags() []string {
+	var tags []string
+	for _, p := range []api.Perceptor{date.Perceptor, size.Perceptor} {
+		tags = append(tags, p.(api.ExifTagger).ExifTags()...)
+	}
+	return tags
+}
+
 // scan runs one walk through the steps of the import chain in order, the way the
 // chain wires them, with fakeExif. Returns the main files that reached the plugins.
 func scan(t *testing.T, root string) []string {
@@ -92,8 +115,8 @@ func scanWith(t *testing.T, root string, dropped func(key string)) []string {
 	ps := []providers.Provider{apple.New("", nil, itemsProxy, logger), folder.New()}
 	sw := group.Switch{Providers: ps}
 	gate := discover.NewGate(testDB, plugins.Pm, len(ps), discover.NewProgress(), dropped, logger)
-	steps := identify.NewSteps(nil, t.TempDir(), testDB, logger)
-	steps.Read.Extract = fakeExif
+	steps := identify.NewSteps(nil, coreTags(), t.TempDir(), testDB, logger)
+	steps.Read.Extract = perFile(fakeExif)
 	steps.Embedded.Extract = func(string, string, string) (string, error) { return "", errors.New("no exiftool in tests") }
 
 	var processed []string

@@ -17,4 +17,7 @@ func (p *durationPerceptor) NewProcessor(chin <-chan exif_core.RawItemRW, chout 
 	return NewDurationProcessor(chin, chout, logger)
 }
 
+// ExifTags: the length tags
+func (p *durationPerceptor) ExifTags() []string { return durationTags }
+
 var Perceptor api.Perceptor = &durationPerceptor{}

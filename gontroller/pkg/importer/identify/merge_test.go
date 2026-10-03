@@ -16,13 +16,16 @@ func TestMergePriority(t *testing.T) {
 		Meta:  api.RawExif{"DateTimeOriginal": []byte("source")},
 		Files: []*dto.FileDto{file(dto.RoleOriginal), file(dto.RoleStill), file(dto.RoleMeta)},
 		Exif: []api.RawExif{
-			{"DateTimeOriginal": []byte("main"), "Orientation": []byte("main"), "Make": []byte("main")},
+			{"DateTimeOriginal": []byte("main"), "Orientation": []byte("main"), "Make": []byte("main"), "Error": []byte("main")},
 			{"Orientation": []byte("derivative"), "Make": []byte("derivative"), "Lens": []byte("derivative")},
 			{"DateTimeOriginal": []byte("xmp"), "Orientation": []byte("xmp")},
 		},
 	}
-	d, _ = Merge{}.Decorate(d)
+	d, _ = NewMerge([]string{"DateTimeOriginal", "Orientation", "Make", "Lens"}).Decorate(d)
 	it, _ := Yield{}.Decorate(d)
+	if got := it.GetExif("Error"); got != "" {
+		t.Errorf("an undeclared tag reaches the package: %q", got)
+	}
 	for tag, want := range map[string]string{
 		"DateTimeOriginal": "source",
 		"Orientation":      "xmp",

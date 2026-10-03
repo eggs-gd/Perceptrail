@@ -35,7 +35,7 @@ const workers = 5
 type Steps struct {
 	Read     *Reader
 	Classify Classifier
-	Merge    Merge
+	Merge    *Merge
 	Validate *Validator
 	Embedded *Embedded
 	Sizes    *Sizes
@@ -43,11 +43,13 @@ type Steps struct {
 	Yield    Yield
 }
 
-// NewSteps: pool runs exiftool (nil in tests: set the Extract funcs); previews are
-// extracted under cacheDir
-func NewSteps(pool *exiftoolPool, cacheDir string, db Store, logger *l.Logger) *Steps {
+// NewSteps: pool runs exiftool (nil in tests: set the Extract funcs); tags are what
+// the perceptors read (ExifTagger: read from the files, merged into the package);
+// previews are extracted under cacheDir
+func NewSteps(pool *exiftoolPool, tags []string, cacheDir string, db Store, logger *l.Logger) *Steps {
 	return &Steps{
-		Read:     NewReader(pool, logger),
+		Read:     NewReader(pool, tags, logger),
+		Merge:    NewMerge(tags),
 		Validate: NewValidator(db, logger),
 		Embedded: NewEmbedded(pool, cacheDir, logger),
 		Sizes:    NewSizes(db),
@@ -70,14 +72,15 @@ func (s *Steps) Run(g discover.Group) (*Item, error) {
 }
 
 // New: in — the groups that need work (stored: rows of the files table); out — the
-// identified items; previews are extracted under cacheDir. Its steps report to
+// identified items; tags — what the perceptors read; previews are extracted under
+// cacheDir. Its steps report to
 // errch (every group ends here or as an item: the progress counts them).
-func New(cacheDir string, db Store, in <-chan discover.Group, out chan<- *Item, errch chan error, logger *l.Logger) chain.ChainProcessor {
+func New(tags []string, cacheDir string, db Store, in <-chan discover.Group, out chan<- *Item, errch chan error, logger *l.Logger) chain.ChainProcessor {
 	// The kinds' table changed since the files were judged "not media": judged again
 	if err := reclassifyIgnored(db, logger); err != nil {
 		logger.Error("MIME version check failed", l.Error(err))
 	}
-	s := NewSteps(newExiftoolPool(workers, logger), cacheDir, db, logger)
+	s := NewSteps(newExiftoolPool(workers, logger), tags, cacheDir, db, logger)
 
 	// read → classify: the files and their metadata
 	read := make(chan *draft)

@@ -17,4 +17,9 @@ func (p *sizePerceptor) NewProcessor(chin <-chan exif_core.RawItemRW, chout chan
 	return NewSizesProcessor(chin, chout, logger)
 }
 
+// ExifTags: the size pairs in their order, ImageSize, what turns it
+func (p *sizePerceptor) ExifTags() []string {
+	return append(append([]string{}, sizePairs...), "ImageSize", "Orientation", "Rotation")
+}
+
 var Perceptor api.Perceptor = &sizePerceptor{}

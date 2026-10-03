@@ -11,17 +11,19 @@ import (
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
+// sizePairs: width and height tags, the best first
+var sizePairs = []string{
+	"ImageWidth", "ImageHeight",
+	"ExifImageWidth", "ExifImageHeight",
+	"PixelXDimension", "PixelYDimension",
+}
+
 type sizesExtractor struct {
 	logger *l.Logger
 }
 
 func (cd *sizesExtractor) Decorate(in exif_core.RawItemRW) (exif_core.RawItemRW, error) {
-	w, h := firstSize(
-		in,
-		"ImageWidth", "ImageHeight",
-		"ExifImageWidth", "ExifImageHeight",
-		"PixelXDimension", "PixelYDimension",
-	)
+	w, h := firstSize(in, sizePairs...)
 	if w == 0 || h == 0 {
 		w, h = parseImageSize(in.GetExif("ImageSize"))
 	}

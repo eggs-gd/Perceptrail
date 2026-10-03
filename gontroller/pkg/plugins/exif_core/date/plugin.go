@@ -17,4 +17,16 @@ func (p *datePerceptor) NewProcessor(chin <-chan exif_core.RawItemRW, chout chan
 	return NewDatesProcessor(chin, chout, logger)
 }
 
+// ExifTags: what resolveDate reads (the dates, their sub-seconds and offsets, the
+// GPS time, the coordinates for the zone, the MIME type)
+func (p *datePerceptor) ExifTags() []string {
+	return append([]string{
+		"MIMEType", "CreationDate", "CreateDate",
+		"DateTimeOriginal", "SubSecTimeOriginal", "OffsetTimeOriginal",
+		"SubSecTimeDigitized", "OffsetTimeDigitized",
+		"ModifyDate", "SubSecTime", "OffsetTime",
+		"GPSDateTime", "GPSDateStamp", "GPSTimeStamp", "FileModifyDate",
+	}, api.CoordinateTags...)
+}
+
 var Perceptor api.Perceptor = &datePerceptor{}

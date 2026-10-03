@@ -118,7 +118,7 @@ func NewImporterService(ctx app.AppContext) *importerService {
 
 	importChain := chain.NewChainProcessor(errch)
 	importChain.AddStep(disc)
-	importChain.AddStep(identify.New(ctx.Config().CacheDir(), db, stored, identified, errProcessing, logger))
+	importChain.AddStep(identify.New(plugins.Pm.ExifTags(), ctx.Config().CacheDir(), db, stored, identified, errProcessing, logger))
 	importChain.AddStep(core.New(plugins.Pm.Core(), identified, cored, errProcessing, logger))
 	importChain.AddStep(external.New(plugins.Pm.External(), cored, perceived, errProcessing, logger))
 	importChain.AddStep(commit.New(db, plugins.Pm, perceived, items, errProcessing, logger))

@@ -15,6 +15,9 @@ func (p *geoPerceptor) NewProcessor(chin <-chan api.RawItemR, chout chan<- api.R
 	return NewGeotagsProcessor(chin, chout, logger)
 }
 
+// ExifTags: the coordinates (api.Coordinates)
+func (p *geoPerceptor) ExifTags() []string { return api.CoordinateTags }
+
 var Perceptor api.Perceptor = &geoPerceptor{}
 
 func main() {}

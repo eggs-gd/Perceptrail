@@ -21,5 +21,6 @@ type RawItemRW interface {
 
 type ExifCorePerceptor interface {
 	api.Perceptor
+	api.ExifTagger
 	NewProcessor(chin <-chan RawItemRW, chout chan<- RawItemRW, logger *l.Logger) chain.Processor
 }

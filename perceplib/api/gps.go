@@ -8,6 +8,10 @@ import (
 // Coordinates as exiftool prints them: 50 deg 27' 12.34" N
 var dmsRe = regexp.MustCompile(`(\d+(?:\.\d+)?) deg (\d+(?:\.\d+)?)' (\d+(?:\.\d+)?)"(?: ([NSEW]))?`)
 
+// CoordinateTags: what Coordinates reads — a perceptor that calls it declares them
+// (ExifTagger)
+var CoordinateTags = []string{"GPSCoordinates", "GPSLatitude", "GPSLongitude", "GPSLatitudeRef", "GPSLongitudeRef"}
+
 // Coordinates: latitude and longitude (degrees, south and west negative) from
 // GPSLatitude/GPSLongitude or the QuickTime GPSCoordinates
 func Coordinates(exif ExifProvider) (lat, lon float64, ok bool) {

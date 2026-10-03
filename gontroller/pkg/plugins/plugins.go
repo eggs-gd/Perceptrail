@@ -152,6 +152,28 @@ func (pm *pluginManager) External() []api.ExifPerceptor {
 	return out
 }
 
+// ExifTags: every tag the import chain's perceptors read (ExifTagger), once each —
+// the only ones read from the files besides the core's own
+func (pm *pluginManager) ExifTags() []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(tags []string) {
+		for _, t := range tags {
+			if !seen[t] {
+				seen[t] = true
+				out = append(out, t)
+			}
+		}
+	}
+	for _, p := range pm.Core() {
+		add(p.ExifTags())
+	}
+	for _, p := range pm.External() {
+		add(p.ExifTags())
+	}
+	return out
+}
+
 // Unprocessed: an import perceptor has no row for the item (new, or its schema
 // changed): the item goes through the import once more
 func (pm *pluginManager) Unprocessed(guid string) bool {
