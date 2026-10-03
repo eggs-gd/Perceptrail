@@ -4,7 +4,7 @@ The Perceptrail Go backend: scans the library, extracts metadata with ExifTool, 
 it through EXIF plugins, stores it in SQLite and serves it to the client over HTTP.
 
 The core implements the necessary minimum (date, size); core plugins live here, in
-`pkg/plugins/exif_core`. Extended features are external perceptors
+`pkg/plugins/exif_date`, `exif_size`, `exif_duration`. Extended features are external perceptors
 ([`../perceptors`](../perceptors/readme.md)).
 
 Design: [Item flow](../_sb/puml/Item%20flow.puml),
@@ -73,9 +73,9 @@ gate       the files table; only the groups that need work pass (gate.Group)
 identify   one exiftool call per group (the declared tags only) → kinds → the
            metadata package → fingerprint → the item → the cheap preview
            (identify.Item)
-exif_core  the built-in EXIF perceptors (date, size, length)
-exif_ext   the external EXIF perceptors (.so)
-commit     the perceptors' values, then the item (Visible / Waiting)
+exif       the EXIF perceptors: built in (date, size, length), then the .so ones;
+           their values kept
+commit     the item published (Visible / Waiting)
 ```
 
 After a walk's flush reached the end: its deletions, the perceptors' rows of gone
@@ -91,9 +91,9 @@ Item states (`dto.ItemState`): `New → Dirty → Processing → Ready`, `Delete
 | Package | What |
 |---|---|
 | `pkg/app` | app context, config, logger categories, services |
-| `pkg/importer` | the import chain: linear stages, each a sub-chain of its own — `walk`, `group`, `gate`, `identify` (exiftool, kinds, the item, sizes, the cheap preview), `exif_core` / `exif_ext` (the EXIF perceptors: built in, external), `commit` (the closer); see its README |
+| `pkg/importer` | the import chain: linear stages, each a sub-chain of its own — `walk`, `group`, `gate`, `identify` (exiftool, kinds, the item, sizes, the cheap preview), `exif` (the EXIF perceptors, built in and external, their values kept), `commit` (the item published); see its README |
 | `pkg/transcode` | the transcoders' switch and stubs (a chain of its own later) |
-| `pkg/plugins` | the perceptors' registry (built in + `.so`, their storages); the built-in EXIF perceptors `exif_date`, `exif_size`, `exif_duration`; `exif_core`: their contract (`RawItemRW`, `ExifCorePerceptor`) and shared helpers; `exif_coretest`: test helpers |
+| `pkg/plugins` | the perceptors' registry (built in + `.so`, their storages); the built-in EXIF perceptors `exif_date`, `exif_size`, `exif_duration`; their contract (`RawItemRW`, `ExifCorePerceptor`) and `OrderByValue` in `pkg/plugins` itself; `exif_coretest`: test helpers |
 | `pkg/model` | SQLite via GORM, `ItemsApi`/`FilesApi`, DTOs |
 | `pkg/client` | Echo, `/items`, `/assets`, `/perceptors` and `/p/:view/order` routes |
 | `pkg/providers` | the sources: one switch sends a file to the grouper of the first provider that claims it, and on-demand renditions come from the item's provider; `providers/folder`: the plain folder (last, takes the rest); `providers/apple`: Apple Photos (its DB, the grouper, on demand), `providers/apple/photokit`: PhotoKit (cgo, macOS only; a stub elsewhere; the main thread serves its main queue) |

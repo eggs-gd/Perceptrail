@@ -537,6 +537,23 @@ Design: roadmap "Expensive stage".
 
 ## Backend: gontroller, plugins, exiftool
 
+### One exif step; the perceptors' contract in plugins (2026-10-03, decided)
+
+The perceptors' logic was spread over four places: the built-in ones a step
+(`importer/exif_core`), the external ones another (`importer/exif_ext`), their
+values kept in commit (`keep`), and what the import asks of them in the top
+(`perceptors.go`) — the top handing the steps lists and a `saveValues` lambda. Now
+one step, `importer/exif`: the built-in perceptors, the external ones, keep — it
+reads the plugin registry itself — and it gives the rest of the import what it asks
+(`Tags` for identify, `MarkUnprocessed` at start, `Prune` after a walk). One generic
+adapter (`perceive[T]`) over the item for both kinds. commit only publishes.
+
+`plugins/exif_core` (two types and `OrderByValue`) was a sub-package for one and a
+half files: folded into `pkg/plugins`. To avoid a cycle (the built-in perceptors
+import it), the registry no longer imports them — `gontroller.go` gives them to
+`Load` — and no longer imports `app`: it pulled config → client → routes into every
+perceptor (an import cycle in the routes' tests); `Load` takes a `plugins.Config`.
+
 ### discover cut into walk, group, gate; the walk cycle is the top's (2026-10-03, decided)
 
 discover took nine arguments; a `Deps` struct only hid them. The cause: three things

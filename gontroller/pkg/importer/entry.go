@@ -2,20 +2,20 @@
 // only linear steps, each in its own package (a sub-chain when it has several), each
 // knowing its tools; the top knows none of them (roadmap "Chains").
 //
-//	walk → group → gate → identify → exif_core → exif_ext → commit
+//	walk → group → gate → identify → exif → commit
 //
 //	walk       the library's files (path + stat), one walk when asked; then a flush
 //	group      whole assets: the providers' groupers (the plain folder last)
 //	gate       the files table up to date; only the groups that need work pass
 //	identify   the item known — exiftool, kinds and the main file, the item's
 //	           identity, sizes, the cheap preview
-//	exif_core  the built-in EXIF perceptors (date, size, length): they write into it
-//	exif_ext   the external EXIF perceptors (Go plugins): they only read it
-//	commit     the item published: Visible (a preview) or Waiting (none), with its
-//	           perceptors' values
+//	exif       the EXIF perceptors: the built-in ones write into the item (date,
+//	           size, length), the external Go plugins only read it; their values kept
+//	commit     the item published: Visible (a preview) or Waiting (none)
 //
 // What spans the steps is the top's: the walk cycle (cycle.go), one asset again
-// (Refresh), the perceptors' bookkeeping (perceptors.go).
+// (Refresh); the perceptors' bookkeeping is the exif step's (its Tags, MarkUnprocessed,
+// Prune), the top only calls it at start and after a walk.
 //
 // Diagrams: _sb/puml/Import chain.puml, _sb/puml/Walker.puml (gate, validator).
 //
@@ -41,8 +41,7 @@ import (
 
 	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/importer/commit"
-	"perceptrail/gontroller/pkg/importer/exif_core"
-	"perceptrail/gontroller/pkg/importer/exif_ext"
+	"perceptrail/gontroller/pkg/importer/exif"
 	"perceptrail/gontroller/pkg/importer/gate"
 	"perceptrail/gontroller/pkg/importer/group"
 	"perceptrail/gontroller/pkg/importer/identify"
@@ -86,7 +85,7 @@ func NewImporterService(ctx app.AppContext) *importerService {
 		rescan = defaultRescan
 	}
 	// A perceptor new or changed since the last run: its items are processed again
-	if err := markUnprocessed(db, logger); err != nil {
+	if err := exif.MarkUnprocessed(db, logger); err != nil {
 		logger.Error("Perceptors' rows not checked", l.Error(err))
 	}
 
@@ -98,11 +97,9 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	grouped := chain.NewPipe[providers.Group](0)
 	// gate → identify: the groups that need work, stored (rows of the files table)
 	stored := chain.NewPipe[gate.Group](0)
-	// identify → exif_core: the identified items
+	// identify → exif: the identified items
 	identified := chain.NewPipe[*identify.Item](0)
-	// exif_core → exif_ext: + what the core perceptors found
-	cored := chain.NewPipe[*identify.Item](0)
-	// exif_ext → commit: + what the external perceptors found
+	// exif → commit: + what the perceptors found, their values kept
 	perceived := chain.NewPipe[*identify.Item](0)
 	// commit → the end: published items (later: events to the client); buffered so
 	// the closer does not wait for the end
@@ -117,10 +114,9 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	importChain.AddStep(chain.Entry(found, walker))
 	importChain.AddStep(group.New(ps, found, grouped))
 	importChain.AddStep(gate.New(db, logger, grouped, stored))
-	importChain.AddStep(identify.New(identify.Config{Tags: exifTags(), CacheDir: ctx.Config().CacheDir(), DB: db, Logger: logger}, stored, identified))
-	importChain.AddStep(exif_core.New(corePerceptors(), identified, cored, logger))
-	importChain.AddStep(exif_ext.New(externalPerceptors(), cored, perceived, logger))
-	importChain.AddStep(commit.New(db, saveValues, perceived, items))
+	importChain.AddStep(identify.New(identify.Config{Tags: exif.Tags(), CacheDir: ctx.Config().CacheDir(), DB: db, Logger: logger}, stored, identified))
+	importChain.AddStep(exif.New(identified, perceived, logger))
+	importChain.AddStep(commit.New(db, perceived, items))
 	// The end: an item's waiters hear it; the walk's flush here means its work is
 	// done — the cycle goes on
 	importChain.AddStep(chain.Sink(items, func(it *dto.ItemDto) { waits.done(it.Guid) }, c.walked))

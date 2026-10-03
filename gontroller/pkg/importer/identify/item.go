@@ -67,7 +67,7 @@ func (d *draft) hasKind(k mediaKind) bool {
 
 // Item: what identify yields — the item known (identity, kind, what to show now)
 // and its metadata package. The perceptors read it (api.RawItemR) and the core ones
-// write into it (exif_core.RawItemRW); commit publishes Item.
+// write into it (plugins.RawItemRW); commit publishes Item.
 type Item struct {
 	Item   *dto.ItemDto
 	meta   api.RawExif

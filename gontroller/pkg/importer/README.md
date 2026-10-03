@@ -9,13 +9,13 @@ its steps; the top knows none of the tools — the file system, the providers,
 exiftool, the plugins belong to the stage that uses them. One step does one thing.
 
 ```
-walk → group → gate → identify → exif_core → exif_ext → commit
+walk → group → gate → identify → exif → commit
 ```
 
 A step's constructor takes what it really depends on and its pipes: `walk` the root,
 `group` the providers, `gate` the model, `identify` its `Config` (the perceptors'
-tags, the cache directory, the model), `exif_core` / `exif_ext` their perceptors,
-`commit` the model and the values' writer. No callbacks between the steps.
+tags, the cache directory, the model), `exif` the logger (it reads the plugin
+registry itself), `commit` the model. No callbacks between the steps.
 
 [`entry.go`](entry.go) (`NewImporterService`) wires the stages and holds what
 spans them: the pipes between the steps (typed: a step's in/out types are checked
@@ -23,18 +23,17 @@ at compile time), one error channel, the end of the chain (a `Sink`: an item's
 waiters hear it; the walk's flush means its work is done), the **walk cycle**
 ([`cycle.go`](cycle.go): after a walk's flush reached the end — its deletions, the
 perceptors' rows of gone items, the rescan pause, the next walk), `Refresh` (one
-asset again, without a walk), the perceptors' bookkeeping
-([`perceptors.go`](perceptors.go)).
+asset again, without a walk); at start and after a walk it calls the exif step's
+bookkeeping (`exif.MarkUnprocessed`, `exif.Prune`).
 
 ```
-importer/                  the top: the steps, the walk cycle, Refresh, the perceptors' bookkeeping
+importer/                  the top: the steps, the walk cycle, Refresh
 importer/walk/             the library's files, one walk when asked; what a walk says is gone (Gone)
 importer/group/            whole assets: the providers' switch and their groupers (a sub-chain)
 importer/gate/             the files table up to date; only the groups that need work pass
 importer/identify/         read → classify → merge → fingerprint → validate → embedded → sizes → pick → yield: the item known
-importer/exif_core/        the core EXIF perceptors (built in: plugins/exif_date, …): they write into the item
-importer/exif_ext/         the external EXIF perceptors (.so): they only read it
-importer/commit/           keep (the perceptors' values) → close (the item): the item published
+importer/exif/             the EXIF perceptors (built in, then .so), their values kept; their tags, rework, pruning
+importer/commit/           the item published
 ```
 
 Step packages export their logic (`gate.NewGate`, `identify.Steps`,
@@ -45,15 +44,16 @@ messages): see [Types](#types-who-owns-what). Every step declares the DB methods
 interface (`gate.Store`, `ValidatorStore`, `SizesStore`, `KindsStore`, `CloserStore`,
 the cycle's `CycleStore`); a sub-chain's `Store` embeds its steps'; the top passes
 the proxy.
-**What a perceptor means to the import lives here, not in the registry**
-([`perceptors.go`](perceptors.go)): which ones run in the chain (EXIF data: core,
-external), the tags they read, their rows written (`keep` gets `saveValues`), and
-two bits of bookkeeping the top does itself — **at start**, an item an import
+**What a perceptor means to the import is the exif step's**
+([`exif/`](exif/)), not the registry's and not scattered over the steps: which ones
+run (EXIF data: the built-in ones, then the external), the tags they read (`Tags`:
+identify reads those), their rows written (its last step, `keep`), and two bits of
+bookkeeping the top calls — **at start** (`MarkUnprocessed`) an item an import
 perceptor has no row for (the perceptor is new, or its schema changed) is marked
 for rework (`MarkRework`: the gate sends its group once more; publishing clears the
-mark); **after each walk** (its flush at the end of the chain) the rows of gone
-items are pruned. walk, group and gate know nothing of perceptors. All over `plugins.All` /
-`plugins.Store`, which is all `pkg/plugins` offers. The sources are providers (`pkg/providers`: Apple Photos, the plain
+mark); **after each walk** (`Prune`) the rows of gone items go. It reads the
+registry itself (`plugins.All`, `plugins.Store`); walk, group, gate and commit know
+nothing of perceptors. The sources are providers (`pkg/providers`: Apple Photos, the plain
 folder last); the transcoders (`pkg/transcode`, not wired yet) are a chain of their
 own later (fed from the DB).
 
@@ -65,9 +65,8 @@ detail).
 [walk] → [group: switch → a grouper per provider] → [gate]
   → [identify: read (one exiftool call per group, N) → classify → merge → fingerprint
              → validate → embedded → sizes → pick → yield]
-  → [exif_core: exif_date, exif_size, exif_duration — a step each]
-  → [exif_ext: a .so perceptor each (read-only), or pass]
-  → [commit: keep (the perceptors' values) → close (Visible | Waiting)]
+  → [exif: exif_date → exif_size → exif_duration → each .so (read-only) → keep]
+  → [commit: close (Visible | Waiting)]
 ```
 
 ## Stages and their steps
@@ -89,11 +88,8 @@ detail).
 | sizes | `identify/sizes.go` | draft -> draft | Pixels and codec of every file the client may show (the original's from the metadata, images from their header), written to the files table. |
 | pick | `identify/pick.go` | draft -> draft | What the browser shows now, no transcode: the source's `Show`, the main file (JPEG, PNG, …; H.264 video), the biggest viewable derivative, else the embedded one. Any size counts. |
 | yield | `identify/item.go` | draft -> `*identify.Item` | What leaves the stage: the item and its metadata package. |
-| **exif_core** | `exif_core/entry.go` | `*identify.Item` -> `*identify.Item` | The built-in perceptors (date + zone, size, length), a step each, between `open` (skips a non-item; read-write view) and `release`. |
-| **exif_ext** | `exif_ext/entry.go` | `*identify.Item` -> `*identify.Item` | The external `.so` perceptors, a step each with read-only adapters around it; none loaded: one pass step. |
-| **commit** | `commit/entry.go` | `*identify.Item` -> `*dto.ItemDto` | The item published. |
-| keep | `commit/keep.go` | `*identify.Item` -> `*identify.Item` | A row in every import perceptor's storage: its value, or "processed, nothing found". Before close: an item published without them would be taken as done. |
-| close | `commit/close.go` | `*identify.Item` -> `*dto.ItemDto` | The model publishes the item (`Publish`: `Visible` with a preview, else `Waiting`). |
+| **exif** | `exif/entry.go` | `*identify.Item` -> `*identify.Item` | The EXIF perceptors, a step each: the built-in ones (date + zone, size, length; read-write `plugins.RawItemRW`), then the external `.so` ones (read-only `api.RawItemR`); then keep — a row in every import perceptor's storage (its value, or "processed, nothing found"), before the item is published. |
+| **commit** | `commit/entry.go`, `close.go` | `*identify.Item` -> `*dto.ItemDto` | The model publishes the item (`Publish`: `Visible` with a preview, else `Waiting`). |
 
 ## Types: who owns what
 
@@ -111,7 +107,7 @@ detail).
   never sees a provider type.
 - **`identify.Item`** — what identify yields: the item and its metadata package. The
   perceptors read it (`api.RawItemR`), the core ones write into it
-  (`exif_core.RawItemRW`), commit publishes `Item.Item`. identify's working `draft`
+  (`plugins.RawItemRW`), commit publishes `Item.Item`. identify's working `draft`
   (`Files`, `Exif`, `Kinds` aligned) is private to it.
 - **`transcode.Item`** — the transcoders' input (an item and its files with roles),
   fed from the DB later, not by the import.
@@ -120,7 +116,7 @@ detail).
 
 - **Declared, never `-all`.** A perceptor declares the tags it reads
   (`api.ExifTagger`, required of every EXIF perceptor; `exif.CoordinateTags` for
-  perceplib's `exif.Coordinates`); the importer's `exifTags` is their union. identify adds its own
+  perceplib's `exif.Coordinates`); the exif step's `Tags` is their union. identify adds its own
   (`read.go` `ownTags`: MIME type, errors, sizes, codec, whether embedded previews
   are there). A perceptor that reads an undeclared tag gets "" — each core
   perceptor's test checks it reads only what it declares (`exif_coretest`).

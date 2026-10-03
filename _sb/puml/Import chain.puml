@@ -2,7 +2,7 @@
 
 !pragma teoz true
 
-title Import chain (gontroller): walk -> group -> gate -> identify -> exif_core -> exif_ext -> commit;\nevery participant is a step (own goroutine), every arrow is a typed pipe (values + the walk's flush)
+title Import chain (gontroller): walk -> group -> gate -> identify -> exif -> commit;\nevery participant is a step (own goroutine), every arrow is a typed pipe (values + the walk's flush)
 
 box "walk: the files" #LightCyan
 control "walk\n(entry point)" as Walker
@@ -30,13 +30,13 @@ control "pick\n(cheap preview)" as Preview #LightYellow
 control "yield" as Yield
 end box
 
-box "exif_core / exif_ext: the EXIF perceptors" #Honeydew
-control "exif_core\n(exif_date, exif_size, ...)" as Core
-control "exif_ext\n(external .so)" as Plugins
+box "exif: the EXIF perceptors, their values kept" #Honeydew
+control "built in\n(exif_date, exif_size, ...)" as Core
+control "external\n(.so)" as Plugins
+control "keep\n(the perceptors' values)" as Keep
 end box
 
 box "commit: the item published" #MistyRose
-control "keep\n(the perceptors' values)" as Keep
 control "close" as Closer
 end box
 

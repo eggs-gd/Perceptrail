@@ -3,6 +3,7 @@ package importer
 import (
 	"time"
 
+	"perceptrail/gontroller/pkg/importer/exif"
 	"perceptrail/gontroller/pkg/importer/walk"
 	"perceptrail/gontroller/pkg/model/dto"
 
@@ -16,7 +17,7 @@ import (
 // CycleStore: what the cycle asks of the model — the files a walk did not stamp, what
 // their being gone means, the items (the perceptors' bookkeeping)
 type CycleStore interface {
-	Items
+	exif.Items
 	GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error)
 	Gone(files []*dto.FileDto) (deleted, dirty int, err error)
 }
@@ -31,7 +32,7 @@ type cycle struct {
 // walked: the walk's flush reached the end of the chain
 func (c *cycle) walked() {
 	deleteGone(c.db, c.walker.Last(), c.logger)
-	prune(c.db, c.logger)
+	exif.Prune(c.db, c.logger)
 	time.AfterFunc(c.rescan, c.walker.Next)
 }
 

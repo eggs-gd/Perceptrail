@@ -83,7 +83,7 @@ Target architecture — the diagrams in [`../puml`](../puml).
 - Perceptor data (PR #17): a perceptor declares its data as a struct
   (`api.NewStore[T]`, typed `Put` / `Get`); the core keeps it — SQLite, a file per
   perceptor in `data_dir/perceptors/` (Postgres: not yet). Values are kept right
-  before the item is published (commit: keep → close); an item a perceptor has no row for is processed again; gone items are
+  before the item is published (the exif step's keep, then commit); an item a perceptor has no row for is processed again; gone items are
   pruned after a walk. Geo is its first user: coordinates from EXIF or the Photos DB,
   the sheet on a Hilbert curve with every city and region in one piece, sections
   region → city from the time zone. A photo may start a path of sections; the side
@@ -415,19 +415,18 @@ transcoders, plugins belong to the stage that uses them. One step does one thing
       sub-chain in its own package; the DB passed to the steps, their logic
       exported for the tests:
 
-      discover → identify → exif_core → exif_ext → commit
+      walk → group → gate → identify → exif → commit
 
-      | stage | yields | inside |
+      | step | yields | inside |
       |---|---|---|
-      | discover | the groups that need work; the files table up to date | walk → group (the providers' switch → their groupers) → gate; `Refresh` lives here (one group into the channel between group and gate) |
-      | identify | the item known: identity, metadata, roles, what to show | read (exiftool, N in parallel) → classify (mime, main file, roles) → validate → embedded (an embedded preview for a group with nothing viewable; after validate: it needs the main file and the GUID) → sizes → pick (the cheap preview) — exiftool lives only here (read, embedded) |
-      | core | the core's metadata (date + zone, size, length) | the built-in perceptors, a step each |
-      | plugins | the external EXIF perceptors' values (geo, colour…) | the `.so` plugins, a step each, with their read/write adapters |
-      | commit | the item published | keep (the perceptors' values) → close (the state: Visible / Waiting) |
+      | walk | the files (path, stat), a walk when asked; its result | — |
+      | group | whole assets | the providers' switch → their groupers |
+      | gate | the groups that need work; the files table up to date | — |
+      | identify | the item known: identity, metadata, roles, what to show | see below — exiftool lives only here |
+      | exif | the perceptors' values, kept | the built-in perceptors, the `.so` ones, a step each; keep |
+      | commit | the item published | the state (Visible / Waiting) |
 
-      Packages: `pkg/importer` (the top: five stages) with `discover`, `identify`,
-      `exif_core`, `exif_ext`, `commit`. Errors: discover reports to the walk's channel,
-      the rest to the processing one (progress is counted from the gate).
+      The walk cycle (deletions, pruning, the pause), Refresh: the top's.
       identify inside: read (one exiftool call per group, the declared tags) →
       classify → merge (the metadata package: source > .xmp > main > derivatives) →
       fingerprint (the file's bytes) → validate → embedded → sizes → pick → yield.
@@ -468,7 +467,7 @@ to be worked out on its own):
   cache (a provider taking its files over too), perceptor values, orphans.
 - **API providers** (Immich…): no files to walk. Either a second source in
   discover (their change feed; the gate needs another sign of change than a stat),
-  or a chain of its own — `sync → identify → exif_core → exif_ext → commit` — sharing
+  or a chain of its own — `sync → identify → exif → commit` — sharing
   the stages after discover. Leaning to the latter; with the first API provider.
 - Not a chain: on demand (a request path; it re-enters the import through
   `Refresh`).

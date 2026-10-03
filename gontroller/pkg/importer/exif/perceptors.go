@@ -1,4 +1,4 @@
-package importer
+package exif
 
 import (
 	"fmt"
@@ -40,9 +40,9 @@ func externalPerceptors() []api.ExifPerceptor {
 	return out
 }
 
-// exifTags: every tag the import chain's perceptors read (ExifTagger), once each —
+// Tags: every tag the import chain's perceptors read (ExifTagger), once each —
 // the only ones read from the files besides identify's own
-func exifTags() []string {
+func Tags() []string {
 	seen := map[string]bool{}
 	var out []string
 	add := func(tags []string) {
@@ -75,7 +75,7 @@ func importStores() []*model.PerceptorStore {
 }
 
 // saveValues: a row in each import perceptor's storage for the item — its value, or
-// "processed, nothing found" (no GPS); values gives a storage's value (commit)
+// "processed, nothing found" (no GPS); values gives a storage's value (keep)
 func saveValues(guid string, values func(store string) (api.Values, bool)) error {
 	for _, st := range importStores() {
 		v, _ := values(st.Name())
@@ -93,11 +93,11 @@ type Items interface {
 	MarkRework(guids []string) (int64, error)
 }
 
-// markUnprocessed runs at start: an item an import perceptor has no row for (the
+// MarkUnprocessed runs at start: an item an import perceptor has no row for (the
 // perceptor is new, or its schema changed: its storage was recreated) is marked for
 // rework — the gate sends its group once more, its files unchanged. Once at start,
 // not per group per walk: a perceptor's rows change only with the perceptors.
-func markUnprocessed(db Items, logger *l.Logger) error {
+func MarkUnprocessed(db Items, logger *l.Logger) error {
 	guids, err := db.GetAllGuids()
 	if err != nil {
 		return err
@@ -130,9 +130,9 @@ func markUnprocessed(db Items, logger *l.Logger) error {
 	return err
 }
 
-// prune drops every perceptor's rows of items that are gone — after a walk, once its
+// Prune drops every perceptor's rows of items that are gone — after a walk, once its
 // flush reached the end of the chain (its deletions are done)
-func prune(db Items, logger *l.Logger) {
+func Prune(db Items, logger *l.Logger) {
 	guids, err := db.GetAllGuids()
 	if err != nil {
 		logger.Error("Perceptor storage: can't read items", l.Error(err))
