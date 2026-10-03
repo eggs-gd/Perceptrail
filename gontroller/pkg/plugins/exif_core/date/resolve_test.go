@@ -41,14 +41,14 @@ func TestResolveDate(t *testing.T) {
 		{
 			name: "no offset, no GPS time, coordinates: Kyiv in summer (DST)",
 			tags: tags{"DateTimeOriginal": "2024:07:10 18:05:00",
-				"GPSLatitude": `50 deg 27' 0.00" N`, "GPSLongitude": `30 deg 31' 0.00" E`},
+				"GPSLatitude": "50.45", "GPSLongitude": "30.516667"},
 			want: "2024-07-10T18:05:00+03:00", source: "DateTimeOriginal", zone: ZoneCoords,
 		},
 		{
-			name: "coordinates with Ref tags: New York in winter",
+			name: "signed coordinates (west negative): New York in winter",
 			tags: tags{"DateTimeOriginal": "2024:01:10 09:00:00",
-				"GPSLatitude": `40 deg 42' 46.00"`, "GPSLatitudeRef": "North",
-				"GPSLongitude": `74 deg 0' 22.00"`, "GPSLongitudeRef": "West"},
+				"GPSLatitude": "40.712778",
+				"GPSLongitude": "-74.006111"},
 			want: "2024-01-10T09:00:00-05:00", source: "DateTimeOriginal", zone: ZoneCoords,
 		},
 		{
@@ -70,13 +70,13 @@ func TestResolveDate(t *testing.T) {
 		{
 			name: "video without CreationDate: CreateDate is UTC",
 			tags: tags{"MIMEType": "video/mp4", "CreateDate": "2024:09:23 11:29:03",
-				"GPSCoordinates": `50 deg 27' 0.00" N, 30 deg 31' 0.00" E, 150 m Above Sea Level`},
+				"GPSCoordinates": "50.45 30.516667 150"},
 			want: "2024-09-23T14:29:03+03:00", source: "CreateDate", zone: ZoneCoords,
 		},
 		{
 			name: "only GPS time: the instant, zone from coordinates",
 			tags: tags{"GPSDateStamp": "2025:01:19", "GPSTimeStamp": "13:15:59",
-				"GPSLatitude": `48 deg 51' 24.00" N`, "GPSLongitude": `2 deg 21' 8.00" E`},
+				"GPSLatitude": "48.856667", "GPSLongitude": "2.352222"},
 			want: "2025-01-19T14:15:59+01:00", source: "GPSDateTime", zone: ZoneCoords,
 		},
 		{

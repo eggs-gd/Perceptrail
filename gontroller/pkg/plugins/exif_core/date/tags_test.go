@@ -15,7 +15,7 @@ func TestReadsDeclaredTags(t *testing.T) {
 		{"MIMEType": "video/quicktime"},
 		{"MIMEType": "video/quicktime", "CreateDate": "2024:01:02 10:00:00"},
 		{"DateTimeOriginal": "2024:01:02 10:00:00"},
-		{"DateTimeOriginal": "2024:01:02 10:00:00", "GPSLatitude": "50 deg 27' 0.00\" N", "GPSLongitude": "30 deg 31' 0.00\" E"},
+		{"DateTimeOriginal": "2024:01:02 10:00:00", "GPSLatitude": "50.45", "GPSLongitude": "30.516667"},
 	} {
 		r := exif_coretest.NewRecorder(exif)
 		if _, err := (&datesExtractor{}).Decorate(r); err != nil {

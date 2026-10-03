@@ -64,36 +64,28 @@ func parseSizePair(width, height string) (int, int) {
 	return w, h
 }
 
-// ImageSize is often "4032x3024".
+// ImageSize (exiftool -n): "4032 3024"
 func parseImageSize(s string) (int, int) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return 0, 0
-	}
-	parts := strings.FieldsFunc(s, func(r rune) bool {
-		return r == 'x' || r == 'X' || r == '×'
-	})
+	parts := strings.Fields(s)
 	if len(parts) != 2 {
 		return 0, 0
 	}
 	return parseSizePair(parts[0], parts[1])
 }
 
-// EXIF orientations 5–8 (and their string forms) display with width/height swapped.
+// EXIF orientations 5–8 display with width/height swapped
 func needsSwap(orientation string) bool {
-	switch orientation {
-	case "5", "6", "7", "8",
-		"Mirror horizontal and rotate 270 CW",
-		"Rotate 90 CW",
-		"Mirror horizontal and rotate 90 CW",
-		"Rotate 270 CW":
+	switch strings.TrimSpace(orientation) {
+	case "5", "6", "7", "8":
 		return true
 	default:
 		return false
 	}
 }
 
-// QuickTime/MP4 store unrotated track dimensions plus a Rotation matrix (phone portrait video = 90).
+// QuickTime/MP4 store unrotated track dimensions plus a Rotation in degrees (phone
+// portrait video = 90). HEIC's Rotation is not degrees (irot quarter turns): its
+// turn comes from Orientation, a quarter-turn count of 1 or 3 is never "90"/"270".
 func isRotatedVideo(rotation string) bool {
 	switch strings.TrimSpace(rotation) {
 	case "90", "270", "-90":

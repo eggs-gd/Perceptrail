@@ -11,9 +11,8 @@ import (
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
-// The length of a video (or an animation), for the tile. exiftool prints it as
-// "24.40 s" under 30 s, "0:01:23" above (without -n); the Apple Photos record
-// writes it the same way.
+// The length of a video (or an animation), for the tile: seconds (exiftool -n; the
+// Apple Photos record writes them the same way).
 // durationTags: where a length is, the best first
 var durationTags = []string{"Duration", "MediaDuration", "TrackDuration"}
 
@@ -31,19 +30,13 @@ func (d *durationExtractor) Decorate(in exif_core.RawItemRW) (exif_core.RawItemR
 	return in, nil
 }
 
-// parse: seconds from "24.40 s", "0:01:23", "1:02:03.5", "24.4"; 0 if none
+// parse: seconds, 0 if none
 func parse(v string) float64 {
-	v = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(v), "(approx)"))
-	v = strings.TrimSpace(strings.TrimSuffix(v, "s"))
-	var total float64
-	for _, part := range strings.Split(v, ":") {
-		n, err := strconv.ParseFloat(strings.TrimSpace(part), 64)
-		if err != nil || n < 0 {
-			return 0
-		}
-		total = total*60 + n
+	s, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
+	if err != nil || s < 0 {
+		return 0
 	}
-	return total
+	return s
 }
 
 func (d *durationExtractor) Stop() {}

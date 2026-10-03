@@ -38,6 +38,12 @@ func TestReadGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.Close()
+	// South and west, a portrait orientation: what -n gives for them is pinned here
+	if out, err := exec.Command("exiftool", "-q", "-overwrite_original",
+		"-GPSLatitude=33.8688", "-GPSLatitudeRef=S", "-GPSLongitude=151.2093", "-GPSLongitudeRef=W",
+		"-Orientation#=6", photo).CombinedOutput(); err != nil {
+		t.Fatalf("exiftool write: %v %s", err, out)
+	}
 	xmp := filepath.Join(dir, "a.xmp")
 	if err := os.WriteFile(xmp, []byte(sidecarXMP), 0o644); err != nil {
 		t.Fatal(err)
@@ -47,7 +53,7 @@ func TestReadGroup(t *testing.T) {
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
 	pool := newExiftoolPool(1, logger)
 	defer pool.Close()
-	r := NewReader(pool, []string{"DateTimeOriginal"}, logger)
+	r := NewReader(pool, []string{"DateTimeOriginal", "GPSLatitude", "GPSLongitude", "Orientation"}, logger)
 
 	file := func(p string) *dto.FileDto { return &dto.FileDto{ItemEntry: dto.ItemEntry{Path: p}} }
 	d, err := r.Decorate(discover.Group{Files: []*dto.FileDto{file(photo), file(xmp), file(gone)}})
@@ -56,6 +62,15 @@ func TestReadGroup(t *testing.T) {
 	}
 	if got := string(d.Exif[0]["ImageWidth"]); got != "64" {
 		t.Errorf("ImageWidth %q, want 64", got)
+	}
+	// -n: numbers as numbers — the composite GPS tags signed by their Ref, the
+	// orientation 1–8, ImageSize "W H"
+	for tag, want := range map[string]string{
+		"GPSLatitude": "-33.8688", "GPSLongitude": "-151.2093", "Orientation": "6", "ImageSize": "64 48",
+	} {
+		if got := string(d.Exif[0][tag]); got != want {
+			t.Errorf("%s %q, want %q", tag, got, want)
+		}
 	}
 	if got := string(d.Exif[0]["MIMEType"]); got != "image/jpeg" {
 		t.Errorf("MIMEType %q", got)

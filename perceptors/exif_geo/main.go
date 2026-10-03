@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/eggs-gd/perceplib/api"
 	"github.com/eggs-gd/perceplib/chain"
+	"github.com/eggs-gd/perceplib/exif"
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
@@ -15,8 +16,8 @@ func (p *geoPerceptor) NewProcessor(chin <-chan api.RawItemR, chout chan<- api.R
 	return NewGeotagsProcessor(chin, chout, logger)
 }
 
-// ExifTags: the coordinates (api.Coordinates)
-func (p *geoPerceptor) ExifTags() []string { return api.CoordinateTags }
+// ExifTags: the coordinates (exif.Coordinates)
+func (p *geoPerceptor) ExifTags() []string { return exif.CoordinateTags }
 
 var Perceptor api.Perceptor = &geoPerceptor{}
 

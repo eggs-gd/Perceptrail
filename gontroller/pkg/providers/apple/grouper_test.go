@@ -251,8 +251,8 @@ func TestMetaRecord(t *testing.T) {
 		"ImageWidth":         "3024",
 		"ImageHeight":        "4032",
 		"Orientation":        "1",
-		"GPSLatitude":        `50 deg 25' 45.48" N`,
-		"GPSLongitude":       `30 deg 32' 17.16" W`,
+		"GPSLatitude":        "50.4293",
+		"GPSLongitude":       "-30.5381",
 	}
 	for k, v := range want {
 		if got := string(m[k]); got != v {
@@ -265,8 +265,8 @@ func TestMetaRecord(t *testing.T) {
 	if k := groups[edited].Kind; k != dto.KindPhoto {
 		t.Errorf("edited: kind %q, want photo", k)
 	}
-	if d := string(groups[live].Meta["Duration"]); d != "2.50 s" {
-		t.Errorf("live: Duration %q, want exiftool's 2.50 s", d)
+	if d := string(groups[live].Meta["Duration"]); d != "2.5" {
+		t.Errorf("live: Duration %q, want 2.5 (seconds, as exiftool -n)", d)
 	}
 	if _, ok := groups[edited].Meta["Duration"]; ok {
 		t.Error("a photo got a Duration")

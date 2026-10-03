@@ -48,7 +48,9 @@ type Perceptor interface {
 // ExifTagger: the tags a perceptor reads (exiftool's names). The core reads only
 // the declared tags of the enabled perceptors, from every file of the asset (the
 // source's metadata first, then the sidecars, the main file, the derivatives):
-// GetExif returns "" for a tag nobody declared. Plugins never run exiftool.
+// GetExif returns "" for a tag nobody declared. Values are exiftool's -n form —
+// numbers as numbers (signed decimal degrees, seconds, Orientation 1–8); dates as
+// "2006:01:02 15:04:05". Plugins never run exiftool (helpers: package exif).
 type ExifTagger interface {
 	ExifTags() []string
 }

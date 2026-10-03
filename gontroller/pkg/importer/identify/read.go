@@ -25,7 +25,7 @@ var ownTags = []string{
 }
 
 // Reader: the read step's logic — one exiftool call for the whole group, only the
-// declared tags. Extract reads the files (exiftool; a fake in tests): one map per
+// declared tags, numbers as numbers (-n: no print conversion; dates are unchanged). Extract reads the files (exiftool; a fake in tests): one map per
 // path, nil when the file could not be read.
 type Reader struct {
 	logger  *l.Logger
@@ -36,7 +36,7 @@ type Reader struct {
 
 // NewReader: tags are what the perceptors read; identify's own are added
 func NewReader(pool *exiftoolPool, tags []string, logger *l.Logger) *Reader {
-	r := &Reader{logger: logger, pool: pool, args: []string{"-j"}}
+	r := &Reader{logger: logger, pool: pool, args: []string{"-j", "-n"}}
 	seen := map[string]bool{}
 	for _, t := range slices.Concat(ownTags, tags) {
 		if !seen[t] {
@@ -102,8 +102,8 @@ func (e *Reader) exiftool(paths []string) ([]api.RawExif, error) {
 	return res, err
 }
 
-// decodeJSON: exiftool's -j output by SourceFile, every value as exiftool prints it
-// (-s2 would print the same): a number keeps its text, a list is joined by ", "
+// decodeJSON: exiftool's -j output by SourceFile, every value as text: a number
+// keeps its literal, a list is joined by ", "
 func decodeJSON(out []byte) (map[string]api.RawExif, error) {
 	var files []map[string]json.RawMessage
 	dec := json.NewDecoder(bytes.NewReader(out))

@@ -9,6 +9,7 @@ import (
 	_ "time/tzdata" // IANA zones for the coordinates lookup, also in a minimal Docker image
 
 	"github.com/eggs-gd/perceplib/api"
+	exifhelp "github.com/eggs-gd/perceplib/exif"
 	"github.com/ringsaturn/tzf"
 )
 
@@ -226,7 +227,7 @@ var (
 // coordsZone is the IANA zone at the GPS coordinates, nil if unknown. The zone
 // dictionary is loaded on first use.
 func coordsZone(exif api.ExifProvider) *time.Location {
-	lat, lng, ok := api.Coordinates(exif)
+	lat, lng, ok := exifhelp.Coordinates(exif)
 	if !ok || math.Abs(lat) > 90 || math.Abs(lng) > 180 || (lat == 0 && lng == 0) {
 		return nil
 	}

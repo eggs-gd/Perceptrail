@@ -5,6 +5,7 @@ import (
 
 	"github.com/eggs-gd/perceplib/api"
 	"github.com/eggs-gd/perceplib/chain"
+	"github.com/eggs-gd/perceplib/exif"
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
@@ -26,7 +27,7 @@ func (p *datePerceptor) ExifTags() []string {
 		"SubSecTimeDigitized", "OffsetTimeDigitized",
 		"ModifyDate", "SubSecTime", "OffsetTime",
 		"GPSDateTime", "GPSDateStamp", "GPSTimeStamp", "FileModifyDate",
-	}, api.CoordinateTags...)
+	}, exif.CoordinateTags...)
 }
 
 var Perceptor api.Perceptor = &datePerceptor{}
