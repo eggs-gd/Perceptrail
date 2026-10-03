@@ -53,7 +53,7 @@ type Walker struct {
 }
 
 // New: the chain's entry — out gets every file of a walk, then the gone ones
-func New(root string, db Store, logger *l.Logger, out *chain.Pipe[*dto.FileDto]) chain.Processor {
+func New(db Store, root string, logger *l.Logger, out *chain.Pipe[*dto.FileDto]) chain.Processor {
 	return chain.Entry(out, &Walker{logger: logger, root: root, db: db})
 }
 

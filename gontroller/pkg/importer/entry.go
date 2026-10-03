@@ -96,11 +96,11 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	perceived := chain.NewPipe[*identify.Item](0)
 
 	importChain := chain.New(errch)
-	importChain.AddStep(walk.New(ctx.Config().Path, db, logger, found))
+	importChain.AddStep(walk.New(db, ctx.Config().Path, logger, found))
 	importChain.AddStep(group.New(providers.Enabled(), found, grouped))
 	importChain.AddStep(gate.New(db, logger, grouped, stored))
 	importChain.AddStep(identify.New(db, ctx.Config().CacheDir(), logger, stored, identified))
-	importChain.AddStep(exif.New(db, identified, perceived, logger))
+	importChain.AddStep(exif.New(db, logger, identified, perceived))
 	importChain.AddStep(commit.New(db, perceived))
 
 	return &importerService{importChain: importChain, rescan: rescan, db: db, logger: logger}

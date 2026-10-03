@@ -30,7 +30,7 @@ var (
 // (MarkUnprocessed); on every walk's flush the rows of gone items are pruned (Prune —
 // the walk's own deletions come once the flush has left the chain: a row of an item
 // gone in this walk goes on the next one). Its errors go to the chain it runs in.
-func New(db Items, in, out *chain.Pipe[*identify.Item], logger *l.Logger) chain.Processor {
+func New(db Items, logger *l.Logger, in, out *chain.Pipe[*identify.Item]) chain.Processor {
 	// A perceptor new or changed since the last run: its items are processed again
 	if err := MarkUnprocessed(db, logger); err != nil {
 		logger.Error("Perceptors' rows not checked", l.Error(err))

@@ -159,7 +159,7 @@ func TestWalkPass(t *testing.T) {
 	found := chain.NewPipe[*dto.FileDto](0)
 	got := &files{}
 	c := chain.New(nil)
-	c.AddStep(New(root, &rows{byPath: map[string]*dto.FileDto{}}, testLogger, found))
+	c.AddStep(New(&rows{byPath: map[string]*dto.FileDto{}}, root, testLogger, found))
 	c.AddStep(chain.End[*dto.FileDto](found, got))
 	go c.Process(t.Context())
 	pass := func() []string {

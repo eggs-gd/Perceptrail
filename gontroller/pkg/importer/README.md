@@ -12,10 +12,11 @@ exiftool, the plugins belong to the stage that uses them. One step does one thin
 walk → group → gate → identify → exif → commit
 ```
 
-A step's constructor takes what it really depends on and its pipes: `walk` the root
-and the model (the files table),
+A step's constructor takes what it really depends on, then its pipes — always in
+one order: the model, the step's own dependencies, the logger, `in`, `out`, options.
+`walk` the model (the files table) and the root,
 `group` the providers, `gate` the model, `identify` the model and the cache directory (its exiftool is its own; the tags it
-reads it asks the plugin registry: `plugins.ExifTags`), `exif` the logger (it reads the plugin
+reads it asks the plugin registry: `plugins.ExifTags`), `exif` the model (rework, pruning; it reads the plugin
 registry itself), `commit` the model. No callbacks between the steps.
 
 [`entry.go`](entry.go) (`NewImporterService`) only wires the steps: the pipes

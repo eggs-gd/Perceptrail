@@ -110,7 +110,7 @@ func scan(t *testing.T, root string) []string {
 	h := &harness{t: t}
 	errs := make(chan error, 10)
 	c := chain.New(errs)
-	c.AddStep(walk.New(root, testDB, logger, found))
+	c.AddStep(walk.New(testDB, root, logger, found))
 	c.AddStep(group.New(ps, found, grouped))
 	c.AddStep(gate.New(testDB, logger, grouped, stored))
 	c.AddStep(identify.New(testDB, t.TempDir(), logger, stored, identified, identify.WithExiftool(fakeTool{})))
