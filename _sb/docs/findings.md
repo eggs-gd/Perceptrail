@@ -545,7 +545,7 @@ values kept in commit (`keep`), and what the import asks of them in the top
 (`perceptors.go`) — the top handing the steps lists and a `saveValues` lambda. Now
 one step, `importer/exif`: the built-in perceptors, the external ones, keep — it
 reads the plugin registry itself — and it gives the rest of the import what it asks
-(`Tags` for identify, `MarkUnprocessed` at start, `Prune` after a walk). One generic
+(`MarkUnprocessed` at start, `Prune` after a walk). One generic
 adapter (`perceive[T]`) over the item for both kinds. commit only publishes.
 
 `plugins/exif_core` (two types and `OrderByValue`) was a sub-package for one and a
@@ -553,6 +553,13 @@ half files: folded into `pkg/plugins`. To avoid a cycle (the built-in perceptors
 import it), the registry no longer imports them — `gontroller.go` gives them to
 `Load` — and no longer imports `app`: it pulled config → client → routes into every
 perceptor (an import cycle in the routes' tests); `Load` takes a `plugins.Config`.
+
+`identify.Config` was the same kind of wrapper: its `Tags` were carried by the top
+from the exif step. "Which tags do the loaded perceptors read" is a plain question
+to the registry (`plugins.ExifTags`, no import rules in it): identify asks it
+itself and takes only its real dependencies — `identify.New(db, cacheDir, logger,
+in, out)`. The import's tests load the registry with the built-in perceptors, as
+the server does.
 
 ### discover cut into walk, group, gate; the walk cycle is the top's (2026-10-03, decided)
 

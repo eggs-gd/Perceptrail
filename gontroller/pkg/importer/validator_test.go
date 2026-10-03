@@ -50,6 +50,11 @@ func TestMain(m *testing.M) {
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
 	testDB = model.NewProxy(logger)
 	filesProxy, itemsProxy = testDB, testDB
+	// The registry as the server loads it: the built-in perceptors (their tags are what
+	// identify reads)
+	if err := plugins.Load(plugins.Config{DataDir: dir, Logger: logger}, exif_date.Perceptor, exif_size.Perceptor); err != nil {
+		panic(err)
+	}
 
 	code := m.Run()
 	os.RemoveAll(dir)
@@ -87,16 +92,6 @@ func perFile(read func(path string) (api.RawExif, error)) func([]string) ([]api.
 	}
 }
 
-// coreTags: what the core perceptors the tests run declare (the chain gets the
-// enabled ones' from the plugin manager)
-func coreTags() []string {
-	var tags []string
-	for _, p := range []api.Perceptor{exif_date.Perceptor, exif_size.Perceptor} {
-		tags = append(tags, p.(api.ExifTagger).ExifTags()...)
-	}
-	return tags
-}
-
 // harness: the import's steps as the chain has them, run one group at a time — the
 // providers (Apple, the plain folder last), the gate, identify's steps (a fake
 // exiftool), the core perceptors, close; after a walk its flush (every grouper gives
@@ -115,7 +110,7 @@ type harness struct {
 func newHarness(t *testing.T) *harness {
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
 	ps := []providers.Provider{apple.New("", nil, itemsProxy, logger), folder.New()}
-	steps := identify.NewSteps(nil, identify.Config{Tags: coreTags(), CacheDir: t.TempDir(), DB: testDB, Logger: logger})
+	steps := identify.NewSteps(nil, testDB, t.TempDir(), logger)
 	steps.Read.Extract = perFile(fakeExif)
 	steps.Embedded.Extract = func(string, string, string) (string, error) { return "", errors.New("no exiftool in tests") }
 	return &harness{t: t, logger: logger, ps: ps, sw: group.Switch{Providers: ps}, gate: gate.NewGate(testDB, logger), steps: steps}

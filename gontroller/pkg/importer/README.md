@@ -13,8 +13,8 @@ walk → group → gate → identify → exif → commit
 ```
 
 A step's constructor takes what it really depends on and its pipes: `walk` the root,
-`group` the providers, `gate` the model, `identify` its `Config` (the perceptors'
-tags, the cache directory, the model), `exif` the logger (it reads the plugin
+`group` the providers, `gate` the model, `identify` the model and the cache directory (the tags it reads it asks the plugin
+registry: `plugins.ExifTags`), `exif` the logger (it reads the plugin
 registry itself), `commit` the model. No callbacks between the steps.
 
 [`entry.go`](entry.go) (`NewImporterService`) wires the stages and holds what
@@ -46,8 +46,7 @@ the cycle's `CycleStore`); a sub-chain's `Store` embeds its steps'; the top pass
 the proxy.
 **What a perceptor means to the import is the exif step's**
 ([`exif/`](exif/)), not the registry's and not scattered over the steps: which ones
-run (EXIF data: the built-in ones, then the external), the tags they read (`Tags`:
-identify reads those), their rows written (its last step, `keep`), and two bits of
+run (EXIF data: the built-in ones, then the external), their rows written (its last step, `keep`), and two bits of
 bookkeeping the top calls — **at start** (`MarkUnprocessed`) an item an import
 perceptor has no row for (the perceptor is new, or its schema changed) is marked
 for rework (`MarkRework`: the gate sends its group once more; publishing clears the
@@ -116,7 +115,7 @@ detail).
 
 - **Declared, never `-all`.** A perceptor declares the tags it reads
   (`api.ExifTagger`, required of every EXIF perceptor; `exif.CoordinateTags` for
-  perceplib's `exif.Coordinates`); the exif step's `Tags` is their union. identify adds its own
+  perceplib's `exif.Coordinates`); the registry's `plugins.ExifTags` is their union (identify asks it). identify adds its own
   (`read.go` `ownTags`: MIME type, errors, sizes, codec, whether embedded previews
   are there). A perceptor that reads an undeclared tag gets "" — each core
   perceptor's test checks it reads only what it declares (`exif_coretest`).

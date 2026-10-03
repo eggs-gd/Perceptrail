@@ -40,28 +40,6 @@ func externalPerceptors() []api.ExifPerceptor {
 	return out
 }
 
-// Tags: every tag the import chain's perceptors read (ExifTagger), once each —
-// the only ones read from the files besides identify's own
-func Tags() []string {
-	seen := map[string]bool{}
-	var out []string
-	add := func(tags []string) {
-		for _, t := range tags {
-			if !seen[t] {
-				seen[t] = true
-				out = append(out, t)
-			}
-		}
-	}
-	for _, p := range corePerceptors() {
-		add(p.ExifTags())
-	}
-	for _, p := range externalPerceptors() {
-		add(p.ExifTags())
-	}
-	return out
-}
-
 // importStores: the storages of the perceptors that run in the import chain: every
 // processed item gets a row in each (a value, or "nothing found")
 func importStores() []*model.PerceptorStore {

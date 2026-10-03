@@ -94,6 +94,25 @@ func openStores() {
 	}
 }
 
+// ExifTags: every tag the loaded perceptors read (api.ExifTagger), once each
+func ExifTags() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, p := range All() {
+		t, ok := p.(api.ExifTagger)
+		if !ok {
+			continue
+		}
+		for _, tag := range t.ExifTags() {
+			if !seen[tag] {
+				seen[tag] = true
+				out = append(out, tag)
+			}
+		}
+	}
+	return out
+}
+
 // Store: the storage of a perceptor that keeps data (its Schema); false: it keeps
 // nothing, or it could not be opened
 func Store(perceptor string) (*model.PerceptorStore, bool) {

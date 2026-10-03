@@ -1,9 +1,8 @@
 // Package exif: the import's EXIF perceptors over the identified item — the
 // built-in ones (they write into it: date, size, length), the external Go plugins
 // (they only read it), then their values kept, a row in each one's storage. And what
-// the rest of the import asks of them: the tags they read (Tags: identify reads
-// those), the items one has not processed (MarkUnprocessed, at start), the rows of
-// gone items (Prune, after a walk). It reads the plugin registry itself.
+// the rest of the import asks of them: the items one has not processed
+// (MarkUnprocessed, at start), the rows of gone items (Prune, after a walk). It reads the plugin registry itself.
 //
 //	each built-in perceptor → each external one → keep
 package exif

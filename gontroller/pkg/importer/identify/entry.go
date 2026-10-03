@@ -14,6 +14,7 @@ package identify
 
 import (
 	"perceptrail/gontroller/pkg/importer/gate"
+	"perceptrail/gontroller/pkg/plugins"
 
 	"github.com/eggs-gd/perceplib/chain"
 	l "github.com/eggs-gd/perceplib/logger"
@@ -45,14 +46,17 @@ type Steps struct {
 	Yield       Yield
 }
 
-// NewSteps: pool runs exiftool (nil in tests: set the Extract funcs)
-func NewSteps(pool *exiftoolPool, cfg Config) *Steps {
+// NewSteps: pool runs exiftool (nil in tests: set the Extract funcs); embedded
+// previews are extracted under cacheDir. What is read besides identify's own tags:
+// what the loaded perceptors declare (plugins.ExifTags)
+func NewSteps(pool *exiftoolPool, db Store, cacheDir string, logger *l.Logger) *Steps {
+	tags := plugins.ExifTags()
 	return &Steps{
-		Read:     NewReader(pool, cfg.Tags, cfg.Logger),
-		Merge:    NewMerge(cfg.Tags),
-		Validate: NewValidator(cfg.DB, cfg.Logger),
-		Embedded: NewEmbedded(pool, cfg.CacheDir, cfg.Logger),
-		Sizes:    NewSizes(cfg.DB),
+		Read:     NewReader(pool, tags, logger),
+		Merge:    NewMerge(tags),
+		Validate: NewValidator(db, logger),
+		Embedded: NewEmbedded(pool, cacheDir, logger),
+		Sizes:    NewSizes(db),
 	}
 }
 
@@ -71,28 +75,19 @@ func (s *Steps) Run(g gate.Group) (*Item, error) {
 	return s.Yield.Decorate(d)
 }
 
-// Config: what identify works with — the tags the perceptors read (read from the
-// files, merged into the package), where embedded previews are extracted, the
-// model, the logger
-type Config struct {
-	Tags     []string
-	CacheDir string
-	DB       Store
-	Logger   *l.Logger
-}
-
 // New: in — the groups that need work (stored: rows of the files table); out — the
-// identified items. Its errors go to the chain it runs in.
-func New(cfg Config, in *chain.Pipe[gate.Group], out *chain.Pipe[*Item]) chain.Processor {
+// identified items; embedded previews go under cacheDir. Its errors go to the chain
+// it runs in.
+func New(db Store, cacheDir string, logger *l.Logger, in *chain.Pipe[gate.Group], out *chain.Pipe[*Item]) chain.Processor {
 	// The kinds' table changed since the files were judged "not media": judged again
-	if err := reclassifyIgnored(cfg.DB, cfg.Logger); err != nil {
-		cfg.Logger.Error("MIME version check failed", l.Error(err))
+	if err := reclassifyIgnored(db, logger); err != nil {
+		logger.Error("MIME version check failed", l.Error(err))
 	}
 	// The fingerprint changed: every item gets the new one
-	if err := forgetOldHashes(cfg.DB, cfg.Logger); err != nil {
-		cfg.Logger.Error("Fingerprint version check failed", l.Error(err))
+	if err := forgetOldHashes(db, logger); err != nil {
+		logger.Error("Fingerprint version check failed", l.Error(err))
 	}
-	s := NewSteps(newExiftoolPool(workers, cfg.Logger), cfg)
+	s := NewSteps(newExiftoolPool(workers, logger), db, cacheDir, logger)
 
 	// read → classify: the files and their metadata
 	read := chain.NewPipe[*draft](0)

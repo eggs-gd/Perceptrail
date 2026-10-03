@@ -114,7 +114,7 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	importChain.AddStep(chain.Entry(found, walker))
 	importChain.AddStep(group.New(ps, found, grouped))
 	importChain.AddStep(gate.New(db, logger, grouped, stored))
-	importChain.AddStep(identify.New(identify.Config{Tags: exif.Tags(), CacheDir: ctx.Config().CacheDir(), DB: db, Logger: logger}, stored, identified))
+	importChain.AddStep(identify.New(db, ctx.Config().CacheDir(), logger, stored, identified))
 	importChain.AddStep(exif.New(identified, perceived, logger))
 	importChain.AddStep(commit.New(db, perceived, items))
 	// The end: an item's waiters hear it; the walk's flush here means its work is
