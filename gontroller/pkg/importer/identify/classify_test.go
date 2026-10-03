@@ -3,7 +3,6 @@ package identify
 import (
 	"testing"
 
-	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/model/dto"
 
 	"github.com/eggs-gd/perceplib/api"
@@ -13,8 +12,8 @@ func TestMimeRanking(t *testing.T) {
 	file := func(name string, size int64) *dto.FileDto {
 		return &dto.FileDto{ItemEntry: dto.ItemEntry{Path: "/lib/" + name, Name: name, Size: size}}
 	}
-	rank := func(files ...*dto.FileDto) *flow.RawItem {
-		g, _ := Classifier{}.Decorate(&flow.RawItem{Files: files, Exif: make([]api.RawExif, len(files))})
+	rank := func(files ...*dto.FileDto) *draft {
+		g, _ := Classifier{}.Decorate(&draft{Files: files, Exif: make([]api.RawExif, len(files))})
 		return g
 	}
 	cases := []struct {
@@ -31,14 +30,14 @@ func TestMimeRanking(t *testing.T) {
 	}
 	for _, c := range cases {
 		g := rank(c.files...)
-		if g.Files[0].Name != c.main || g.IsMedia() != c.media {
-			t.Errorf("main %s media %v, want %s %v", g.Files[0].Name, g.IsMedia(), c.main, c.media)
+		if g.Files[0].Name != c.main || g.isMedia() != c.media {
+			t.Errorf("main %s media %v, want %s %v", g.Files[0].Name, g.isMedia(), c.main, c.media)
 		}
 	}
-	if k, m := kindOf("/x/a.CR2", ""); k != flow.KindRaw || m != "image/x-canon-cr2" {
+	if k, m := kindOf("/x/a.CR2", ""); k != kindRaw || m != "image/x-canon-cr2" {
 		t.Errorf("CR2: %s %s", k, m)
 	}
-	if k, _ := kindOf("/x/a.bin", "image/x-nikon-nef"); k != flow.KindRaw {
+	if k, _ := kindOf("/x/a.bin", "image/x-nikon-nef"); k != kindRaw {
 		t.Errorf("RAW by exif MIME: %s", k)
 	}
 }
@@ -49,7 +48,7 @@ func TestGenericRoles(t *testing.T) {
 	file := func(name string, size int64) *dto.FileDto {
 		return &dto.FileDto{ItemEntry: dto.ItemEntry{Path: "/lib/" + name, Name: name, Size: size}}
 	}
-	g, _ := Classifier{}.Decorate(&flow.RawItem{
+	g, _ := Classifier{}.Decorate(&draft{
 		Files: []*dto.FileDto{file("D.JPG", 5000), file("D.xmp", 10), file("D.NEF", 30000), file("D.MOV", 900)},
 		Exif:  make([]api.RawExif, 4),
 	})
@@ -59,11 +58,22 @@ func TestGenericRoles(t *testing.T) {
 			t.Errorf("%s: role %q, want %q", f.Name, f.Role, w)
 		}
 	}
-	lp, _ := Classifier{}.Decorate(&flow.RawItem{
+	lp, _ := Classifier{}.Decorate(&draft{
 		Files: []*dto.FileDto{file("L.HEIC", 2000), file("L.MOV", 3000)},
 		Exif:  make([]api.RawExif, 2),
 	})
 	if lp.Files[0].Name != "L.MOV" || lp.Files[0].Role != dto.RoleOriginal || lp.Files[1].Role != dto.RoleStill {
 		t.Errorf("Live Photo: %s %s / %s %s", lp.Files[0].Name, lp.Files[0].Role, lp.Files[1].Name, lp.Files[1].Role)
+	}
+}
+
+// A broken original (not an image) with good derivatives: still an item (a keyed
+// asset); a plain folder's group is judged by its main file
+func TestIsMedia(t *testing.T) {
+	if !(&draft{Key: "uuid", Kinds: []mediaKind{kindOther, kindImage}}).isMedia() {
+		t.Error("a keyed asset with a viewable derivative is media")
+	}
+	if (&draft{Kinds: []mediaKind{kindOther, kindImage}}).isMedia() {
+		t.Error("a generic group is judged by its main file")
 	}
 }

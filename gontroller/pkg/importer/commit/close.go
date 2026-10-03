@@ -1,7 +1,7 @@
 package commit
 
 import (
-	"perceptrail/gontroller/pkg/importer/flow"
+	"perceptrail/gontroller/pkg/importer/identify"
 	"perceptrail/gontroller/pkg/model/dto"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -19,7 +19,7 @@ type Closer struct {
 
 func NewCloser(db CloserStore) *Closer { return &Closer{db: db} }
 
-func (c *Closer) Decorate(in *flow.RawItem) (*dto.ItemDto, error) {
+func (c *Closer) Decorate(in *identify.Item) (*dto.ItemDto, error) {
 	if in == nil || in.Item == nil {
 		return nil, chain.ErrSkippedItem
 	}

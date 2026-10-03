@@ -4,8 +4,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"perceptrail/gontroller/pkg/importer/flow"
-
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
@@ -30,7 +28,7 @@ func NewEmbedded(pool *exiftoolPool, cacheDir string, logger *l.Logger) *Embedde
 // Embedded previews, the biggest kind first
 var embeddedPreviews = []string{"JpgFromRaw", "PreviewImage", "ThumbnailImage"}
 
-func (e *Embedded) Decorate(it *flow.RawItem) (*flow.RawItem, error) {
+func (e *Embedded) Decorate(it *draft) (*draft, error) {
 	if p, _ := viewableFile(it); p != "" {
 		return it, nil // a file of the group shows: nothing to extract
 	}

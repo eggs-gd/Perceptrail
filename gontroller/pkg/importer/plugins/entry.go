@@ -9,7 +9,7 @@ package plugins
 import (
 	"fmt"
 
-	"perceptrail/gontroller/pkg/importer/flow"
+	"perceptrail/gontroller/pkg/importer/identify"
 
 	"github.com/eggs-gd/perceplib/api"
 	"github.com/eggs-gd/perceplib/chain"
@@ -19,7 +19,7 @@ import (
 // New: perceptors — the external perceptors, in order; in — the items the core has
 // perceived; out — the same, perceived by the external ones (none: passed on as they
 // are). Its steps report to errch.
-func New(perceptors []api.ExifPerceptor, in <-chan *flow.RawItem, out chan<- *flow.RawItem, errch chan error, logger *l.Logger) chain.ChainProcessor {
+func New(perceptors []api.ExifPerceptor, in <-chan *identify.Item, out chan<- *identify.Item, errch chan error, logger *l.Logger) chain.ChainProcessor {
 	stage := chain.NewChainProcessor(errch)
 
 	// A perceptor's step reads its own channel and writes its own; the stage wires
@@ -50,7 +50,7 @@ func New(perceptors []api.ExifPerceptor, in <-chan *flow.RawItem, out chan<- *fl
 			stage.AddStep(chain.NewDecorator(s.out, out, back{}))
 			break
 		}
-		next := make(chan *flow.RawItem, 1)
+		next := make(chan *identify.Item, 1)
 		stage.AddStep(chain.NewDecorator(s.out, next, back{}))
 		prev = next
 	}
@@ -60,14 +60,14 @@ func New(perceptors []api.ExifPerceptor, in <-chan *flow.RawItem, out chan<- *fl
 // toReadOnly: what an external perceptor sees
 type toReadOnly struct{}
 
-func (toReadOnly) Decorate(in *flow.RawItem) (api.RawItemR, error) { return in, nil }
-func (toReadOnly) Stop()                                           {}
+func (toReadOnly) Decorate(in *identify.Item) (api.RawItemR, error) { return in, nil }
+func (toReadOnly) Stop()                                            {}
 
 // back: the item an external perceptor returned
 type back struct{}
 
-func (back) Decorate(in api.RawItemR) (*flow.RawItem, error) {
-	it, ok := in.(*flow.RawItem)
+func (back) Decorate(in api.RawItemR) (*identify.Item, error) {
+	it, ok := in.(*identify.Item)
 	if !ok {
 		return nil, fmt.Errorf("external EXIF plugin returned %T, want the item it got", in)
 	}
@@ -77,5 +77,5 @@ func (back) Stop() {}
 
 type pass struct{}
 
-func (pass) Decorate(in *flow.RawItem) (*flow.RawItem, error) { return in, nil }
-func (pass) Stop()                                            {}
+func (pass) Decorate(in *identify.Item) (*identify.Item, error) { return in, nil }
+func (pass) Stop()                                              {}

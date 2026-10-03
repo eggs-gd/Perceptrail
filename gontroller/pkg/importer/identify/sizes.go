@@ -8,7 +8,6 @@ import (
 	"os"
 	"strconv"
 
-	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/model/dto"
 
 	_ "golang.org/x/image/webp"
@@ -27,7 +26,7 @@ type Sizes struct {
 
 func NewSizes(db SizesStore) *Sizes { return &Sizes{db: db} }
 
-func (s *Sizes) Decorate(it *flow.RawItem) (*flow.RawItem, error) {
+func (s *Sizes) Decorate(it *draft) (*draft, error) {
 	setSizes(it)
 	if _, err := s.db.UpdateFiles(it.Files); err != nil {
 		return nil, err
@@ -39,7 +38,7 @@ func (s *Sizes) Stop() {}
 
 // setSizes: the original's size comes from its metadata (the source's first: the
 // Photos DB size is oriented); images from their header — no decoding
-func setSizes(it *flow.RawItem) {
+func setSizes(it *draft) {
 	for i, f := range it.Files {
 		if f.Role == dto.RoleMeta {
 			continue
@@ -64,7 +63,7 @@ func setSizes(it *flow.RawItem) {
 }
 
 // mainTag: a tag of the main file — the source's metadata first, then its EXIF
-func mainTag(it *flow.RawItem, tag string) string {
+func mainTag(it *draft, tag string) string {
 	if v, ok := it.Meta[tag]; ok {
 		return string(v)
 	}

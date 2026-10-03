@@ -7,7 +7,7 @@
 package commit
 
 import (
-	"perceptrail/gontroller/pkg/importer/flow"
+	"perceptrail/gontroller/pkg/importer/identify"
 	"perceptrail/gontroller/pkg/model/dto"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -16,9 +16,9 @@ import (
 
 // New: in — the perceived items; out — the published ones. Its steps report to
 // errch.
-func New(db CloserStore, values Values, in <-chan *flow.RawItem, out chan<- *dto.ItemDto, errch chan error, logger *l.Logger) chain.ChainProcessor {
+func New(db CloserStore, values Values, in <-chan *identify.Item, out chan<- *dto.ItemDto, errch chan error, logger *l.Logger) chain.ChainProcessor {
 	// keep → close: the values kept
-	kept := make(chan *flow.RawItem)
+	kept := make(chan *identify.Item)
 
 	stage := chain.NewChainProcessor(errch)
 	stage.AddStep(chain.NewDecorator(in, kept, NewKeep(values)))

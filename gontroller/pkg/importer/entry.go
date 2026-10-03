@@ -39,7 +39,6 @@ import (
 	"perceptrail/gontroller/pkg/importer/commit"
 	"perceptrail/gontroller/pkg/importer/core"
 	"perceptrail/gontroller/pkg/importer/discover"
-	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/importer/identify"
 	external "perceptrail/gontroller/pkg/importer/plugins"
 	"perceptrail/gontroller/pkg/model"
@@ -101,15 +100,15 @@ func NewImporterService(ctx app.AppContext) *importerService {
 		rescan = defaultRescan
 	}
 
-	// Between the stages (the message types: flow)
+	// Between the stages (each message type belongs to the stage that yields it)
 	// discover → identify: the groups that need work, stored (rows of the files table)
 	stored := make(chan discover.Group)
 	// identify → core: the identified items
-	identified := make(chan *flow.RawItem)
+	identified := make(chan *identify.Item)
 	// core → plugins: + what the core perceptors found
-	cored := make(chan *flow.RawItem)
+	cored := make(chan *identify.Item)
 	// plugins → commit: + what the external perceptors found
-	perceived := make(chan *flow.RawItem)
+	perceived := make(chan *identify.Item)
 	// commit → nobody yet: published items, drained in Start (later: events to the
 	// client); buffered so the closer does not wait for the drain
 	items := make(chan *dto.ItemDto, 1000)

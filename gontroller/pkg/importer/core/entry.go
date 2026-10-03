@@ -8,7 +8,7 @@ package core
 import (
 	"fmt"
 
-	"perceptrail/gontroller/pkg/importer/flow"
+	"perceptrail/gontroller/pkg/importer/identify"
 	"perceptrail/gontroller/pkg/plugins/exif_core"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -17,7 +17,7 @@ import (
 
 // New: perceptors — the core perceptors, in order; in — the identified items; out
 // — the same, perceived by the core. Its steps report to errch.
-func New(perceptors []exif_core.ExifCorePerceptor, in <-chan *flow.RawItem, out chan<- *flow.RawItem, errch chan error, logger *l.Logger) chain.ChainProcessor {
+func New(perceptors []exif_core.ExifCorePerceptor, in <-chan *identify.Item, out chan<- *identify.Item, errch chan error, logger *l.Logger) chain.ChainProcessor {
 	stage := chain.NewChainProcessor(errch)
 
 	// Every step reads the previous step's channel: a perceptor that gets no step must
@@ -39,12 +39,12 @@ func New(perceptors []exif_core.ExifCorePerceptor, in <-chan *flow.RawItem, out 
 }
 
 // The core perceptors read and write the item
-var _ exif_core.RawItemRW = (*flow.RawItem)(nil)
+var _ exif_core.RawItemRW = (*identify.Item)(nil)
 
 // open: the item as the core perceptors see it (read-write); not an item: skipped
 type open struct{}
 
-func (open) Decorate(in *flow.RawItem) (exif_core.RawItemRW, error) {
+func (open) Decorate(in *identify.Item) (exif_core.RawItemRW, error) {
 	if in.Item == nil {
 		return nil, chain.ErrSkippedItem
 	}
@@ -55,10 +55,10 @@ func (open) Stop() {}
 // release: back to the item the next stages carry
 type release struct{}
 
-func (release) Decorate(in exif_core.RawItemRW) (*flow.RawItem, error) {
-	it, ok := in.(*flow.RawItem)
+func (release) Decorate(in exif_core.RawItemRW) (*identify.Item, error) {
+	it, ok := in.(*identify.Item)
 	if !ok {
-		return nil, fmt.Errorf("core perceptor returned %T, want *flow.RawItem", in)
+		return nil, fmt.Errorf("core perceptor returned %T, want *identify.Item", in)
 	}
 	return it, nil
 }

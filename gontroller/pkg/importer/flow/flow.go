@@ -1,6 +1,6 @@
-// Package flow: what is left of the shared types — identify's working item and its
-// kinds. Being dissolved: every type moves to the package that produces it
-// (the provider contract is in providers, discover yields discover.Group).
+// Package flow: the item transcode still reads (RawItem, MediaKind), left until
+// transcode gets an input of its own; the import no longer uses it — identify's
+// working item is private there, it yields identify.Item.
 package flow
 
 import (

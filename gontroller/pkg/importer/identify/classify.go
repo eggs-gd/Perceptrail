@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"perceptrail/gontroller/pkg/importer/flow"
 	"sort"
 	"strings"
 )
@@ -19,41 +18,41 @@ import (
 // The main file is always the source: RAW, then video, then an image. The JPEG of
 // RAW+JPEG and the photo of a Live Photo are derivatives — later they can serve as
 // ready previews and save a transcode, but the item is the source.
-var kindRank = map[flow.MediaKind]int{flow.KindRaw: 0, flow.KindVideo: 1, flow.KindImage: 2, flow.KindSidecar: 3, flow.KindOther: 4}
+var kindRank = map[mediaKind]int{kindRaw: 0, kindVideo: 1, kindImage: 2, kindSidecar: 3, kindOther: 4}
 
 type extInfo struct {
-	kind flow.MediaKind
+	kind mediaKind
 	mime string
 }
 
 var extTable = map[string]extInfo{
-	".jpg": {flow.KindImage, "image/jpeg"}, ".jpeg": {flow.KindImage, "image/jpeg"},
-	".heic": {flow.KindImage, "image/heic"}, ".heif": {flow.KindImage, "image/heif"},
-	".png": {flow.KindImage, "image/png"}, ".gif": {flow.KindImage, "image/gif"},
-	".webp": {flow.KindImage, "image/webp"}, ".avif": {flow.KindImage, "image/avif"},
-	".tif": {flow.KindImage, "image/tiff"}, ".tiff": {flow.KindImage, "image/tiff"},
-	".bmp": {flow.KindImage, "image/bmp"},
+	".jpg": {kindImage, "image/jpeg"}, ".jpeg": {kindImage, "image/jpeg"},
+	".heic": {kindImage, "image/heic"}, ".heif": {kindImage, "image/heif"},
+	".png": {kindImage, "image/png"}, ".gif": {kindImage, "image/gif"},
+	".webp": {kindImage, "image/webp"}, ".avif": {kindImage, "image/avif"},
+	".tif": {kindImage, "image/tiff"}, ".tiff": {kindImage, "image/tiff"},
+	".bmp": {kindImage, "image/bmp"},
 
-	".dng": {flow.KindRaw, "image/x-adobe-dng"}, ".cr2": {flow.KindRaw, "image/x-canon-cr2"},
-	".cr3": {flow.KindRaw, "image/x-canon-cr3"}, ".nef": {flow.KindRaw, "image/x-nikon-nef"},
-	".arw": {flow.KindRaw, "image/x-sony-arw"}, ".raf": {flow.KindRaw, "image/x-fujifilm-raf"},
-	".orf": {flow.KindRaw, "image/x-olympus-orf"}, ".rw2": {flow.KindRaw, "image/x-panasonic-rw2"},
+	".dng": {kindRaw, "image/x-adobe-dng"}, ".cr2": {kindRaw, "image/x-canon-cr2"},
+	".cr3": {kindRaw, "image/x-canon-cr3"}, ".nef": {kindRaw, "image/x-nikon-nef"},
+	".arw": {kindRaw, "image/x-sony-arw"}, ".raf": {kindRaw, "image/x-fujifilm-raf"},
+	".orf": {kindRaw, "image/x-olympus-orf"}, ".rw2": {kindRaw, "image/x-panasonic-rw2"},
 
-	".mov": {flow.KindVideo, "video/quicktime"}, ".mp4": {flow.KindVideo, "video/mp4"},
-	".m4v": {flow.KindVideo, "video/x-m4v"}, ".avi": {flow.KindVideo, "video/x-msvideo"},
-	".mkv": {flow.KindVideo, "video/x-matroska"}, ".webm": {flow.KindVideo, "video/webm"},
-	".mts": {flow.KindVideo, "video/m2ts"}, ".m2ts": {flow.KindVideo, "video/m2ts"},
-	".3gp": {flow.KindVideo, "video/3gpp"},
+	".mov": {kindVideo, "video/quicktime"}, ".mp4": {kindVideo, "video/mp4"},
+	".m4v": {kindVideo, "video/x-m4v"}, ".avi": {kindVideo, "video/x-msvideo"},
+	".mkv": {kindVideo, "video/x-matroska"}, ".webm": {kindVideo, "video/webm"},
+	".mts": {kindVideo, "video/m2ts"}, ".m2ts": {kindVideo, "video/m2ts"},
+	".3gp": {kindVideo, "video/3gpp"},
 
-	".xmp": {flow.KindSidecar, "application/rdf+xml"}, ".aae": {flow.KindSidecar, "application/xml"},
+	".xmp": {kindSidecar, "application/rdf+xml"}, ".aae": {kindSidecar, "application/xml"},
 }
 
 // Classifier: the classify step's logic
 type Classifier struct{}
 
 // Decorate fills Kinds (and every file's MimeType) and puts the main file first
-func (Classifier) Decorate(g *flow.RawItem) (*flow.RawItem, error) {
-	g.Kinds = make([]flow.MediaKind, len(g.Files))
+func (Classifier) Decorate(g *draft) (*draft, error) {
+	g.Kinds = make([]mediaKind, len(g.Files))
 	for i, f := range g.Files {
 		var exifMime string
 		if g.Exif[i] != nil {
@@ -97,14 +96,14 @@ func (Classifier) Stop() {}
 // setRoles: the main file is the original, what else the group has is by kind — a
 // photo is a still (the JPEG of a RAW, the photo of a Live Photo), a video is
 // motion, the rest (.xmp, .aae) is metadata
-func setRoles(g *flow.RawItem) {
+func setRoles(g *draft) {
 	for i, f := range g.Files {
 		switch {
 		case i == 0:
 			f.Role = dto.RoleOriginal
-		case g.Kinds[i] == flow.KindImage || g.Kinds[i] == flow.KindRaw:
+		case g.Kinds[i] == kindImage || g.Kinds[i] == kindRaw:
 			f.Role = dto.RoleStill
-		case g.Kinds[i] == flow.KindVideo:
+		case g.Kinds[i] == kindVideo:
 			f.Role = dto.RoleMotion
 		default:
 			f.Role = dto.RoleMeta
@@ -114,7 +113,7 @@ func setRoles(g *flow.RawItem) {
 
 // kindOf: the MIME type from the content (exiftool), else the extension table, else
 // a sniff of the first bytes; the kind follows from it
-func kindOf(path, exifMime string) (flow.MediaKind, string) {
+func kindOf(path, exifMime string) (mediaKind, string) {
 	ext := strings.ToLower(filepath.Ext(path))
 	known, byExt := extTable[ext]
 
@@ -127,22 +126,22 @@ func kindOf(path, exifMime string) (flow.MediaKind, string) {
 	}
 
 	switch {
-	case byExt && known.kind == flow.KindSidecar:
-		return flow.KindSidecar, mime
+	case byExt && known.kind == kindSidecar:
+		return kindSidecar, mime
 	case strings.HasPrefix(mime, "video/"):
-		return flow.KindVideo, mime
+		return kindVideo, mime
 	case strings.HasPrefix(mime, "image/"):
-		if byExt && known.kind == flow.KindRaw || isRawMime(mime) {
-			return flow.KindRaw, mime
+		if byExt && known.kind == kindRaw || isRawMime(mime) {
+			return kindRaw, mime
 		}
-		return flow.KindImage, mime
+		return kindImage, mime
 	}
-	return flow.KindOther, mime
+	return kindOther, mime
 }
 
 func isRawMime(mime string) bool {
 	for _, info := range extTable {
-		if info.kind == flow.KindRaw && info.mime == mime {
+		if info.kind == kindRaw && info.mime == mime {
 			return true
 		}
 	}

@@ -9,7 +9,6 @@ import (
 	"perceptrail/gontroller/pkg/importer/commit"
 	"perceptrail/gontroller/pkg/importer/discover"
 	"perceptrail/gontroller/pkg/importer/discover/group"
-	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/importer/identify"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
@@ -88,17 +87,14 @@ func scanWith(t *testing.T, root string, dropped func(key string)) []string {
 	t.Helper()
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
 	// The stages' steps as the chain has them, run one group at a time: the providers
-	// (Apple, the plain folder last), the gate; read (a fake exiftool), classify,
-	// validate, embedded, sizes, pick; the core perceptors; close
+	// (Apple, the plain folder last), the gate; identify's steps (a fake exiftool);
+	// the core perceptors; close
 	ps := []providers.Provider{apple.New("", nil, itemsProxy, logger), folder.New()}
 	sw := group.Switch{Providers: ps}
 	gate := discover.NewGate(testDB, plugins.Pm, len(ps), discover.NewProgress(), dropped, logger)
-	exif := identify.NewReader(nil, logger)
-	exif.Extract = fakeExif
-	valid := identify.NewValidator(testDB, logger)
-	embedded := identify.NewEmbedded(nil, t.TempDir(), logger)
-	embedded.Extract = func(string, string, string) (string, error) { return "", errors.New("no exiftool in tests") }
-	sizes := identify.NewSizes(testDB)
+	steps := identify.NewSteps(nil, t.TempDir(), testDB, logger)
+	steps.Read.Extract = fakeExif
+	steps.Embedded.Extract = func(string, string, string) (string, error) { return "", errors.New("no exiftool in tests") }
 
 	var processed []string
 	ok := func(err error) bool {
@@ -129,25 +125,15 @@ func scanWith(t *testing.T, root string, dropped func(key string)) []string {
 				if !ok(err) {
 					continue
 				}
-				exifed, err := exif.Decorate(stored)
+				it, err := steps.Run(stored)
 				if !ok(err) {
 					continue
 				}
-				ranked, _ := identify.Classifier{}.Decorate(exifed)
-				it, err := valid.Decorate(ranked)
-				if !ok(err) {
-					continue
-				}
-				it, _ = embedded.Decorate(it)
-				if it, err = sizes.Decorate(it); err != nil {
-					t.Fatal(err)
-				}
-				it, _ = identify.Pick{}.Decorate(it)
 				runCorePlugins(t, it)
 				if _, err := commit.NewCloser(itemsProxy).Decorate(it); err != nil {
 					t.Fatal(err)
 				}
-				processed = append(processed, it.Files[0].Path)
+				processed = append(processed, it.Item.Path)
 			}
 		}
 	}
@@ -348,7 +334,7 @@ func TestValidatorDeletedThenBack(t *testing.T) {
 
 // runCorePlugins passes the item through the core EXIF plugins (date, size) the
 // way the plugin chain does
-func runCorePlugins(t *testing.T, it *flow.RawItem) {
+func runCorePlugins(t *testing.T, it *identify.Item) {
 	t.Helper()
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
 	ctx, cancel := context.WithCancel(context.Background())

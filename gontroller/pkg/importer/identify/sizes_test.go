@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/model/dto"
 
 	"github.com/eggs-gd/perceplib/api"
@@ -26,7 +25,7 @@ func TestSetSizes(t *testing.T) {
 	}
 	out.Close()
 
-	it := &flow.RawItem{
+	it := &draft{
 		Files: []*dto.FileDto{
 			{Role: dto.RoleOriginal, ItemEntry: dto.ItemEntry{Path: filepath.Join(dir, "o.heic")}},
 			{Role: dto.RoleStill, ItemEntry: dto.ItemEntry{Path: still}},
@@ -51,7 +50,7 @@ func TestSetSizesDerivativeAsMain(t *testing.T) {
 	out, _ := os.Create(still)
 	jpeg.Encode(out, image.NewRGBA(image.Rect(0, 0, 32, 24)), nil)
 	out.Close()
-	it := &flow.RawItem{
+	it := &draft{
 		Files: []*dto.FileDto{{Role: dto.RoleStill, ItemEntry: dto.ItemEntry{Path: still}}},
 		Exif:  []api.RawExif{nil},
 		Meta:  api.RawExif{"ImageWidth": []byte("4032"), "ImageHeight": []byte("3024")},

@@ -1,17 +1,19 @@
 // Package identify: the second stage of the import — the item known: its identity,
 // its metadata, its files' kinds and roles, what it can show now.
 //
-//	read (exiftool, in parallel) → classify (kinds, the main file) → validate (the
-//	item: same / changed / moved / new / broken) → embedded (a preview extracted
-//	from the main file, when nothing else shows) → sizes (pixels, codecs) → pick
-//	(what to show now)
+//	read (exiftool, in parallel) → classify (kinds, roles, the main file) → merge
+//	(the metadata package) → validate (the item: same / changed / moved / new /
+//	broken) → embedded (a preview extracted from the main file, when nothing else
+//	shows) → sizes (pixels, codecs) → pick (what to show now) → yield (the Item)
+//
+// What crosses its boundary is only Item: the working draft (every file, its exif,
+// kinds) stays here.
 //
 // exiftool lives here and nowhere else (read, embedded).
 package identify
 
 import (
 	"perceptrail/gontroller/pkg/importer/discover"
-	"perceptrail/gontroller/pkg/importer/flow"
 
 	"github.com/eggs-gd/perceplib/chain"
 	l "github.com/eggs-gd/perceplib/logger"
@@ -27,36 +29,81 @@ type Store interface {
 // exiftool processes and parallel read steps (groups are independent)
 const workers = 5
 
+// Steps: the stage's steps' logic, in order — New runs them between channels, Run
+// one group at a time (the tests). exiftool comes in through Read.Extract and
+// Embedded.Extract (a fake in tests).
+type Steps struct {
+	Read     *Reader
+	Classify Classifier
+	Merge    Merge
+	Validate *Validator
+	Embedded *Embedded
+	Sizes    *Sizes
+	Pick     Pick
+	Yield    Yield
+}
+
+// NewSteps: pool runs exiftool (nil in tests: set the Extract funcs); previews are
+// extracted under cacheDir
+func NewSteps(pool *exiftoolPool, cacheDir string, db Store, logger *l.Logger) *Steps {
+	return &Steps{
+		Read:     NewReader(pool, logger),
+		Validate: NewValidator(db, logger),
+		Embedded: NewEmbedded(pool, cacheDir, logger),
+		Sizes:    NewSizes(db),
+	}
+}
+
+// Run: one group through every step, as the chain runs it
+func (s *Steps) Run(g discover.Group) (*Item, error) {
+	d, err := s.Read.Decorate(g)
+	for _, step := range []chain.Decorator[*draft, *draft]{s.Classify, s.Merge, s.Validate, s.Embedded, s.Sizes, s.Pick} {
+		if err != nil {
+			return nil, err
+		}
+		d, err = step.Decorate(d)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return s.Yield.Decorate(d)
+}
+
 // New: in — the groups that need work (stored: rows of the files table); out — the
 // identified items; previews are extracted under cacheDir. Its steps report to
 // errch (every group ends here or as an item: the progress counts them).
-func New(cacheDir string, db Store, in <-chan discover.Group, out chan<- *flow.RawItem, errch chan error, logger *l.Logger) chain.ChainProcessor {
+func New(cacheDir string, db Store, in <-chan discover.Group, out chan<- *Item, errch chan error, logger *l.Logger) chain.ChainProcessor {
 	// The kinds' table changed since the files were judged "not media": judged again
 	if err := reclassifyIgnored(db, logger); err != nil {
 		logger.Error("MIME version check failed", l.Error(err))
 	}
+	s := NewSteps(newExiftoolPool(workers, logger), cacheDir, db, logger)
 
 	// read → classify: the files and their metadata
-	read := make(chan *flow.RawItem)
-	// classify → validate: + kinds, the main file first
-	classified := make(chan *flow.RawItem)
+	read := make(chan *draft)
+	// classify → merge: + kinds and roles, the main file first
+	classified := make(chan *draft)
+	// merge → validate: + the asset's metadata package
+	merged := make(chan *draft)
 	// validate → embedded: + the item (its GUID); not media does not get here
-	validated := make(chan *flow.RawItem)
+	validated := make(chan *draft)
 	// embedded → sizes: + the extracted preview, if one was needed
-	extracted := make(chan *flow.RawItem)
+	extracted := make(chan *draft)
 	// sizes → pick: + every file's pixels and codec (stored)
-	sized := make(chan *flow.RawItem)
+	sized := make(chan *draft)
+	// pick → yield: + what to show now
+	picked := make(chan *draft)
 
-	exiftool := newExiftoolPool(workers, logger)
-	reader := NewReader(exiftool, logger)
 	stage := chain.NewChainProcessor(errch)
 	for range workers { // N readers on the same channels, sharing the pool
-		stage.AddStep(chain.NewDecorator(in, read, reader))
+		stage.AddStep(chain.NewDecorator(in, read, s.Read))
 	}
-	stage.AddStep(chain.NewDecorator(read, classified, Classifier{}))
-	stage.AddStep(chain.NewDecorator(classified, validated, NewValidator(db, logger)))
-	stage.AddStep(chain.NewDecorator(validated, extracted, NewEmbedded(exiftool, cacheDir, logger)))
-	stage.AddStep(chain.NewDecorator(extracted, sized, NewSizes(db)))
-	stage.AddStep(chain.NewDecorator(sized, out, Pick{}))
+	stage.AddStep(chain.NewDecorator(read, classified, s.Classify))
+	stage.AddStep(chain.NewDecorator(classified, merged, s.Merge))
+	stage.AddStep(chain.NewDecorator(merged, validated, s.Validate))
+	stage.AddStep(chain.NewDecorator(validated, extracted, s.Embedded))
+	stage.AddStep(chain.NewDecorator(extracted, sized, s.Sizes))
+	stage.AddStep(chain.NewDecorator(sized, picked, s.Pick))
+	stage.AddStep(chain.NewDecorator(picked, out, s.Yield))
 	return stage
 }

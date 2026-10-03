@@ -3,7 +3,6 @@ package identify
 import (
 	"strconv"
 
-	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/model/dto"
 )
 
@@ -18,7 +17,7 @@ import (
 // Nothing found: the item waits for the expensive stage (Waiting).
 type Pick struct{}
 
-func (Pick) Decorate(it *flow.RawItem) (*flow.RawItem, error) {
+func (Pick) Decorate(it *draft) (*draft, error) {
 	it.Item.PreviewPath, it.Item.PreviewMime = viewableFile(it)
 	if it.Item.PreviewPath == "" && it.Embedded != "" {
 		it.Item.PreviewPath, it.Item.PreviewMime = it.Embedded, "image/jpeg"
@@ -38,7 +37,7 @@ var viewableImage = map[string]bool{
 var viewableVideoCodec = map[string]bool{"avc1": true, "avc3": true}
 
 // viewableFile: a file of the group the browser shows (1–3 above), or none
-func viewableFile(it *flow.RawItem) (path, mime string) {
+func viewableFile(it *draft) (path, mime string) {
 	for _, f := range it.Show {
 		if viewableImage[f.MimeType] {
 			return f.Path, f.MimeType
@@ -52,7 +51,7 @@ func viewableFile(it *flow.RawItem) (path, mime string) {
 
 	best := -1
 	for i := 1; i < len(it.Files); i++ {
-		if it.Kinds[i] != flow.KindImage || !viewableImage[it.Files[i].MimeType] {
+		if it.Kinds[i] != kindImage || !viewableImage[it.Files[i].MimeType] {
 			continue
 		}
 		if best < 0 || pixels(it.Exif[i], it.Files[i]) > pixels(it.Exif[best], it.Files[best]) {
@@ -65,11 +64,11 @@ func viewableFile(it *flow.RawItem) (path, mime string) {
 	return "", ""
 }
 
-func viewable(f *dto.FileDto, kind flow.MediaKind, exif map[string][]byte) bool {
+func viewable(f *dto.FileDto, kind mediaKind, exif map[string][]byte) bool {
 	switch kind {
-	case flow.KindImage:
+	case kindImage:
 		return viewableImage[f.MimeType]
-	case flow.KindVideo:
+	case kindVideo:
 		return exif != nil && viewableVideoCodec[string(exif["CompressorID"])]
 	}
 	return false

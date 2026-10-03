@@ -1,7 +1,7 @@
 package commit
 
 import (
-	"perceptrail/gontroller/pkg/importer/flow"
+	"perceptrail/gontroller/pkg/importer/identify"
 
 	"github.com/eggs-gd/perceplib/api"
 	"github.com/eggs-gd/perceplib/chain"
@@ -20,7 +20,7 @@ type Keep struct {
 
 func NewKeep(values Values) *Keep { return &Keep{values: values} }
 
-func (k *Keep) Decorate(it *flow.RawItem) (*flow.RawItem, error) {
+func (k *Keep) Decorate(it *identify.Item) (*identify.Item, error) {
 	if it.Item == nil {
 		return nil, chain.ErrSkippedItem
 	}

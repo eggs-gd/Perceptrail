@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/model/dto"
 )
 
@@ -101,17 +100,6 @@ func TestApplePhotosLibrary(t *testing.T) {
 	exec(`UPDATE ZASSET SET ZTRASHEDSTATE = 1 WHERE ZUUID = ?`, appleEdited)
 	scan(t, root)
 	assertNoItem(t, appleEdited)
-}
-
-// A broken original (not an image) with good derivatives: still an item
-func TestAppleBrokenOriginal(t *testing.T) {
-	it := &flow.RawItem{Key: appleEdited, Kinds: []flow.MediaKind{flow.KindOther, flow.KindImage}}
-	if !it.IsMedia() {
-		t.Error("a keyed asset with a viewable derivative is media")
-	}
-	if (&flow.RawItem{Kinds: []flow.MediaKind{flow.KindOther, flow.KindImage}}).IsMedia() {
-		t.Error("a generic group is judged by its main file")
-	}
 }
 
 // The DB is the truth: the date and size come from it (the files have no EXIF
