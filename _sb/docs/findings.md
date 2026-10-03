@@ -561,6 +561,20 @@ itself and takes only its real dependencies — `identify.New(db, cacheDir, logg
 in, out)`. The import's tests load the registry with the built-in perceptors, as
 the server does.
 
+`identify.Steps` (a struct listing the stage's steps, plus `Run` for the tests) was
+a second declaration next to the chain's own: it existed because the tests had to
+replace exiftool, which lived in `Extract` func fields of the steps. exiftool is now
+a dependency of identify (`identify.Exiftool`: `Read`, `Extract`; the server's
+`Pool`, a fake in tests); `Steps` and `Run` are gone; the tests drive the real
+chain (`Pipe.Send` a group, `Pipe.Flush`, read what came out before the flush).
+
+While at it: a stop left every exiftool process orphaned (329 of them had piled up
+from killed dev runs) — `main` returned as soon as PhotoKit's main queue was let go,
+without waiting for the services, and the web service never stopped at all (`e.Start`
+blocked forever). Now `main` cancels and waits for the services (at most 10 s), the
+web service shuts down on the context, the importer closes its exiftool `Pool`: a
+SIGTERM ends in a second, no orphans.
+
 ### discover cut into walk, group, gate; the walk cycle is the top's (2026-10-03, decided)
 
 discover took nine arguments; a `Deps` struct only hid them. The cause: three things

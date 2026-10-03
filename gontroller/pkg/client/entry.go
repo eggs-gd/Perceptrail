@@ -2,8 +2,10 @@ package client
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"perceptrail/gontroller/pkg/client/routes"
+	"time"
 
 	"github.com/eggs-gd/perceplib/api"
 	l "github.com/eggs-gd/perceplib/logger"
@@ -58,7 +60,17 @@ func (s *webService) Start(parentCtx context.Context) {
 	routes.RegisterAppRoutes(e, s.app)
 	routes.RegisterRenditionRoutes(e, s.logger)
 
-	e.Logger.Fatal(e.Start(s.cfg.Addr()))
+	go func() {
+		if err := e.Start(s.cfg.Addr()); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			e.Logger.Fatal(err)
+		}
+	}()
 
+	// A stop: the server closes (requests in flight get a few seconds)
 	<-ctx.Done()
+	shutdown, done := context.WithTimeout(context.Background(), 5*time.Second)
+	defer done()
+	if err := e.Shutdown(shutdown); err != nil {
+		s.logger.Error("Server shutdown", l.Error(err))
+	}
 }

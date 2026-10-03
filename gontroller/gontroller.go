@@ -19,6 +19,7 @@ import (
 	"perceptrail/gontroller/pkg/providers/apple/photokit"
 	"perceptrail/gontroller/pkg/providers/folder"
 	"syscall"
+	"time"
 
 	"github.com/eggs-gd/go-exiftool"
 	l "github.com/eggs-gd/perceplib/logger"
@@ -82,11 +83,24 @@ func main() {
 	svc.AddService(web)
 	//svc.AddService(importer.NewMaintenanceService(ctx)) // later
 
-	go svc.RunApp(mainCtx)
+	stopped := make(chan struct{})
+	go func() {
+		svc.RunApp(mainCtx)
+		close(stopped)
+	}()
 
 	// The main thread serves PhotoKit's main queue until a stop (macOS; elsewhere: waits)
 	done := make(chan struct{})
 	go func() { <-stop; close(done) }()
 	photokit.RunMain(done)
+
+	// The services stop and clean up (the importer closes its exiftool processes, or
+	// they outlive us) — at most a while: a step may be inside a long exiftool call
+	cancel(nil)
+	select {
+	case <-stopped:
+	case <-time.After(10 * time.Second):
+		log.Printf("Services did not stop in time")
+	}
 	log.Printf("Chain Sys stop")
 }
