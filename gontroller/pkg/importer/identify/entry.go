@@ -2,7 +2,7 @@
 // its metadata, its files' kinds and roles, what it can show now.
 //
 //	read (exiftool, in parallel) → classify (kinds, roles, the main file) → merge
-//	(the metadata package) → validate (the item: same / changed / moved / new /
+//	(the metadata package) → fingerprint (the main file's bytes) → validate (the item: same / changed / moved / new /
 //	broken) → embedded (a preview extracted from the main file, when nothing else
 //	shows) → sizes (pixels, codecs) → pick (what to show now) → yield (the Item)
 //
@@ -22,6 +22,7 @@ import (
 // Store: what identify reads and writes — its steps' needs
 type Store interface {
 	KindsStore
+	HashStore
 	ValidatorStore
 	SizesStore
 }
@@ -33,14 +34,15 @@ const workers = 5
 // one group at a time (the tests). exiftool comes in through Read.Extract and
 // Embedded.Extract (a fake in tests).
 type Steps struct {
-	Read     *Reader
-	Classify Classifier
-	Merge    *Merge
-	Validate *Validator
-	Embedded *Embedded
-	Sizes    *Sizes
-	Pick     Pick
-	Yield    Yield
+	Read        *Reader
+	Classify    Classifier
+	Merge       *Merge
+	Fingerprint Fingerprint
+	Validate    *Validator
+	Embedded    *Embedded
+	Sizes       *Sizes
+	Pick        Pick
+	Yield       Yield
 }
 
 // NewSteps: pool runs exiftool (nil in tests: set the Extract funcs); tags are what
@@ -59,7 +61,7 @@ func NewSteps(pool *exiftoolPool, tags []string, cacheDir string, db Store, logg
 // Run: one group through every step, as the chain runs it
 func (s *Steps) Run(g discover.Group) (*Item, error) {
 	d, err := s.Read.Decorate(g)
-	for _, step := range []chain.Decorator[*draft, *draft]{s.Classify, s.Merge, s.Validate, s.Embedded, s.Sizes, s.Pick} {
+	for _, step := range []chain.Decorator[*draft, *draft]{s.Classify, s.Merge, s.Fingerprint, s.Validate, s.Embedded, s.Sizes, s.Pick} {
 		if err != nil {
 			return nil, err
 		}
@@ -80,14 +82,20 @@ func New(tags []string, cacheDir string, db Store, in <-chan discover.Group, out
 	if err := reclassifyIgnored(db, logger); err != nil {
 		logger.Error("MIME version check failed", l.Error(err))
 	}
+	// The fingerprint changed: every item gets the new one
+	if err := forgetOldHashes(db, logger); err != nil {
+		logger.Error("Fingerprint version check failed", l.Error(err))
+	}
 	s := NewSteps(newExiftoolPool(workers, logger), tags, cacheDir, db, logger)
 
 	// read → classify: the files and their metadata
 	read := make(chan *draft)
 	// classify → merge: + kinds and roles, the main file first
 	classified := make(chan *draft)
-	// merge → validate: + the asset's metadata package
+	// merge → fingerprint: + the asset's metadata package
 	merged := make(chan *draft)
+	// fingerprint → validate: + the main file's fingerprint
+	fingerprinted := make(chan *draft)
 	// validate → embedded: + the item (its GUID); not media does not get here
 	validated := make(chan *draft)
 	// embedded → sizes: + the extracted preview, if one was needed
@@ -103,7 +111,8 @@ func New(tags []string, cacheDir string, db Store, in <-chan discover.Group, out
 	}
 	stage.AddStep(chain.NewDecorator(read, classified, s.Classify))
 	stage.AddStep(chain.NewDecorator(classified, merged, s.Merge))
-	stage.AddStep(chain.NewDecorator(merged, validated, s.Validate))
+	stage.AddStep(chain.NewDecorator(merged, fingerprinted, s.Fingerprint))
+	stage.AddStep(chain.NewDecorator(fingerprinted, validated, s.Validate))
 	stage.AddStep(chain.NewDecorator(validated, extracted, s.Embedded))
 	stage.AddStep(chain.NewDecorator(extracted, sized, s.Sizes))
 	stage.AddStep(chain.NewDecorator(sized, picked, s.Pick))

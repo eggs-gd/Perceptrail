@@ -195,9 +195,10 @@ func (g *Gate) needsProcessing(files []*dto.FileDto, key, metaHash string) bool 
 	if err != nil {
 		return errors.Is(err, model.ErrNotFound)
 	}
-	// The source's metadata changed (a date corrected in Photos), the files did not;
-	// or a perceptor has not processed it (new, or its schema changed)
-	return !cheapStageDone(item) || item.MetaHash != metaHash || g.perceptors.Unprocessed(item.Guid)
+	// No fingerprint (identify's changed: it gets the new one); the source's metadata
+	// changed (a date corrected in Photos), the files did not; or a perceptor has not
+	// processed it (new, or its schema changed)
+	return !cheapStageDone(item) || item.HashShort == "" || item.MetaHash != metaHash || g.perceptors.Unprocessed(item.Guid)
 }
 
 // cheapStageDone: the item went through the cheap stage (Visible, Waiting) or is

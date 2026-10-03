@@ -51,6 +51,30 @@ func TestMovedKeepsItemAndPreview(t *testing.T) {
 	}
 }
 
+// The fingerprint changed (hashVersion): every group is identified once more and
+// keeps its item; then the walk is idle again
+func TestFingerprintChangeReidentifies(t *testing.T) {
+	root := t.TempDir()
+	a, b := filepath.Join(root, "a.jpg"), filepath.Join(root, "b.jpg")
+	write(t, a, "first")
+	write(t, b, "second")
+	scan(t, root)
+	guid := itemAt(t, a).Guid
+
+	if _, err := testDB.ClearHashes(); err != nil {
+		t.Fatal(err)
+	}
+	if got := scan(t, root); len(got) != 2 {
+		t.Fatalf("re-identified %v, want both", got)
+	}
+	if item := itemAt(t, a); item.Guid != guid || item.HashShort == "" || item.State != dto.Visible {
+		t.Errorf("after: %+v", item)
+	}
+	if got := scan(t, root); len(got) != 0 {
+		t.Errorf("walked again: %v", got)
+	}
+}
+
 // Not media: remembered as ignored, not read again on the next walk
 func TestNotMediaIgnored(t *testing.T) {
 	root := t.TempDir()

@@ -22,7 +22,7 @@ const (
 // draft: the item while identify works on it — private to the stage; only Item
 // leaves it. Files, Exif and Kinds are aligned (a nil Exif: exiftool returned
 // nothing). read fills Files and Exif, classify Kinds (the main file first), merge
-// Merged, validate Item, embedded Embedded.
+// Merged, fingerprint Hash, validate Item, embedded Embedded.
 type draft struct {
 	Item     *dto.ItemDto
 	Exif     []api.RawExif
@@ -35,6 +35,8 @@ type draft struct {
 	Kind     string // discover.Group.Kind
 	// Merged: the asset's metadata package (merge) — what the perceptors read
 	Merged api.RawExif
+	// Hash: the main file's fingerprint (fingerprint), its identity across paths
+	Hash string
 	// Embedded: a preview extracted from the main file, when the group has nothing
 	// the browser shows — the cheap preview's last resort
 	Embedded string

@@ -1,55 +1,14 @@
 package model
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"perceptrail/gontroller/pkg/model/dto"
-	"sort"
 
-	"github.com/eggs-gd/perceplib/api"
 	"gorm.io/gorm"
 )
-
-// File-system tags (exiftool File group) that change on move/rename/read
-// and must not affect content identity.
-var volatileHashTags = map[string]struct{}{
-	"FileName":            {},
-	"Directory":           {},
-	"FileModifyDate":      {},
-	"FileAccessDate":      {},
-	"FileInodeChangeDate": {},
-	"FileCreateDate":      {},
-	"FilePermissions":     {},
-	"FileAttributes":      {},
-}
-
-func (p *proxy) getShortHash(item *dto.FileDto, meta api.RawExif) string {
-	h := sha256.New()
-
-	// Write the file size to the hash
-	h.Write([]byte(fmt.Sprintf("%d", item.Size)))
-
-	// Process the EXIF data
-	var keys []string
-	for k := range meta {
-		if _, skip := volatileHashTags[k]; skip {
-			continue
-		}
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	for _, k := range keys {
-		h.Write([]byte(k))
-		h.Write([]byte(fmt.Sprintf("%d", meta[k])))
-	}
-
-	return hex.EncodeToString(h.Sum(nil))
-}
 
 // Outcome of ValidateFile, per Walker.puml
 type Outcome int
@@ -61,9 +20,9 @@ const (
 	OutcomeMoved                  // same hash, the old path is gone: the item keeps its GUID
 )
 
-func (p *proxy) ValidateFile(item *dto.FileDto, meta api.RawExif) (*dto.ItemDto, Outcome, error) {
-	var hashShort = p.getShortHash(item, meta)
-
+// ValidateFile: the item of a plain folder's main file, by its path and its
+// fingerprint (hashShort: the file's bytes, see identify's fingerprint)
+func (p *proxy) ValidateFile(item *dto.FileDto, hashShort string) (*dto.ItemDto, Outcome, error) {
 	itemByGUID, itemByPath, itemByHash := p.getItemsForValidation(item, hashShort)
 
 	if itemByGUID.Guid != itemByPath.Guid {
@@ -216,8 +175,7 @@ func (p *proxy) moveItem(item *dto.ItemDto, file *dto.FileDto) error {
 // ValidateKeyed: the key is the item's identity (it never changes, whatever the
 // main file is): same hash -> as is; another hash -> Dirty (the main file changed,
 // e.g. a derivative replaced by the downloaded original); deleted -> restored.
-func (p *proxy) ValidateKeyed(key string, main *dto.FileDto, meta api.RawExif) (*dto.ItemDto, error) {
-	hash := p.getShortHash(main, meta)
+func (p *proxy) ValidateKeyed(key string, main *dto.FileDto, hash string) (*dto.ItemDto, error) {
 	var item dto.ItemDto
 	err := p.db.Unscoped().Where("guid = ?", key).First(&item).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {

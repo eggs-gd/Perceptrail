@@ -6,7 +6,6 @@ import (
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 
-	"github.com/eggs-gd/perceplib/api"
 	"github.com/eggs-gd/perceplib/chain"
 
 	l "github.com/eggs-gd/perceplib/logger"
@@ -15,8 +14,8 @@ import (
 // ValidatorStore: what validate reads and writes — the item of a group (by its
 // main file's hash or its key), the files' links, a superseded item deleted
 type ValidatorStore interface {
-	ValidateFile(main *dto.FileDto, meta api.RawExif) (*dto.ItemDto, model.Outcome, error)
-	ValidateKeyed(key string, main *dto.FileDto, meta api.RawExif) (*dto.ItemDto, error)
+	ValidateFile(main *dto.FileDto, hash string) (*dto.ItemDto, model.Outcome, error)
+	ValidateKeyed(key string, main *dto.FileDto, hash string) (*dto.ItemDto, error)
 	UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error)
 	GetItemByGuid(guid string) (*dto.ItemDto, error)
 	DeleteItem(item *dto.ItemDto) error
@@ -77,7 +76,7 @@ func (v *Validator) Decorate(g *draft) (*draft, error) {
 	// Moved items go on too: the cheap stage is cheap, and their preview path
 	// changed with them. Skipping outputs that already exist is the expensive
 	// stage's business.
-	item, _, err := v.db.ValidateFile(main, g.Exif[0])
+	item, _, err := v.db.ValidateFile(main, g.Hash)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +103,7 @@ func (v *Validator) keyed(g *draft) (*draft, error) {
 	if _, err := v.db.UpdateFiles(g.Files); err != nil {
 		return nil, err
 	}
-	item, err := v.db.ValidateKeyed(g.Key, g.Files[0], g.Exif[0])
+	item, err := v.db.ValidateKeyed(g.Key, g.Files[0], g.Hash)
 	if err != nil {
 		return nil, err
 	}

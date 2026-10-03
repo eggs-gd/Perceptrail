@@ -5,8 +5,6 @@ import (
 
 	"perceptrail/gontroller/pkg/model/dto"
 
-	"github.com/eggs-gd/perceplib/api"
-
 	"gorm.io/gorm"
 )
 
@@ -19,10 +17,10 @@ type ItemsApi interface {
 	// - short hash gate,
 	// - full hash gate
 	//GetShortHash(rawExif t.RawExif, fileSizeBytes uint64) string
-	ValidateFile(item *dto.FileDto, meta api.RawExif) (*dto.ItemDto, Outcome, error)
+	ValidateFile(item *dto.FileDto, hashShort string) (*dto.ItemDto, Outcome, error)
 	// ValidateKeyed: the item of a group whose source knows its identity (an Apple
 	// Photos asset UUID); found by the key — restored if deleted — or created
-	ValidateKeyed(key string, main *dto.FileDto, meta api.RawExif) (*dto.ItemDto, error)
+	ValidateKeyed(key string, main *dto.FileDto, hash string) (*dto.ItemDto, error)
 
 	GetAllItems() ([]*dto.ItemDto, error)
 	// GetAllGuids: the GUIDs of every item (deleted ones excluded)
@@ -41,6 +39,9 @@ type ItemsApi interface {
 	// DeletedAt is set), for the client's delta sync
 	StreamItemsSince(since time.Time, fn func(*dto.ItemDto, []*dto.FileDto) error) error
 	GetItemByGuid(guid string) (*dto.ItemDto, error)
+	// ClearHashes: every item forgets its fingerprint (the fingerprint changed): the
+	// gate sends each group once more to get the new one
+	ClearHashes() (int64, error)
 	GetItemByPath(path string) (*dto.ItemDto, error)
 	GetItemByHash(hash string) (*dto.ItemDto, error)
 	GetItemsByHash(path string) ([]*dto.ItemDto, error)
@@ -153,6 +154,11 @@ func (p *proxy) GetItemByPath(path string) (*dto.ItemDto, error) {
 func (p *proxy) GetItemByHash(hash string) (*dto.ItemDto, error) {
 	var item dto.ItemDto
 	return &item, p.db.Where("hash_short = ?", hash).First(&item).Error
+}
+
+func (p *proxy) ClearHashes() (int64, error) {
+	res := p.db.Unscoped().Model(&dto.ItemDto{}).Where("hash_short <> ''").Update("hash_short", "")
+	return res.RowsAffected, res.Error
 }
 
 func (p *proxy) GetItemsByHash(hash string) ([]*dto.ItemDto, error) {
