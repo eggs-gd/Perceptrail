@@ -1,7 +1,8 @@
-// Package walk: the first step of the import — the library's files, one walk when
-// asked (Next): every file with its stat, then the chain's flush. What a walk tells
-// about the files it did not see (Gone) is its business too; when to walk again is
-// the importer's.
+// Package walk: the first step of the import — the library's files, walk after walk:
+// every file with its stat, then the chain's flush; once the walk has gone through
+// the whole chain (the flush returns), what it did not see that it says is gone is
+// deleted (the model's rules); after the rescan pause, the next walk. Walks never
+// overlap: no group is in the chain twice.
 package walk
 
 import (
@@ -12,7 +13,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
@@ -36,48 +36,35 @@ type Result struct {
 	Unreadable []string
 }
 
-// Walker: the chain's entry point (a chain.Source). On every Next it walks the root
-// once — every file with its stat — records the result (Last) and flushes the chain.
+// Store: what a walk asks of the model — the files it did not stamp, what their
+// being gone means
+type Store interface {
+	GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error)
+	Gone(files []*dto.FileDto) (deleted, dirty int, err error)
+}
+
+// Walker: the chain's entry point (a chain.Source)
 type Walker struct {
 	logger *l.Logger
 	root   string
-	next   chan struct{}
-
-	mu   sync.Mutex
-	last Result
+	rescan time.Duration // the pause after a walk's work is done
+	db     Store
 }
 
-func New(root string, logger *l.Logger) *Walker {
-	return &Walker{logger: logger, root: root, next: make(chan struct{}, 1)}
+func New(root string, rescan time.Duration, db Store, logger *l.Logger) *Walker {
+	return &Walker{logger: logger, root: root, rescan: rescan, db: db}
 }
 
-// Next asks for a walk (one is pending at most)
-func (w *Walker) Next() {
-	select {
-	case w.next <- struct{}{}:
-	default:
-	}
-}
-
-// Last: the last finished walk
-func (w *Walker) Last() Result {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.last
-}
-
-func (w *Walker) Run(ctx context.Context, out chain.Emitter[dto.ItemEntry]) {
+func (m *Walker) Run(ctx context.Context, out chain.Emitter[dto.ItemEntry]) {
 	for {
-		select {
-		case <-w.next:
-		case <-ctx.Done():
+		r := m.walk(ctx, out.Emit)
+		if !out.Flush() { // returns once the walk went through the whole chain
 			return
 		}
-		r := w.walk(ctx, out.Emit)
-		w.mu.Lock()
-		w.last = r
-		w.mu.Unlock()
-		if !out.Flush() {
+		Delete(m.db, r, m.logger)
+		select {
+		case <-time.After(m.rescan):
+		case <-ctx.Done():
 			return
 		}
 	}
@@ -138,6 +125,32 @@ func (m *Walker) walk(ctx context.Context, emit func(dto.ItemEntry) bool) Result
 func Once(ctx context.Context, root string, logger *l.Logger, each func(dto.ItemEntry)) Result {
 	m := &Walker{logger: logger, root: root}
 	return m.walk(ctx, func(e dto.ItemEntry) bool { each(e); return true })
+}
+
+// Delete: the files the walk did not see that it says are gone (Gone) go by the
+// model's rules (a main file's item deleted, a sidecar's item processed again)
+func Delete(db Store, r Result, logger *l.Logger) {
+	switch {
+	case !r.Complete:
+		logger.Warn("Walk incomplete: deletions are not checked")
+		return
+	case r.Files == 0:
+		logger.Warn("Walk found no files: deletions are not checked", l.String("path", r.Root))
+		return
+	}
+	logger.Info("Walk complete", l.Int("files", r.Files), l.Int("unreadable", len(r.Unreadable)))
+	stale, err := db.GetFilesCheckedBefore(r.Started)
+	if err != nil {
+		logger.Error("Deletions: can't read files", l.Error(err))
+		return
+	}
+	gone := Gone(r, stale)
+	deleted, dirty, err := db.Gone(gone)
+	if err != nil {
+		logger.Error("Deletions failed", l.Error(err))
+		return
+	}
+	logger.Info("Deletions", l.Int("files", len(gone)), l.Int("items", deleted), l.Int("dirty", dirty))
 }
 
 // Gone: of the files a walk did not stamp (stale), the ones it says are deleted —

@@ -11,7 +11,7 @@ c := chain.New(errch)                      // errors of every step (skips never 
 c.AddStep(chain.Entry(in, walker))         // a Source: emits values, flushes after a batch
 c.AddStep(chain.Parallel(4, in, parsed, parse)) // the same Decorator on 4 workers
 c.AddStep(chain.Decorate(parsed, out, enrich))
-c.AddStep(chain.Sink(out, publish, batchDone))  // the end: each value; the batch's flush
+c.AddStep(chain.End(out, publish))         // the end: every value consumed
 c.Process(ctx)                             // runs until ctx ends
 ```
 
@@ -20,7 +20,11 @@ c.Process(ctx)                             // runs until ctx ends
 A `Pipe[T]` carries values and a **flush**. A source flushes when a batch is
 complete (a walk of a library). Every step passes the flush on **after the values
 before it**, so a flush that reaches the end of a chain means every value of the
-batch has gone through every step.
+batch has gone through every step — and the source hears it: **its `Flush` returns
+once the flush has left every end** (the library counts the flush's copies: a
+`Route` multiplies them, a barrier joins them, an end consumes them). A source that
+repeats (a walk every minute) waits for that before the next batch. `Pipe.Flush`
+does the same from outside (a test driving a sub-chain value by value).
 
 - **A `Flusher`** (`Flush() ([]To, error)`, optional on a step's logic) gives what it
   holds — a group not complete yet — and that goes out before the flush.
@@ -40,7 +44,8 @@ batch has gone through every step.
 | `Parallel(n, in, out, d)` | the same `Decorator`, safe for concurrent use | n workers; the order may change |
 | `Route(in, outs, r)` | `Router[T]`: `Route(T) (int, error)` | a value to one output (an index) |
 | `Entry(out, s)` | `Source[T]`: `Run(ctx, Emitter[T])` | the chain's input: `Emit(v)`, `Flush()` |
-| `Sink(in, each, flushed)` | two funcs | the end: every value, and the flush |
+| `End(in, c)` | `Consumer[T]`: `Consume(T) error` | a chain's end: every value consumed |
+| `Sink(in, each, flushed)` | two funcs | an end as funcs: every value, and the flush |
 | `Series(in, out, ds...)` | `Decorator[T, T]`s | one after another, a step each; none: values pass |
 | `New(errch)` + `AddStep` | — | a chain; it is a step too (a sub-chain) |
 

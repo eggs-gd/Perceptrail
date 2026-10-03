@@ -116,12 +116,12 @@ func newHarness(t *testing.T) *harness {
 // (nothing: the group was skipped)
 func (h *harness) identify(g gate.Group) (*identify.Item, bool) {
 	h.stored.Send(h.t.Context(), g)
-	h.stored.Flush(h.t.Context())
+	h.stored.Flush(h.t.Context()) // returns once the group went through: the end has seen it all
+	<-h.flushed
 	var it *identify.Item
 	select {
 	case it = <-h.identified:
-		<-h.flushed
-	case <-h.flushed:
+	default:
 	}
 	select {
 	case err := <-h.errs:
@@ -168,7 +168,7 @@ func (h *harness) toGate(g providers.Group) {
 		return
 	}
 	runCorePlugins(h.t, it)
-	if _, err := commit.NewCloser(itemsProxy).Decorate(it); err != nil {
+	if err := commit.NewCloser(itemsProxy, nil).Consume(it); err != nil {
 		h.t.Fatal(err)
 	}
 	h.processed = append(h.processed, it.Item.Path)
@@ -196,7 +196,7 @@ func (h *harness) scan(root string) []string {
 			h.toGate(g)
 		}
 	}
-	deleteGone(testDB, r, h.logger)
+	walk.Delete(testDB, r, h.logger)
 	return h.processed
 }
 

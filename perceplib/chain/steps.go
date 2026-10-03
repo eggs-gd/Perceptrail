@@ -32,8 +32,8 @@ func (s *decorateStep[Ti, To]) run(ctx context.Context, errch chan<- error) {
 			return
 		}
 		s.out.send(ctx, msg[To]{v: r})
-	}, func() {
-		flushOut(ctx, errch, s.logic, s.out)
+	}, func(b *batch) {
+		flushOut(ctx, errch, s.logic, s.out, b)
 	})
 }
 
@@ -78,9 +78,9 @@ func (s *parallelStep[Ti, To]) run(ctx context.Context, errch chan<- error) {
 		case <-ctx.Done():
 			inFlight.Done()
 		}
-	}, func() {
+	}, func(b *batch) {
 		inFlight.Wait()
-		flushOut(ctx, errch, s.logic, s.out)
+		flushOut(ctx, errch, s.logic, s.out, b)
 	})
 	close(work)
 	workers.Wait()
@@ -117,15 +117,16 @@ func (s *routeStep[T]) run(ctx context.Context, errch chan<- error) {
 		if i >= 0 && i < len(s.outs) {
 			s.outs[i].send(ctx, msg[T]{v: v})
 		}
-	}, func() {
+	}, func(b *batch) {
 		for _, o := range s.outs {
-			o.send(ctx, msg[T]{flush: true})
+			o.forward(ctx, b)
 		}
 	})
 }
 
-// Emitter: what a Source writes to — values, and a flush when a batch is complete.
-// Both return false once the chain stops.
+// Emitter: what a Source writes to — values, and a flush when a batch is complete:
+// Flush returns once the flush has left every end of the chain (every value of the
+// batch went through every step). Both return false once the chain stops.
 type Emitter[T any] interface {
 	Emit(T) bool
 	Flush() bool
@@ -143,7 +144,7 @@ type emitter[T any] struct {
 }
 
 func (e emitter[T]) Emit(v T) bool { return e.out.send(e.ctx, msg[T]{v: v}) }
-func (e emitter[T]) Flush() bool   { return e.out.send(e.ctx, msg[T]{flush: true}) }
+func (e emitter[T]) Flush() bool   { return e.out.Flush(e.ctx) }
 
 type entryStep[T any] struct {
 	out   *Pipe[T]
@@ -167,8 +168,8 @@ type sinkStep[T any] struct {
 	flushed func()
 }
 
-// Sink: the end of a chain — each value to each, and flushed when a flush arrives
-// (every value before it went through the whole chain)
+// Sink: the end of a chain as two funcs — each value to each, flushed when a flush
+// arrives (every value before it went through the whole chain)
 func Sink[T any](in *Pipe[T], each func(T), flushed func()) Processor {
 	return &sinkStep[T]{in: in, each: each, flushed: flushed}
 }
@@ -178,11 +179,35 @@ func (s *sinkStep[T]) run(ctx context.Context, _ chan<- error) {
 		if s.each != nil {
 			s.each(v)
 		}
-	}, func() {
+	}, func(*batch) {
 		if s.flushed != nil {
 			s.flushed()
 		}
 	})
+}
+
+// Consumer: the logic of a chain's last step — every value consumed, nothing goes
+// on. Optional: Stopper.
+type Consumer[T any] interface {
+	Consume(T) error
+}
+
+type endStep[T any] struct {
+	in    *Pipe[T]
+	logic Consumer[T]
+}
+
+// End: logic consumes in — a chain's end (a flush stops here: its batch is done when
+// every end has it)
+func End[T any](in *Pipe[T], logic Consumer[T]) Processor {
+	return &endStep[T]{in: in, logic: logic}
+}
+
+func (s *endStep[T]) run(ctx context.Context, errch chan<- error) {
+	defer stop(s.logic)
+	s.in.receive(ctx, func(v T) {
+		report(ctx, errch, s.logic.Consume(v))
+	}, func(*batch) {})
 }
 
 type pass[T any] struct{}

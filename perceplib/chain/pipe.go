@@ -1,15 +1,53 @@
 // Package chain: steps that run concurrently, connected by typed pipes. A pipe
 // carries values and the flush signal: a source flushes when a batch is complete (a
-// walk), every step passes it on after the values before it, so a flush at the end of
-// the chain means the batch is done.
+// walk), every step passes it on after the values before it, and the source hears
+// when the flush has left every end of the chain — the batch is done.
 package chain
 
-import "context"
+import (
+	"context"
+	"sync"
+	"sync/atomic"
+)
 
-// msg: a value, or the flush signal
+// msg: a value, or the flush signal (flush != nil)
 type msg[T any] struct {
 	v     T
-	flush bool
+	flush *batch
+}
+
+// batch: one flush on its way through the chain. Its tokens are its copies in the
+// pipes: a step that passes it on adds one per output before it consumes what it
+// got (a Route multiplies it, a barrier joins it); a chain's end consumes it. The
+// last token consumed: the batch is done.
+type batch struct {
+	tokens atomic.Int64
+	done   chan struct{}
+	once   sync.Once
+}
+
+func newBatch() *batch {
+	b := &batch{done: make(chan struct{})}
+	b.tokens.Store(1)
+	return b
+}
+
+func (b *batch) add(n int) { b.tokens.Add(int64(n)) }
+
+func (b *batch) consume() {
+	if b.tokens.Add(-1) == 0 {
+		b.once.Do(func() { close(b.done) })
+	}
+}
+
+// wait: the batch is done; false if ctx ended first
+func (b *batch) wait(ctx context.Context) bool {
+	select {
+	case <-b.done:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
 
 // Pipe: a typed channel between steps. The steps that write to it register when
@@ -31,11 +69,20 @@ func (p *Pipe[T]) Send(ctx context.Context, v T) bool {
 	return p.send(ctx, msg[T]{v: v})
 }
 
-// Flush: a flush from outside the chain (a test driving a sub-chain value by value:
-// Send, Flush, and what comes out before the flush at the end is all of it); false if
-// ctx ended first
+// Flush: a flush from outside the chain, returning once it has left every end of the
+// chain (a test driving a sub-chain value by value: Send, Flush — every value sent
+// before went through); false if ctx ended first
 func (p *Pipe[T]) Flush(ctx context.Context) bool {
-	return p.send(ctx, msg[T]{flush: true})
+	b := newBatch()
+	return p.send(ctx, msg[T]{flush: b}) && b.wait(ctx)
+}
+
+// forward: a flush passed on (one more token of its batch)
+func (p *Pipe[T]) forward(ctx context.Context, b *batch) {
+	b.add(1)
+	if !p.send(ctx, msg[T]{flush: b}) {
+		b.consume() // nobody will: the chain stops
+	}
 }
 
 func (p *Pipe[T]) send(ctx context.Context, m msg[T]) bool {
@@ -48,21 +95,25 @@ func (p *Pipe[T]) send(ctx context.Context, m msg[T]) bool {
 }
 
 // receive reads p until ctx ends: every value to each, a flush to flush once every
-// writer has flushed
-func (p *Pipe[T]) receive(ctx context.Context, each func(T), flush func()) {
-	flushed := 0
+// writer has flushed (with its batch: flush passes it on, or not at a chain's end);
+// the tokens received are consumed after
+func (p *Pipe[T]) receive(ctx context.Context, each func(T), flush func(*batch)) {
+	var held []*batch
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case m := <-p.ch:
-			if !m.flush {
+			if m.flush == nil {
 				each(m.v)
 				continue
 			}
-			if flushed++; flushed >= p.writers {
-				flushed = 0
-				flush()
+			if held = append(held, m.flush); len(held) >= p.writers {
+				flush(held[0])
+				for _, b := range held {
+					b.consume()
+				}
+				held = nil
 			}
 		}
 	}

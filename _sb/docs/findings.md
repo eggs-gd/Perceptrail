@@ -537,6 +537,21 @@ Design: roadmap "Expensive stage".
 
 ## Backend: gontroller, plugins, exiftool
 
+### The chain runs itself: the walker cycles, commit is the end (2026-10-03, decided)
+
+The walker stuck out of the importer (`Next`, `Last`), a `cycle.go` at the top ran
+the deletions, the pruning and the pause, and a `Sink` step at the end told the top
+"the walk is done". All of it is the chain's own: the library's `Emitter.Flush` now
+returns once the flush has left every end of the chain (it counts the flush's copies:
+a `Route` multiplies them, a barrier joins them, an end consumes them), so the walker
+cycles by itself — walk, flush and wait, delete what it says is gone (walk owns
+what a walk means; the model applies it), pause, again. `commit` is the chain's end
+(`chain.End`); the exif step checks the perceptors' rows at start and prunes on each
+flush (one walk late for this walk's deletions, harmless). The top only wires the
+steps and keeps Refresh. While writing it the import tests' harness had a race of
+its own (a `select` over "item" and "flushed", both ready): read deterministically
+now that `Flush` returns after the end saw everything.
+
 ### One exif step; the perceptors' contract in plugins (2026-10-03, decided)
 
 The perceptors' logic was spread over four places: the built-in ones a step

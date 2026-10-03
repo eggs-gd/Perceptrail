@@ -80,7 +80,7 @@ func stop(logic any) {
 }
 
 // flushOut: what a Flusher holds, then the flush
-func flushOut[To any](ctx context.Context, errch chan<- error, logic any, out *Pipe[To]) {
+func flushOut[To any](ctx context.Context, errch chan<- error, logic any, out *Pipe[To], b *batch) {
 	if f, ok := logic.(Flusher[To]); ok {
 		held, err := f.Flush()
 		report(ctx, errch, err)
@@ -88,5 +88,5 @@ func flushOut[To any](ctx context.Context, errch chan<- error, logic any, out *P
 			out.send(ctx, msg[To]{v: v})
 		}
 	}
-	out.send(ctx, msg[To]{flush: true})
+	out.forward(ctx, b)
 }

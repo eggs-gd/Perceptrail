@@ -278,3 +278,74 @@ func TestFlushFromOutside(t *testing.T) {
 		t.Errorf("got %v, flushes %v", got.got, got.flushes)
 	}
 }
+
+// drained: a source that records, after each Flush returns, how many values the ends
+// had consumed by then
+type drained struct {
+	vs   []int
+	seen *atomic.Int32
+	at   chan int32
+}
+
+func (d drained) Run(ctx context.Context, out Emitter[int]) {
+	for _, v := range d.vs {
+		out.Emit(v)
+	}
+	if out.Flush() {
+		d.at <- d.seen.Load()
+	}
+	<-ctx.Done()
+}
+
+type count struct{ seen *atomic.Int32 }
+
+func (c count) Consume(int) error { time.Sleep(5 * time.Millisecond); c.seen.Add(1); return nil }
+
+// Flush returns once the flush has left every end of the chain — through a Route, two
+// branches, two ends — so every value of the batch has been consumed by then
+func TestFlushWaitsForEveryEnd(t *testing.T) {
+	in, even, odd := NewPipe[int](0), NewPipe[int](0), NewPipe[int](0)
+	var seen atomic.Int32
+	at := make(chan int32, 1)
+	c := New(nil)
+	c.AddStep(Entry(in, drained{vs: []int{1, 2, 3, 4, 5}, seen: &seen, at: at}))
+	c.AddStep(Route(in, []*Pipe[int]{even, odd}, parity{}))
+	c.AddStep(End[int](even, count{&seen}))
+	c.AddStep(End[int](odd, count{&seen}))
+	defer run(t, c)()
+	select {
+	case n := <-at:
+		if n != 5 {
+			t.Errorf("Flush returned with %d of 5 values consumed", n)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Flush never returned")
+	}
+}
+
+type failOdd struct{}
+
+func (failOdd) Consume(v int) error {
+	if v%2 == 1 {
+		return errors.New("odd")
+	}
+	return nil
+}
+
+// End: a chain's last step — its errors go to the chain's channel
+func TestEndReportsErrors(t *testing.T) {
+	errch := make(chan error, 10)
+	in := NewPipe[int](0)
+	c := New(errch)
+	c.AddStep(End[int](in, failOdd{}))
+	defer run(t, c)()
+	for _, v := range []int{1, 2, 3} {
+		in.Send(t.Context(), v)
+	}
+	if !in.Flush(t.Context()) {
+		t.Fatal("flush not done")
+	}
+	if len(errch) != 2 {
+		t.Errorf("%d errors, want 2", len(errch))
+	}
+}

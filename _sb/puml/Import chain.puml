@@ -41,7 +41,7 @@ control "close" as Closer
 end box
 
 box "importer (the top)" #WhiteSmoke
-control "cycle,\nRefresh" as Top
+control "Refresh" as Top
 end box
 
 database "DB" as DB
@@ -107,22 +107,22 @@ end note
 
 == end of walk ==
 
-Walker -> Groups: FLUSH (the walk's Result kept: Last)
+Walker -> Groups: FLUSH (Flush returns once it left the chain's end)
 Groups -> Photos: flush
 & Groups -> Generic: flush
 note right of Groups: to every grouper (Route)
 Generic -> Gate: what it holds (last group), flush
 Photos -> Gate: what it holds (files held back: stamped), flush
 note over Gate: once every grouper has flushed (the chain's barrier)\nthe flush goes on, through every step, to the end
-Closer --> Top: the flush reached the end of the chain (Sink):\nevery group of the walk went through every step
-Top -> DB: deletions (V2): walk.Gone (a complete walk, under the root,\nnot under unreadable directories), then the model's Gone
-Top -> Top: the perceptors' rows of gone items pruned
-Top -> Walker: rescan pause (1 min), then Next: walk again
+note over Core, Keep: keep: on the flush, the perceptors' rows\nof gone items pruned (the previous walk's)
+Closer --> Walker: the flush left the chain's end (commit):\nevery group of the walk went through every step
+Walker -> DB: deletions (V2): walk.Gone (a complete walk, under the root,\nnot under unreadable directories), then the model's Gone
+Walker -> Walker: rescan pause (1 min), then walk again
 
 == One asset again (Apple Photos on demand) ==
 note over Photos: Photos made a file of an asset local\n(the viewer asked for it: PhotoKit)
 Top -> Photos: Refresh(uuid): Regroup - the last load's DB rows\n+ the disk now (no walk, no DB read)
 Top -> Gate: providers.Group (asset UUID, Requested):\nprocessed even if nothing changed; no flush,\ndeletions untouched
-Closer --> Top: the item is done: the request waiting\nfor it answers (importer Refresh)
+Closer --> Top: published(guid): the request waiting\nfor it answers (importer Refresh)
 
 @enduml

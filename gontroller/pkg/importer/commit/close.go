@@ -3,8 +3,6 @@ package commit
 import (
 	"perceptrail/gontroller/pkg/importer/identify"
 	"perceptrail/gontroller/pkg/model/dto"
-
-	"github.com/eggs-gd/perceplib/chain"
 )
 
 // CloserStore: what the closer writes — the item published (the model decides its
@@ -15,16 +13,24 @@ type CloserStore interface {
 
 // Closer: the close step's logic — the item published after the cheap stage
 type Closer struct {
-	db CloserStore
+	db        CloserStore
+	published func(guid string)
 }
 
-func NewCloser(db CloserStore) *Closer { return &Closer{db: db} }
+func NewCloser(db CloserStore, published func(guid string)) *Closer {
+	return &Closer{db: db, published: published}
+}
 
-func (c *Closer) Decorate(in *identify.Item) (*dto.ItemDto, error) {
+func (c *Closer) Consume(in *identify.Item) error {
 	if in == nil || in.Item == nil {
-		return nil, chain.ErrSkippedItem
+		return nil
 	}
-	return c.db.Publish(in.Item)
+	item, err := c.db.Publish(in.Item)
+	if err != nil {
+		return err
+	}
+	if c.published != nil {
+		c.published(item.Guid)
+	}
+	return nil
 }
-
-func (c *Closer) Stop() {}

@@ -1,10 +1,10 @@
 // Package exif: the import's EXIF perceptors over the identified item — the
 // built-in ones (they write into it: date, size, length), the external Go plugins
 // (they only read it), then their values kept, a row in each one's storage. And what
-// the rest of the import asks of them: the items one has not processed
-// (MarkUnprocessed, at start), the rows of gone items (Prune, after a walk). It reads the plugin registry itself.
+// what follows from them: the items one has not processed are processed again (at
+// start), the rows of gone items pruned (on a walk's flush). It reads the plugin registry itself.
 //
-//	each built-in perceptor → each external one → keep
+//	each built-in perceptor → each external one → keep (on a flush: prune)
 package exif
 
 import (
@@ -25,9 +25,16 @@ var (
 	_ api.RawItemR      = (*identify.Item)(nil)
 )
 
-// New: in — the identified items; out — the same, perceived, their values kept. Its
-// errors go to the chain it runs in.
-func New(in, out *chain.Pipe[*identify.Item], logger *l.Logger) chain.Processor {
+// New: in — the identified items; out — the same, perceived, their values kept. At
+// start, the items a perceptor has not processed are marked for rework
+// (MarkUnprocessed); on every walk's flush the rows of gone items are pruned (Prune —
+// the walk's own deletions come once the flush has left the chain: a row of an item
+// gone in this walk goes on the next one). Its errors go to the chain it runs in.
+func New(db Items, in, out *chain.Pipe[*identify.Item], logger *l.Logger) chain.Processor {
+	// A perceptor new or changed since the last run: its items are processed again
+	if err := MarkUnprocessed(db, logger); err != nil {
+		logger.Error("Perceptors' rows not checked", l.Error(err))
+	}
 	var steps []chain.Decorator[*identify.Item, *identify.Item]
 	for _, p := range corePerceptors() {
 		if d := p.Decorator(logger.Named(p.Name())); d != nil {
@@ -43,7 +50,7 @@ func New(in, out *chain.Pipe[*identify.Item], logger *l.Logger) chain.Processor 
 			logger.Error("EXIF plugin has no decorator, skipped", l.String("plugin", p.Name()))
 		}
 	}
-	return chain.Series(in, out, append(steps, keep{})...)
+	return chain.Series(in, out, append(steps, keep{db: db, logger: logger})...)
 }
 
 // perceive: a perceptor's logic over the item the steps carry, seen as T (read-write
@@ -76,7 +83,10 @@ func (p perceive[T]) Stop() {
 // value, or "processed, nothing found"). Before the item is published: an item
 // published without them would be taken as done; a crash between the two leaves an
 // item that is not, the next walk sends it again.
-type keep struct{}
+type keep struct {
+	db     Items
+	logger *l.Logger
+}
 
 func (keep) Decorate(it *identify.Item) (*identify.Item, error) {
 	if it.Item == nil {
@@ -86,4 +96,10 @@ func (keep) Decorate(it *identify.Item) (*identify.Item, error) {
 		return nil, err
 	}
 	return it, nil
+}
+
+// Flush: a walk's flush — the perceptors' rows of gone items are pruned
+func (k keep) Flush() ([]*identify.Item, error) {
+	Prune(k.db, k.logger)
+	return nil, nil
 }

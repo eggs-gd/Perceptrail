@@ -79,7 +79,7 @@ commit     the item published (Visible / Waiting)
 ```
 
 After a walk's flush reached the end: its deletions, the perceptors' rows of gone
-items, the rescan pause, the next walk (the importer's cycle). Details, the types
+items, the rescan pause, the next walk — the chain runs this by itself. Details, the types
 and the rules: [`pkg/importer/README.md`](pkg/importer/README.md).
 The transcoders (`pkg/transcode`) are not wired yet: a chain of their own, fed from
 the DB.

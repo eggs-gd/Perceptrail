@@ -17,17 +17,16 @@ A step's constructor takes what it really depends on and its pipes: `walk` the r
 reads it asks the plugin registry: `plugins.ExifTags`), `exif` the logger (it reads the plugin
 registry itself), `commit` the model. No callbacks between the steps.
 
-[`entry.go`](entry.go) (`NewImporterService`) wires the stages and holds what
-spans them: the pipes between the steps (typed: a step's in/out types are checked
-at compile time), one error channel, the end of the chain (a `Sink`: an item's
-waiters hear it; the walk's flush means its work is done), the **walk cycle**
-([`cycle.go`](cycle.go): after a walk's flush reached the end — its deletions, the
-perceptors' rows of gone items, the rescan pause, the next walk), `Refresh` (one
-asset again, without a walk); at start and after a walk it calls the exif step's
-bookkeeping (`exif.MarkUnprocessed`, `exif.Prune`).
+[`entry.go`](entry.go) (`NewImporterService`) only wires the steps: the pipes
+between them (typed: a step's in/out types are checked at compile time), one error
+channel, and `Refresh` (one asset again, without a walk) with who waits for it. The
+chain starts, walks, repeats and stops by itself: `walk` walks at once, flushes,
+waits until the walk went through the whole chain (its `Flush` returns), deletes
+what it says is gone, pauses (`rescan`), walks again; `exif` checks the perceptors'
+rows at start and prunes them on every flush; `commit` is the chain's end.
 
 ```
-importer/                  the top: the steps, the walk cycle, Refresh
+importer/                  the top: the steps wired, Refresh
 importer/walk/             the library's files, one walk when asked; what a walk says is gone (Gone)
 importer/group/            whole assets: the providers' switch and their groupers (a sub-chain)
 importer/gate/             the files table up to date; only the groups that need work pass
@@ -45,7 +44,7 @@ of processes, closed when its steps stop), a test gives a fake
 **A type belongs to the package that produces it** (there is no shared package of
 messages): see [Types](#types-who-owns-what). Every step declares the DB methods it calls as its own small
 interface (`gate.Store`, `ValidatorStore`, `SizesStore`, `KindsStore`, `CloserStore`,
-the cycle's `CycleStore`); a sub-chain's `Store` embeds its steps'; the top passes
+`walk.Store`, `exif.Items`); a sub-chain's `Store` embeds its steps'; the top passes
 the proxy.
 **What a perceptor means to the import is the exif step's**
 ([`exif/`](exif/)), not the registry's and not scattered over the steps: which ones
@@ -75,7 +74,7 @@ detail).
 
 | Stage / step | File | In -> out | What it does |
 |---|---|---|---|
-| **walk** | `walk/walker.go` | a request (`Next`) -> `dto.ItemEntry` | A `chain.Source`: on each request walks the root — every file (path + stat) — records the walk (`walk.Result`, `Last`) and flushes the chain. Unreadable subdirectories are skipped and recorded. `walk.Gone`: of the files a walk did not stamp, the ones it says are deleted. |
+| **walk** | `walk/walker.go` | the root -> `dto.ItemEntry` | A `chain.Source`: walks at once — every file (path + stat) — flushes, waits until the walk went through the chain (`Flush` returns), deletes what it says is gone (`walk.Gone`, then the model's `Gone`), pauses (`rescan`), walks again. Unreadable subdirectories are skipped and recorded. |
 | **group** | `group/switch.go` | `dto.ItemEntry` -> `providers.Group` | A sub-chain: a switch sends a file to the grouper of the first enabled provider that claims it (the plain folder last: everything else), the walk's flush to every grouper (a `chain.Route`); each grouper is a step of it. |
 | (plain folder grouper) | `pkg/providers/folder` | `dto.ItemEntry` -> `providers.Group` | Sidecars by name, next to each other: one open group; a complete group goes out, the last one on the walk's flush. |
 | (Apple Photos grouper) | `pkg/providers/apple` | `dto.ItemEntry` -> `providers.Group` | The first file of a library loads the assets from a copy of `Photos.sqlite` and forms the groups (files that exist, per the naming layout); a group goes out when its last file arrives. Key = asset UUID; the main file = the source; `Show` = the edit, the original, then Apple's derivatives. Trashed / hidden assets are not sent; incomplete groups' files are `Held`, given on the walk's flush. Video renditions Photos downloads on request (`_2_3_o.mp4`, `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`; `_a` instead of `_o` for an edit, preferred) are `motion`, after the stills; `apple.Local` finds the best file for an on-demand want; `Regroup` forms one asset again (the last load's DB rows + the disk now). |
@@ -90,8 +89,8 @@ detail).
 | sizes | `identify/sizes.go` | draft -> draft | Pixels and codec of every file the client may show (the original's from the metadata, images from their header), written to the files table. |
 | pick | `identify/pick.go` | draft -> draft | What the browser shows now, no transcode: the source's `Show`, the main file (JPEG, PNG, …; H.264 video), the biggest viewable derivative, else the embedded one. Any size counts. |
 | yield | `identify/item.go` | draft -> `*identify.Item` | What leaves the stage: the item and its metadata package. |
-| **exif** | `exif/entry.go` | `*identify.Item` -> `*identify.Item` | The EXIF perceptors, a step each: the built-in ones (date + zone, size, length; read-write `plugins.RawItemRW`), then the external `.so` ones (read-only `api.RawItemR`); then keep — a row in every import perceptor's storage (its value, or "processed, nothing found"), before the item is published. |
-| **commit** | `commit/entry.go`, `close.go` | `*identify.Item` -> `*dto.ItemDto` | The model publishes the item (`Publish`: `Visible` with a preview, else `Waiting`). |
+| **exif** | `exif/entry.go` | `*identify.Item` -> `*identify.Item` | The EXIF perceptors, a step each: the built-in ones (date + zone, size, length; read-write `plugins.RawItemRW`), then the external `.so` ones (read-only `api.RawItemR`); then keep — a row in every import perceptor's storage (its value, or "processed, nothing found"), before the item is published; at start the items a perceptor has not processed are marked for rework, on every flush the rows of gone items pruned. |
+| **commit** | `commit/entry.go`, `close.go` | `*identify.Item` -> (the chain's end) | The model publishes the item (`Publish`: `Visible` with a preview, else `Waiting`); who waits for it hears (`published`, Refresh). |
 
 ## Types: who owns what
 
@@ -162,8 +161,8 @@ it calls (its own small interface).
 - **The walk's flush passes through the groupers**, not around them: each gives
   what it holds (its last group, the files held back) before passing it on, and the
   gate's input has a writer per grouper — the chain's barrier passes the flush on
-  only once every grouper has flushed. The deletions come when the flush reached
-  the end of the chain (the cycle): every file the walk saw is stamped by then.
+  only once every grouper has flushed. The deletions come when the walker's flush
+  has left the chain's end: every file the walk saw is stamped by then.
 - **Deletions are conservative**: only after a complete walk that found files, never
   under an unreadable directory, only under the configured root. A main file gone
   -> the item is soft-deleted; a sidecar gone -> the item is `Dirty`.
@@ -171,9 +170,13 @@ it calls (its own small interface).
   previous walk's flush reached the end of the chain (every group of it went through
   every step: a flush passes a step only after the values before it, `Parallel`
   waits for the ones in flight), not from the end of the walk: walks never overlap,
-  no group is in the chain twice (`cycle.go`: the walker walks only when the cycle
-  asks). Nothing is counted: a group dropped (a skip) or failed on the way is simply
-  not there.
+  no group is in the chain twice (the walker's `Flush` returns only then: the
+  library counts the flush's copies — a `Route` multiplies them, a barrier joins
+  them, an end consumes them). Nothing is counted per group: one dropped (a skip)
+  or failed on the way is simply not there.
+- **The perceptors' rows of gone items** are pruned on a walk's flush at the exif
+  step — before that walk's deletions: a row of an item gone in this walk goes on
+  the next one.
 - **Moves and deletions**: the deletions come after the walk's groups went through
   the whole chain, so a moved file is validated before its old path is deleted; the
   validator also finds soft-deleted items by fingerprint and restores them (a file
