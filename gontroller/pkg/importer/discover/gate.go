@@ -28,16 +28,12 @@ type Store interface {
 	SweepStore
 }
 
-// Unprocessed: whether a perceptor still has to process an item (its schema is new
-// or changed) — the group goes through the import once more
-type Unprocessed interface {
-	Unprocessed(guid string) bool
-}
-
-// Perceptors: what discover asks of the perceptors — the gate and the deletions
-type Perceptors interface {
-	Unprocessed
-	Pruner
+// Perceptors: what discover asks of the perceptors — whether one still has to
+// process an item (its schema is new or changed: the group goes through the import
+// once more, the gate), and to drop the rows of items not kept (the deletions)
+type Perceptors struct {
+	Unprocessed func(guid string) bool
+	Prune       func(keep func(guid string) bool)
 }
 
 // files gate: keeps the files table (identity, stat, CheckTime) and lets through
@@ -45,7 +41,7 @@ type Perceptors interface {
 // flush (once every grouper has flushed) it derives deletions.
 type Gate struct {
 	db         GateStore
-	perceptors Unprocessed
+	perceptors Perceptors
 	sweep      sweep
 	logger     *l.Logger
 	branches   int // markers to wait for

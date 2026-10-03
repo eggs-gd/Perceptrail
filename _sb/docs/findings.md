@@ -537,6 +537,20 @@ Design: roadmap "Expensive stage".
 
 ## Backend: gontroller, plugins, exiftool
 
+### Registries are package functions, steps are instances (2026-10-03, decided)
+
+`providers` (one registry per process) exposed package functions (`Enabled`, `Of`),
+`plugins` exposed a global instance (`plugins.Pm.LoadPlugins`, `Pm.Core()`, …): a
+third more text in the package and at every call. Rule: **a top-level package that is
+one per process (a registry) gives package functions** — `plugins.Load`, `All`,
+`Core`, `External`, `ExifTags`, `Unprocessed`, `SaveValues`, `Prune`, `LoadValues`,
+`Client`; **instances where they encapsulate logic** (a chain's steps, a provider, a
+grouper). A step that needs one call of a registry gets that function
+(`discover.Perceptors{Unprocessed, Prune}`, `commit.Values`), not the registry — a
+one-method dependency is a func, as the gate's `dropped` already was. Not singletons
+for everything: the DB proxy, the steps' stores stay passed in (narrow interfaces,
+replaceable in tests); a global reached from inside a step hides the link.
+
 ### chain: pipes with a flush (2026-10-03, decided)
 
 The end of a walk was a domain value: `Found.Done` / `Group.Done` rode in the data,

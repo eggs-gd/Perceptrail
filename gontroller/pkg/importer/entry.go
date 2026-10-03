@@ -94,14 +94,14 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	items := chain.NewPipe[*dto.ItemDto](1000)
 
 	waits := newAssetWaits()
-	disc := discover.New(ctx.Config().Path, rescan, providers.Enabled(), progress, waits.done, db, plugins.Pm, stored, logger)
+	disc := discover.New(ctx.Config().Path, rescan, providers.Enabled(), progress, waits.done, db, discover.Perceptors{Unprocessed: plugins.Unprocessed, Prune: plugins.Prune}, stored, logger)
 
 	importChain := chain.New(errch)
 	importChain.AddStep(disc)
-	importChain.AddStep(identify.New(plugins.Pm.ExifTags(), ctx.Config().CacheDir(), db, stored, identified, logger))
-	importChain.AddStep(core.New(plugins.Pm.Core(), identified, cored, logger))
-	importChain.AddStep(external.New(plugins.Pm.External(), cored, perceived, logger))
-	importChain.AddStep(commit.New(db, plugins.Pm, perceived, items))
+	importChain.AddStep(identify.New(plugins.ExifTags(), ctx.Config().CacheDir(), db, stored, identified, logger))
+	importChain.AddStep(core.New(plugins.Core(), identified, cored, logger))
+	importChain.AddStep(external.New(plugins.External(), cored, perceived, logger))
+	importChain.AddStep(commit.New(db, plugins.SaveValues, perceived, items))
 	// The end: an item's waiters hear it; the walk's flush here means its work is done
 	importChain.AddStep(chain.Sink(items, func(it *dto.ItemDto) { waits.done(it.Guid) }, progress.Done))
 

@@ -23,16 +23,11 @@ type SweepStore interface {
 	GetAllGuids() ([]string, error)
 }
 
-// Pruner: the perceptors' rows of items not kept are dropped
-type Pruner interface {
-	Prune(keep func(guid string) bool)
-}
-
 // sweep: the deletions after a complete walk — the gate runs it once every
 // grouper's marker has reached it (all files stamped)
 type sweep struct {
 	db         SweepStore
-	perceptors Pruner
+	perceptors Perceptors
 	logger     *l.Logger
 }
 

@@ -114,7 +114,7 @@ func scanWith(t *testing.T, root string, dropped func(key string)) []string {
 	ps := []providers.Provider{apple.New("", nil, itemsProxy, logger), folder.New()}
 	sw := group.Switch{Providers: ps}
 	progress := discover.NewProgress()
-	gate := discover.NewGate(testDB, plugins.Pm, progress, dropped, logger)
+	gate := discover.NewGate(testDB, discover.Perceptors{Unprocessed: plugins.Unprocessed, Prune: plugins.Prune}, progress, dropped, logger)
 	steps := identify.NewSteps(nil, coreTags(), t.TempDir(), testDB, logger)
 	steps.Read.Extract = perFile(fakeExif)
 	steps.Embedded.Extract = func(string, string, string) (string, error) { return "", errors.New("no exiftool in tests") }

@@ -45,7 +45,7 @@ func main() {
 	log.Printf("mode: %s", ctx.Config().Mode)
 	svc := app.NewSvcContext()
 
-	err := plugins.Pm.LoadPlugins(ctx)
+	err := plugins.Load(ctx)
 	if err != nil {
 		log.Fatalf("Failed to load plugins: %v", err)
 	}
@@ -66,7 +66,7 @@ func main() {
 	for _, p := range ps {
 		p.Start(mainCtx, importer.Refresh)
 	}
-	web, err := client.NewWebService(ctx.Config().Server, routes.AppInfo{Version: app.Version, Mode: ctx.Config().Mode}, plugins.Pm.ClientPerceptors(), plugins.Pm.LoadValues, ctx.Logger(string(app.LogHTTP)))
+	web, err := client.NewWebService(ctx.Config().Server, routes.AppInfo{Version: app.Version, Mode: ctx.Config().Mode}, plugins.Client(), plugins.LoadValues, ctx.Logger(string(app.LogHTTP)))
 	if err != nil {
 		log.Fatalf("Server: %v", err)
 	}
