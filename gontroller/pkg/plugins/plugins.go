@@ -11,15 +11,23 @@ import (
 	"plugin"
 	"sync"
 
-	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/model"
-	"perceptrail/gontroller/pkg/plugins/exif_date"
-	"perceptrail/gontroller/pkg/plugins/exif_duration"
-	"perceptrail/gontroller/pkg/plugins/exif_size"
+	"perceptrail/gontroller/pkg/plugins/settings"
 
 	"github.com/eggs-gd/perceplib/api"
 	l "github.com/eggs-gd/perceplib/logger"
 )
+
+// Config: what the registry needs — the external plugins' files, which perceptors
+// run and which the client sees, where their storages go (the DB driver, the data
+// directory), the logger
+type Config struct {
+	Plugins    []string
+	Perceptors settings.Perceptors
+	Driver     string
+	DataDir    string
+	Logger     *l.Logger
+}
 
 // The loaded perceptors (enabled in the config), the core ones first, and the
 // storage of each that keeps data (its Schema), by perceptor name
@@ -27,23 +35,23 @@ var (
 	mu         sync.RWMutex
 	perceptors []api.Perceptor
 	stores     map[string]*model.PerceptorStore
-	config     *app.Config
+	config     Config
 	logger     *l.Logger
 	loaded     bool
 )
 
-// Load loads every perceptor once, at start: the core ones, then the external
-// plugins of the config; the ones switched off in the config do not run
-func Load(ctx app.AppContext) error {
+// Load loads every perceptor once, at start: the built-in ones (core: given by the
+// caller — they import this package for their contract, it does not import them),
+// then the external plugins of the config; the ones switched off in the config do not
+// run
+func Load(cfg Config, core ...api.Perceptor) error {
 	mu.Lock()
 	defer mu.Unlock()
 	if loaded {
 		return nil
 	}
-	config = ctx.Config()
-	logger = ctx.Logger(string(app.LogPlugins))
+	config, logger = cfg, cfg.Logger
 
-	core := []api.Perceptor{exif_date.Perceptor, exif_size.Perceptor, exif_duration.Perceptor}
 	external := loadExternal()
 	perceptors = nil
 	for _, p := range append(core, external...) {
@@ -77,7 +85,7 @@ func openStores() {
 		if s.Store == "" {
 			continue
 		}
-		st, err := model.OpenPerceptorStore(config.Database.Driver, filepath.Join(config.DataDir, "perceptors"), s)
+		st, err := model.OpenPerceptorStore(config.Driver, filepath.Join(config.DataDir, "perceptors"), s)
 		if err != nil {
 			logger.Error("Perceptor storage not opened", l.String("perceptor", p.Name()), l.Error(err))
 			continue

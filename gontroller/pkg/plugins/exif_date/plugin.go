@@ -1,7 +1,7 @@
 package exif_date
 
 import (
-	"perceptrail/gontroller/pkg/plugins/exif_core"
+	"perceptrail/gontroller/pkg/plugins"
 
 	"github.com/eggs-gd/perceplib/api"
 	"github.com/eggs-gd/perceplib/chain"
@@ -14,7 +14,7 @@ type datePerceptor struct{}
 func (p *datePerceptor) Name() string                       { return "exif_date" }
 func (p *datePerceptor) DataProvider() api.DataProviderType { return api.ExifDataProvider }
 func (p *datePerceptor) ProcessingMode() api.ProcessingMode { return api.SingleItem }
-func (p *datePerceptor) Decorator(logger *l.Logger) chain.Decorator[exif_core.RawItemRW, exif_core.RawItemRW] {
+func (p *datePerceptor) Decorator(logger *l.Logger) chain.Decorator[plugins.RawItemRW, plugins.RawItemRW] {
 	return &datesExtractor{logger}
 }
 

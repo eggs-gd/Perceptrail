@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"perceptrail/gontroller/pkg/plugins/exif_core"
+	"perceptrail/gontroller/pkg/plugins"
 
 	l "github.com/eggs-gd/perceplib/logger"
 )
@@ -18,7 +18,7 @@ type durationExtractor struct {
 	logger *l.Logger
 }
 
-func (d *durationExtractor) Decorate(in exif_core.RawItemRW) (exif_core.RawItemRW, error) {
+func (d *durationExtractor) Decorate(in plugins.RawItemRW) (plugins.RawItemRW, error) {
 	for _, tag := range durationTags {
 		if s := parse(in.GetExif(tag)); s > 0 {
 			in.SetDuration(s)

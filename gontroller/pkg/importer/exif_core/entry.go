@@ -1,7 +1,7 @@
 // Package exif_core: the third stage of the import — the core EXIF perceptors
 // (built in: pkg/plugins/exif_date, exif_size, exif_duration) over the identified
 // item. They write into it
-// (exif_core.RawItemRW): what they find goes into the item and their storages.
+// (plugins.RawItemRW): what they find goes into the item and their storages.
 //
 //	each core perceptor, a step each, in the plugin manager's order
 package exif_core
@@ -10,7 +10,7 @@ import (
 	"fmt"
 
 	"perceptrail/gontroller/pkg/importer/identify"
-	"perceptrail/gontroller/pkg/plugins/exif_core"
+	"perceptrail/gontroller/pkg/plugins"
 
 	"github.com/eggs-gd/perceplib/chain"
 	l "github.com/eggs-gd/perceplib/logger"
@@ -19,7 +19,7 @@ import (
 // New: perceptors — the core perceptors, in order; in — the identified items; out
 // — the same, perceived by the core (none: as they are). Its errors go to the chain
 // it runs in.
-func New(perceptors []exif_core.ExifCorePerceptor, in, out *chain.Pipe[*identify.Item], logger *l.Logger) chain.Processor {
+func New(perceptors []plugins.ExifCorePerceptor, in, out *chain.Pipe[*identify.Item], logger *l.Logger) chain.Processor {
 	var steps []chain.Decorator[*identify.Item, *identify.Item]
 	for _, p := range perceptors {
 		d := p.Decorator(logger.Named(p.Name()))
@@ -33,12 +33,12 @@ func New(perceptors []exif_core.ExifCorePerceptor, in, out *chain.Pipe[*identify
 }
 
 // The core perceptors read and write the item
-var _ exif_core.RawItemRW = (*identify.Item)(nil)
+var _ plugins.RawItemRW = (*identify.Item)(nil)
 
 // perceive: a core perceptor's logic over the item the stages carry
 type perceive struct {
 	name  string
-	logic chain.Decorator[exif_core.RawItemRW, exif_core.RawItemRW]
+	logic chain.Decorator[plugins.RawItemRW, plugins.RawItemRW]
 }
 
 func (p perceive) Decorate(in *identify.Item) (*identify.Item, error) {

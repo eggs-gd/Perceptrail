@@ -12,7 +12,7 @@ import (
 	"perceptrail/gontroller/pkg/importer/walk"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/plugins/exif_core"
+	"perceptrail/gontroller/pkg/plugins"
 	"perceptrail/gontroller/pkg/plugins/exif_date"
 	"perceptrail/gontroller/pkg/plugins/exif_size"
 	"perceptrail/gontroller/pkg/providers"
@@ -388,7 +388,7 @@ func runCorePlugins(t *testing.T, it *identify.Item) {
 	t.Helper()
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
 	for _, p := range []api.Perceptor{exif_date.Perceptor, exif_size.Perceptor} {
-		if _, err := p.(exif_core.ExifCorePerceptor).Decorator(logger).Decorate(it); err != nil {
+		if _, err := p.(plugins.ExifCorePerceptor).Decorator(logger).Decorate(it); err != nil {
 			t.Fatal(err)
 		}
 	}

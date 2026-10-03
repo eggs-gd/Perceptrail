@@ -1,4 +1,4 @@
-package exif_core
+package plugins
 
 import (
 	"fmt"

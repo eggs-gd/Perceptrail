@@ -5,7 +5,6 @@ import (
 
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/plugins"
-	"perceptrail/gontroller/pkg/plugins/exif_core"
 
 	"github.com/eggs-gd/perceplib/api"
 	l "github.com/eggs-gd/perceplib/logger"
@@ -16,10 +15,10 @@ import (
 // loaded and where each one keeps its data.
 
 // corePerceptors: the import chain's core perceptors (built in, EXIF data), in order
-func corePerceptors() []exif_core.ExifCorePerceptor {
-	var out []exif_core.ExifCorePerceptor
+func corePerceptors() []plugins.ExifCorePerceptor {
+	var out []plugins.ExifCorePerceptor
 	for _, p := range plugins.All() {
-		if c, ok := p.(exif_core.ExifCorePerceptor); ok && p.DataProvider() == api.ExifDataProvider {
+		if c, ok := p.(plugins.ExifCorePerceptor); ok && p.DataProvider() == api.ExifDataProvider {
 			out = append(out, c)
 		}
 	}
@@ -31,7 +30,7 @@ func corePerceptors() []exif_core.ExifCorePerceptor {
 func externalPerceptors() []api.ExifPerceptor {
 	var out []api.ExifPerceptor
 	for _, p := range plugins.All() {
-		if _, core := p.(exif_core.ExifCorePerceptor); core || p.DataProvider() != api.ExifDataProvider {
+		if _, core := p.(plugins.ExifCorePerceptor); core || p.DataProvider() != api.ExifDataProvider {
 			continue
 		}
 		if e, ok := p.(api.ExifPerceptor); ok {

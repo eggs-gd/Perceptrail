@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"perceptrail/gontroller/pkg/plugins/exif_core"
+	"perceptrail/gontroller/pkg/plugins"
 
 	"github.com/eggs-gd/perceplib/api"
 )
@@ -24,7 +24,7 @@ func (p *sizePerceptor) View() api.View {
 }
 
 func (p *sizePerceptor) Order(ctx context.Context, _ string, items []api.ItemDataProvider) ([]api.Entry, error) {
-	out := exif_core.OrderByValue(items, func(it api.ItemDataProvider) float64 {
+	out := plugins.OrderByValue(items, func(it api.ItemDataProvider) float64 {
 		s := it.GetSize()
 		return float64(s.W) * float64(s.H) / 1e6
 	}, func(it api.ItemDataProvider, mp float64) []string {

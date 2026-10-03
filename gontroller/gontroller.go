@@ -11,6 +11,9 @@ import (
 	"perceptrail/gontroller/pkg/importer"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/plugins"
+	"perceptrail/gontroller/pkg/plugins/exif_date"
+	"perceptrail/gontroller/pkg/plugins/exif_duration"
+	"perceptrail/gontroller/pkg/plugins/exif_size"
 	"perceptrail/gontroller/pkg/providers"
 	"perceptrail/gontroller/pkg/providers/apple"
 	"perceptrail/gontroller/pkg/providers/apple/photokit"
@@ -45,7 +48,13 @@ func main() {
 	log.Printf("mode: %s", ctx.Config().Mode)
 	svc := app.NewSvcContext()
 
-	err := plugins.Load(ctx)
+	err := plugins.Load(plugins.Config{
+		Plugins:    ctx.Config().Plugins,
+		Perceptors: ctx.Config().Perceptors,
+		Driver:     ctx.Config().Database.Driver,
+		DataDir:    ctx.Config().DataDir,
+		Logger:     ctx.Logger(string(app.LogPlugins)),
+	}, exif_date.Perceptor, exif_size.Perceptor, exif_duration.Perceptor)
 	if err != nil {
 		log.Fatalf("Failed to load plugins: %v", err)
 	}

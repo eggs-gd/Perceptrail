@@ -1,7 +1,7 @@
 package exif_size
 
 import (
-	"perceptrail/gontroller/pkg/plugins/exif_core"
+	"perceptrail/gontroller/pkg/plugins"
 	"strconv"
 	"strings"
 
@@ -21,7 +21,7 @@ type sizesExtractor struct {
 	logger *l.Logger
 }
 
-func (cd *sizesExtractor) Decorate(in exif_core.RawItemRW) (exif_core.RawItemRW, error) {
+func (cd *sizesExtractor) Decorate(in plugins.RawItemRW) (plugins.RawItemRW, error) {
 	w, h := firstSize(in, sizePairs...)
 	if w == 0 || h == 0 {
 		w, h = parseImageSize(in.GetExif("ImageSize"))
@@ -47,7 +47,7 @@ func (cd *sizesExtractor) Decorate(in exif_core.RawItemRW) (exif_core.RawItemRW,
 	return in, nil
 }
 
-func firstSize(in exif_core.RawItemRW, keys ...string) (int, int) {
+func firstSize(in plugins.RawItemRW, keys ...string) (int, int) {
 	for i := 0; i+1 < len(keys); i += 2 {
 		w, h := parseSizePair(in.GetExif(keys[i]), in.GetExif(keys[i+1]))
 		if w != 0 && h != 0 {

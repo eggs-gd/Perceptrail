@@ -1,5 +1,5 @@
 package exif_coretest
 
-import "perceptrail/gontroller/pkg/plugins/exif_core"
+import "perceptrail/gontroller/pkg/plugins"
 
-var _ exif_core.RawItemRW = (*Recorder)(nil)
+var _ plugins.RawItemRW = (*Recorder)(nil)
