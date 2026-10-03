@@ -12,6 +12,9 @@ import (
 
 var db *gorm.DB
 
+// ErrNotFound: a lookup found no row (GetFileByPath, GetItemByGuid, …)
+var ErrNotFound = gorm.ErrRecordNotFound
+
 type proxy struct {
 	logger *l.Logger
 	db     *gorm.DB

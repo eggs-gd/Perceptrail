@@ -1,4 +1,5 @@
 import {PUBLIC_API_PATH} from '$env/static/public';
+import {SvelteMap} from 'svelte/reactivity';
 import type {Asset, Rendition} from '$lib/stores';
 
 // What a browser surely shows; anything else only in the formats it claims
@@ -136,12 +137,25 @@ export function localFullVideo(asset: Asset): Rendition | undefined {
     return asset.kind === 'video' && o?.mime.startsWith('video/') && canPlayVideo(o) ? o : undefined;
 }
 
+// The client's guess, the server's veto: the full resolution came from Photos for
+// these assets (the viewer's Original); the server learns it on its next pass. Kept
+// with the asset as the server sent it: a copy that differs (the server processed
+// it) is the server's word, the guess no longer applies. Lost on reload.
+const fetchedFull = new SvelteMap<string, string>();
+
+/** The viewer got the asset's full resolution from Photos: its cloud goes now */
+export function fullFetched(guid: string, asset: Asset) {
+    fetchedFull.set(guid, JSON.stringify(asset));
+}
+
 /**
  * The full resolution is here (the tile's cloud says when not): a video's original;
  * for an image, any file of the asset as big as the full size — the original, the
- * edit's render, a full-size derivative
+ * edit's render, a full-size derivative; or it just came from Photos (fullFetched)
  */
-export function fullHere(asset: Asset): boolean {
+export function fullHere(asset: Asset, guid?: string): boolean {
+    const guess = guid ? fetchedFull.get(guid) : undefined;
+    if (guess && guess === JSON.stringify(asset)) return true;
     if (asset.kind === 'video') return !!asset.original?.mime.startsWith('video/');
     if (!asset.full) return !!asset.original;
     const full = longSide(asset.full) * FULL_SLACK;

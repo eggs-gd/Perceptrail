@@ -82,8 +82,8 @@ Target architecture — the diagrams in [`../puml`](../puml).
   directly), the gallery shows the photo it closed on.
 - Perceptor data (PR #17): a perceptor declares its data as a struct
   (`api.NewStore[T]`, typed `Put` / `Get`); the core keeps it — SQLite, a file per
-  perceptor in `data_dir/perceptors/` (Postgres: not yet). Values are committed with
-  the item; an item a perceptor has no row for is processed again; gone items are
+  perceptor in `data_dir/perceptors/` (Postgres: not yet). Values are kept right
+  before the item is published (the exif step's keep, then commit); an item a perceptor has no row for is processed again; gone items are
   pruned after a walk. Geo is its first user: coordinates from EXIF or the Photos DB,
   the sheet on a Hilbert curve with every city and region in one piece, sections
   region → city from the time zone. A photo may start a path of sections; the side
@@ -96,8 +96,9 @@ Target architecture — the diagrams in [`../puml`](../puml).
 - **Apple Photos on demand** (PR #21, transcode step 0): Photos, asked through
   PhotoKit, makes a cloud-only rendition local in its own library — we render and
   store nothing it keeps. `pkg/photokit` (cgo, macOS); `/items/:guid/rendition/
-  {medium,hover,original}`; one asset processed again without a walk (`Regroup` →
-  the gate → `Refresh`); assets with nothing local asked for in the background;
+  {medium,hover,original}`; one asset marked for the next pass (`Refresh`;
+  originally processed at once through `Regroup` — PR #24 made it a mark, the
+  client guesses the cloud meanwhile); assets with nothing local asked for in the background;
   `/items/:guid/files`. The viewer opens on what is here (the comfortable ~2048 px,
   or the full size lit as the Original), the medium asked for only when nothing here
   is that big; hover with a loading ring; the tile's cloud = the full resolution is
@@ -410,24 +411,47 @@ constructor (`New(deps, in, out, errch)`) that lists all its steps. No switches 
 branches on the top; the top knows nothing of the tools — exiftool, providers,
 transcoders, plugins belong to the stage that uses them. One step does one thing.
 
-- [ ] **The import chain — agreed, to refactor** (it exists, but `pkg/scan` does
-      everything; the cheap preview is a monster step):
+- [x] **The import chain — stages** (PR #24; `pkg/scan` did everything, the cheap
+      preview was a monster step). `pkg/importer` with five stages, each a
+      sub-chain in its own package; the DB passed to the steps, their logic
+      exported for the tests:
 
-      discover → identify → core → plugins → commit
+      walk → group → gate → identify → exif → commit
 
-      | stage | yields | inside |
+      | step | yields | inside |
       |---|---|---|
-      | discover | the groups that need work; the files table up to date | walk → group (the providers' switch → their groupers) → gate; `Refresh` lives here (one group into the channel between group and gate) |
-      | identify | the item known: identity, metadata, roles, what to show | read (exiftool, N in parallel) → embedded (an embedded preview for a group with nothing viewable) → classify (mime, main file, roles) → validate → sizes → pick (the cheap preview) — exiftool lives only here |
-      | core | the core's metadata (date + zone, size, length) | the built-in perceptors, a step each |
-      | plugins | the external EXIF perceptors' values (geo, colour…) | the `.so` plugins, a step each, with their read/write adapters |
-      | commit | the item published | the state (Visible / Waiting), the item and the perceptors' values written together |
+      | walk | the chain's entry: the files' rows (stat, seen), then the gone ones | — |
+      | group | whole assets (a gone file passes through, or its provider decides) | the providers' switch → their groupers |
+      | gate | the groups that need work; gone files deleted (the model's Gone) | — |
+      | identify | the item known: identity, metadata, roles, what to show | see below — exiftool lives only here |
+      | exif | the perceptors' values, kept | the built-in perceptors, the `.so` ones, a step each; keep |
+      | commit | the item published | the state (Visible / Waiting) |
 
-      Packages: `pkg/importer` (the top: five stages) with `discover`, `identify`,
-      `core`, `plugins`, `commit`. Errors: discover reports to the walk's channel,
-      the rest to the processing one (progress is counted from the gate). In two
-      commits: the move without logic changes, then the cheap preview cut into
-      steps and the commit taken out of the plugin processor.
+      The passes (`Chain.Run`, the pause), Refresh (a rework mark): the service's.
+      identify inside: read (one exiftool call per group, the declared tags) →
+      classify → merge (the metadata package: source > .xmp > main > derivatives) →
+      fingerprint (the file's bytes) → validate → embedded → sizes → pick → yield.
+      Every type belongs to its producer: the provider contract in `providers`,
+      `discover.Group`, `identify.Item`, `transcode.Item` — `importer/flow` is gone.
+      The perceptors declare their exif tags (`api.ExifTagger`); a step gets only
+      the DB methods it calls; no step knows the plugin manager. exif is read as
+      numbers (`-n`). The chain library has pipes with a flush. Findings: "Import
+      data: types by producer, exif by declaration, a bytes fingerprint", "exif as
+      numbers", "chain: pipes with a flush".
+
+      Deferred:
+      - [x] the end-of-walk marker out of band — the library's flush;
+      - [x] the import tests run the real chain, one pass (`walk` to identify, a
+            test end);
+      - [ ] Apple: files Photos offloads (Optimize Mac Storage) must not hide or
+            delete the item — the grouper gets them as gone now and may keep the
+            asset (a separate task);
+      - [ ] storing the metadata package in the DB — when a consumer needs it (the
+            info panel's raw exif, a perceptor re-run without the files);
+      - [ ] reading the sidecars of keyed (Apple) groups (only the main file is
+            read: the DB is the source of truth there);
+      - [ ] the HTTP routes still hold package-level DB proxies with the whole API —
+            the same narrowing as the import's steps.
 
 **The next chains — a starting idea to brainstorm** (the rough stages only; each
 to be worked out on its own):
@@ -447,35 +471,30 @@ to be worked out on its own):
   cache (a provider taking its files over too), perceptor values, orphans.
 - **API providers** (Immich…): no files to walk. Either a second source in
   discover (their change feed; the gate needs another sign of change than a stat),
-  or a chain of its own — `sync → identify → core → plugins → commit` — sharing
+  or a chain of its own — `sync → identify → exif → commit` — sharing
   the stages after discover. Leaning to the latter; with the first API provider.
 - Not a chain: on demand (a request path; it re-enters the import through
   `Refresh`).
 
-**perceplib `chain` — what the import taught** (proposals, to weigh with the
-refactor):
+**perceplib `chain` — what the import taught** (done in PR #24: the chain is
+rewritten in place, see its README and findings "chain: pipes with a flush"):
 
-- **A flush signal in the library**: the end-of-walk marker is a domain value
-  every step checks by hand (`ev.Done != nil` in each grouper, the gate counting
-  markers per branch). A library-level flush/barrier that passes every step (an
-  optional `Flusher` interface: flush what you hold, then pass it on) would take it
-  out of the steps.
-- **Skips are not errors**: `ErrSkippedItem` travels on the error channel, every
-  consumer filters it, and the progress counts "done" through it. A result kind of
-  its own (passed / skipped / failed) would make the counting explicit.
-- **Error channels at run time**: `AddStep` gives a step the chain's error channel
-  at the moment it is added; a sub-chain's steps keep the channel it was made with
-  (hence `errProcessing` passed around by hand). Inheriting the channel when the
-  chain runs (or per sub-chain, explicitly) would remove that trap.
-- **Typed stages**: a sub-chain is an untyped `Processor` — nothing checks at
-  compile time that a stage's in/out types match its neighbours'. A
-  `Stage[In, Out]` (a sub-chain with its typed ends) would.
-- **Parallel steps**: N workers on the same channels are built by hand
-  (`NewExifExtractor`); `chain.Parallel(n, decorator)` would say it.
-- **The switch**: `map[int]To` (random order for a broadcast, branches by bare
-  index) — a slice, or named outputs.
-- **Stop**: called from several goroutines (the walker guards it with a mutex) —
-  one lifecycle: the context ends the step, `Stop` once.
+- [x] **A flush signal in the library**: typed pipes carry values and a flush; a
+      `Flusher` gives what it holds; where branches join the flush passes once every
+      writer has flushed (the barrier). The end-of-walk marker is gone from the
+      data; a flush at the end of the chain means the walk is done (no counting).
+- [x] **Skips are not errors**: `ErrSkippedItem` never reaches the error channel.
+- [x] **Error channels at run time**: a sub-chain without its own uses its
+      parent's; the import has one.
+- [x] **Typed stages**: the stages take and give typed pipes — checked at compile
+      time (no separate `Stage` type needed).
+- [x] **Parallel steps**: `chain.Parallel(n, …)`; a flush waits for the values in
+      flight.
+- [x] **The switch**: `Route` returns one output index; the flush goes to every
+      output.
+- [x] **Stop**: optional, called once; every send selects on the context.
+- [x] **Plugins give logic only**: `Decorator(logger)` instead of building a step
+      on raw channels.
 
 ## Core — service (gontroller)
 
@@ -490,6 +509,7 @@ refactor):
       `perceptors/` (stubs aside) is built with the test's own Go and loaded with
       `plugin.Open` — a plugin built against other dependency versions than the host
       (it happened: `x/sync`, `testify`) fails it. CI runs it uncached.
+- [ ] Typed keys: GUIDs and providers' keys are plain `string` today.
 
 ## Deployment (first release)
 

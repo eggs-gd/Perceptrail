@@ -50,6 +50,9 @@ func TestPerceptorStore(t *testing.T) {
 	}
 
 	// Gone items: their rows go
+	if guids, err := st.Guids(); err != nil || len(guids) != 2 {
+		t.Errorf("guids %v %v, want both rows", guids, err)
+	}
 	if n, err := st.Prune(func(g string) bool { return g == "a" }); err != nil || n != 1 {
 		t.Errorf("prune: %d %v, want 1", n, err)
 	}

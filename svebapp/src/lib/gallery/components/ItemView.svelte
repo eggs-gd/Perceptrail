@@ -7,10 +7,9 @@
     import Picture from "./Picture.svelte";
     import Motion from "./Motion.svelte";
     import KindBadge from "./KindBadge.svelte";
-    import {assetUrl, biggestImage, fallbackImage, hasImage, hoverUrl, localFullVideo, mediumUrl, originalImage, originalOnDemand, playableVideos, viewerChoice} from "./asset";
+    import {assetUrl, biggestImage, fallbackImage, fullFetched, hasImage, hoverUrl, localFullVideo, mediumUrl, originalImage, originalOnDemand, playableVideos, viewerChoice} from "./asset";
     import {viewerPrefs} from "./viewerPrefs.svelte";
     import {debug} from "$lib/app.svelte";
-    import {refreshFromServer} from "$lib/workers";
 
     interface Props {
         item: Item;
@@ -139,7 +138,7 @@
                onloadedmetadata={(e) => {
                    const v = e.currentTarget as HTMLVideoElement;
                    videoLoad = {guid: item.guid, w: v.videoWidth, h: v.videoHeight};
-                   if (videoOriginal && videoOriginal === fromPhotos) refreshFromServer(true);
+                   if (videoOriginal && videoOriginal === fromPhotos) fullFetched(item.guid, asset!);
                }}>
             {#if videoOriginal}
                 <source src={videoOriginal}>
@@ -183,9 +182,9 @@
                  onload={(e) => {
                      const img = e.currentTarget as HTMLImageElement;
                      originalLoad = {url: original!.url, w: img.naturalWidth, h: img.naturalHeight};
-                     // From Photos: the server has processed the item again before it
-                     // answered (the original is local now) — the delta has it
-                     if (original!.url === fromPhotos) refreshFromServer(true);
+                     // From Photos: the original is local now — the cloud goes at once,
+                     // the server's next pass confirms it (or brings it back)
+                     if (original!.url === fromPhotos) fullFetched(item.guid, asset!);
                  }}>
         {/if}
         {#if mode === 'tile' && hovered && hasMotion}
@@ -193,7 +192,7 @@
         {/if}
         {#if mode === 'tile' && asset.kind}
             <!-- What moves is marked, also while it moves; it spins while the video comes -->
-            <KindBadge {asset} loading={hovered && motionLoading}/>
+            <KindBadge guid={item.guid} {asset} loading={hovered && motionLoading}/>
         {/if}
         {#if livePlaying}
             <video class="live" {@attach playLive} playsinline loop={viewerPrefs.liveMode === 'loop'}
@@ -215,7 +214,7 @@
                 <source src="{video.src}#t=0.1" type={video.type}>
             {/each}
         </video>
-        <KindBadge {asset} duration={asset.duration || fileDuration}/>
+        <KindBadge guid={item.guid} {asset} duration={asset.duration || fileDuration}/>
     </div>
 {:else if item.previewMime.startsWith("image")}
     <!-- From an older server (no asset): the default preview -->

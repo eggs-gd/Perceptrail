@@ -4,7 +4,7 @@ The Perceptrail Go backend: scans the library, extracts metadata with ExifTool, 
 it through EXIF plugins, stores it in SQLite and serves it to the client over HTTP.
 
 The core implements the necessary minimum (date, size); core plugins live here, in
-`pkg/plugins/exif_core`. Extended features are external perceptors
+`pkg/plugins/exif_date`, `exif_size`, `exif_duration`. Extended features are external perceptors
 ([`../perceptors`](../perceptors/readme.md)).
 
 Design: [Item flow](../_sb/puml/Item%20flow.puml),
@@ -64,18 +64,26 @@ packages — see [findings](../_sb/docs/findings.md#go-plugins-2026-09-28).
 ## Import pipeline
 
 Services (`pkg/app/services.go`) start in parallel: `ImporterService` and
-`WebService`. Import is a chain of steps over channels (`perceplib/chain`):
+`WebService`. Import is a chain of steps over typed pipes (`perceplib/chain`):
 
 ```
-FsWalker          files → groups (main file + sidecars by name)
-                  → files table (GUID, LinkedTo, CheckTime)
-ExifExtractor     5 long-lived exiftool processes (-stay_open)
-                  → RawItem {Item, []RawExif}; ValidateFile creates/finds the item
-ExifPluginProcessor
-                  opener → exif_core/date → exif_core/size → [external] → closer
-                  closer writes the item to the items table
-(Transcoder)      disabled for now: thumbnails/transcoding (bimg + libvips)
+walk       the chain's entry: the library's files as rows (stat, seen), then the
+           ones it says are gone
+group      whole assets: the providers' groupers (the plain folder last)
+gate       only the groups that need work pass (gate.Group); gone files deleted
+identify   one exiftool call per group (the declared tags only) → kinds → the
+           metadata package → fingerprint → the item → the cheap preview
+           (identify.Item)
+exif       the EXIF perceptors: built in (date, size, length), then the .so ones;
+           their values kept
+commit     the item published (Visible / Waiting)
 ```
+
+A pass (`Chain.Run`) ends when the walk's flush has reached the end; the importer
+service pauses (`rescan`) and runs the next. Details, the types
+and the rules: [`pkg/importer/README.md`](pkg/importer/README.md).
+The transcoders (`pkg/transcode`) are not wired yet: a chain of their own, fed from
+the DB.
 
 Item states (`dto.ItemState`): `New → Dirty → Processing → Ready`, `Deleted`.
 
@@ -84,8 +92,9 @@ Item states (`dto.ItemState`): `New → Dirty → Processing → Ready`, `Delete
 | Package | What |
 |---|---|
 | `pkg/app` | app context, config, logger categories, services |
-| `pkg/scan` | import steps: `fswalker`, `exifextractor`, `exifpluginprocessor` |
-| `pkg/plugins` | plugin manager (core + `.so`), `exif_core/{date,size}` |
+| `pkg/importer` | the import chain: linear stages, each a sub-chain of its own — `walk`, `group`, `gate`, `identify` (exiftool, kinds, the item, sizes, the cheap preview), `exif` (the EXIF perceptors, built in and external, their values kept), `commit` (the item published); see its README |
+| `pkg/transcode` | the transcoders' switch and stubs (a chain of its own later) |
+| `pkg/plugins` | the perceptors' registry (built in + `.so`, their storages); the built-in EXIF perceptors `exif_date`, `exif_size`, `exif_duration`; their contract (`RawItemRW`, `ExifCorePerceptor`) and `OrderByValue` in `pkg/plugins` itself; `exif_coretest`: test helpers |
 | `pkg/model` | SQLite via GORM, `ItemsApi`/`FilesApi`, DTOs |
 | `pkg/client` | Echo, `/items`, `/assets`, `/perceptors` and `/p/:view/order` routes |
 | `pkg/providers` | the sources: one switch sends a file to the grouper of the first provider that claims it, and on-demand renditions come from the item's provider; `providers/folder`: the plain folder (last, takes the rest); `providers/apple`: Apple Photos (its DB, the grouper, on demand), `providers/apple/photokit`: PhotoKit (cgo, macOS only; a stub elsewhere; the main thread serves its main queue) |

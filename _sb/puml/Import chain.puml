@@ -2,31 +2,57 @@
 
 !pragma teoz true
 
-title Import chain (gontroller): every participant is a chain step (own goroutine), every arrow is a channel
+title Import chain (gontroller): walk -> group -> gate -> identify -> exif -> commit;\nevery participant is a step (own goroutine), every arrow is a typed pipe (values + the walk's flush)
 
-control "fswalker\n(entry point)" as Walker
+box "walk: the files" #LightCyan
+control "walk\n(the entry)" as Walker
+end box
 
-box "grouping (a sub-chain): the providers' switch, a grouper each" #LightCyan
+box "group: whole assets (a sub-chain)" #LightCyan
 control "switch\n(first that claims)" as Groups
 control "Apple Photos\ngrouper" as Photos
 control "plain folder\ngrouper (last)" as Generic
 end box
 
-control "files gate" as Gate #LightGreen
-control "exif\n(N workers)" as Exif
-control "mime" as Mime
-control "validator" as Validator #LightGreen
+box "gate: the files table" #LightGreen
+control "gate" as Gate
+end box
 
-control "cheap preview" as Preview #LightYellow
+box "identify: the item known (exiftool lives here)" #Lavender
+control "read\n(exiftool, N)" as Exif
+control "classify" as Mime
+control "merge" as Merge
+control "fingerprint" as Fingerprint
+control "validate" as Validator #LightGreen
+control "embedded\n(exiftool)" as Embedded
+control "sizes" as Sizes
+control "pick\n(cheap preview)" as Preview #LightYellow
+control "yield" as Yield
+end box
 
-control "plugins\n(core, then external)" as Plugins
+box "exif: the EXIF perceptors, their values kept" #Honeydew
+control "built in\n(exif_date, exif_size, ...)" as Core
+control "external\n(.so)" as Plugins
+control "keep\n(the perceptors' values)" as Keep
+end box
+
+box "commit: the item published" #MistyRose
+control "close" as Closer
+end box
+
+box "importer (the top)" #WhiteSmoke
+control "the passes,\nRefresh" as Top
+end box
+
 database "DB" as DB
-control "closer" as Closer
 
 == files flow in; groups flow out one by one, steps run concurrently ==
 
+Top -> Walker: Chain.Run: a pass starts the entry
+
 loop every file under the root
-    Walker -> Groups: file (path, stat)
+    Walker -> DB: its row: created / stat refreshed,\nCheckTime (Changed: new or stat changed)
+    Walker -> Groups: *dto.FileDto (the row)
     note left of Walker
     Unreadable directory:
     skipped, recorded (V1)
@@ -36,31 +62,45 @@ end
 alt Apple claims it (inside *.photoslibrary)
     Groups -> Photos: file
     Photos -> Photos: first file: asset links from Photos.sqlite\n(original, render, Live Photo video); buffer of open\ngroups, a group goes out when all its files arrived
-    Photos -> Gate: group (asset UUID)
+    Photos -> Gate: providers.Asset (asset UUID; a file of an asset\ntrashed / hidden in Photos: sent as gone)
 else nobody else claims it (other providers: Immich, ... later)
     Groups -> Generic: file
     Generic -> Generic: sidecars by name, next to each other\n(buffer: one open group; a complete group goes out)
-    Generic -> Gate: group
+    Generic -> Gate: providers.Asset
 end
 note over Groups: a provider not enabled is not asked:\nits files are a plain folder's
 
-Gate -> DB: stat vs files table,\nCheckTime of every file
-alt unchanged and the item is Ready
+alt a gone file
+    Gate -> DB: the model's Gone: a main file's item deleted,\na sidecar's item Dirty
+else unchanged, the model says no work (NeedsWork)
     Gate ->x Gate: drop
-else new / changed / not Ready
-    Gate -> Exif: group
+else changed (stat, a role the grouper gave) / needs work (Rework, ...)
+    Gate -> Exif: gate.Group (no provider type past here)
 end
 
-Exif -> Mime: group + exif
-Mime -> Mime: kind of every file\n(exif FileType/MIMEType, own extension table,\ncontent sniff), rank: main file
-Mime -> Validator: ranked group
+Exif -> Exif: ONE exiftool -j call for the group,\nonly the declared tags (the perceptors'\nExifTags + identify's own); a map per file
+Exif -> Mime: draft (private to identify)
+Mime -> Mime: kind of every file\n(exif MIMEType, own extension table,\ncontent sniff), rank: main file, roles
+Mime -> Merge: ranked draft
+Merge -> Merge: the metadata package: a tag from\nthe source (Photos DB) > .xmp > main > derivatives;\nonly the perceptors' tags
+Merge -> Fingerprint: + package
+Fingerprint -> Fingerprint: the main file's bytes:\nsize + sha256(first, last 64 KB)
+Fingerprint -> Validator: + fingerprint
 
-Validator -> DB: hash of the main file:\nsame / changed / moved / duplicate
-Validator -> Preview: item (GUID) + group
+Validator -> DB: by path and fingerprint:\nsame / changed / moved / duplicate
+Validator -> Embedded: item (GUID) + draft
 
-Preview -> Preview: what the browser shows now, no transcode:\nthe main file (JPEG, PNG, ...; H.264 video) /\nthe biggest viewable derivative / an embedded preview\n(exiftool -b into the cache); any size counts
-Preview -> Plugins: item + preview ("" = nothing yet)
-Plugins -> Closer: item + metadata
+Embedded -> Embedded: nothing in the group shows:\nthe main file's embedded preview\n(exiftool -b into the cache)
+Embedded -> Sizes: + embedded ("" = none)
+Sizes -> DB: pixels, codec of every file
+Sizes -> Preview: + sizes
+Preview -> Preview: what the browser shows now, no transcode:\nShow / the main file (JPEG, PNG, ...; H.264 video) /\nthe biggest viewable derivative / the embedded one;\nany size counts
+Preview -> Yield: + preview ("" = nothing yet)
+Yield -> Core: identify.Item (the item + its metadata package;\nthe draft stays in identify)
+Core -> Plugins: + date, size, length (written into the item)
+Plugins -> Keep: + the external perceptors' values (read-only)
+Keep -> DB: a row in every import perceptor's storage
+Keep -> Closer: item
 Closer -> DB: Visible (a preview) or Waiting (none)
 note right of Closer
 The client gets Visible (and Ready)
@@ -71,20 +111,24 @@ end note
 
 == end of walk ==
 
-Walker -> Groups: marker (walk result)
-Groups -> Photos: marker
-& Groups -> Generic: marker
-note right of Groups: to every grouper
-Generic -> Gate: last groups, marker
-Photos -> Gate: last groups, marker
-Gate -> DB: after the marker from every branch:\ndeletions (V2), only after a complete walk,\nnot under unreadable directories
-Closer --> Walker: the last group of the walk is done (items + errors counted)
-Walker -> Walker: rescan pause (1 min), then walk again
+loop every row the walk did not stamp that it says is gone (V2: a complete walk,\nunder the root, not under unreadable directories)
+    Walker -> Groups: *dto.FileDto (Gone): to its provider's grouper,\nwhich passes it through (or makes something of it)
+end
+Walker -> Groups: FLUSH
+Groups -> Photos: flush
+& Groups -> Generic: flush
+note right of Groups: to every grouper (Route)
+Generic -> Gate: what it holds (last group), flush
+Photos -> Gate: flush (an incomplete group waits for the next walk)
+note over Gate: once every grouper has flushed (the chain's barrier)\nthe flush goes on, through every step, to the end
+note over Core, Keep: keep: on the flush, the perceptors' rows\nof gone items pruned (the previous walk's)
+Closer --> Top: Chain.Run returns: the flush reached the chain's end (commit):\nevery group of the walk went through every step
+Top -> Top: rescan pause (1 min), then the next pass
 
 == One asset again (Apple Photos on demand) ==
 note over Photos: Photos made a file of an asset local\n(the viewer asked for it: PhotoKit)
-Photos -> Photos: Regroup(uuid): the last load's DB rows\n+ the disk now (no walk, no DB read)
-Photos -> Gate: group (asset UUID): like any group,\nonly what changed passes; no marker,\ndeletions untouched
-Closer --> Photos: the item is done: the request waiting\nfor it answers (importer Refresh)
+Photos -> Top: Refresh(uuid)
+Top -> DB: MarkRework (updated_at untouched: no delta brings\nthe item back); the next pass processes it (NeedsWork)
+note over Top: no waiting: the client guesses meanwhile\n(the tile's cloud goes once it got the original)
 
 @enduml

@@ -54,10 +54,6 @@ const mediumSize = 2048
 // hovers)
 const fetchers = 3
 
-// How long a request waits for its item to be processed again (the tile's cloud
-// goes as soon as the client asks for the delta after it)
-const refreshWait = 10 * time.Second
-
 type fetching struct {
 	done chan struct{}
 	data []byte
@@ -96,8 +92,9 @@ func (p *Provider) Rendition(item *dto.ItemDto, level string, opt providers.Opti
 			drawn = nil // a failed request hands over nothing to show
 			p.logger.Debug("Rendition not fetched", l.String("guid", uuid), l.String("level", level), l.Error(err))
 		} else {
-			// The new file reaches the item now; the viewer does not wait for that
-			go p.refresh(uuid, refreshWait)
+			// The new file reaches the item on the next walk (the client has its own
+			// guess meanwhile: the cloud goes when it got the rendition)
+			p.refresh(uuid)
 		}
 		path = Local(root, uuid, want)
 	}
@@ -129,16 +126,15 @@ func (p *Provider) original(item *dto.ItemDto) (providers.Rendition, error) {
 		if err != nil || path == "" {
 			return fail(err)
 		}
-		p.refresh(item.Guid, refreshWait) // the original is local now: the cloud goes
+		p.refresh(item.Guid) // the original is local now: the next walk knows it
 		return providers.Rendition{Path: path}, nil
 	}
 	data, err := p.photos.Full(item.Guid)
 	if err != nil {
 		return fail(err)
 	}
-	// Drawing it may have made Photos download the original: the item knows before
-	// the answer goes, so the client's next delta has it (the cloud goes)
-	p.refresh(item.Guid, refreshWait)
+	// Drawing it may have made Photos download the original: the next walk knows it
+	p.refresh(item.Guid)
 	return providers.Rendition{Data: data, Mime: "image/jpeg"}, nil
 }
 
@@ -214,7 +210,7 @@ func (p *Provider) hydrateWaiting(ctx context.Context) {
 }
 
 func (p *Provider) hydrateRound(asked map[string]bool) {
-	items, err := p.items.GetItemsInStates(dto.Waiting)
+	items, err := p.items.Unshown()
 	if err != nil {
 		p.logger.Error("Waiting items not read", l.Error(err))
 		return
@@ -228,7 +224,7 @@ func (p *Provider) hydrateRound(asked map[string]bool) {
 		if _, err := p.once(it.Guid+"/medium", func() ([]byte, error) { return p.photos.Image(it.Guid, mediumSize) }); err != nil {
 			p.logger.Debug("Waiting asset not fetched", l.String("guid", it.Guid), l.Error(err))
 		} else {
-			p.refresh(it.Guid, refreshWait)
+			p.refresh(it.Guid)
 		}
 	}
 }

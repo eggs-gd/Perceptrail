@@ -3,6 +3,7 @@
     import {formatDuration, fullHere} from './asset';
 
     interface Props {
+        guid: string;
         asset: Asset;
         /** A video's length, seconds: the asset's, unless the caller knows better */
         duration?: number;
@@ -10,14 +11,14 @@
         loading?: boolean;
     }
 
-    let {asset, duration = asset.duration, loading = false}: Props = $props();
+    let {guid, asset, duration = asset.duration, loading = false}: Props = $props();
 
     const TITLES: Record<AssetKind, string> = {photo: 'Photo', live: 'Live Photo', video: 'Video'};
 
     // The full resolution is not here (only in iCloud) — the same for every kind:
     // gone once any file of it is that big (the original, the edit's render, a
     // full-size derivative)
-    let cloud = $derived(!fullHere(asset));
+    let cloud = $derived(!fullHere(asset, guid));
     let title = $derived(TITLES[asset.kind] + (cloud ? ' (full resolution in iCloud only)' : ''));
 </script>
 

@@ -7,7 +7,7 @@ also its own UI to the client (a map, face management) — see the
 [ML Flow](../_sb/puml/ML%20Flow.puml).
 
 The basics (date, size) are not here but in the core:
-`gontroller/pkg/plugins/exif_core`. What lives here can be implemented differently
+`gontroller/pkg/plugins/exif_date`, `exif_size`, `exif_duration` (their contract: `plugins.ExifCorePerceptor`). What lives here can be implemented differently
 (e.g. someone may write another geo plugin).
 
 ## Contract
@@ -21,8 +21,12 @@ type geoPerceptor struct{}
 func (p *geoPerceptor) Name() string                       { return "exif_geo" }
 func (p *geoPerceptor) DataProvider() api.DataProviderType { return api.ExifDataProvider }
 func (p *geoPerceptor) ProcessingMode() api.ProcessingMode { return api.SingleItem }
-func (p *geoPerceptor) NewProcessor(chin <-chan api.RawItemR, chout chan<- api.RawItemR,
-    logger *l.Logger) chain.Processor { … }
+// The tags it reads (api.ExifTagger): only declared tags are read from the files
+func (p *geoPerceptor) ExifTags() []string { return exif.CoordinateTags }
+// Its logic over one item: the host runs it as a step (pipes are the host's business)
+func (p *geoPerceptor) Decorator(logger *l.Logger) chain.Decorator[api.RawItemR, api.RawItemR] {
+    return &geotagsExtractor{logger}
+}
 
 // Navigation — every perceptor is a view of the gallery's sheet
 func (p *geoPerceptor) View() api.View { return api.View{Title: "Place", Icon: geoIcon, Help: "…"} }
@@ -38,7 +42,9 @@ func main() {}
   `MetadataProvider`.
 - `ProcessingMode`: `SingleItem` or `ItemGroup` (groups are not implemented on the
   server side yet).
-- `NewProcessor` returns a `perceplib/chain` step (usually `chain.NewDecorator`).
+- `Decorator(logger)` returns the perceptor's logic: a `chain.Decorator` over one item
+  (`Decorate(item) (item, error)`; optional `Stop`). The host connects it into the
+  import chain — a plugin sees no channels or pipes. `nil`: nothing to do on import.
 - `Schema`: what the perceptor keeps per item — the `Schema()` of a typed
   `api.NewStore[T]` (T is a struct; `Put(item, T)` in the processor, `Get(item)` in
   `Order`), or the zero `api.Schema{}` for nothing. The core keeps the storage (SQLite:
@@ -75,10 +81,16 @@ with `-count=1` (the test cache does not see other modules change).
 | Plugin | Status |
 |---|---|
 | `exif_geo` | keeps the coordinates (`places.Places`, a `Store[Location]` — importable by other perceptors); its view: the sheet on a Hilbert curve, sections region → city from the time zone of the place |
-| `ml_color` | loads; `NewProcessor` returns `nil`; its view (relative): "not analysed yet" |
+| `ml_color` | loads; `Decorator` returns `nil`; its view (relative): "not analysed yet" |
 | `ml_faces` | empty `main.go`, no `Perceptor` symbol |
 | `ml_objects` | empty `main.go`, no `Perceptor` symbol |
 
 EXIF plugins may implement either `api.ExifPerceptor` (read-only `RawItemR`, e.g.
-`exif_geo`) or the core `exif_core.ExifCorePerceptor` (`RawItemRW`); the server wires
-both. A plugin whose `NewProcessor` returns `nil` is skipped.
+`exif_geo`) or the core `plugins.ExifCorePerceptor` (`RawItemRW`); the server wires
+both. A plugin whose `Decorator` returns `nil` is skipped. Every EXIF plugin
+declares the tags it reads (`ExifTags`, `api.ExifTagger`): the server reads only
+declared tags, from the whole asset (the source's metadata first, then the .xmp
+sidecars, the main file, the derivatives) — `GetExif` of an undeclared tag is "".
+Values are exiftool's `-n` form: numbers as numbers (signed decimal degrees, seconds,
+Orientation 1–8; dates as "2006:01:02 15:04:05"); helpers in `perceplib/exif`
+(`Coordinates`). Plugins never run exiftool themselves.

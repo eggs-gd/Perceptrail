@@ -45,8 +45,21 @@ type Perceptor interface {
 	Order(ctx context.Context, anchor string, items []ItemDataProvider) ([]Entry, error)
 }
 
+// ExifTagger: the tags a perceptor reads (exiftool's names). The core reads only
+// the declared tags of the enabled perceptors, from every file of the asset (the
+// source's metadata first, then the sidecars, the main file, the derivatives):
+// GetExif returns "" for a tag nobody declared. Values are exiftool's -n form —
+// numbers as numbers (signed decimal degrees, seconds, Orientation 1–8); dates as
+// "2006:01:02 15:04:05". Plugins never run exiftool (helpers: package exif).
+type ExifTagger interface {
+	ExifTags() []string
+}
+
 // ExifPerceptor is a specialized interface for EXIF-based processors
 type ExifPerceptor interface {
 	Perceptor
-	NewProcessor(chin <-chan RawItemR, chout chan<- RawItemR, logger *l.Logger) chain.Processor
+	ExifTagger
+	// Decorator: the perceptor's logic over one item (it only reads it; its values
+	// go to its Store); the core runs it as a step. nil: nothing to do on import.
+	Decorator(logger *l.Logger) chain.Decorator[RawItemR, RawItemR]
 }

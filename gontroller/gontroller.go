@@ -8,14 +8,18 @@ import (
 	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/client"
 	"perceptrail/gontroller/pkg/client/routes"
+	"perceptrail/gontroller/pkg/importer"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/plugins"
+	"perceptrail/gontroller/pkg/plugins/exif_date"
+	"perceptrail/gontroller/pkg/plugins/exif_duration"
+	"perceptrail/gontroller/pkg/plugins/exif_size"
 	"perceptrail/gontroller/pkg/providers"
 	"perceptrail/gontroller/pkg/providers/apple"
 	"perceptrail/gontroller/pkg/providers/apple/photokit"
 	"perceptrail/gontroller/pkg/providers/folder"
-	"perceptrail/gontroller/pkg/scan"
 	"syscall"
+	"time"
 
 	"github.com/eggs-gd/go-exiftool"
 	l "github.com/eggs-gd/perceplib/logger"
@@ -45,7 +49,13 @@ func main() {
 	log.Printf("mode: %s", ctx.Config().Mode)
 	svc := app.NewSvcContext()
 
-	err := plugins.Pm.LoadPlugins(ctx)
+	err := plugins.Load(plugins.Config{
+		Plugins:    ctx.Config().Plugins,
+		Perceptors: ctx.Config().Perceptors,
+		Driver:     ctx.Config().Database.Driver,
+		DataDir:    ctx.Config().DataDir,
+		Logger:     ctx.Logger(string(app.LogPlugins)),
+	}, exif_date.Perceptor, exif_size.Perceptor, exif_duration.Perceptor)
 	if err != nil {
 		log.Fatalf("Failed to load plugins: %v", err)
 	}
@@ -61,23 +71,36 @@ func main() {
 	ps = append(ps, folder.New())
 	providers.Enable(ps...)
 
-	importer := scan.NewImporterService(ctx)
+	importer := importer.NewImporterService(ctx)
 	svc.AddService(importer)
 	for _, p := range ps {
 		p.Start(mainCtx, importer.Refresh)
 	}
-	web, err := client.NewWebService(ctx.Config().Server, routes.AppInfo{Version: app.Version, Mode: ctx.Config().Mode}, plugins.Pm.ClientPerceptors(), plugins.Pm.LoadValues, ctx.Logger(string(app.LogHTTP)))
+	web, err := client.NewWebService(ctx.Config().Server, routes.AppInfo{Version: app.Version, Mode: ctx.Config().Mode}, plugins.Client(), plugins.LoadValues, ctx.Logger(string(app.LogHTTP)))
 	if err != nil {
 		log.Fatalf("Server: %v", err)
 	}
 	svc.AddService(web)
 	//svc.AddService(importer.NewMaintenanceService(ctx)) // later
 
-	go svc.RunApp(mainCtx)
+	stopped := make(chan struct{})
+	go func() {
+		svc.RunApp(mainCtx)
+		close(stopped)
+	}()
 
 	// The main thread serves PhotoKit's main queue until a stop (macOS; elsewhere: waits)
 	done := make(chan struct{})
 	go func() { <-stop; close(done) }()
 	photokit.RunMain(done)
+
+	// The services stop and clean up (the importer closes its exiftool processes, or
+	// they outlive us) — at most a while: a step may be inside a long exiftool call
+	cancel(nil)
+	select {
+	case <-stopped:
+	case <-time.After(10 * time.Second):
+		log.Printf("Services did not stop in time")
+	}
 	log.Printf("Chain Sys stop")
 }

@@ -49,6 +49,9 @@ type ItemDto struct {
 	PreviewMime string
 	// Hash of the source's own metadata (Apple Photos DB) this item was built from
 	MetaHash string
+	// Rework: something outside the item's files wants it processed again (a perceptor
+	// that has no row for it); publishing clears it
+	Rework bool
 	// A video's length, seconds; 0: not a video or unknown
 	Duration float64
 	// What the asset is (Kind*) when the source says it (Apple Photos); "": the
@@ -62,10 +65,6 @@ type ItemDto struct {
 	DateSource string // the tag Date came from; "" = no date
 	DateZone   string // how DateOffset was found: tag, gps, coords, file, server (assumed)
 	Path       string // Source path
-
-	// The perceptors' values for this item, by store (not a column: each perceptor's
-	// storage keeps them — committed with the item, loaded for Order)
-	values map[string]api.Values `gorm:"-"`
 
 	Size  api.Size `gorm:"embedded;embeddedPrefix:size_"`
 	Ratio api.Size `gorm:"embedded;embeddedPrefix:ratio_"`
@@ -85,33 +84,12 @@ func (ItemDto) TableName() string {
 	return "items"
 }
 
-// The item as plugins read it (api.ItemDataProvider): perceptors get the library
-// as these
-
-func (i *ItemDto) GetGuid() string { return i.Guid }
-
 // GetDate returns the date in the local zone of the shot; no date: the zero time
 func (i *ItemDto) GetDate() time.Time {
 	if i.DateSource == "" {
 		return i.Date
 	}
 	return i.Date.In(time.FixedZone("", i.DateOffset*60))
-}
-
-func (i *ItemDto) GetSize() api.Size    { return i.Size }
-func (i *ItemDto) GetRatio() api.Size   { return i.Ratio }
-func (i *ItemDto) GetDuration() float64 { return i.Duration }
-
-func (i *ItemDto) StoreValues(store string) (api.Values, bool) {
-	v, ok := i.values[store]
-	return v, ok
-}
-
-func (i *ItemDto) SetStoreValues(store string, v api.Values) {
-	if i.values == nil {
-		i.values = map[string]api.Values{}
-	}
-	i.values[store] = v
 }
 
 // type Tag struct {

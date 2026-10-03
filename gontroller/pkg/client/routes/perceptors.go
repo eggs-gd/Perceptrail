@@ -95,9 +95,11 @@ func getOrder(c echo.Context) error {
 		return err
 	}
 	in := make([]api.ItemDataProvider, len(items))
+	byGuid := make(map[string]*perceived, len(items))
 	guids := make([]string, len(items))
 	for i, it := range items {
-		in[i] = it
+		p := &perceived{ItemDto: it}
+		in[i], byGuid[it.Guid] = p, p
 		guids[i] = it.Guid
 	}
 	// The perceptor's own values ride on the items it orders
@@ -106,9 +108,9 @@ func getOrder(c echo.Context) error {
 		if err != nil {
 			return err
 		}
-		for _, it := range items {
-			if v, ok := values[it.Guid]; ok {
-				it.SetStoreValues(store, v)
+		for guid, v := range values {
+			if p, ok := byGuid[guid]; ok {
+				p.SetStoreValues(store, v)
 			}
 		}
 	}
@@ -154,6 +156,7 @@ func getInfo(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
 	out := []clientInfo{}
+	pi := &perceived{ItemDto: item}
 	for _, p := range perceptors {
 		if loadValues != nil {
 			store, values, err := loadValues(p.Name(), []string{item.Guid})
@@ -161,10 +164,10 @@ func getInfo(c echo.Context) error {
 				return err
 			}
 			if v, ok := values[item.Guid]; ok {
-				item.SetStoreValues(store, v)
+				pi.SetStoreValues(store, v)
 			}
 		}
-		facts := p.Info(item)
+		facts := p.Info(pi)
 		if len(facts) == 0 {
 			continue
 		}
@@ -180,3 +183,28 @@ func getInfo(c echo.Context) error {
 
 // shownStates: what the client is shown (see shown)
 var shownStates = []dto.ItemState{dto.Visible, dto.Ready}
+
+// perceived: a stored item as a perceptor reads it (api.ItemDataProvider) — the
+// item, and the perceptors' values loaded for it (each perceptor's storage keeps
+// them, not the items table)
+type perceived struct {
+	*dto.ItemDto
+	values map[string]api.Values
+}
+
+func (p *perceived) GetGuid() string      { return p.Guid }
+func (p *perceived) GetSize() api.Size    { return p.Size }
+func (p *perceived) GetRatio() api.Size   { return p.Ratio }
+func (p *perceived) GetDuration() float64 { return p.Duration }
+
+func (p *perceived) StoreValues(store string) (api.Values, bool) {
+	v, ok := p.values[store]
+	return v, ok
+}
+
+func (p *perceived) SetStoreValues(store string, v api.Values) {
+	if p.values == nil {
+		p.values = map[string]api.Values{}
+	}
+	p.values[store] = v
+}

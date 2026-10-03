@@ -3,15 +3,18 @@ package apple
 import (
 	"context"
 	"sync"
-	"time"
 
-	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/providers"
-	"perceptrail/gontroller/pkg/scan/flow"
 
 	l "github.com/eggs-gd/perceplib/logger"
 )
+
+// Items: what the provider reads of the library's items — the ones nothing can show
+// yet (on demand: asked of Photos)
+type Items interface {
+	Unshown() ([]*dto.ItemDto, error)
+}
 
 // Provider: Apple Photos — the files of a *.photoslibrary grouped by its DB (the
 // grouper), and on demand what Photos keeps only in iCloud (PhotoKit, macOS: see
@@ -20,7 +23,7 @@ type Provider struct {
 	root    string // the library root walked: access to Photos is asked only if one is there
 	grouper *Grouper
 	photos  Photos // nil: only what is on disk
-	items   model.ItemsApi
+	items   Items
 	logger  *l.Logger
 
 	refresh providers.Refresher
@@ -35,14 +38,14 @@ var _ providers.Provider = (*Provider)(nil)
 
 // New: photos asks Photos for renditions (photokit.Library; nil: only what is on
 // disk); root is the library root walked
-func New(root string, photos Photos, items model.ItemsApi, logger *l.Logger) *Provider {
+func New(root string, photos Photos, items Items, logger *l.Logger) *Provider {
 	return &Provider{
 		root:     root,
 		grouper:  newGrouper(logger),
 		photos:   photos,
 		items:    items,
 		logger:   logger,
-		refresh:  func(string, time.Duration) bool { return false },
+		refresh:  func(string) {},
 		sem:      make(chan struct{}, fetchers),
 		inFlight: map[string]*fetching{},
 	}
@@ -54,8 +57,6 @@ func (p *Provider) Name() string { return "apple" }
 func (p *Provider) Claims(path string) bool { return BundleRoot(path) != "" }
 
 func (p *Provider) Grouper() providers.Grouper { return p.grouper }
-
-func (p *Provider) Regroup(key string) (flow.FileGroup, bool) { return p.grouper.Regroup(key) }
 
 // Owns: an item whose main file is in a Photos library (its GUID is the asset UUID)
 func (p *Provider) Owns(item *dto.ItemDto) bool { return BundleRoot(item.Path) != "" }
