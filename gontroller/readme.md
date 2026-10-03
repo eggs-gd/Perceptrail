@@ -64,7 +64,7 @@ packages — see [findings](../_sb/docs/findings.md#go-plugins-2026-09-28).
 ## Import pipeline
 
 Services (`pkg/app/services.go`) start in parallel: `ImporterService` and
-`WebService`. Import is a chain of steps over channels (`perceplib/chain`):
+`WebService`. Import is a chain of steps over typed pipes (`perceplib/chain`):
 
 ```
 discover   walk → group (the providers' groupers) → gate: the files table, the

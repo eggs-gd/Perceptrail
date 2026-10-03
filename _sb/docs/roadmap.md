@@ -434,11 +434,13 @@ transcoders, plugins belong to the stage that uses them. One step does one thing
       Every type belongs to its producer: the provider contract in `providers`,
       `discover.Group`, `identify.Item`, `transcode.Item` — `importer/flow` is gone.
       The perceptors declare their exif tags (`api.ExifTagger`); a step gets only
-      the DB methods it calls; no step knows the plugin manager. Findings:
-      "Import data: types by producer, exif by declaration, a bytes fingerprint".
+      the DB methods it calls; no step knows the plugin manager. exif is read as
+      numbers (`-n`). The chain library has pipes with a flush. Findings: "Import
+      data: types by producer, exif by declaration, a bytes fingerprint", "exif as
+      numbers", "chain: pipes with a flush".
 
       Deferred:
-      - [ ] the end-of-walk marker out of band (needs perceplib's flush signal);
+      - [x] the end-of-walk marker out of band — the library's flush;
       - [ ] `Steps` / `Run` for discover (its tests drive `NewGate` and the groupers
             directly);
       - [ ] storing the metadata package in the DB — when a consumer needs it (the
@@ -471,30 +473,25 @@ to be worked out on its own):
 - Not a chain: on demand (a request path; it re-enters the import through
   `Refresh`).
 
-**perceplib `chain` — what the import taught** (proposals, to weigh with the
-refactor):
+**perceplib `chain` — what the import taught** (done in PR #24: the chain is
+rewritten in place, see its README and findings "chain: pipes with a flush"):
 
-- **A flush signal in the library**: the end-of-walk marker is a domain value
-  every step checks by hand (`ev.Done != nil` in each grouper, the gate counting
-  markers per branch). A library-level flush/barrier that passes every step (an
-  optional `Flusher` interface: flush what you hold, then pass it on) would take it
-  out of the steps.
-- **Skips are not errors**: `ErrSkippedItem` travels on the error channel, every
-  consumer filters it, and the progress counts "done" through it. A result kind of
-  its own (passed / skipped / failed) would make the counting explicit.
-- **Error channels at run time**: `AddStep` gives a step the chain's error channel
-  at the moment it is added; a sub-chain's steps keep the channel it was made with
-  (hence `errProcessing` passed around by hand). Inheriting the channel when the
-  chain runs (or per sub-chain, explicitly) would remove that trap.
-- **Typed stages**: a sub-chain is an untyped `Processor` — nothing checks at
-  compile time that a stage's in/out types match its neighbours'. A
-  `Stage[In, Out]` (a sub-chain with its typed ends) would.
-- **Parallel steps**: N workers on the same channels are built by hand
-  (`NewExifExtractor`); `chain.Parallel(n, decorator)` would say it.
-- **The switch**: `map[int]To` (random order for a broadcast, branches by bare
-  index) — a slice, or named outputs.
-- **Stop**: called from several goroutines (the walker guards it with a mutex) —
-  one lifecycle: the context ends the step, `Stop` once.
+- [x] **A flush signal in the library**: typed pipes carry values and a flush; a
+      `Flusher` gives what it holds; where branches join the flush passes once every
+      writer has flushed (the barrier). The end-of-walk marker is gone from the
+      data; a flush at the end of the chain means the walk is done (no counting).
+- [x] **Skips are not errors**: `ErrSkippedItem` never reaches the error channel.
+- [x] **Error channels at run time**: a sub-chain without its own uses its
+      parent's; the import has one.
+- [x] **Typed stages**: the stages take and give typed pipes — checked at compile
+      time (no separate `Stage` type needed).
+- [x] **Parallel steps**: `chain.Parallel(n, …)`; a flush waits for the values in
+      flight.
+- [x] **The switch**: `Route` returns one output index; the flush goes to every
+      output.
+- [x] **Stop**: optional, called once; every send selects on the context.
+- [x] **Plugins give logic only**: `Decorator(logger)` instead of building a step
+      on raw channels.
 
 ## Core — service (gontroller)
 

@@ -537,6 +537,58 @@ Design: roadmap "Expensive stage".
 
 ## Backend: gontroller, plugins, exiftool
 
+### chain: pipes with a flush (2026-10-03, decided)
+
+The end of a walk was a domain value: `Found.Done` / `Group.Done` rode in the data,
+every grouper checked it, the switch broadcast it, the gate counted one per branch,
+and `Progress` counted every group the gate passed until it came out as an item or
+as an error — which needed a second error channel and made skips travel as errors.
+perceplib's `chain` is rewritten in place (no v2 next to it: one commit with its
+users):
+
+- **Typed pipes carry values and a flush.** A source flushes after a batch; a step
+  passes it on after the values before it (a `Flusher` first gives what it holds); a
+  reader with several writers passes it once every writer has flushed — the barrier
+  that replaces the gate's marker counting. `Route` sends it to every output,
+  `Parallel` waits for the values in flight.
+- **Completion without counting**: pipes are FIFO and every step keeps the order of
+  values and flush, so the walk's flush at the end of the chain (a `Sink`) means
+  every group of it went through every step. `Progress` is now the last walk and
+  that signal; one error channel; a skip is never an error.
+- Also: a sub-chain inherits its parent's error channel at run time (it was bound
+  at `AddStep`, the sub-chain's own steps kept the old one); every send selects on
+  the context (`chout <- res` blocked forever on shutdown); `Stop` is optional and
+  called once (the walker guarded a double call with a mutex); `Series` for a list
+  of steps; plugins give a `chain.Decorator` (`Decorator(logger)`), the host wires
+  it — no channels in the plugin API.
+- **Checked**: the library's tests under `-race`; the smoke run gives the same items
+  and coordinates as before, the next walk idle, a removed file deleted and a new one
+  added on the following walk; the real DB copy walks twice, idle, no deletions.
+
+### exif as numbers: exiftool -n (2026-10-03, decided)
+
+Every perceptor parsed exiftool's printed text with a parser of its own
+(`50 deg 27' 12.34" N` plus the Ref, `"4032x3024"`, `"Rotate 90 CW"`, `"24.40 s"` /
+`"0:01:23"`), and the Apple provider faked that text (`dms()`) so the same parsers
+read the Photos DB. identify now reads with `-n` (no print conversion; value
+conversion and composite tags still apply). Measured on JPEG, HEIC and MOV, and with
+a written south-west JPEG and MOV:
+
+- the composite `GPSLatitude` / `GPSLongitude` (what an unqualified name gives) are
+  signed by their Ref — south and west negative; `EXIF:GPSLatitude` would be
+  unsigned (never asked). QuickTime `GPSCoordinates`: `"lat lon [alt]"`, signed;
+- `Orientation` 1–8; `Duration` seconds (exact: 9.80833, not the printed 9.81);
+  `ImageSize` `"W H"`;
+- `Rotation` differs by format: QuickTime degrees (90), HEIC `irot` quarter turns
+  (3) — size turns only a video by 90 / 270, HEIC's turn comes from `Orientation`;
+- dates, offsets, MIME types, codecs, binary markers: unchanged.
+
+So the parsers are `ParseFloat`; `Coordinates` left the `api` contract for a small
+`perceplib/exif` package of helpers; the Apple record writes numbers (its MetaHash
+changes once — the same pass as `hashVersion`). A probe test pins the behaviour with
+a real exiftool (`identify/read_test.go`). Compared with the text build on 8 files:
+dates, zones, sizes and coordinates identical, durations exact.
+
 ### Import data: types by producer, exif by declaration, a bytes fingerprint (2026-10-03, decided)
 
 `importer/flow` was a bag: the providers' contract (`FileEvent`, `FileGroup`,

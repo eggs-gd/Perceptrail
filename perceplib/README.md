@@ -9,18 +9,20 @@ as a **git subtree** under `perceplib/`.
 
 | Package | What |
 |---|---|
-| `api` | perceptor contract (`Perceptor`, `ExifPerceptor` (+ `ExifTagger`: the tags it reads — only declared tags are read, `GetExif` of another is ""), every perceptor also navigates: `View` (its button) + `Order` (the gallery's sheet in its order, with sections); what it knows about an item: `Info` (facts for the info panel); its data: `Schema` + a typed `Store[T]` (`NewStore`, `Put`, `Get` — the host keeps the storage)), `Coordinates` (GPS from EXIF; `CoordinateTags` to declare), data types (`RawExif`, `Size`), item access interfaces (`RawItemR`, `ItemDataProvider/Editor`), `GetRatio` |
-| `chain` | channel-based pipeline: `NewChainProcessor`, `NewEntryPoint`, `NewDecorator`, `NewSwitch`; `ErrSkippedItem` |
+| `api` | perceptor contract (`Perceptor`, `ExifPerceptor` (+ `ExifTagger`: the tags it reads — only declared tags are read, `GetExif` of another is ""; + `Decorator(logger)`: its logic over one item, the host runs it as a step), every perceptor also navigates: `View` (its button) + `Order` (the gallery's sheet in its order, with sections); what it knows about an item: `Info` (facts for the info panel); its data: `Schema` + a typed `Store[T]` (`NewStore`, `Put`, `Get` — the host keeps the storage)), data types (`RawExif`, `Size`), item access interfaces (`RawItemR`, `ItemDataProvider/Editor`), `GetRatio` |
+| `chain` | steps connected by typed pipes that carry values and a flush (a batch done): `Decorate`, `Parallel`, `Route`, `Entry`, `Sink`, `Series`, `New`; `ErrSkippedItem` (a skip, not an error) — [README](chain/README.md) |
+| `exif` | helpers for the values the host reads with exiftool `-n` (numbers as numbers): `Coordinates` (signed decimal degrees) + `CoordinateTags` to declare |
 | `logger` | zap wrapper with a custom console encoder |
 | `logger/decorators` | `GontrollerDecorator` — tree-style fields, SQL highlighting |
 
 ### chain
 
-Each step is a `Processor` with its own goroutine: reads from its input channel,
-writes to its output channel. `Decorator[Ti, To]` transforms an item; an error goes
-to the chain's shared error channel (`ErrSkippedItem` is a regular skip, not a
-failure). A chain is itself a `Processor`, so chains nest (that is how EXIF plugins
-are run).
+Each step is a goroutine reading one typed pipe and writing another; its logic is
+plain Go (`Decorator`, `Router`, `Source`). A source flushes after a batch; every
+step passes the flush on after the values before it, and where branches join it
+passes once every branch has flushed — so a flush at the end means the batch is
+done. Errors go to the chain's error channel (a skip never does); a chain is a step
+too, so chains nest. Details: [`chain/README.md`](chain/README.md).
 
 ## Working from Perceptrail (subtree)
 
