@@ -106,7 +106,7 @@ func newHarness(t *testing.T) *harness {
 		flushed: make(chan struct{}, 1), errs: make(chan error, 10)}
 	out := chain.NewPipe[*identify.Item](0)
 	c := chain.New(h.errs)
-	c.AddStep(identify.New(testDB, fakeTool{}, t.TempDir(), logger, h.stored, out))
+	c.AddStep(identify.New(testDB, t.TempDir(), logger, h.stored, out, identify.WithExiftool(fakeTool{})))
 	c.AddStep(chain.Sink(out, func(it *identify.Item) { h.identified <- it }, func() { h.flushed <- struct{}{} }))
 	go c.Process(t.Context())
 	return h

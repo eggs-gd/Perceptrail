@@ -18,8 +18,8 @@ import (
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
-// Exiftool: what identify asks of exiftool — a dependency of the stage (the server's
-// Pool; a fake in tests)
+// Exiftool: what identify asks of exiftool. The stage starts its own (a pool of
+// processes); tests give a fake (WithExiftool)
 type Exiftool interface {
 	// Read: the tags of every path at once, as exiftool -n gives them (numbers as
 	// numbers); one map per path, nil when the file could not be read
@@ -32,20 +32,17 @@ type Exiftool interface {
 // One file must not block an exiftool worker forever (broken or huge files)
 const exiftoolTimeout = 2 * time.Minute
 
-// Pool: long-lived exiftool processes (-stay_open), as many as identify's parallel
+// pool: long-lived exiftool processes (-stay_open), as many as identify's parallel
 // readers; a command takes a free process
-type Pool struct {
+type pool struct {
 	workers   []*exiftool.Server
 	free      chan *exiftool.Server
 	logger    *l.Logger
 	closeOnce sync.Once
 }
 
-// NewPool: the server's exiftool, one process per parallel reader
-func NewPool(logger *l.Logger) *Pool { return newPool(workers, logger) }
-
-func newPool(count int, logger *l.Logger) *Pool {
-	p := &Pool{free: make(chan *exiftool.Server, count), logger: logger}
+func newPool(count int, logger *l.Logger) *pool {
+	p := &pool{free: make(chan *exiftool.Server, count), logger: logger}
 	for range count {
 		et, err := exiftool.NewServer()
 		if err != nil {
@@ -58,7 +55,7 @@ func newPool(count int, logger *l.Logger) *Pool {
 	return p
 }
 
-func (p *Pool) command(args ...string) ([]byte, error) {
+func (p *pool) command(args ...string) ([]byte, error) {
 	et := <-p.free
 	defer func() { p.free <- et }()
 	return et.Command(args...)
@@ -66,7 +63,7 @@ func (p *Pool) command(args ...string) ([]byte, error) {
 
 // Read: one call for every path; -j gives an object per file read, with its path
 // (SourceFile): a file it could not read has none
-func (p *Pool) Read(paths, tags []string) ([]api.RawExif, error) {
+func (p *pool) Read(paths, tags []string) ([]api.RawExif, error) {
 	args := []string{"-j", "-n"}
 	for _, t := range tags {
 		args = append(args, "-"+t)
@@ -89,7 +86,7 @@ func (p *Pool) Read(paths, tags []string) ([]api.RawExif, error) {
 // Extract writes the embedded preview tag of src to dst. The embedded JPEG is stored
 // as the sensor saw it, with no EXIF of its own; the RAW's Orientation is copied onto
 // it, or a portrait shot shows on its side (the browser turns an <img> by its EXIF)
-func (p *Pool) Extract(tag, src, dst string) error {
+func (p *pool) Extract(tag, src, dst string) error {
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
 	}
@@ -106,8 +103,8 @@ func (p *Pool) Extract(tag, src, dst string) error {
 	return nil
 }
 
-// Close: the processes end (the server, at stop)
-func (p *Pool) Close() {
+// Close: the processes end — the stage's steps that use them stop (once)
+func (p *pool) Close() {
 	p.closeOnce.Do(func() {
 		for _, et := range p.workers {
 			et.Close()

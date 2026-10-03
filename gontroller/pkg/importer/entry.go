@@ -61,7 +61,6 @@ const defaultRescan = time.Minute
 type importerService struct {
 	importChain *chain.Chain
 	walker      *walk.Walker
-	exiftool    *identify.Pool // closed at stop
 
 	// One asset again (Refresh): its provider forms its group, it goes into the
 	// gate's input; whoever waits hears when its item leaves the chain
@@ -107,7 +106,6 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	items := chain.NewPipe[*dto.ItemDto](1000)
 
 	ps := providers.Enabled()
-	exiftool := identify.NewPool(logger)
 	walker := walk.New(ctx.Config().Path, logger)
 	waits := newAssetWaits()
 	c := &cycle{db: db, walker: walker, rescan: rescan, logger: logger}
@@ -116,7 +114,7 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	importChain.AddStep(chain.Entry(found, walker))
 	importChain.AddStep(group.New(ps, found, grouped))
 	importChain.AddStep(gate.New(db, logger, grouped, stored))
-	importChain.AddStep(identify.New(db, exiftool, ctx.Config().CacheDir(), logger, stored, identified))
+	importChain.AddStep(identify.New(db, ctx.Config().CacheDir(), logger, stored, identified))
 	importChain.AddStep(exif.New(identified, perceived, logger))
 	importChain.AddStep(commit.New(db, perceived, items))
 	// The end: an item's waiters hear it; the walk's flush here means its work is
@@ -126,7 +124,6 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	return &importerService{
 		importChain: importChain,
 		walker:      walker,
-		exiftool:    exiftool,
 		providers:   ps,
 		grouped:     grouped,
 		waits:       waits,
@@ -211,5 +208,4 @@ func (w *assetWaits) done(key string) {
 func (s *importerService) Start(ctx context.Context) {
 	s.walker.Next() // the first walk; the cycle asks for the next ones
 	s.importChain.Process(ctx)
-	s.exiftool.Close()
 }

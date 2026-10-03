@@ -41,3 +41,5 @@ func (e *Embedded) Decorate(it *draft) (*draft, error) {
 	}
 	return it, nil
 }
+
+func (e *Embedded) Stop() { closeTool(e.tool) }

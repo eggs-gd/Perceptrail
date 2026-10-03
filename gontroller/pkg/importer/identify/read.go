@@ -76,3 +76,13 @@ func (e *Reader) Decorate(g gate.Group) (*draft, error) {
 	}
 	return out, nil
 }
+
+func (e *Reader) Stop() { closeTool(e.tool) }
+
+// closeTool: the stage's own exiftool ends when a step using it stops (a test's fake
+// has nothing to close)
+func closeTool(tool Exiftool) {
+	if c, ok := tool.(interface{ Close() }); ok {
+		c.Close()
+	}
+}

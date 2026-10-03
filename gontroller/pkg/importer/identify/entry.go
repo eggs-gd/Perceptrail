@@ -28,14 +28,31 @@ type Store interface {
 	SizesStore
 }
 
-// Parallel readers, and the server Pool's exiftool processes (groups are independent)
+// Parallel readers, and the stage's exiftool processes (groups are independent)
 const workers = 5
 
+// Option: a test's change to the stage
+type Option func(*options)
+
+type options struct{ tool Exiftool }
+
+// WithExiftool: a test's exiftool instead of the stage's own processes
+func WithExiftool(tool Exiftool) Option { return func(o *options) { o.tool = tool } }
+
 // New: in — the groups that need work (stored: rows of the files table); out — the
-// identified items. tool reads the files (the server's Pool); embedded previews go
-// under cacheDir; what is read besides identify's own tags is what the loaded
-// perceptors declare (plugins.ExifTags). Its errors go to the chain it runs in.
-func New(db Store, tool Exiftool, cacheDir string, logger *l.Logger, in *chain.Pipe[gate.Group], out *chain.Pipe[*Item]) chain.Processor {
+// identified items; embedded previews go under cacheDir. It runs its own exiftool
+// (a pool of processes, closed when its steps stop); what is read besides
+// identify's own tags is what the loaded perceptors declare (plugins.ExifTags). Its
+// errors go to the chain it runs in.
+func New(db Store, cacheDir string, logger *l.Logger, in *chain.Pipe[gate.Group], out *chain.Pipe[*Item], opts ...Option) chain.Processor {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
+	tool := o.tool
+	if tool == nil {
+		tool = newPool(workers, logger)
+	}
 	// The kinds' table changed since the files were judged "not media": judged again
 	if err := reclassifyIgnored(db, logger); err != nil {
 		logger.Error("MIME version check failed", l.Error(err))
