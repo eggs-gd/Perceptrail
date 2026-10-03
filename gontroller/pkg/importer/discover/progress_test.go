@@ -4,46 +4,9 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"perceptrail/gontroller/pkg/providers"
 )
-
-// The walker walks again only after the previous walk's work is done
-func TestWalkerRepeatsAfterIdle(t *testing.T) {
-	root := t.TempDir()
-	writeFile(t, root+"/a.jpg")
-
-	m := newTestMonitor(t, root)
-	m.interval = time.Millisecond
-	m.progress = NewProgress()
-	chin := make(chan inType)
-	go m.Start(chin, m.ctx)
-
-	walks := 0
-	deadline := time.After(5 * time.Second)
-	for walks < 2 {
-		select {
-		case in := <-chin:
-			if in.done == nil {
-				continue
-			}
-			walks++
-			if walks == 1 {
-				// A group of the walk is still being processed: no second walk yet
-				m.progress.Passed()
-				m.progress.WalkGated()
-				select {
-				case in := <-chin:
-					t.Fatalf("walked again while busy: %+v", in)
-				case <-time.After(50 * time.Millisecond):
-				}
-				m.progress.Finished()
-			} else {
-				m.progress.WalkGated()
-			}
-		case <-deadline:
-			t.Fatalf("only %d walks", walks)
-		}
-	}
-}
 
 func idleSoon(p *Progress) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
@@ -51,24 +14,56 @@ func idleSoon(p *Progress) bool {
 	return p.WaitIdle(ctx)
 }
 
-// Idle only when the walk is gated and every passed group has finished
+// Idle until a walk is recorded; then only once its flush reached the end (Done); a
+// second Done is harmless
 func TestProgressWaitIdle(t *testing.T) {
 	p := NewProgress()
-	p.Passed()
-	p.Passed()
-	if idleSoon(p) {
-		t.Fatal("idle before the gate saw the whole walk")
-	}
-	p.WalkGated()
-	p.Finished()
-	if idleSoon(p) {
-		t.Fatal("idle with a group still in flight")
-	}
-	p.Finished()
 	if !idleSoon(p) {
-		t.Fatal("not idle when all is done")
+		t.Error("no walk yet: idle")
 	}
+	p.Walked(Walk{Root: "/lib", Files: 3})
 	if idleSoon(p) {
-		t.Fatal("waitIdle must reset for the next walk")
+		t.Error("idle before the walk's flush reached the end")
+	}
+	if p.Last().Files != 3 {
+		t.Errorf("last walk %+v", p.Last())
+	}
+	p.Done()
+	p.Done()
+	if !idleSoon(p) {
+		t.Error("not idle after Done")
+	}
+}
+
+// emitter: what the walker sends, flushes counted
+type emitter struct{ flushes chan struct{} }
+
+func (emitter) Emit(providers.Found) bool { return true }
+func (e emitter) Flush() bool             { e.flushes <- struct{}{}; return true }
+
+// The walker walks again only after the previous walk's work is done
+func TestWalkerRepeatsAfterIdle(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, root+"/a.jpg")
+	m := newTestWalker(root)
+	m.interval = time.Millisecond
+	out := emitter{flushes: make(chan struct{})}
+	go m.Run(t.Context(), out)
+
+	select {
+	case <-out.flushes:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no first walk")
+	}
+	select {
+	case <-out.flushes:
+		t.Fatal("walked again while the first walk was in the chain")
+	case <-time.After(50 * time.Millisecond):
+	}
+	m.progress.Done() // the first walk's flush reached the end
+	select {
+	case <-out.flushes:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no second walk after the first was done")
 	}
 }

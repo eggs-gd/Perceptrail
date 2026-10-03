@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
@@ -17,54 +16,32 @@ import (
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
-// fswalker: the entry point. It only reports what it finds — every file with its
-// stat, then the end-of-walk marker. Grouping, MIME, the DB are later steps.
-
-type inType struct {
-	path string
-	info os.DirEntry
-	// Set only on the end-of-walk marker
-	done *providers.Walk
-}
-
-type fsMonitor struct {
-	logger *l.Logger
-	ctx    context.Context
-	cancel context.CancelFunc
-
-	mu sync.Mutex // guards cancel: Stop is called from two goroutines
-
+// Walker: the chain's entry point (a chain.Source). It only reports what it finds —
+// every file with its stat — then records the walk and flushes the chain. Grouping,
+// MIME, the DB are later steps.
+type Walker struct {
+	logger   *l.Logger
 	path     string
 	interval time.Duration // pause after the work of a walk is done
 	progress *Progress
 }
 
-// NewFsWalker walks the library again and again: interval after the chain has
-// processed the previous walk (progress), not after the walk itself
-func NewFsWalker(path string, interval time.Duration, progress *Progress, chout chan<- providers.Found, logger *l.Logger) chain.Processor {
-	return chain.NewEntryPoint(chout, &fsMonitor{logger: logger, path: path, interval: interval, progress: progress})
+// NewWalker walks the library again and again: interval after the chain has
+// processed the previous walk (its flush reached the end), not after the walk itself
+func NewWalker(path string, interval time.Duration, progress *Progress, logger *l.Logger) *Walker {
+	return &Walker{logger: logger, path: path, interval: interval, progress: progress}
 }
 
-func (m *fsMonitor) Start(chin chan<- inType, ctx context.Context) {
-	m.mu.Lock()
-	m.ctx, m.cancel = context.WithCancel(ctx)
-	m.mu.Unlock()
-	defer m.Stop()
-
-	// Walk, wait until the chain has processed that walk, pause, walk again
+func (m *Walker) Run(ctx context.Context, out chain.Emitter[providers.Found]) {
+	// Walk, flush, wait until the chain has processed that walk, pause, walk again
 	for {
-		result := m.walk(chin)
-		select {
-		case chin <- inType{done: &result}:
-		case <-m.ctx.Done():
-			return
-		}
-		if !m.progress.WaitIdle(m.ctx) {
+		m.progress.Walked(m.walk(ctx, out.Emit))
+		if !out.Flush() || !m.progress.WaitIdle(ctx) {
 			return
 		}
 		select {
 		case <-time.After(m.interval):
-		case <-m.ctx.Done():
+		case <-ctx.Done():
 			return
 		}
 	}
@@ -72,8 +49,8 @@ func (m *fsMonitor) Start(chin chan<- inType, ctx context.Context) {
 
 // walk sends every file under the root to chin. An unreadable subdirectory is
 // skipped and recorded; an unreadable root or a cancel makes the walk incomplete.
-func (m *fsMonitor) walk(chin chan<- inType) providers.Walk {
-	result := providers.Walk{Root: m.path, Started: time.Now()}
+func (m *Walker) walk(ctx context.Context, emit func(providers.Found) bool) Walk {
+	result := Walk{Root: m.path, Started: time.Now()}
 
 	if info, err := os.Stat(m.path); err != nil || !info.IsDir() {
 		m.logger.Error("Library root is not a readable directory", l.String("path", m.path), l.Error(err))
@@ -81,7 +58,7 @@ func (m *fsMonitor) walk(chin chan<- inType) providers.Walk {
 	}
 
 	err := filepath.WalkDir(m.path, func(path string, entry fs.DirEntry, err error) error {
-		if ctxErr := m.ctx.Err(); ctxErr != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
 		if err != nil {
@@ -99,13 +76,19 @@ func (m *fsMonitor) walk(chin chan<- inType) providers.Walk {
 			return nil
 		}
 
-		select {
-		case chin <- inType{path: path, info: entry}:
-			result.Files++
+		result.Files++
+		// A file that vanished since it was listed is not seen: the gate will take it
+		// as deleted
+		info, err := entry.Info()
+		if err != nil {
 			return nil
-		case <-m.ctx.Done():
-			return m.ctx.Err()
 		}
+		if !emit(providers.Found{Entry: dto.ItemEntry{
+			Path: path, Name: entry.Name(), Size: info.Size(), ModTime: info.ModTime(),
+		}}) {
+			return ctx.Err()
+		}
+		return nil
 	})
 
 	if err != nil {
@@ -118,52 +101,9 @@ func (m *fsMonitor) walk(chin chan<- inType) providers.Walk {
 	return result
 }
 
-func (m *fsMonitor) Stop() {
-	// Called from both the walk goroutine and the chain runner
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.cancel != nil {
-		m.cancel()
-	}
-}
-
-// Decorate adds the stat. A file that vanished since it was listed is skipped: it
-// is not seen, so the gate will take it as deleted.
-func (m *fsMonitor) Decorate(in inType) (providers.Found, error) {
-	if in.done != nil {
-		return providers.Found{Done: in.done}, nil
-	}
-	info, err := in.info.Info()
-	if err != nil {
-		return providers.Found{}, chain.ErrSkippedItem
-	}
-	return providers.Found{Entry: dto.ItemEntry{
-		Path:    in.path,
-		Name:    in.info.Name(),
-		Size:    info.Size(),
-		ModTime: info.ModTime(),
-	}}, nil
-}
-
-// WalkOnce: one walk of root as the walker does it — every file with its stat, then
-// the end-of-walk marker — synchronously and once (tests of the whole import)
-func WalkOnce(ctx context.Context, root string, logger *l.Logger, each func(providers.Found)) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	m := &fsMonitor{logger: logger, ctx: ctx, cancel: cancel, path: root}
-	found := make(chan inType)
-	result := make(chan providers.Walk)
-	go func() {
-		r := m.walk(found)
-		close(found)
-		result <- r
-	}()
-	for in := range found {
-		if ev, err := m.Decorate(in); err == nil {
-			each(ev)
-		}
-	}
-	r := <-result
-	ev, _ := m.Decorate(inType{done: &r})
-	each(ev)
+// WalkOnce: one walk of root as the walker does it — every file with its stat —
+// synchronously and once (tests of the whole import); the walk's result
+func WalkOnce(ctx context.Context, root string, logger *l.Logger, each func(providers.Found)) Walk {
+	m := &Walker{logger: logger, path: root}
+	return m.walk(ctx, func(f providers.Found) bool { each(f); return true })
 }

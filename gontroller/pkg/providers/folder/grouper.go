@@ -21,11 +21,6 @@ type Grouper struct {
 }
 
 func (g *Grouper) Decorate(ev providers.Found) (providers.Group, error) {
-	if ev.Done != nil {
-		last := g.open
-		g.open = nil
-		return providers.Group{Asset: providers.Asset{Files: last}, Done: ev.Done}, nil
-	}
 	if shouldSkipPath(ev.Entry.Path) {
 		return providers.Group{}, chain.ErrSkippedItem
 	}
@@ -39,7 +34,15 @@ func (g *Grouper) Decorate(ev providers.Found) (providers.Group, error) {
 	return providers.Group{Asset: providers.Asset{Files: closed}}, nil
 }
 
-func (g *Grouper) Stop() {}
+// Flush: the walk ended — the last open group goes out
+func (g *Grouper) Flush() ([]providers.Group, error) {
+	last := g.open
+	g.open = nil
+	if len(last) == 0 {
+		return nil, nil
+	}
+	return []providers.Group{{Asset: providers.Asset{Files: last}}}, nil
+}
 
 // sameGroup: the file sits in the group's directory and its name without the last
 // extension is the name or the stem of a group member: "a.jpg", "a.xmp",

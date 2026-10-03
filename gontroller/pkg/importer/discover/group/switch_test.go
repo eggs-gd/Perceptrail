@@ -14,20 +14,14 @@ type claimsJPEG struct{ providers.Provider }
 
 func (claimsJPEG) Claims(path string) bool { return strings.HasSuffix(path, ".jpg") }
 
-// A file to the first provider that claims it, the rest to the plain folder; the
-// marker to every grouper
+// A file to the first provider that claims it, the rest to the plain folder (the
+// walk's flush reaches every grouper: the chain's Route sends it to every output)
 func TestSwitch(t *testing.T) {
 	s := Switch{Providers: []providers.Provider{claimsJPEG{}, folder.New()}}
-	got, _ := s.Switch(providers.Found{Entry: dto.ItemEntry{Path: "/lib/a.jpg"}})
-	if _, ok := got[0]; !ok || len(got) != 1 {
-		t.Errorf("a claimed file goes to its provider's grouper, got %v", got)
+	if got, _ := s.Route(providers.Found{Entry: dto.ItemEntry{Path: "/lib/a.jpg"}}); got != 0 {
+		t.Errorf("a claimed file goes to its provider's grouper, got %d", got)
 	}
-	got, _ = s.Switch(providers.Found{Entry: dto.ItemEntry{Path: "/lib/a.mov"}})
-	if _, ok := got[1]; !ok || len(got) != 1 {
-		t.Errorf("an unclaimed file goes to the plain folder, got %v", got)
-	}
-	got, _ = s.Switch(providers.Found{Done: &providers.Walk{}})
-	if len(got) != 2 {
-		t.Errorf("the marker must reach every grouper, got %d", len(got))
+	if got, _ := s.Route(providers.Found{Entry: dto.ItemEntry{Path: "/lib/a.mov"}}); got != 1 {
+		t.Errorf("an unclaimed file goes to the plain folder, got %d", got)
 	}
 }

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/providers"
 
 	l "github.com/eggs-gd/perceplib/logger"
 )
@@ -38,7 +37,7 @@ type sweep struct {
 }
 
 // finalizeWalk derives deletions: files not stamped by this walk are gone.
-func (g *sweep) finalizeWalk(result providers.Walk, held []string) {
+func (g *sweep) finalizeWalk(result Walk, held []string) {
 	if !result.Complete {
 		g.logger.Warn("Walk incomplete: deletions are not checked")
 		return

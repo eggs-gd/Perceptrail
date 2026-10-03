@@ -41,8 +41,8 @@ type Perceptors interface {
 }
 
 // files gate: keeps the files table (identity, stat, CheckTime) and lets through
-// only groups that need work — so unchanged files never reach exiftool. After the
-// end-of-walk marker from every grouper it derives deletions.
+// only groups that need work — so unchanged files never reach exiftool. On the walk's
+// flush (once every grouper has flushed) it derives deletions.
 type Gate struct {
 	db         GateStore
 	perceptors Unprocessed
@@ -57,37 +57,34 @@ type Gate struct {
 	dropped func(key string)
 }
 
-// NewGate: the gate step's logic. branches is the number of groupers that send an
-// end-of-walk marker; dropped hears of a keyed group let not through (nil: nobody).
-func NewGate(db Store, perceptors Perceptors, branches int, progress *Progress, dropped func(key string), logger *l.Logger) *Gate {
+// NewGate: the gate step's logic. progress gives the walk the deletions are
+// derived from; dropped hears of a keyed group let not through (nil: nobody).
+func NewGate(db Store, perceptors Perceptors, progress *Progress, dropped func(key string), logger *l.Logger) *Gate {
 	return &Gate{
 		db: db, perceptors: perceptors, sweep: sweep{db: db, perceptors: perceptors, logger: logger},
-		logger: logger, branches: branches, progress: progress, dropped: dropped,
+		logger: logger, progress: progress, dropped: dropped,
 	}
 }
 
 func (g *Gate) Decorate(in providers.Group) (Group, error) {
-	// A grouper's last group comes with its end-of-walk marker: the group first
-	var out Group
+	g.held = append(g.held, in.Held...)
 	files, err := g.pass(in.Files, in.Key, in.MetaHash)
-	if err == nil {
-		out = Group{Files: files, Key: in.Key, Show: stored(in.Show, files),
-			Meta: in.Meta, MetaHash: in.MetaHash, Kind: in.Kind}
-		g.progress.Passed()
-	} else if in.Key != "" && in.Files != nil && g.dropped != nil {
-		g.dropped(in.Key)
-	}
-	if in.Done != nil {
-		g.held = append(g.held, in.Held...)
-		g.markers++
-		if g.markers == g.branches { // every grouper has flushed: all files are stamped
-			g.markers = 0
-			g.sweep.finalizeWalk(*in.Done, g.held)
-			g.held = nil
-			g.progress.WalkGated()
+	if err != nil {
+		if in.Key != "" && in.Files != nil && g.dropped != nil {
+			g.dropped(in.Key)
 		}
+		return Group{}, err
 	}
-	return out, err
+	return Group{Files: files, Key: in.Key, Show: stored(in.Show, files),
+		Meta: in.Meta, MetaHash: in.MetaHash, Kind: in.Kind}, nil
+}
+
+// Flush: every grouper has flushed (the chain's barrier) — all files of the walk are
+// stamped: the deletions
+func (g *Gate) Flush() ([]Group, error) {
+	g.sweep.finalizeWalk(g.progress.Last(), g.held)
+	g.held = nil
+	return nil, nil
 }
 
 // stored maps the grouper's files to the stored rows of the group (by path): the
@@ -123,8 +120,6 @@ func (g *Gate) pass(found []*dto.FileDto, key, metaHash string) ([]*dto.FileDto,
 	}
 	return nil, chain.ErrSkippedItem
 }
-
-func (g *Gate) Stop() {}
 
 // store finds or creates the rows of the group (found: files with their stat only),
 // refreshes their stat and stamps them as seen. changed: a new file, or size/mtime differ.

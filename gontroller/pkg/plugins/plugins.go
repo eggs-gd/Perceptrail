@@ -144,7 +144,7 @@ func (pm *pluginManager) External() []api.ExifPerceptor {
 		}
 		e, ok := p.(api.ExifPerceptor)
 		if !ok {
-			pm.logger.Error("EXIF plugin has no NewProcessor, skipped", l.String("plugin", p.Name()))
+			pm.logger.Error("EXIF plugin is not an ExifPerceptor (ExifTags, Decorator), skipped", l.String("plugin", p.Name()))
 			continue
 		}
 		out = append(out, e)

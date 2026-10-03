@@ -22,9 +22,10 @@ import (
 )
 
 // Grouper: the logic of a provider's step — found files in, whole assets out
-// (chain.Decorator is a step's logic, not the step: no channels, no goroutine). The
-// importer runs it between its channels (chain.NewDecorator); the provider keeps the
-// instance — its state is what Regroup works from.
+// (chain.Decorator is a step's logic, not the step: no pipes, no goroutine). The
+// importer runs it between its pipes (chain.Decorate); on the walk's flush it gives
+// what it holds (chain.Flusher: the last group, the files held back). The provider
+// keeps the instance — its state is what Regroup works from.
 type Grouper = chain.Decorator[Found, Group]
 
 type Provider interface {

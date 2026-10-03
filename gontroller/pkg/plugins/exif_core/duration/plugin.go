@@ -13,8 +13,8 @@ type durationPerceptor struct{}
 func (p *durationPerceptor) Name() string                       { return "exif_duration" }
 func (p *durationPerceptor) DataProvider() api.DataProviderType { return api.ExifDataProvider }
 func (p *durationPerceptor) ProcessingMode() api.ProcessingMode { return api.SingleItem }
-func (p *durationPerceptor) NewProcessor(chin <-chan exif_core.RawItemRW, chout chan<- exif_core.RawItemRW, logger *l.Logger) chain.Processor {
-	return NewDurationProcessor(chin, chout, logger)
+func (p *durationPerceptor) Decorator(logger *l.Logger) chain.Decorator[exif_core.RawItemRW, exif_core.RawItemRW] {
+	return &durationExtractor{logger}
 }
 
 // ExifTags: the length tags

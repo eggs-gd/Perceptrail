@@ -27,7 +27,7 @@ type Store interface {
 	SizesStore
 }
 
-// exiftool processes and parallel read steps (groups are independent)
+// exiftool processes and parallel readers (groups are independent)
 const workers = 5
 
 // Steps: the stage's steps' logic, in order — New runs them between channels, Run
@@ -75,9 +75,8 @@ func (s *Steps) Run(g discover.Group) (*Item, error) {
 
 // New: in — the groups that need work (stored: rows of the files table); out — the
 // identified items; tags — what the perceptors read; previews are extracted under
-// cacheDir. Its steps report to
-// errch (every group ends here or as an item: the progress counts them).
-func New(tags []string, cacheDir string, db Store, in <-chan discover.Group, out chan<- *Item, errch chan error, logger *l.Logger) chain.ChainProcessor {
+// cacheDir. Its errors go to the chain it runs in.
+func New(tags []string, cacheDir string, db Store, in *chain.Pipe[discover.Group], out *chain.Pipe[*Item], logger *l.Logger) chain.Processor {
 	// The kinds' table changed since the files were judged "not media": judged again
 	if err := reclassifyIgnored(db, logger); err != nil {
 		logger.Error("MIME version check failed", l.Error(err))
@@ -89,33 +88,31 @@ func New(tags []string, cacheDir string, db Store, in <-chan discover.Group, out
 	s := NewSteps(newExiftoolPool(workers, logger), tags, cacheDir, db, logger)
 
 	// read → classify: the files and their metadata
-	read := make(chan *draft)
+	read := chain.NewPipe[*draft](0)
 	// classify → merge: + kinds and roles, the main file first
-	classified := make(chan *draft)
+	classified := chain.NewPipe[*draft](0)
 	// merge → fingerprint: + the asset's metadata package
-	merged := make(chan *draft)
+	merged := chain.NewPipe[*draft](0)
 	// fingerprint → validate: + the main file's fingerprint
-	fingerprinted := make(chan *draft)
+	fingerprinted := chain.NewPipe[*draft](0)
 	// validate → embedded: + the item (its GUID); not media does not get here
-	validated := make(chan *draft)
+	validated := chain.NewPipe[*draft](0)
 	// embedded → sizes: + the extracted preview, if one was needed
-	extracted := make(chan *draft)
+	extracted := chain.NewPipe[*draft](0)
 	// sizes → pick: + every file's pixels and codec (stored)
-	sized := make(chan *draft)
+	sized := chain.NewPipe[*draft](0)
 	// pick → yield: + what to show now
-	picked := make(chan *draft)
+	picked := chain.NewPipe[*draft](0)
 
-	stage := chain.NewChainProcessor(errch)
-	for range workers { // N readers on the same channels, sharing the pool
-		stage.AddStep(chain.NewDecorator(in, read, s.Read))
-	}
-	stage.AddStep(chain.NewDecorator(read, classified, s.Classify))
-	stage.AddStep(chain.NewDecorator(classified, merged, s.Merge))
-	stage.AddStep(chain.NewDecorator(merged, fingerprinted, s.Fingerprint))
-	stage.AddStep(chain.NewDecorator(fingerprinted, validated, s.Validate))
-	stage.AddStep(chain.NewDecorator(validated, extracted, s.Embedded))
-	stage.AddStep(chain.NewDecorator(extracted, sized, s.Sizes))
-	stage.AddStep(chain.NewDecorator(sized, picked, s.Pick))
-	stage.AddStep(chain.NewDecorator(picked, out, s.Yield))
+	stage := chain.New(nil)
+	stage.AddStep(chain.Parallel(workers, in, read, s.Read)) // groups are independent: one pool
+	stage.AddStep(chain.Decorate(read, classified, s.Classify))
+	stage.AddStep(chain.Decorate(classified, merged, s.Merge))
+	stage.AddStep(chain.Decorate(merged, fingerprinted, s.Fingerprint))
+	stage.AddStep(chain.Decorate(fingerprinted, validated, s.Validate))
+	stage.AddStep(chain.Decorate(validated, extracted, s.Embedded))
+	stage.AddStep(chain.Decorate(extracted, sized, s.Sizes))
+	stage.AddStep(chain.Decorate(sized, picked, s.Pick))
+	stage.AddStep(chain.Decorate(picked, out, s.Yield))
 	return stage
 }

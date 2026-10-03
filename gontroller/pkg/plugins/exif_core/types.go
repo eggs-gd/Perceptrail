@@ -22,5 +22,7 @@ type RawItemRW interface {
 type ExifCorePerceptor interface {
 	api.Perceptor
 	api.ExifTagger
-	NewProcessor(chin <-chan RawItemRW, chout chan<- RawItemRW, logger *l.Logger) chain.Processor
+	// Decorator: the perceptor's logic over one item (it writes into it); the core
+	// runs it as a step
+	Decorator(logger *l.Logger) chain.Decorator[RawItemRW, RawItemRW]
 }

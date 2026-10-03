@@ -34,21 +34,20 @@ func TestGenericGrouper(t *testing.T) {
 			out = append(out, group)
 		}
 	}
-	marker := &providers.Walk{}
-	last, _ := g.Decorate(providers.Found{Done: marker})
-	out = append(out, last)
+	last, _ := g.Flush()
+	out = append(out, last...)
 
 	want := [][]string{
 		{"IMG_1.HEIC", "IMG_1.MOV", "IMG_1.aae"}, // case-insensitive
 		{"a.edited.jpg"},
 		{"a.jpg", "a.jpg.xmp", "a.xmp"},
-		{"b", "b.png"}, // the last group goes out with the marker
+		{"b", "b.png"}, // the last group goes out on the walk's flush
 	}
 	if got := names(out); !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v\nwant %v", got, want)
 	}
-	if last.Done != marker {
-		t.Error("the marker must come with the last group")
+	if again, _ := g.Flush(); len(again) != 0 {
+		t.Errorf("a second flush gave %v", names(again))
 	}
 
 	// Another directory closes the group, even with the same name

@@ -11,32 +11,18 @@ import (
 	"github.com/eggs-gd/perceplib/logger/decorators"
 )
 
-func newTestMonitor(t *testing.T, root string) *fsMonitor {
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	return &fsMonitor{
-		logger: l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}),
-		ctx:    ctx,
-		cancel: cancel,
-		path:   root,
-	}
+func newTestWalker(root string) *Walker {
+	return NewWalker(root, 0, NewProgress(), l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
 }
 
 // runWalk collects what walk sends and returns it with the result
-func runWalk(m *fsMonitor) (providers.Walk, []string) {
-	ch := make(chan inType)
-	res := make(chan providers.Walk)
-	go func() {
-		r := m.walk(ch)
-		close(ch)
-		res <- r
-	}()
-
+func runWalk(m *Walker) (Walk, []string) {
 	var paths []string
-	for in := range ch {
-		paths = append(paths, in.path)
-	}
-	return <-res, paths
+	result := m.walk(context.Background(), func(f providers.Found) bool {
+		paths = append(paths, f.Entry.Path)
+		return true
+	})
+	return result, paths
 }
 
 func writeFile(t *testing.T, path string) {
@@ -54,7 +40,7 @@ func TestWalkComplete(t *testing.T) {
 	writeFile(t, filepath.Join(root, "a.jpg"))
 	writeFile(t, filepath.Join(root, "sub", "b.jpg"))
 
-	result, paths := runWalk(newTestMonitor(t, root))
+	result, paths := runWalk(newTestWalker(root))
 	if !result.Complete || result.Files != 2 || len(paths) != 2 || len(result.Unreadable) != 0 {
 		t.Errorf("got %+v, paths %v", result, paths)
 	}
@@ -76,7 +62,7 @@ func TestWalkSkipsUnreadableDir(t *testing.T) {
 	}
 	t.Cleanup(func() { os.Chmod(locked, 0o755) })
 
-	result, paths := runWalk(newTestMonitor(t, root))
+	result, paths := runWalk(newTestWalker(root))
 	if !result.Complete || result.Files != 2 {
 		t.Errorf("got %+v, paths %v", result, paths)
 	}
@@ -86,7 +72,7 @@ func TestWalkSkipsUnreadableDir(t *testing.T) {
 }
 
 func TestWalkMissingRoot(t *testing.T) {
-	result, paths := runWalk(newTestMonitor(t, filepath.Join(t.TempDir(), "unmounted")))
+	result, paths := runWalk(newTestWalker(filepath.Join(t.TempDir(), "unmounted")))
 	if result.Complete || len(paths) != 0 {
 		t.Errorf("got %+v, paths %v", result, paths)
 	}
@@ -97,14 +83,12 @@ func TestWalkCancelled(t *testing.T) {
 	writeFile(t, filepath.Join(root, "a.jpg"))
 	writeFile(t, filepath.Join(root, "b.jpg"))
 
-	m := newTestMonitor(t, root)
-	ch := make(chan inType)
-	res := make(chan providers.Walk)
-	go func() { res <- m.walk(ch) }()
-	<-ch // take one file, then cancel
-	m.cancel()
-
-	if result := <-res; result.Complete {
+	ctx, cancel := context.WithCancel(t.Context())
+	result := newTestWalker(root).walk(ctx, func(providers.Found) bool {
+		cancel() // take one file, then cancel
+		return true
+	})
+	if result.Complete {
 		t.Errorf("cancelled walk reported complete: %+v", result)
 	}
 }

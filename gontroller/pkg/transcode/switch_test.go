@@ -11,11 +11,8 @@ func TestTranscodeSwitch(t *testing.T) {
 		return &dto.FileDto{Role: role, ItemEntry: dto.ItemEntry{MimeType: mime}}
 	}
 	route := func(kind string, files ...*dto.FileDto) int {
-		out, _ := Switch{}.Switch(&Item{Item: &dto.ItemDto{Kind: kind}, Files: files})
-		for b := range out {
-			return b
-		}
-		return -1
+		b, _ := Switch{}.Route(&Item{Item: &dto.ItemDto{Kind: kind}, Files: files})
+		return b
 	}
 	cases := []struct {
 		name  string

@@ -6,8 +6,6 @@ import (
 
 	"perceptrail/gontroller/pkg/plugins/exif_core"
 
-	"github.com/eggs-gd/perceplib/chain"
-
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
@@ -37,10 +35,4 @@ func parse(v string) float64 {
 		return 0
 	}
 	return s
-}
-
-func (d *durationExtractor) Stop() {}
-
-func NewDurationProcessor(chin <-chan exif_core.RawItemRW, chout chan<- exif_core.RawItemRW, logger *l.Logger) chain.Processor {
-	return chain.NewDecorator(chin, chout, &durationExtractor{logger})
 }

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/eggs-gd/perceplib/api"
-	"github.com/eggs-gd/perceplib/chain"
 
 	l "github.com/eggs-gd/perceplib/logger"
 )
@@ -93,12 +92,4 @@ func isRotatedVideo(rotation string) bool {
 	default:
 		return false
 	}
-}
-
-func (cd *sizesExtractor) Stop() {}
-
-func NewSizesProcessor(chin <-chan exif_core.RawItemRW, chout chan<- exif_core.RawItemRW, logger *l.Logger) chain.Processor {
-	processor := &sizesExtractor{logger}
-
-	return chain.NewDecorator(chin, chout, processor)
 }

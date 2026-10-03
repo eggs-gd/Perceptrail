@@ -2,8 +2,7 @@
 // plugins) over the item the core has perceived. They only read it (api.RawItemR):
 // what they find goes into their storages, the commit writes it.
 //
-//	each external perceptor, in the plugin manager's order: to read-only → the
-//	perceptor → back
+//	each external perceptor, a step each, in the plugin manager's order
 package plugins
 
 import (
@@ -17,65 +16,45 @@ import (
 )
 
 // New: perceptors — the external perceptors, in order; in — the items the core has
-// perceived; out — the same, perceived by the external ones (none: passed on as they
-// are). Its steps report to errch.
-func New(perceptors []api.ExifPerceptor, in <-chan *identify.Item, out chan<- *identify.Item, errch chan error, logger *l.Logger) chain.ChainProcessor {
-	stage := chain.NewChainProcessor(errch)
-
-	// A perceptor's step reads its own channel and writes its own; the stage wires
-	// them one after another
-	type step struct {
-		in, out chan api.RawItemR
-		proc    chain.Processor
-	}
-	var steps []step
+// perceived; out — the same, perceived by the external ones (none: as they are). Its
+// errors go to the chain it runs in.
+func New(perceptors []api.ExifPerceptor, in, out *chain.Pipe[*identify.Item], logger *l.Logger) chain.Processor {
+	var steps []chain.Decorator[*identify.Item, *identify.Item]
 	for _, p := range perceptors {
-		s := step{in: make(chan api.RawItemR, 1), out: make(chan api.RawItemR, 1)}
-		if s.proc = p.NewProcessor(s.in, s.out, logger.Named(p.Name())); s.proc == nil {
-			logger.Error("EXIF plugin returned no processor, skipped", l.String("plugin", p.Name()))
+		d := p.Decorator(logger.Named(p.Name()))
+		if d == nil {
+			logger.Error("EXIF plugin has no decorator, skipped", l.String("plugin", p.Name()))
 			continue
 		}
-		steps = append(steps, s)
+		steps = append(steps, perceive{name: p.Name(), logic: d})
 	}
-	if len(steps) == 0 {
-		stage.AddStep(chain.NewDecorator(in, out, pass{}))
-		return stage
-	}
-
-	prev := in
-	for i, s := range steps {
-		stage.AddStep(chain.NewDecorator(prev, s.in, toReadOnly{}))
-		stage.AddStep(s.proc)
-		if i == len(steps)-1 { // the last one writes out
-			stage.AddStep(chain.NewDecorator(s.out, out, back{}))
-			break
-		}
-		next := make(chan *identify.Item, 1)
-		stage.AddStep(chain.NewDecorator(s.out, next, back{}))
-		prev = next
-	}
-	return stage
+	return chain.Series(in, out, steps...)
 }
 
-// toReadOnly: what an external perceptor sees
-type toReadOnly struct{}
+// The external perceptors only read the item
+var _ api.RawItemR = (*identify.Item)(nil)
 
-func (toReadOnly) Decorate(in *identify.Item) (api.RawItemR, error) { return in, nil }
-func (toReadOnly) Stop()                                            {}
+// perceive: an external perceptor's logic over the item the stages carry; it sees
+// the item read-only
+type perceive struct {
+	name  string
+	logic chain.Decorator[api.RawItemR, api.RawItemR]
+}
 
-// back: the item an external perceptor returned
-type back struct{}
-
-func (back) Decorate(in api.RawItemR) (*identify.Item, error) {
-	it, ok := in.(*identify.Item)
+func (p perceive) Decorate(in *identify.Item) (*identify.Item, error) {
+	out, err := p.logic.Decorate(in)
+	if err != nil {
+		return nil, err
+	}
+	it, ok := out.(*identify.Item)
 	if !ok {
-		return nil, fmt.Errorf("external EXIF plugin returned %T, want the item it got", in)
+		return nil, fmt.Errorf("EXIF plugin %s returned %T, want the item it got", p.name, out)
 	}
 	return it, nil
 }
-func (back) Stop() {}
 
-type pass struct{}
-
-func (pass) Decorate(in *identify.Item) (*identify.Item, error) { return in, nil }
-func (pass) Stop()                                              {}
+func (p perceive) Stop() {
+	if s, ok := p.logic.(chain.Stopper); ok {
+		s.Stop()
+	}
+}

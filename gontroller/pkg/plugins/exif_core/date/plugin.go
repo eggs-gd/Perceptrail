@@ -14,8 +14,8 @@ type datePerceptor struct{}
 func (p *datePerceptor) Name() string                       { return "exif_date" }
 func (p *datePerceptor) DataProvider() api.DataProviderType { return api.ExifDataProvider }
 func (p *datePerceptor) ProcessingMode() api.ProcessingMode { return api.SingleItem }
-func (p *datePerceptor) NewProcessor(chin <-chan exif_core.RawItemRW, chout chan<- exif_core.RawItemRW, logger *l.Logger) chain.Processor {
-	return NewDatesProcessor(chin, chout, logger)
+func (p *datePerceptor) Decorator(logger *l.Logger) chain.Decorator[exif_core.RawItemRW, exif_core.RawItemRW] {
+	return &datesExtractor{logger}
 }
 
 // ExifTags: what resolveDate reads (the dates, their sub-seconds and offsets, the

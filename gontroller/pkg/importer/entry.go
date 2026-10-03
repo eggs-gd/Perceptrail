@@ -16,13 +16,12 @@
 // Diagrams: _sb/puml/Import chain.puml, _sb/puml/Walker.puml (gate, validator).
 //
 // Not obvious:
-//   - Two error channels: discover reports to the walk's, the stages after the gate
-//     to the processing one — every group the gate lets through ends there or as an
-//     item, and the progress counts them; the next walk starts only when all are done
-//     (walks never overlap).
-//   - The end-of-walk marker goes through the groupers to the gate: deletions run
-//     only when every grouper's marker reached it, after a complete walk that found
-//     files, never under an unreadable directory.
+//   - The walker flushes the chain after a walk: every step passes the flush on after
+//     the values before it, a grouper first gives what it holds; where branches join
+//     (the groupers into the gate) it passes once every branch has flushed. At the
+//     gate it runs the deletions (after a complete walk that found files, never
+//     under an unreadable directory); at the end of the chain it means the walk's work
+//     is done — the next walk starts only then (walks never overlap).
 //   - The chain is async: deletions may run before a moved file is validated, so the
 //     validator restores deleted items by hash.
 //   - One asset is processed again without a walk (Refresh): its provider forms its
@@ -31,7 +30,6 @@ package importer
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"time"
 
@@ -57,11 +55,7 @@ const defaultRescan = time.Minute
 type importerService struct {
 	appCtx app.AppContext
 
-	errch    chan error
-	items    chan *dto.ItemDto
-	progress *discover.Progress
-
-	importChain chain.ChainProcessor
+	importChain *chain.Chain
 
 	// One asset again (Refresh): discover sends its group to the gate; whoever
 	// waits hears when its item leaves the chain or the gate drops the group
@@ -72,27 +66,13 @@ type importerService struct {
 func NewImporterService(ctx app.AppContext) *importerService {
 	logger := ctx.Logger(string(app.LogImporter))
 	db := model.NewProxy(ctx.Logger(string(app.LogDB)))
-
-	logErr := func(err error) {
-		if !errors.Is(err, chain.ErrSkippedItem) { // skips are on purpose (buffered, unchanged, not media)
-			logger.Error("Import Error", l.Error(err))
-		}
-	}
 	progress := discover.NewProgress()
 
-	// discover's errors (the walk, the groupers, the gate)
+	// Every stage's errors (skips never get here: they are on purpose)
 	errch := make(chan error)
 	go func() {
 		for err := range errch {
-			logErr(err)
-		}
-	}()
-	// After the gate every group ends as an item (items) or here: both count as done
-	errProcessing := make(chan error)
-	go func() {
-		for err := range errProcessing {
-			progress.Finished()
-			logErr(err)
+			logger.Error("Import Error", l.Error(err))
 		}
 	}()
 	rescan := ctx.Config().Rescan
@@ -102,32 +82,31 @@ func NewImporterService(ctx app.AppContext) *importerService {
 
 	// Between the stages (each message type belongs to the stage that yields it)
 	// discover → identify: the groups that need work, stored (rows of the files table)
-	stored := make(chan discover.Group)
+	stored := chain.NewPipe[discover.Group](0)
 	// identify → core: the identified items
-	identified := make(chan *identify.Item)
+	identified := chain.NewPipe[*identify.Item](0)
 	// core → plugins: + what the core perceptors found
-	cored := make(chan *identify.Item)
+	cored := chain.NewPipe[*identify.Item](0)
 	// plugins → commit: + what the external perceptors found
-	perceived := make(chan *identify.Item)
-	// commit → nobody yet: published items, drained in Start (later: events to the
-	// client); buffered so the closer does not wait for the drain
-	items := make(chan *dto.ItemDto, 1000)
+	perceived := chain.NewPipe[*identify.Item](0)
+	// commit → the end: published items (later: events to the client); buffered so
+	// the closer does not wait for the end
+	items := chain.NewPipe[*dto.ItemDto](1000)
 
 	waits := newAssetWaits()
-	disc := discover.New(ctx.Config().Path, rescan, providers.Enabled(), progress, waits.done, db, plugins.Pm, stored, errch, logger)
+	disc := discover.New(ctx.Config().Path, rescan, providers.Enabled(), progress, waits.done, db, plugins.Pm, stored, logger)
 
-	importChain := chain.NewChainProcessor(errch)
+	importChain := chain.New(errch)
 	importChain.AddStep(disc)
-	importChain.AddStep(identify.New(plugins.Pm.ExifTags(), ctx.Config().CacheDir(), db, stored, identified, errProcessing, logger))
-	importChain.AddStep(core.New(plugins.Pm.Core(), identified, cored, errProcessing, logger))
-	importChain.AddStep(external.New(plugins.Pm.External(), cored, perceived, errProcessing, logger))
-	importChain.AddStep(commit.New(db, plugins.Pm, perceived, items, errProcessing, logger))
+	importChain.AddStep(identify.New(plugins.Pm.ExifTags(), ctx.Config().CacheDir(), db, stored, identified, logger))
+	importChain.AddStep(core.New(plugins.Pm.Core(), identified, cored, logger))
+	importChain.AddStep(external.New(plugins.Pm.External(), cored, perceived, logger))
+	importChain.AddStep(commit.New(db, plugins.Pm, perceived, items))
+	// The end: an item's waiters hear it; the walk's flush here means its work is done
+	importChain.AddStep(chain.Sink(items, func(it *dto.ItemDto) { waits.done(it.Guid) }, progress.Done))
 
 	return &importerService{
 		appCtx:      ctx,
-		errch:       errch,
-		items:       items,
-		progress:    progress,
 		importChain: importChain,
 		discover:    disc,
 		waits:       waits,
@@ -136,24 +115,25 @@ func NewImporterService(ctx app.AppContext) *importerService {
 
 // Refresh processes one asset of a provider's library again, now — the library (Apple
 // Photos…) has just made a file of it local (on demand): no walk of the whole library
-// for one photo. Its group goes to the gate like any group (only what changed passes; deletions are not
-// touched — they come with the walk's marker; a walk sending the same asset at the
-// same time just processes it twice into the same item). Waits until the item has
-// left the chain or the gate dropped the group (nothing changed: Photos drew from
-// what was local), at most wait; false if neither (no such asset, too slow) — the
-// next walk catches up anyway.
+// for one photo. Its group goes to the gate like any group (only what changed passes;
+// deletions are not touched — they come with the walk's flush; a walk sending the
+// same asset at the same time just processes it twice into the same item). Waits
+// until the item has left the chain or the gate dropped the group (nothing changed:
+// Photos drew from what was local), at most wait; false if neither (no such asset,
+// too slow) — the next walk catches up anyway.
 func (s *importerService) Refresh(uuid string, wait time.Duration) bool {
 	done := s.waits.add(uuid)
 	defer s.waits.drop(uuid, done)
 
-	timeout := time.After(wait)
-	if !s.discover.Regroup(uuid, timeout) {
+	ctx, cancel := context.WithTimeout(context.Background(), wait)
+	defer cancel()
+	if !s.discover.Regroup(ctx, uuid) {
 		return false
 	}
 	select {
 	case <-done:
 		return true
-	case <-timeout:
+	case <-ctx.Done():
 		return false
 	}
 }
@@ -202,25 +182,6 @@ func (w *assetWaits) done(key string) {
 	delete(w.by, key)
 }
 
-func (s *importerService) Start(parentCtx context.Context) {
-	ctx, cancel := context.WithCancel(parentCtx)
-	defer cancel()
-
-	// Nothing consumes finished items yet (later: events to the client); drain them,
-	// or the closer blocks once the buffer is full
-	go func() {
-		for {
-			select {
-			case it := <-s.items:
-				s.progress.Finished()
-				s.waits.done(it.Guid)
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
+func (s *importerService) Start(ctx context.Context) {
 	s.importChain.Process(ctx)
-
-	<-ctx.Done()
 }

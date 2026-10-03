@@ -2,7 +2,6 @@ package importer
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -114,7 +113,8 @@ func scanWith(t *testing.T, root string, dropped func(key string)) []string {
 	// the core perceptors; close
 	ps := []providers.Provider{apple.New("", nil, itemsProxy, logger), folder.New()}
 	sw := group.Switch{Providers: ps}
-	gate := discover.NewGate(testDB, plugins.Pm, len(ps), discover.NewProgress(), dropped, logger)
+	progress := discover.NewProgress()
+	gate := discover.NewGate(testDB, plugins.Pm, progress, dropped, logger)
 	steps := identify.NewSteps(nil, coreTags(), t.TempDir(), testDB, logger)
 	steps.Read.Extract = perFile(fakeExif)
 	steps.Embedded.Extract = func(string, string, string) (string, error) { return "", errors.New("no exiftool in tests") }
@@ -129,39 +129,46 @@ func scanWith(t *testing.T, root string, dropped func(key string)) []string {
 		}
 		return true
 	}
-	toGroupers := func(ev providers.Found) {
-		to, err := sw.Switch(ev)
+	toGate := func(group providers.Group) {
+		stored, err := gate.Decorate(group)
 		if !ok(err) {
 			return
 		}
-		for i := range ps { // marker: every grouper, in order
-			in, has := to[i]
-			if !has {
-				continue
-			}
-			group, err := ps[i].Grouper().Decorate(in)
-			if !ok(err) {
-				continue
-			}
-			{
-				stored, err := gate.Decorate(group)
-				if !ok(err) {
-					continue
-				}
-				it, err := steps.Run(stored)
-				if !ok(err) {
-					continue
-				}
-				runCorePlugins(t, it)
-				if _, err := commit.NewCloser(itemsProxy).Decorate(it); err != nil {
-					t.Fatal(err)
-				}
-				processed = append(processed, it.Item.Path)
-			}
+		it, err := steps.Run(stored)
+		if !ok(err) {
+			return
+		}
+		runCorePlugins(t, it)
+		if _, err := commit.NewCloser(itemsProxy).Decorate(it); err != nil {
+			t.Fatal(err)
+		}
+		processed = append(processed, it.Item.Path)
+	}
+	toGroupers := func(ev providers.Found) {
+		i, err := sw.Route(ev)
+		if !ok(err) {
+			return
+		}
+		if group, err := ps[i].Grouper().Decorate(ev); ok(err) {
+			toGate(group)
 		}
 	}
 
-	discover.WalkOnce(t.Context(), root, logger, toGroupers)
+	// The walk, then its flush as the chain gives it: every grouper gives what it
+	// holds, then the gate (the deletions)
+	progress.Walked(discover.WalkOnce(t.Context(), root, logger, toGroupers))
+	for _, p := range ps {
+		held, err := p.Grouper().(chain.Flusher[providers.Group]).Flush()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, g := range held {
+			toGate(g)
+		}
+	}
+	if _, err := gate.Flush(); err != nil {
+		t.Fatal(err)
+	}
 	return processed
 }
 
@@ -360,18 +367,8 @@ func TestValidatorDeletedThenBack(t *testing.T) {
 func runCorePlugins(t *testing.T, it *identify.Item) {
 	t.Helper()
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	for _, p := range []api.Perceptor{date.Perceptor, size.Perceptor} {
-		in, out := make(chan exif_core.RawItemRW), make(chan exif_core.RawItemRW)
-		proc := p.(exif_core.ExifCorePerceptor).NewProcessor(in, out, logger)
-		errs := make(chan error, 1)
-		chain.NewChainProcessor(errs).AddStep(proc)
-		go proc.Process(ctx)
-		in <- it
-		select {
-		case <-out:
-		case err := <-errs:
+		if _, err := p.(exif_core.ExifCorePerceptor).Decorator(logger).Decorate(it); err != nil {
 			t.Fatal(err)
 		}
 	}

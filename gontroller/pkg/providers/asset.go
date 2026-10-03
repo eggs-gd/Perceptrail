@@ -1,34 +1,18 @@
 package providers
 
 import (
-	"time"
-
 	"perceptrail/gontroller/pkg/model/dto"
 
 	"github.com/eggs-gd/perceplib/api"
 )
 
 // The contract between the import's discover stage and a provider's grouper: found
-// files in, whole assets out, the end-of-walk marker through.
+// files in, whole assets out; on the walk's flush, what the grouper still holds.
 
-// Found: one found file (its path and stat), or the end-of-walk marker (Done)
+// Found: one found file (its path and stat). The end of a walk is not a value: the
+// chain flushes, and a grouper gives what it holds (chain.Flusher).
 type Found struct {
 	Entry dto.ItemEntry
-	Done  *Walk
-}
-
-// Walk describes a finished walk; it rides in the end-of-walk marker. Deletions may
-// be derived from it only if the walk was complete: a cancelled walk or an
-// unreadable root says nothing about which files are gone.
-type Walk struct {
-	Root    string
-	Started time.Time
-	// The walk reached the end
-	Complete bool
-	// Files seen (before grouping and filtering)
-	Files int
-	// Directories that could not be read: their files are not "deleted"
-	Unreadable []string
 }
 
 // Asset: one whole asset as its source describes it — all its files (the main file
@@ -51,12 +35,10 @@ type Asset struct {
 	Kind string
 }
 
-// Group: what a grouper sends — a complete asset, and/or its end-of-walk marker
-// (Done: the grouper has flushed; it may come with its last asset)
+// Group: what a grouper sends — a complete asset; on the walk's flush, the files it
+// saw but held back (their asset did not complete in this walk: not "gone" for the
+// deletions)
 type Group struct {
 	Asset
-	Done *Walk
-	// With the marker: files the grouper saw but held back (their asset did not
-	// complete in this walk) — not "gone" for the deletions
 	Held []string
 }

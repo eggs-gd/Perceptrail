@@ -59,5 +59,7 @@ type ExifTagger interface {
 type ExifPerceptor interface {
 	Perceptor
 	ExifTagger
-	NewProcessor(chin <-chan RawItemR, chout chan<- RawItemR, logger *l.Logger) chain.Processor
+	// Decorator: the perceptor's logic over one item (it only reads it; its values
+	// go to its Store); the core runs it as a step. nil: nothing to do on import.
+	Decorator(logger *l.Logger) chain.Decorator[RawItemR, RawItemR]
 }

@@ -48,18 +48,21 @@ func newGrouper(logger *l.Logger) *Grouper {
 	return &Grouper{logger: logger, libs: map[string]*library{}, last: map[string]*library{}}
 }
 
-func (g *Grouper) Decorate(ev providers.Found) (providers.Group, error) {
-	if ev.Done != nil {
-		// Groups that did not complete (a file vanished during the walk) wait for the
-		// next walk; their files must not count as gone
-		var held []string
-		for _, lib := range g.libs {
-			held = append(held, lib.pending()...)
-		}
-		g.libs = map[string]*library{}
-		return providers.Group{Done: ev.Done, Held: held}, nil
+// Flush: the walk ended. Groups that did not complete (a file vanished during the
+// walk) wait for the next walk; their files must not count as gone (Held)
+func (g *Grouper) Flush() ([]providers.Group, error) {
+	var held []string
+	for _, lib := range g.libs {
+		held = append(held, lib.pending()...)
 	}
+	g.libs = map[string]*library{}
+	if len(held) == 0 {
+		return nil, nil
+	}
+	return []providers.Group{{Held: held}}, nil
+}
 
+func (g *Grouper) Decorate(ev providers.Found) (providers.Group, error) {
 	root := BundleRoot(ev.Entry.Path)
 	if root == "" {
 		return providers.Group{}, fmt.Errorf("apple grouper: %s is not in a Photos library", ev.Entry.Path)
@@ -96,8 +99,6 @@ func (g *Grouper) Decorate(ev providers.Found) (providers.Group, error) {
 	a.sent = true
 	return providers.Group{Asset: a.group()}, nil
 }
-
-func (g *Grouper) Stop() {}
 
 // HasLibrary: root is a Photos library or holds one at its top (where Photos keeps
 // it: ~/Pictures) — then Photos is worth asking for access

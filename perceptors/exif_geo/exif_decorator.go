@@ -6,7 +6,6 @@ import (
 	"perceptrail/perseptors/exif_geo/places"
 
 	"github.com/eggs-gd/perceplib/api"
-	"github.com/eggs-gd/perceplib/chain"
 	"github.com/eggs-gd/perceplib/exif"
 
 	l "github.com/eggs-gd/perceplib/logger"
@@ -26,12 +25,4 @@ func (cd *geotagsExtractor) Decorate(in api.RawItemR) (api.RawItemR, error) {
 		places.Places.Put(in, places.Location{Lat: lat, Lon: lon})
 	}
 	return in, nil
-}
-
-func (cd *geotagsExtractor) Stop() {}
-
-func NewGeotagsProcessor(chin <-chan api.RawItemR, chout chan<- api.RawItemR, logger *l.Logger) chain.Processor {
-	processor := &geotagsExtractor{logger}
-
-	return chain.NewDecorator(chin, chout, processor)
 }

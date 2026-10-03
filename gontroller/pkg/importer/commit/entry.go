@@ -11,17 +11,16 @@ import (
 	"perceptrail/gontroller/pkg/model/dto"
 
 	"github.com/eggs-gd/perceplib/chain"
-	l "github.com/eggs-gd/perceplib/logger"
 )
 
-// New: in — the perceived items; out — the published ones. Its steps report to
-// errch.
-func New(db CloserStore, values Values, in <-chan *identify.Item, out chan<- *dto.ItemDto, errch chan error, logger *l.Logger) chain.ChainProcessor {
+// New: in — the perceived items; out — the published ones. Its errors go to the
+// chain it runs in.
+func New(db CloserStore, values Values, in *chain.Pipe[*identify.Item], out *chain.Pipe[*dto.ItemDto]) chain.Processor {
 	// keep → close: the values kept
-	kept := make(chan *identify.Item)
+	kept := chain.NewPipe[*identify.Item](0)
 
-	stage := chain.NewChainProcessor(errch)
-	stage.AddStep(chain.NewDecorator(in, kept, NewKeep(values)))
-	stage.AddStep(chain.NewDecorator(kept, out, NewCloser(db)))
+	stage := chain.New(nil)
+	stage.AddStep(chain.Decorate(in, kept, NewKeep(values)))
+	stage.AddStep(chain.Decorate(kept, out, NewCloser(db)))
 	return stage
 }

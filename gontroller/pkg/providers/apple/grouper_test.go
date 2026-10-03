@@ -116,7 +116,8 @@ func fixture() []fixtureAsset {
 	}
 }
 
-// walk feeds every file under root in the walker's order (sorted paths)
+// walk feeds every file under root in the walker's order (sorted paths), then the
+// walk's flush: the groups, and what the flush gave (the files held back)
 func walk(t *testing.T, g *Grouper, root string, before func(path string)) (map[string]providers.Group, providers.Group) {
 	t.Helper()
 	var paths []string
@@ -147,8 +148,15 @@ func walk(t *testing.T, g *Grouper, root string, before func(path string)) (map[
 		}
 		groups[out.Key] = out
 	}
-	marker, _ := g.Decorate(providers.Found{Done: &providers.Walk{}})
-	return groups, marker
+	var flushed providers.Group
+	held, err := g.Flush()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range held {
+		flushed.Held = append(flushed.Held, h.Held...)
+	}
+	return groups, flushed
 }
 
 func names(files []*dto.FileDto) []string {
