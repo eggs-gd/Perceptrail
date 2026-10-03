@@ -3,7 +3,7 @@ package exif_date
 import (
 	"testing"
 
-	"perceptrail/gontroller/pkg/plugins/exif_core/exif_coretest"
+	"perceptrail/gontroller/pkg/plugins/exif_coretest"
 
 	"github.com/eggs-gd/perceplib/api"
 )

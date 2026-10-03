@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/plugins/exif_core/exif_coretest"
+	"perceptrail/gontroller/pkg/plugins/exif_coretest"
 
 	"github.com/eggs-gd/perceplib/api"
 )
