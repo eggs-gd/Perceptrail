@@ -3,7 +3,6 @@ package apple
 import (
 	"context"
 	"sync"
-	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/providers"
@@ -46,7 +45,7 @@ func New(root string, photos Photos, items Items, logger *l.Logger) *Provider {
 		photos:   photos,
 		items:    items,
 		logger:   logger,
-		refresh:  func(string, time.Duration) bool { return false },
+		refresh:  func(string) {},
 		sem:      make(chan struct{}, fetchers),
 		inFlight: map[string]*fetching{},
 	}
@@ -58,8 +57,6 @@ func (p *Provider) Name() string { return "apple" }
 func (p *Provider) Claims(path string) bool { return BundleRoot(path) != "" }
 
 func (p *Provider) Grouper() providers.Grouper { return p.grouper }
-
-func (p *Provider) Regroup(key string) (providers.Asset, bool) { return p.grouper.Regroup(key) }
 
 // Owns: an item whose main file is in a Photos library (its GUID is the asset UUID)
 func (p *Provider) Owns(item *dto.ItemDto) bool { return BundleRoot(item.Path) != "" }

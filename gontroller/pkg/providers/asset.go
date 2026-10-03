@@ -6,12 +6,13 @@ import (
 	"github.com/eggs-gd/perceplib/api"
 )
 
-// The contract between the import and a provider's grouper: found files in (their
-// path and stat, dto.ItemEntry), whole assets out; on the walk's flush, what the
-// grouper still holds.
+// The contract between the import and a provider's grouper: the walk's files in
+// (their rows: path, stat; Changed, Gone), whole assets out; on the walk's flush,
+// what the grouper still holds. A file the walk says is gone comes too: the grouper
+// passes it through (an asset of its own) or makes something of it.
 
 // Asset: one whole asset as its source describes it — all its files (the main file
-// first when the source knows it, its sidecars, derivatives), with their stat only
+// first when the source knows it, its sidecars, derivatives): the rows the walk gave
 type Asset struct {
 	Files []*dto.FileDto
 	// Set by a source that knows the asset (Apple Photos: the asset UUID): the item's
@@ -28,15 +29,4 @@ type Asset struct {
 	MetaHash string
 	// What the asset is (dto.Kind*), when the source says it
 	Kind string
-}
-
-// Group: what a grouper sends — a complete asset; on the walk's flush, the files it
-// saw but held back (their asset did not complete in this walk: they are there, the
-// deletions must not take them as gone)
-type Group struct {
-	Asset
-	Held []string
-	// Requested: the importer asks for this asset again on demand (the library made
-	// a file of it local): processed even if nothing changed
-	Requested bool
 }

@@ -19,13 +19,6 @@ func NewPipe[T any](buffer int) *Pipe[T] {
 	return &Pipe[T]{ch: make(chan msg[T], buffer)}
 }
 
-// Send: a value from outside the chain (a request, an asset asked again); false if
-// ctx ended first
-func (p *Pipe[T]) Send(ctx context.Context, v T) bool { return p.send(ctx, msg[T]{v: v}) }
-
-// Flush: a flush from outside the chain (a test driving a step value by value)
-func (p *Pipe[T]) Flush(ctx context.Context) bool { return p.send(ctx, msg[T]{flush: true}) }
-
 func (p *Pipe[T]) send(ctx context.Context, m msg[T]) bool {
 	select {
 	case p.ch <- m:

@@ -1,7 +1,9 @@
 // Package apple groups an Apple Photos library (*.photoslibrary) by its database:
 // the first file of a library loads the assets from Photos.sqlite and forms the
 // groups in memory — the files of every asset that exist on disk now — then the
-// walker's files fill them; a group goes out when its last file has arrived. One
+// walker's files fill them; a group goes out when its last file has arrived. A file
+// the walk says is gone passes through as it is (its own group); a file of an asset
+// Photos trashed or hid is sent as gone. One
 // group is one asset: the key is the asset UUID (the item's GUID), the main file
 // is the source (the original; its Live Photo video before it), the rest is
 // linked to it. We only read the library, never write it.
@@ -18,7 +20,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"perceptrail/gontroller/pkg/model/dto"
 
@@ -35,69 +36,56 @@ import (
 type Grouper struct {
 	logger *l.Logger
 	libs   map[string]*library // by bundle path, loaded once per walk
-
-	// The libraries as last loaded, kept between walks: one asset's group can be
-	// formed again without reading the DB (Regroup)
-	lastMu sync.Mutex
-	last   map[string]*library
 }
 
 // newGrouper: the grouper's logic — the importer runs it as a step of the chain
 // (the provider hands it over: providers.Grouper)
 func newGrouper(logger *l.Logger) *Grouper {
-	return &Grouper{logger: logger, libs: map[string]*library{}, last: map[string]*library{}}
+	return &Grouper{logger: logger, libs: map[string]*library{}}
 }
 
-// Flush: the walk ended. Groups that did not complete (a file vanished during the
-// walk) wait for the next walk; their files must not count as gone (Held)
-func (g *Grouper) Flush() ([]providers.Group, error) {
-	var held []string
-	for _, lib := range g.libs {
-		held = append(held, lib.pending()...)
-	}
+// Flush: the walk ended — the next one loads the libraries again. Groups that did
+// not complete (a file vanished during the walk) wait for the next walk.
+func (g *Grouper) Flush() ([]providers.Asset, error) {
 	g.libs = map[string]*library{}
-	if len(held) == 0 {
-		return nil, nil
-	}
-	return []providers.Group{{Held: held}}, nil
+	return nil, nil
 }
 
-func (g *Grouper) Decorate(ev dto.ItemEntry) (providers.Group, error) {
-	root := BundleRoot(ev.Path)
+func (g *Grouper) Decorate(f *dto.FileDto) (providers.Asset, error) {
+	if f.Gone {
+		return providers.Asset{Files: []*dto.FileDto{f}}, nil
+	}
+	root := BundleRoot(f.Path)
 	if root == "" {
-		return providers.Group{}, fmt.Errorf("apple grouper: %s is not in a Photos library", ev.Path)
+		return providers.Asset{}, fmt.Errorf("apple grouper: %s is not in a Photos library", f.Path)
 	}
 	lib, ok := g.libs[root]
 	if !ok {
 		var err error
 		if lib, err = loadLibrary(root); err != nil {
-			// Nothing groups this walk, and its files are held: a DB that cannot be read
-			// says nothing about which assets are gone
-			g.logger.Error("Photos library not loaded: its files are held until it loads", l.String("library", root), l.Error(err))
-			lib = &library{byPath: map[string]*asset{}, failed: true}
+			// Nothing groups this walk (the walk has stamped its files: none is gone)
+			g.logger.Error("Photos library not loaded: nothing of it groups this walk", l.String("library", root), l.Error(err))
+			lib = &library{byPath: map[string]*asset{}}
 		} else {
 			g.logger.Info("Photos library loaded", l.String("library", root), l.Int("assets", len(lib.assets)))
-			g.lastMu.Lock()
-			g.last[root] = lib
-			g.lastMu.Unlock()
 		}
 		g.libs[root] = lib
 	}
 
-	if lib.failed {
-		lib.held = append(lib.held, ev.Path)
-		return providers.Group{}, chain.ErrSkippedItem
+	if lib.dropped[f.Path] {
+		f.Gone = true // the asset is in Photos' trash (or hidden): its item goes
+		return providers.Asset{Files: []*dto.FileDto{f}}, nil
 	}
-	a, ok := lib.byPath[ev.Path]
+	a, ok := lib.byPath[f.Path]
 	if !ok || a.sent {
-		return providers.Group{}, chain.ErrSkippedItem // not an asset file (caches, DB, …)
+		return providers.Asset{}, chain.ErrSkippedItem // not an asset file (caches, DB, …)
 	}
-	a.arrived[ev.Path] = &dto.FileDto{ItemEntry: ev}
+	a.arrived[f.Path] = f
 	if len(a.arrived) < len(a.files) {
-		return providers.Group{}, chain.ErrSkippedItem // not complete yet
+		return providers.Asset{}, chain.ErrSkippedItem // not complete yet
 	}
 	a.sent = true
-	return providers.Group{Asset: a.group()}, nil
+	return a.group(), nil
 }
 
 // HasLibrary: root is a Photos library or holds one at its top (where Photos keeps
@@ -125,23 +113,9 @@ type library struct {
 	assets []*asset
 	byPath map[string]*asset
 	root   string
-	rows   map[string]assetRow // every asset of the DB by UUID (Regroup), files or not
-	failed bool                // the DB did not load
-	held   []string            // a failed library's files, as walked
-}
-
-// pending: the files of groups that did not go out; all of a failed library's
-func (lib *library) pending() []string {
-	held := lib.held
-	for _, a := range lib.assets {
-		if a.sent || len(a.arrived) == 0 {
-			continue
-		}
-		for _, f := range a.files {
-			held = append(held, f.path)
-		}
-	}
-	return held
+	// The files of assets Photos keeps out of the library (trashed, hidden): on disk,
+	// but gone for us
+	dropped map[string]bool
 }
 
 type asset struct {
@@ -164,9 +138,10 @@ func (a *asset) group() providers.Asset {
 	g := providers.Asset{Key: a.uuid, Meta: a.meta, MetaHash: a.metaHash, Kind: a.kind}
 	for _, c := range a.files {
 		f := a.arrived[c.path]
-		f.Role = c.role.fileRole()
 		if c.role == roleOriginal && a.files[0].role == roleLiveVideo {
-			f.Role = dto.RoleStill // a Live Photo's photo: its video is the source
+			f.SetRole(dto.RoleStill) // a Live Photo's photo: its video is the source
+		} else {
+			f.SetRole(c.role.fileRole())
 		}
 		g.Files = append(g.Files, f)
 	}
@@ -318,13 +293,18 @@ func loadLibrary(root string) (*library, error) {
 	if err != nil {
 		return nil, err
 	}
-	lib := &library{byPath: map[string]*asset{}, root: root, rows: map[string]assetRow{}}
+	lib := &library{byPath: map[string]*asset{}, dropped: map[string]bool{}, root: root}
 	for _, r := range rows {
-		if r.trashed || r.hidden || len(r.uuid) < 2 {
+		if len(r.uuid) < 2 {
 			continue
 		}
-		lib.rows[r.uuid] = r
 		a := newAsset(root, r)
+		if r.trashed || r.hidden {
+			for _, c := range a.files {
+				lib.dropped[c.path] = true
+			}
+			continue
+		}
 		if len(a.files) == 0 {
 			continue // nothing local: not even a thumbnail
 		}
@@ -355,40 +335,6 @@ func newAsset(root string, r assetRow) *asset {
 		}
 	}
 	return a
-}
-
-// Regroup: the group of one asset as it is on disk now — after Photos made a file
-// of it local (on demand), its item is processed again without a walk. The DB's
-// metadata is the one the last walk loaded (it wins over the files' EXIF). false:
-// no such asset in a loaded library, or no file of it on disk.
-func (g *Grouper) Regroup(uuid string) (providers.Asset, bool) {
-	g.lastMu.Lock()
-	var lib *library
-	var row assetRow
-	for _, lb := range g.last {
-		if r, ok := lb.rows[uuid]; ok {
-			lib, row = lb, r
-			break
-		}
-	}
-	g.lastMu.Unlock()
-	if lib == nil {
-		return providers.Asset{}, false
-	}
-	a := newAsset(lib.root, row)
-	for _, c := range a.files {
-		info, err := os.Stat(c.path)
-		if err != nil {
-			return providers.Asset{}, false // vanished meanwhile: the next walk sees it
-		}
-		a.arrived[c.path] = &dto.FileDto{ItemEntry: dto.ItemEntry{
-			Path: c.path, Name: filepath.Base(c.path), Size: info.Size(), ModTime: info.ModTime(),
-		}}
-	}
-	if len(a.files) == 0 {
-		return providers.Asset{}, false
-	}
-	return a.group(), true
 }
 
 type assetRow struct {

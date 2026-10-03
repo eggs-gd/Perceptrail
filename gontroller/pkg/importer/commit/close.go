@@ -13,24 +13,17 @@ type CloserStore interface {
 
 // Closer: the close step's logic — the item published after the cheap stage
 type Closer struct {
-	db        CloserStore
-	published func(guid string)
+	db CloserStore
 }
 
-func NewCloser(db CloserStore, published func(guid string)) *Closer {
-	return &Closer{db: db, published: published}
+func NewCloser(db CloserStore) *Closer {
+	return &Closer{db: db}
 }
 
 func (c *Closer) Consume(in *identify.Item) error {
 	if in == nil || in.Item == nil {
 		return nil
 	}
-	item, err := c.db.Publish(in.Item)
-	if err != nil {
-		return err
-	}
-	if c.published != nil {
-		c.published(item.Guid)
-	}
-	return nil
+	_, err := c.db.Publish(in.Item)
+	return err
 }

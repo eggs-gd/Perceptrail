@@ -1,15 +1,12 @@
-// Package gate: the third step of the import — keeps the files table (identity,
-// stat, CheckTime) and lets through only the groups that need work (the model says
-// which), in our format: so unchanged files never reach exiftool. On a walk's flush,
-// the files the walk did not see that it says are gone are deleted (walk.Delete).
+// Package gate: the third step of the import — lets through only the groups that
+// need work (the model says which), in our format: so unchanged files never reach
+// exiftool. A file the walk says is gone (and its provider let through) is the
+// model's to delete here.
 package gate
 
 import (
-	"errors"
-	"time"
+	"slices"
 
-	"perceptrail/gontroller/pkg/importer/walk"
-	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/providers"
 
@@ -19,25 +16,12 @@ import (
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
-// Store: what the gate reads and writes — the files table, and whether a group
-// needs work (the model's rule)
+// Store: what the gate asks the model — whether a group needs work, what a file gone
+// means; the rows a grouper gave a new role
 type Store interface {
-	walk.Store
-	GetFileByPath(path string) (*dto.FileDto, error)
-	CreateFile(entry dto.ItemEntry) (*dto.FileDto, error)
 	UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error)
 	NeedsWork(files []*dto.FileDto, key, metaHash string) (needs bool, guid string, err error)
-}
-
-// needsWork: nothing changed on disk — the model says whether the group still needs
-// work
-func (g *Gate) needsWork(files []*dto.FileDto, key, metaHash string) bool {
-	needs, _, err := g.db.NeedsWork(files, key, metaHash)
-	if err != nil {
-		g.logger.Error("Gate: can't tell whether a group needs work", l.String("file", files[0].Path), l.Error(err))
-		return false
-	}
-	return needs
+	Gone(files []*dto.FileDto) (deleted, dirty int, err error)
 }
 
 // Group: what the gate yields — one whole asset that needs work, in our format: its
@@ -62,126 +46,70 @@ type Group struct {
 type Gate struct {
 	db     Store
 	logger *l.Logger
-	walked *walk.Result // the last walk's, written before its flush
 }
 
-// NewGate: walked — the walk step's result, read on its flush
-func NewGate(db Store, logger *l.Logger, walked *walk.Result) *Gate {
-	return &Gate{db: db, logger: logger, walked: walked}
+func NewGate(db Store, logger *l.Logger) *Gate {
+	return &Gate{db: db, logger: logger}
 }
 
-// New: in — whole assets (the groupers', and one asked again on demand); out — the
-// ones that need work
-func New(db Store, logger *l.Logger, walked *walk.Result, in *chain.Pipe[providers.Group], out *chain.Pipe[Group]) chain.Processor {
-	return chain.Decorate(in, out, NewGate(db, logger, walked))
+// New: in — whole assets (the groupers'); out — the ones that need work
+func New(db Store, logger *l.Logger, in *chain.Pipe[providers.Asset], out *chain.Pipe[Group]) chain.Processor {
+	return chain.Decorate(in, out, NewGate(db, logger))
 }
 
-// Flush: a walk's flush — every group it found has passed the gate; its deletions
-func (g *Gate) Flush() ([]Group, error) {
-	walk.Delete(g.db, *g.walked, g.logger)
-	*g.walked = walk.Result{} // judged once
-	return nil, nil
-}
-
-func (g *Gate) Decorate(in providers.Group) (Group, error) {
-	// Files a grouper held back are there (seen; their asset not complete yet): stamped,
-	// so the deletions after the walk do not take them as gone
-	if err := g.stamp(in.Held); err != nil {
-		return Group{}, err
+func (g *Gate) Decorate(in providers.Asset) (Group, error) {
+	files, err := g.gone(in.Files)
+	if err != nil || len(files) == 0 {
+		return Group{}, skipOr(err)
 	}
-	files, err := g.pass(in.Files, in.Key, in.MetaHash, in.Requested)
-	if err != nil {
-		return Group{}, err
-	}
-	return Group{Files: files, Key: in.Key, Show: stored(in.Show, files),
-		Meta: in.Meta, MetaHash: in.MetaHash, Kind: in.Kind}, nil
-}
-
-// stamp: these files were seen by this walk (their rows, if any, get CheckTime)
-func (g *Gate) stamp(paths []string) error {
-	var rows []*dto.FileDto
-	for _, p := range paths {
-		if f, err := g.db.GetFileByPath(p); err == nil {
-			f.CheckTime = time.Now()
-			rows = append(rows, f)
+	changed := slices.ContainsFunc(files, func(f *dto.FileDto) bool { return f.Changed })
+	if changed {
+		// The walk stored the stat; a role the grouper gave is stored here
+		if _, err := g.db.UpdateFiles(files); err != nil {
+			return Group{}, err
 		}
 	}
-	if len(rows) == 0 {
-		return nil
+	if !changed && !g.needsWork(files, in.Key, in.MetaHash) {
+		return Group{}, chain.ErrSkippedItem
 	}
-	_, err := g.db.UpdateFiles(rows)
-	return err
+	return Group{Files: files, Key: in.Key, Show: in.Show, Meta: in.Meta, MetaHash: in.MetaHash, Kind: in.Kind}, nil
 }
 
-// stored maps the grouper's files to the stored rows of the group (by path): the
-// later steps fill the rows (MimeType, links)
-func stored(files, rows []*dto.FileDto) []*dto.FileDto {
-	if files == nil {
-		return nil
-	}
-	byPath := make(map[string]*dto.FileDto, len(rows))
-	for _, r := range rows {
-		byPath[r.Path] = r
-	}
-	out := make([]*dto.FileDto, 0, len(files))
+// gone: the files the walk says are gone go by the model's rules (a main file's item
+// deleted, a sidecar's item processed again); the rest
+func (g *Gate) gone(files []*dto.FileDto) ([]*dto.FileDto, error) {
+	var gone, rest []*dto.FileDto
 	for _, f := range files {
-		if r, ok := byPath[f.Path]; ok {
-			out = append(out, r)
+		if f.Gone {
+			gone = append(gone, f)
+		} else {
+			rest = append(rest, f)
 		}
 	}
-	return out
+	if len(gone) > 0 {
+		deleted, dirty, err := g.db.Gone(gone)
+		if err != nil {
+			return nil, err
+		}
+		g.logger.Debug("Gone", l.String("file", gone[0].Path), l.Int("items", deleted), l.Int("dirty", dirty))
+	}
+	return rest, nil
 }
 
-// pass stores the group and lets it through if it needs work (or was asked for)
-func (g *Gate) pass(found []*dto.FileDto, key, metaHash string, requested bool) ([]*dto.FileDto, error) {
-	if len(found) == 0 {
-		return nil, chain.ErrSkippedItem
-	}
-	files, changed, err := g.store(found)
+// needsWork: nothing changed on disk — the model says whether the group still needs
+// work
+func (g *Gate) needsWork(files []*dto.FileDto, key, metaHash string) bool {
+	needs, _, err := g.db.NeedsWork(files, key, metaHash)
 	if err != nil {
-		return nil, err
+		g.logger.Error("Gate: can't tell whether a group needs work", l.String("file", files[0].Path), l.Error(err))
+		return false
 	}
-	if changed || requested || g.needsWork(files, key, metaHash) {
-		return files, nil
-	}
-	return nil, chain.ErrSkippedItem
+	return needs
 }
 
-// store finds or creates the rows of the group (found: files with their stat only),
-// refreshes their stat and stamps them as seen. changed: a new file, or size/mtime differ.
-func (g *Gate) store(found []*dto.FileDto) ([]*dto.FileDto, bool, error) {
-	now := time.Now()
-	changed := false
-	files := make([]*dto.FileDto, 0, len(found))
-
-	for _, fe := range found {
-		e := fe.ItemEntry
-		f, err := g.db.GetFileByPath(e.Path)
-		switch {
-		case errors.Is(err, model.ErrNotFound):
-			if f, err = g.db.CreateFile(e); err != nil {
-				return nil, false, err
-			}
-			changed = true
-		case err != nil:
-			return nil, false, err
-		case !f.ModTime.Equal(e.ModTime) || f.Size != e.Size:
-			// Store the fresh stat, or every walk sees the file as changed again
-			// (and the short hash would use the stale size)
-			f.Size, f.ModTime = e.Size, e.ModTime
-			changed = true
-		}
-		// The source's grouper knows the role (Apple): a new role is new work
-		if fe.Role != "" && f.Role != fe.Role {
-			f.Role = fe.Role
-			changed = true
-		}
-		f.CheckTime = now
-		files = append(files, f)
+func skipOr(err error) error {
+	if err != nil {
+		return err
 	}
-
-	if _, err := g.db.UpdateFiles(files); err != nil {
-		return nil, false, err
-	}
-	return files, changed, nil
+	return chain.ErrSkippedItem
 }

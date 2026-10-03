@@ -16,14 +16,20 @@ control "cheap preview" as Transcode
 
 == files gate ==
 
-Groups -> Gate: group []File\n(no main file yet)
+note over Groups: the walk wrote the rows (new? size/mtime changed?\nCheckTime = this walk) before the groupers
+Groups -> Gate: group []File (the rows: Changed / Gone)\n(no main file yet)
 activate Gate
-Gate -> DB: files table by path:\nnew? size/mtime changed?\nCheckTime = this walk
-Gate -> DB: item of the group done?\n(Visible, Waiting, Ready)
-alt nothing changed and the item is done
-    Gate ->x Gate: drop (no exif, no work)
-else new / changed / not done (New, Dirty, interrupted)
+alt a gone file
+    Gate -> DB: the model's Gone (see the end of the walk)
+else changed (stat, role)
     Gate -> Exif: group
+else unchanged
+    Gate -> DB: item of the group done?\n(Visible, Waiting, Ready; Rework)
+    alt done
+        Gate ->x Gate: drop (no exif, no work)
+    else not done (New, Dirty, Rework, interrupted)
+        Gate -> Exif: group
+    end
 end
 deactivate Gate
 
@@ -81,15 +87,17 @@ Validator -> Transcode: item (guid), group, exif
 deactivate Validator
 note over Transcode #LightGreen: then plugins; the closer sets <b>Visible</b> or <b>Waiting</b>
 
-== end of walk (the marker from every groups branch) ==
+== end of walk: the gone files ==
 
 note over Groups, DB #LightGreen
-The files gate runs deletions only after a <b>complete</b> walk with files found
-(not on cancel, missing root, empty root).
+The walk sends gone files only after a <b>complete</b> walk with files found
+(not on cancel, missing root, empty root), before its flush.
 Files with CheckTime older than this walk, under the root,
-not under an unreadable directory, are gone:
+not under an unreadable directory, are gone (their provider sees them first;
+Apple also sends the files of assets trashed or hidden in Photos as gone).
+The files gate has the model apply it:
 - main file gone -> item <b>Deleted</b> (soft delete, hidden from /items)
-- sidecar gone -> item <b>Dirty</b> (re-emitted by the next walk)
+- sidecar gone -> item <b>Dirty</b> (its group passes the gate again)
 - file rows deleted
 end note
 

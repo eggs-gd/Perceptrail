@@ -96,8 +96,9 @@ Target architecture — the diagrams in [`../puml`](../puml).
 - **Apple Photos on demand** (PR #21, transcode step 0): Photos, asked through
   PhotoKit, makes a cloud-only rendition local in its own library — we render and
   store nothing it keeps. `pkg/photokit` (cgo, macOS); `/items/:guid/rendition/
-  {medium,hover,original}`; one asset processed again without a walk (`Regroup` →
-  the gate → `Refresh`); assets with nothing local asked for in the background;
+  {medium,hover,original}`; one asset marked for the next pass (`Refresh`;
+  originally processed at once through `Regroup` — PR #24 made it a mark, the
+  client guesses the cloud meanwhile); assets with nothing local asked for in the background;
   `/items/:guid/files`. The viewer opens on what is here (the comfortable ~2048 px,
   or the full size lit as the Original), the medium asked for only when nothing here
   is that big; hover with a loading ring; the tile's cloud = the full resolution is
@@ -419,14 +420,14 @@ transcoders, plugins belong to the stage that uses them. One step does one thing
 
       | step | yields | inside |
       |---|---|---|
-      | walk | the files (path, stat), a walk when asked; its result | — |
-      | group | whole assets | the providers' switch → their groupers |
-      | gate | the groups that need work; the files table up to date | — |
+      | walk | the chain's entry: the files' rows (stat, seen), then the gone ones | — |
+      | group | whole assets (a gone file passes through, or its provider decides) | the providers' switch → their groupers |
+      | gate | the groups that need work; gone files deleted (the model's Gone) | — |
       | identify | the item known: identity, metadata, roles, what to show | see below — exiftool lives only here |
       | exif | the perceptors' values, kept | the built-in perceptors, the `.so` ones, a step each; keep |
       | commit | the item published | the state (Visible / Waiting) |
 
-      The walk cycle (deletions, pruning, the pause), Refresh: the top's.
+      The passes (`Chain.Run`, the pause), Refresh (a rework mark): the service's.
       identify inside: read (one exiftool call per group, the declared tags) →
       classify → merge (the metadata package: source > .xmp > main > derivatives) →
       fingerprint (the file's bytes) → validate → embedded → sizes → pick → yield.
@@ -440,8 +441,11 @@ transcoders, plugins belong to the stage that uses them. One step does one thing
 
       Deferred:
       - [x] the end-of-walk marker out of band — the library's flush;
-      - [ ] `Steps` / `Run` for discover (its tests drive `NewGate` and the groupers
-            directly);
+      - [x] the import tests run the real chain, one pass (`walk` to identify, a
+            test end);
+      - [ ] Apple: files Photos offloads (Optimize Mac Storage) must not hide or
+            delete the item — the grouper gets them as gone now and may keep the
+            asset (a separate task);
       - [ ] storing the metadata package in the DB — when a consumer needs it (the
             info panel's raw exif, a perceptor re-run without the files);
       - [ ] reading the sidecars of keyed (Apple) groups (only the main file is

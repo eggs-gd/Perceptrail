@@ -2,6 +2,7 @@ package importer
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"perceptrail/gontroller/pkg/providers"
 	"perceptrail/gontroller/pkg/providers/apple"
 	"perceptrail/gontroller/pkg/providers/folder"
+	"slices"
 	"testing"
 
 	"github.com/eggs-gd/perceplib/api"
@@ -79,63 +81,55 @@ func fakeExif(path string) (api.RawExif, error) {
 	return api.RawExif{"Content": content, "ImageSize": []byte("4x3")}, nil
 }
 
-// harness: the import's steps as the chain has them, run one group at a time — the
-// providers (Apple, the plain folder last), the gate, identify's steps (a fake
-// exiftool), the core perceptors, close; after a walk its flush (every grouper gives
-// what it holds) and the gate's (the walk's deletions)
+// harness: the end of the test chain — the core perceptors, close, and the main
+// files that got there
 type harness struct {
-	t      *testing.T
-	logger *l.Logger
-	ps     []providers.Provider
-	sw     group.Switch
-	gate   *gate.Gate
-	walked walk.Result
-	// identify's own chain, driven a group at a time (Send, Flush, Done)
-	chain      *chain.Chain
-	stored     *chain.Pipe[gate.Group]
-	identified chan *identify.Item
-	errs       chan error
-	// the main files that reached the perceptors
+	t         *testing.T
 	processed []string
 }
 
-func newHarness(t *testing.T) *harness {
-	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
-	ps := []providers.Provider{apple.New("", nil, itemsProxy, logger), folder.New()}
-	h := &harness{t: t, logger: logger, ps: ps, sw: group.Switch{Providers: ps},
-		stored: chain.NewPipe[gate.Group](0), identified: make(chan *identify.Item, 1), errs: make(chan error, 10)}
-	h.gate = gate.NewGate(testDB, logger, &h.walked)
-	out := chain.NewPipe[*identify.Item](0)
-	h.chain = chain.New(h.errs)
-	h.chain.AddStep(identify.New(testDB, t.TempDir(), logger, h.stored, out, identify.WithExiftool(fakeTool{})))
-	h.chain.AddStep(chain.End[*identify.Item](out, h))
-	go h.chain.Process(t.Context())
-	return h
-}
-
-// Consume: identify's chain ends here
 func (h *harness) Consume(it *identify.Item) error {
-	h.identified <- it
+	runCorePlugins(h.t, it)
+	if err := commit.NewCloser(itemsProxy).Consume(it); err != nil {
+		return err
+	}
+	h.processed = append(h.processed, it.Item.Path)
 	return nil
 }
 
-// identify: one group through identify's chain — what came out before its flush
-// (nothing: the group was skipped)
-func (h *harness) identify(g gate.Group) (*identify.Item, bool) {
-	h.stored.Send(h.t.Context(), g)
-	h.stored.Flush(h.t.Context())
-	<-h.chain.Done() // the group went through: the end has seen it all
-	var it *identify.Item
-	select {
-	case it = <-h.identified:
-	default:
+// scan runs one pass of the import chain over root, as the server builds it — the
+// providers (Apple, the plain folder last), the gate, identify (a fake exiftool) —
+// up to the core perceptors and close; the main files processed in it. A new chain
+// each time: the groupers start empty, as on a restart.
+func scan(t *testing.T, root string) []string {
+	t.Helper()
+	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
+	ps := []providers.Provider{apple.New("", nil, itemsProxy, logger), folder.New()}
+	found, grouped := chain.NewPipe[*dto.FileDto](0), chain.NewPipe[providers.Asset](0)
+	stored, identified := chain.NewPipe[gate.Group](0), chain.NewPipe[*identify.Item](0)
+	h := &harness{t: t}
+	errs := make(chan error, 10)
+	c := chain.New(errs)
+	c.AddStep(walk.New(root, testDB, logger, found))
+	c.AddStep(group.New(ps, found, grouped))
+	c.AddStep(gate.New(testDB, logger, grouped, stored))
+	c.AddStep(identify.New(testDB, t.TempDir(), logger, stored, identified, identify.WithExiftool(fakeTool{})))
+	c.AddStep(chain.End[*identify.Item](identified, h))
+
+	ctx, cancel := context.WithCancel(t.Context())
+	stopped := make(chan struct{})
+	go func() { c.Process(ctx); close(stopped) }()
+	defer func() { cancel(); <-stopped }()
+	if !c.Run(ctx) {
+		t.Fatal("the pass did not end")
 	}
 	select {
-	case err := <-h.errs:
-		h.t.Fatal(err)
+	case err := <-errs:
+		t.Fatal(err)
 	default:
 	}
-	return it, it != nil
+	slices.Sort(h.processed) // the steps run concurrently
+	return h.processed
 }
 
 // fakeTool stands in for exiftool: a file's content is its metadata (fakeExif); no
@@ -153,79 +147,6 @@ func (fakeTool) Read(paths, _ []string) ([]api.RawExif, error) {
 }
 
 func (fakeTool) Extract(string, string, string) error { return errors.New("no exiftool in tests") }
-
-func (h *harness) ok(err error) bool {
-	if errors.Is(err, chain.ErrSkippedItem) {
-		return false
-	}
-	if err != nil {
-		h.t.Fatal(err)
-	}
-	return true
-}
-
-// toGate: one group from the gate on, through every step
-func (h *harness) toGate(g providers.Group) {
-	stored, err := h.gate.Decorate(g)
-	if !h.ok(err) {
-		return
-	}
-	it, ok := h.identify(stored)
-	if !ok {
-		return
-	}
-	runCorePlugins(h.t, it)
-	if err := commit.NewCloser(itemsProxy, nil).Consume(it); err != nil {
-		h.t.Fatal(err)
-	}
-	h.processed = append(h.processed, it.Item.Path)
-}
-
-// scan: one walk of root; the main files processed in it
-func (h *harness) scan(root string) []string {
-	h.processed = nil
-	h.walked = walk.Once(h.t.Context(), root, h.logger, func(e dto.ItemEntry) {
-		i, err := h.sw.Route(e)
-		if !h.ok(err) {
-			return
-		}
-		if g, err := h.ps[i].Grouper().Decorate(e); h.ok(err) {
-			h.toGate(g)
-		}
-	})
-	// The walk's flush: every grouper gives what it holds; then the gate's: the deletions
-	for _, p := range h.ps {
-		held, err := p.Grouper().(chain.Flusher[providers.Group]).Flush()
-		if err != nil {
-			h.t.Fatal(err)
-		}
-		for _, g := range held {
-			h.toGate(g)
-		}
-	}
-	if _, err := h.gate.Flush(); err != nil {
-		h.t.Fatal(err)
-	}
-	return h.processed
-}
-
-// refresh: one asset asked again on demand, as Refresh sends it
-func (h *harness) refresh(key string) []string {
-	h.processed = nil
-	for _, p := range h.ps {
-		if a, ok := p.Regroup(key); ok {
-			h.toGate(providers.Group{Asset: a, Requested: true})
-		}
-	}
-	return h.processed
-}
-
-// scan runs one walk through the steps of the import chain (a new harness: the
-// groupers start empty, as on a restart)
-func scan(t *testing.T, root string) []string {
-	t.Helper()
-	return newHarness(t).scan(root)
-}
 
 func write(t *testing.T, path, content string) {
 	t.Helper()
@@ -333,17 +254,13 @@ func TestValidatorSidecarDeleted(t *testing.T) {
 	if err := os.Remove(xmp); err != nil {
 		t.Fatal(err)
 	}
-	scan(t, root)
-	if item := itemAt(t, photo); item.Guid != guid || item.State != dto.Dirty {
-		t.Errorf("sidecar gone: %+v, want the same item, Dirty", item)
-	}
-
-	// Dirty is processed on the next walk although no file changed
+	// The gone sidecar makes the item Dirty before the grouper's flush gives the
+	// photo's group: processed in the same walk, though the photo did not change
 	if got := scan(t, root); len(got) != 1 || got[0] != photo {
-		t.Errorf("dirty: processed %v", got)
+		t.Errorf("sidecar gone: processed %v", got)
 	}
-	if item := itemAt(t, photo); item.State != dto.Visible {
-		t.Errorf("dirty: state %d after processing", item.State)
+	if item := itemAt(t, photo); item.Guid != guid || item.State != dto.Visible {
+		t.Errorf("sidecar gone: %+v, want the same item, Visible", item)
 	}
 }
 

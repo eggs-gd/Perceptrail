@@ -204,10 +204,7 @@ func TestHydrateWaiting(t *testing.T) {
 	refreshed := make(chan string, 4)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	p.Start(ctx, func(uuid string, _ time.Duration) bool {
-		refreshed <- uuid
-		return true
-	})
+	p.Start(ctx, func(uuid string) { refreshed <- uuid })
 	select {
 	case uuid := <-refreshed:
 		if uuid != "H1111111-WAITING" {

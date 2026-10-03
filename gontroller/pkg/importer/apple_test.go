@@ -8,6 +8,9 @@ import (
 	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
+
+	l "github.com/eggs-gd/perceplib/logger"
+	"github.com/eggs-gd/perceplib/logger/decorators"
 )
 
 const (
@@ -129,25 +132,26 @@ func TestAppleMetadataFromDB(t *testing.T) {
 	}
 }
 
-// One asset asked again on demand (Refresh): processed even if nothing changed (it
-// then always reaches the end, where its waiters hear it), its item kept
-func TestRefreshProcessesAsked(t *testing.T) {
+// One asset asked again on demand (Refresh): marked, processed on the next walk
+// though nothing changed, its item kept; the mark is no change the client sees
+func TestRefreshMarksForNextWalk(t *testing.T) {
 	root := t.TempDir()
 	photosLibrary(t, root)
-	h := newHarness(t)
-	h.scan(root)
-	if got := h.scan(root); len(got) != 0 {
+	scan(t, root)
+	if got := scan(t, root); len(got) != 0 {
 		t.Fatalf("nothing changed, processed %v", got)
 	}
-	// Asked again on demand: processed though nothing changed, its item kept
-	guid := appleEdited
-	if got := h.refresh(appleEdited); len(got) != 1 {
-		t.Fatalf("refresh processed %v, want the asset", got)
+	before, _ := itemsProxy.GetItemByGuid(appleEdited)
+	s := &importerService{db: itemsProxy, logger: l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})}
+	s.Refresh(appleEdited)
+	s.Refresh("no-such-asset")
+	if marked, _ := itemsProxy.GetItemByGuid(appleEdited); !marked.UpdatedAt.Equal(before.UpdatedAt) {
+		t.Errorf("the mark moved updated_at: %v -> %v (the client's delta would bring it)", before.UpdatedAt, marked.UpdatedAt)
 	}
-	if item, err := itemsProxy.GetItemByGuid(guid); err != nil || item.State != dto.Visible {
+	if got := scan(t, root); len(got) != 1 {
+		t.Fatalf("the next walk processed %v, want the asset", got)
+	}
+	if item, err := itemsProxy.GetItemByGuid(appleEdited); err != nil || item.State != dto.Visible || item.Rework {
 		t.Errorf("after refresh: %+v", item)
-	}
-	if got := h.refresh("no-such-asset"); len(got) != 0 {
-		t.Errorf("an unknown asset processed %v", got)
 	}
 }

@@ -9,11 +9,11 @@ import (
 	"perceptrail/gontroller/pkg/providers"
 )
 
-func entry(path string) dto.ItemEntry {
-	return dto.ItemEntry{Path: path, Name: filepath.Base(path)}
+func entry(path string) *dto.FileDto {
+	return &dto.FileDto{ItemEntry: dto.ItemEntry{Path: path, Name: filepath.Base(path)}}
 }
 
-func names(groups []providers.Group) [][]string {
+func names(groups []providers.Asset) [][]string {
 	var out [][]string
 	for _, g := range groups {
 		var n []string
@@ -28,7 +28,7 @@ func names(groups []providers.Group) [][]string {
 // Files come in name order; one group is open, the next name closes it
 func TestGenericGrouper(t *testing.T) {
 	g := &Grouper{}
-	var out []providers.Group
+	var out []providers.Asset
 	for _, n := range []string{"IMG_1.HEIC", "IMG_1.MOV", "IMG_1.aae", "a.edited.jpg", "a.jpg", "a.jpg.xmp", "a.xmp", "b", "b.png"} {
 		if group, err := g.Decorate(entry("/lib/" + n)); err == nil {
 			out = append(out, group)
@@ -48,6 +48,18 @@ func TestGenericGrouper(t *testing.T) {
 	}
 	if again, _ := g.Flush(); len(again) != 0 {
 		t.Errorf("a second flush gave %v", names(again))
+	}
+
+	// A file the walk says is gone passes through alone; the open group stays open
+	g = &Grouper{}
+	g.Decorate(entry("/lib/y.jpg"))
+	gone := entry("/lib/y.xmp")
+	gone.Gone = true
+	if group, err := g.Decorate(gone); err != nil || len(group.Files) != 1 || group.Files[0] != gone {
+		t.Errorf("gone: %v %v", group, err)
+	}
+	if last, _ := g.Flush(); !reflect.DeepEqual(names(last), [][]string{{"y.jpg"}}) {
+		t.Errorf("the open group after a gone file: %v", names(last))
 	}
 
 	// Another directory closes the group, even with the same name

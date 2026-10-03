@@ -185,12 +185,14 @@ func (p *proxy) Publish(item *dto.ItemDto) (*dto.ItemDto, error) {
 }
 
 // MarkRework: these items are processed again on the next walk (NeedsWork), their
-// files unchanged — e.g. a perceptor has no row for them; publishing clears the mark
+// files unchanged — e.g. a perceptor has no row for them, a library made a file of
+// one local; publishing clears the mark. Not a change the client sees: updated_at
+// stays (the client's delta would bring the item back in its old state)
 func (p *proxy) MarkRework(guids []string) (int64, error) {
 	var n int64
 	for start := 0; start < len(guids); start += 500 { // under SQLite's variable limit
 		page := guids[start:min(start+500, len(guids))]
-		res := p.db.Model(&dto.ItemDto{}).Where("guid IN ?", page).Update("rework", true)
+		res := p.db.Model(&dto.ItemDto{}).Where("guid IN ?", page).UpdateColumn("rework", true)
 		if res.Error != nil {
 			return n, res.Error
 		}

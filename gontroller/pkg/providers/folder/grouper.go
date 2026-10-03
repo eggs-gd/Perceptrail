@@ -2,8 +2,9 @@
 // one claimed (the last in the switch). Its grouper: sidecars have the main file's
 // name and sit next to it, and the walk lists a directory in name order — so a
 // group's files come one after another. One group is open; a file that does not
-// belong to it closes it (the group goes out) and opens the next. The end-of-walk
-// marker goes out with the last group.
+// belong to it closes it (the group goes out) and opens the next; the walk's flush
+// sends the last one. A file the walk says is gone passes through as it is (its own
+// group).
 package folder
 
 import (
@@ -20,28 +21,29 @@ type Grouper struct {
 	open []*dto.FileDto
 }
 
-func (g *Grouper) Decorate(ev dto.ItemEntry) (providers.Group, error) {
-	if shouldSkipPath(ev.Path) {
-		return providers.Group{}, chain.ErrSkippedItem
-	}
-	file := &dto.FileDto{ItemEntry: ev}
-	if len(g.open) == 0 || sameGroup(g.open, file) {
+func (g *Grouper) Decorate(file *dto.FileDto) (providers.Asset, error) {
+	switch {
+	case file.Gone:
+		return providers.Asset{Files: []*dto.FileDto{file}}, nil
+	case shouldSkipPath(file.Path):
+		return providers.Asset{}, chain.ErrSkippedItem
+	case len(g.open) == 0 || sameGroup(g.open, file):
 		g.open = append(g.open, file)
-		return providers.Group{}, chain.ErrSkippedItem // not complete yet
+		return providers.Asset{}, chain.ErrSkippedItem // not complete yet
 	}
 	closed := g.open
 	g.open = []*dto.FileDto{file}
-	return providers.Group{Asset: providers.Asset{Files: closed}}, nil
+	return providers.Asset{Files: closed}, nil
 }
 
 // Flush: the walk ended — the last open group goes out
-func (g *Grouper) Flush() ([]providers.Group, error) {
+func (g *Grouper) Flush() ([]providers.Asset, error) {
 	last := g.open
 	g.open = nil
 	if len(last) == 0 {
 		return nil, nil
 	}
-	return []providers.Group{{Asset: providers.Asset{Files: last}}}, nil
+	return []providers.Asset{{Files: last}}, nil
 }
 
 // sameGroup: the file sits in the group's directory and its name without the last

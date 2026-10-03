@@ -537,30 +537,40 @@ Design: roadmap "Expensive stage".
 
 ## Backend: gontroller, plugins, exiftool
 
-### The chain's owner cycles it; the chain library lean again (2026-10-03, decided)
+### The walk writes the rows, gone files flow; Refresh is a mark (2026-10-04, decided)
 
-A first try had the chain run itself: the walker was a `Source` whose `Flush`
-returned once the flush had left every end (the library counted the flush's
-copies), so the walker walked, waited, deleted and paused in a loop; the library
-grew `Entry`, `Source`, `Emitter`, `Sink`, `Series`, `Pass` and a flush counter to
-match (499 lines, develop had 302). Rejected: the cycle is not the walker's, it is
-the whole chain's, and the chain's owner (the importer service) already starts it.
-Now:
+Two tries came first and were rejected. (1) The walker cycled itself: a `Source`
+whose `Flush` waited for the end of the chain, the deletions after it. (2) The
+service cycled the chain through a `Spread` step fed walk requests, and the walk's
+result reached the gate through a variable shared by both steps — a side channel
+between packages, and a chain with two inputs. Now:
 
-- **The library** has five step kinds, a file each: `Decorate`, `Parallel`,
-  `Route`, `Spread` (one value in, many out, then a flush: a walk request → the
-  files) and `End`; `Chain.Done()` fires when a flush has reached every `End` (the
-  chain counts its ends, nothing else). `Pipe.Send` / `Pipe.Flush` inject from
-  outside at any time: the chain stays running. 348 lines.
-- **The owner cycles**: send a walk request into `walk`'s input, wait for `Done`,
-  pause (`rescan`), again. Refresh sends a group into the gate's input.
-- **Deletions back in the gate, on the walk's flush** (as before the stages): the
-  walk writes its `walk.Result` (shared by the owner with the gate) before it
-  flushes; the gate judges and deletes on the flush. A moved file's old path may go
-  before the new path is validated; the validator restores the soft-deleted item by
-  fingerprint, so the GUID stays (smoke: move / add / delete as before).
-- `Series` became a loop of `Decorate` steps in the exif step; the import tests'
-  harness ends identify's chain with an `End` and waits on `Done`.
+- **The chain library** is back to its shape: one input, `Entry` (an output only,
+  started by the chain); `Decorate`, `Parallel`, `Route`, `End`, the flush with its
+  barrier. `Chain.Process` runs the steps; `Chain.Run` is one pass — it starts the
+  entry and returns once its flush has reached every `End`. The importer service:
+  `for Run { pause }`.
+- **The walk writes the files table** as it goes (created, stat, `CheckTime`;
+  `Changed` when new or the stat changed) and sends rows. After a complete walk it
+  sends the rows it did not stamp that it says are gone (`Gone`: under the root, not
+  under an unreadable directory — the filter stays in walk), then the flush.
+  Groupers take rows; `Held` is gone (the walk stamped what it saw); the gate is a
+  filter only, and has the model delete gone files. A provider sees gone files: the
+  folder passes them through; Apple sends the files of an asset trashed or hidden in
+  Photos as gone (they are on disk, so the walk stamped them — before, the gate
+  stamped only grouped files and they went as unseen).
+- **Refresh is a mark** (`MarkRework`, through `UpdateColumn`: `updated_at` stays,
+  so the client's delta does not bring the item back in its old state). No
+  injection, no waiting, no `Regroup` / `Requested` / `assetWaits`. The client
+  guesses: once the viewer got the original from Photos, the tile's cloud goes
+  (`fullFetched`, kept with the asset as the server sent it); a newer copy from the
+  server overrides the guess. Not kept across reloads (accepted).
+- Consequences seen in the tests: a gone sidecar makes the item `Dirty` before the
+  grouper's flush gives the main file's group, so it is processed in the same pass.
+  A real-DB copy (Apple disabled): idle passes, ~0.3 s each.
+- Open: a Photos library has internal files (database, caches) the walk now writes
+  rows for (before, only grouped files had rows) — not measured on a real library
+  (unreadable from the sandbox here).
 
 ### One exif step; the perceptors' contract in plugins (2026-10-03, decided)
 

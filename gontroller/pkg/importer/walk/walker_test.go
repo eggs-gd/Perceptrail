@@ -5,7 +5,11 @@ import (
 	"os"
 	"path/filepath"
 	"perceptrail/gontroller/pkg/model/dto"
+	"slices"
 	"testing"
+	"time"
+
+	"perceptrail/gontroller/pkg/model"
 
 	"github.com/eggs-gd/perceplib/chain"
 	l "github.com/eggs-gd/perceplib/logger"
@@ -96,28 +100,81 @@ func TestWalkCancelled(t *testing.T) {
 	}
 }
 
-// files: the end of a test chain — the paths it got
-type files struct{ paths []string }
+// rows: the files table in memory (Changed, Gone are not stored)
+type rows struct{ byPath map[string]*dto.FileDto }
 
-func (f *files) Consume(e dto.ItemEntry) error { f.paths = append(f.paths, e.Path); return nil }
+func (r *rows) GetFileByPath(path string) (*dto.FileDto, error) {
+	if f, ok := r.byPath[path]; ok {
+		c := *f
+		c.Changed, c.Gone = false, false
+		return &c, nil
+	}
+	return nil, model.ErrNotFound
+}
+func (r *rows) CreateFile(e dto.ItemEntry) (*dto.FileDto, error) {
+	f := &dto.FileDto{ItemEntry: e}
+	r.byPath[e.Path] = f
+	return f, nil
+}
+func (r *rows) UpdateFiles(fs []*dto.FileDto) ([]*dto.FileDto, error) {
+	for _, f := range fs {
+		c := *f
+		r.byPath[f.Path] = &c
+	}
+	return fs, nil
+}
+func (r *rows) GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error) {
+	var out []*dto.FileDto
+	for _, f := range r.byPath {
+		if f.CheckTime.Before(t) {
+			c := *f
+			c.Changed, c.Gone = false, false
+			out = append(out, &c)
+		}
+	}
+	return out, nil
+}
 
-// A walk per request: the files, its result, then the flush (the chain is Done)
-func TestWalkStep(t *testing.T) {
+// files: the end of a test chain — what it got, by name
+type files struct{ got []string }
+
+func (f *files) Consume(r *dto.FileDto) error {
+	mark := ""
+	switch {
+	case r.Gone:
+		mark = " gone"
+	case r.Changed:
+		mark = " changed"
+	}
+	f.got = append(f.got, r.Name+mark)
+	return nil
+}
+
+// A pass: every file as a row (new or changed: Changed), then the rows it did not
+// see (Gone), then the flush (the pass ends)
+func TestWalkPass(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "a.jpg"))
-	req, found := chain.NewPipe[struct{}](0), chain.NewPipe[dto.ItemEntry](0)
-	var result Result
+	writeFile(t, filepath.Join(root, "b.jpg"))
+	found := chain.NewPipe[*dto.FileDto](0)
 	got := &files{}
 	c := chain.New(nil)
-	c.AddStep(New(root, &result, testLogger, req, found))
-	c.AddStep(chain.End[dto.ItemEntry](found, got))
+	c.AddStep(New(root, &rows{byPath: map[string]*dto.FileDto{}}, testLogger, found))
+	c.AddStep(chain.End[*dto.FileDto](found, got))
 	go c.Process(t.Context())
-	for range 2 {
-		req.Send(t.Context(), struct{}{})
-		<-c.Done()
+	pass := func() []string {
+		got.got = nil
+		if !c.Run(t.Context()) {
+			t.Fatal("the pass did not end")
+		}
+		return got.got
 	}
-	if !result.Complete || result.Files != 1 || len(got.paths) != 2 {
-		t.Errorf("result %+v, paths %v", result, got.paths)
+	if g := pass(); !slices.Equal(g, []string{"a.jpg changed", "b.jpg changed"}) {
+		t.Errorf("first pass %v", g)
+	}
+	os.Remove(filepath.Join(root, "b.jpg"))
+	if g := pass(); !slices.Equal(g, []string{"a.jpg", "b.jpg gone"}) {
+		t.Errorf("second pass %v", g)
 	}
 }
 

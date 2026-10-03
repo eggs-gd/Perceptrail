@@ -1,7 +1,8 @@
-// Package walk: the first step of the import — the library's files, a walk per
-// request: every file with its stat, then the chain's flush; the walk's result goes
-// to whoever judges the deletions on that flush (the gate). When a walk comes is the
-// chain's owner's business.
+// Package walk: the chain's entry — the library's files, one walk per pass. Every
+// file it sees is a row of the files table, written now (path, stat, the time it was
+// seen; Changed: new or its stat changed) and sent on; after a complete walk, the
+// rows it did not see that it says are gone are sent too (Gone: the gate deletes
+// them), then the chain's flush.
 package walk
 
 import (
@@ -14,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -35,29 +37,88 @@ type Result struct {
 	Unreadable []string
 }
 
-// Store: what a walk asks of the model — the files it did not stamp, what their
-// being gone means
+// Store: the files table as a walk writes and reads it
 type Store interface {
+	GetFileByPath(path string) (*dto.FileDto, error)
+	CreateFile(entry dto.ItemEntry) (*dto.FileDto, error)
+	UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error)
 	GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error)
-	Gone(files []*dto.FileDto) (deleted, dirty int, err error)
 }
 
-// Walker: the walk step's logic (a chain.Spreader: a request in, the files out)
+// Walker: the walk step's logic (a chain.Source)
 type Walker struct {
 	logger *l.Logger
 	root   string
-	result *Result
+	db     Store
 }
 
-// New: in — a walk request; out — every file found, then the flush. result gets the
-// walk's result before the flush (the owner shares it with the gate)
-func New(root string, result *Result, logger *l.Logger, in *chain.Pipe[struct{}], out *chain.Pipe[dto.ItemEntry]) chain.Processor {
-	return chain.Spread(in, out, &Walker{logger: logger, root: root, result: result})
+// New: the chain's entry — out gets every file of a walk, then the gone ones
+func New(root string, db Store, logger *l.Logger, out *chain.Pipe[*dto.FileDto]) chain.Processor {
+	return chain.Entry(out, &Walker{logger: logger, root: root, db: db})
 }
 
-func (m *Walker) Spread(ctx context.Context, _ struct{}, emit func(dto.ItemEntry) bool) error {
-	*m.result = m.walk(ctx, emit)
+// Start: one walk — the files seen, then the gone ones
+func (m *Walker) Start(ctx context.Context, emit func(*dto.FileDto) bool) error {
+	r := m.walk(ctx, func(e dto.ItemEntry) bool {
+		f, err := m.seen(e, time.Now())
+		if err != nil {
+			m.logger.Error("File not stored", l.String("path", e.Path), l.Error(err))
+			return true
+		}
+		return emit(f)
+	})
+	gone := m.gone(r)
+	for _, f := range gone {
+		f.Gone = true
+		if !emit(f) {
+			break
+		}
+	}
+	if r.Complete {
+		m.logger.Info("Walk complete", l.Int("files", r.Files), l.Int("unreadable", len(r.Unreadable)), l.Int("gone", len(gone)))
+	}
 	return nil
+}
+
+// seen: the file's row — created, or its stat refreshed; stamped as seen at now.
+// Changed: new, or its size / mtime differ.
+func (m *Walker) seen(e dto.ItemEntry, now time.Time) (*dto.FileDto, error) {
+	f, err := m.db.GetFileByPath(e.Path)
+	switch {
+	case errors.Is(err, model.ErrNotFound):
+		if f, err = m.db.CreateFile(e); err != nil {
+			return nil, err
+		}
+		f.Changed = true
+	case err != nil:
+		return nil, err
+	case !f.ModTime.Equal(e.ModTime) || f.Size != e.Size:
+		// The fresh stat stored, or every walk sees the file as changed again (and
+		// the short hash would use the stale size)
+		f.Size, f.ModTime = e.Size, e.ModTime
+		f.Changed = true
+	}
+	f.CheckTime = now
+	_, err = m.db.UpdateFiles([]*dto.FileDto{f})
+	return f, err
+}
+
+// gone: the rows the walk did not stamp that it says are deleted (Gone)
+func (m *Walker) gone(r Result) []*dto.FileDto {
+	switch {
+	case !r.Complete:
+		m.logger.Warn("Walk incomplete: deletions are not checked")
+		return nil
+	case r.Files == 0:
+		m.logger.Warn("Walk found no files: deletions are not checked", l.String("path", r.Root))
+		return nil
+	}
+	stale, err := m.db.GetFilesCheckedBefore(r.Started)
+	if err != nil {
+		m.logger.Error("Deletions: can't read files", l.Error(err))
+		return nil
+	}
+	return Gone(r, stale)
 }
 
 func (m *Walker) walk(ctx context.Context, emit func(dto.ItemEntry) bool) Result {
@@ -110,44 +171,10 @@ func (m *Walker) walk(ctx context.Context, emit func(dto.ItemEntry) bool) Result
 	return result
 }
 
-// Once: one walk of root as the walker does it — every file with its stat —
-// synchronously (tests of the whole import); the walk's result
-func Once(ctx context.Context, root string, logger *l.Logger, each func(dto.ItemEntry)) Result {
-	m := &Walker{logger: logger, root: root}
-	return m.walk(ctx, func(e dto.ItemEntry) bool { each(e); return true })
-}
-
-// Delete: the files the walk did not see that it says are gone (Gone) go by the
-// model's rules (a main file's item deleted, a sidecar's item processed again)
-func Delete(db Store, r Result, logger *l.Logger) {
-	switch {
-	case !r.Complete:
-		logger.Warn("Walk incomplete: deletions are not checked")
-		return
-	case r.Files == 0:
-		logger.Warn("Walk found no files: deletions are not checked", l.String("path", r.Root))
-		return
-	}
-	logger.Info("Walk complete", l.Int("files", r.Files), l.Int("unreadable", len(r.Unreadable)))
-	stale, err := db.GetFilesCheckedBefore(r.Started)
-	if err != nil {
-		logger.Error("Deletions: can't read files", l.Error(err))
-		return
-	}
-	gone := Gone(r, stale)
-	deleted, dirty, err := db.Gone(gone)
-	if err != nil {
-		logger.Error("Deletions failed", l.Error(err))
-		return
-	}
-	logger.Info("Deletions", l.Int("files", len(gone)), l.Int("items", deleted), l.Int("dirty", dirty))
-}
-
 // Gone: of the files a walk did not stamp (stale), the ones it says are deleted —
 // only after a complete walk that found files, only under its root (another root:
 // the config changed, not ours to judge), never under an unreadable directory, never
-// a file a grouper held back (seen, its asset not complete yet: the gate stamps
-// those anyway)
+// a file it saw (stamped as it went)
 func Gone(r Result, stale []*dto.FileDto) []*dto.FileDto {
 	if !r.Complete || r.Files == 0 {
 		return nil // an empty root (an unmounted drive's mount point) must not delete the library

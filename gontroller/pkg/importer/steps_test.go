@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"perceptrail/gontroller/pkg/importer/gate"
-	"perceptrail/gontroller/pkg/importer/walk"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/providers"
 )
@@ -107,18 +106,10 @@ func TestNotMediaIgnored(t *testing.T) {
 	if f, err := filesProxy.GetFileByPath(notes); err != nil || !f.IsIgnored() {
 		t.Fatalf("not ignored: %+v %v", f, err)
 	}
-	gate := gate.NewGate(testDB, nil, &walk.Result{})
-	if _, err := gate.Decorate(providers.Group{Asset: providers.Asset{Files: []*dto.FileDto{{ItemEntry: statEntry(t, notes)}}}}); err == nil {
+	row, _ := filesProxy.GetFileByPath(notes) // as the walk gives it: unchanged
+	if _, err := gate.NewGate(testDB, nil).Decorate(providers.Asset{Files: []*dto.FileDto{row}}); err == nil {
 		t.Error("the gate let an unchanged ignored group through")
 	}
-}
-
-func statEntry(t *testing.T, path string) dto.ItemEntry {
-	info, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return dto.ItemEntry{Path: path, Name: filepath.Base(path), Size: info.Size(), ModTime: info.ModTime()}
 }
 
 // The RAW is deleted, its JPEG stays: the JPEG becomes the item in the same walk

@@ -5,7 +5,7 @@
 title Import chain (gontroller): walk -> group -> gate -> identify -> exif -> commit;\nevery participant is a step (own goroutine), every arrow is a typed pipe (values + the walk's flush)
 
 box "walk: the files" #LightCyan
-control "walk\n(a walk per request)" as Walker
+control "walk\n(the entry)" as Walker
 end box
 
 box "group: whole assets (a sub-chain)" #LightCyan
@@ -41,17 +41,18 @@ control "close" as Closer
 end box
 
 box "importer (the top)" #WhiteSmoke
-control "the cycle,\nRefresh" as Top
+control "the passes,\nRefresh" as Top
 end box
 
 database "DB" as DB
 
 == files flow in; groups flow out one by one, steps run concurrently ==
 
-Top -> Walker: a walk request
+Top -> Walker: Chain.Run: a pass starts the entry
 
 loop every file under the root
-    Walker -> Groups: dto.ItemEntry (path, stat)
+    Walker -> DB: its row: created / stat refreshed,\nCheckTime (Changed: new or stat changed)
+    Walker -> Groups: *dto.FileDto (the row)
     note left of Walker
     Unreadable directory:
     skipped, recorded (V1)
@@ -61,19 +62,20 @@ end
 alt Apple claims it (inside *.photoslibrary)
     Groups -> Photos: file
     Photos -> Photos: first file: asset links from Photos.sqlite\n(original, render, Live Photo video); buffer of open\ngroups, a group goes out when all its files arrived
-    Photos -> Gate: providers.Group (asset UUID)
+    Photos -> Gate: providers.Asset (asset UUID; a file of an asset\ntrashed / hidden in Photos: sent as gone)
 else nobody else claims it (other providers: Immich, ... later)
     Groups -> Generic: file
     Generic -> Generic: sidecars by name, next to each other\n(buffer: one open group; a complete group goes out)
-    Generic -> Gate: providers.Group
+    Generic -> Gate: providers.Asset
 end
 note over Groups: a provider not enabled is not asked:\nits files are a plain folder's
 
-Gate -> DB: stat vs files table,\nCheckTime of every file
-alt unchanged, the model says no work (NeedsWork), not asked for
+alt a gone file
+    Gate -> DB: the model's Gone: a main file's item deleted,\na sidecar's item Dirty
+else unchanged, the model says no work (NeedsWork)
     Gate ->x Gate: drop
-else new / changed / needs work / Requested
-    Gate -> Exif: gate.Group (our format:\nstored rows; no provider type past here)
+else changed (stat, a role the grouper gave) / needs work (Rework, ...)
+    Gate -> Exif: gate.Group (no provider type past here)
 end
 
 Exif -> Exif: ONE exiftool -j call for the group,\nonly the declared tags (the perceptors'\nExifTags + identify's own); a map per file
@@ -109,24 +111,24 @@ end note
 
 == end of walk ==
 
-Walker -> Gate: walk.Result (shared, written before the flush)
+loop every row the walk did not stamp that it says is gone (V2: a complete walk,\nunder the root, not under unreadable directories)
+    Walker -> Groups: *dto.FileDto (Gone): to its provider's grouper,\nwhich passes it through (or makes something of it)
+end
 Walker -> Groups: FLUSH
 Groups -> Photos: flush
 & Groups -> Generic: flush
 note right of Groups: to every grouper (Route)
 Generic -> Gate: what it holds (last group), flush
-Photos -> Gate: what it holds (files held back: stamped), flush
-note over Gate: once every grouper has flushed (the chain's barrier)
-Gate -> DB: deletions (V2): walk.Gone (a complete walk, under the root,\nnot under unreadable directories), then the model's Gone
-note over Gate: the flush goes on, through every step, to the end
+Photos -> Gate: flush (an incomplete group waits for the next walk)
+note over Gate: once every grouper has flushed (the chain's barrier)\nthe flush goes on, through every step, to the end
 note over Core, Keep: keep: on the flush, the perceptors' rows\nof gone items pruned (the previous walk's)
-Closer --> Top: Chain.Done: the flush reached the chain's end (commit):\nevery group of the walk went through every step
-Top -> Top: rescan pause (1 min), then the next walk request
+Closer --> Top: Chain.Run returns: the flush reached the chain's end (commit):\nevery group of the walk went through every step
+Top -> Top: rescan pause (1 min), then the next pass
 
 == One asset again (Apple Photos on demand) ==
 note over Photos: Photos made a file of an asset local\n(the viewer asked for it: PhotoKit)
-Top -> Photos: Refresh(uuid): Regroup - the last load's DB rows\n+ the disk now (no walk, no DB read)
-Top -> Gate: providers.Group (asset UUID, Requested):\nprocessed even if nothing changed; no flush,\ndeletions untouched
-Closer --> Top: published(guid): the request waiting\nfor it answers (importer Refresh)
+Photos -> Top: Refresh(uuid)
+Top -> DB: MarkRework (updated_at untouched: no delta brings\nthe item back); the next pass processes it (NeedsWork)
+note over Top: no waiting: the client guesses meanwhile\n(the tile's cloud goes once it got the original)
 
 @enduml

@@ -67,9 +67,10 @@ Services (`pkg/app/services.go`) start in parallel: `ImporterService` and
 `WebService`. Import is a chain of steps over typed pipes (`perceplib/chain`):
 
 ```
-walk       the library's files (path + stat), one walk when asked
+walk       the chain's entry: the library's files as rows (stat, seen), then the
+           ones it says are gone
 group      whole assets: the providers' groupers (the plain folder last)
-gate       the files table; only the groups that need work pass (gate.Group)
+gate       only the groups that need work pass (gate.Group); gone files deleted
 identify   one exiftool call per group (the declared tags only) → kinds → the
            metadata package → fingerprint → the item → the cheap preview
            (identify.Item)
@@ -78,8 +79,8 @@ exif       the EXIF perceptors: built in (date, size, length), then the .so ones
 commit     the item published (Visible / Waiting)
 ```
 
-After a walk's flush reached the end: its deletions, the perceptors' rows of gone
-items, the rescan pause, the next walk — the chain runs this by itself. Details, the types
+A pass (`Chain.Run`) ends when the walk's flush has reached the end; the importer
+service pauses (`rescan`) and runs the next. Details, the types
 and the rules: [`pkg/importer/README.md`](pkg/importer/README.md).
 The transcoders (`pkg/transcode`) are not wired yet: a chain of their own, fed from
 the DB.

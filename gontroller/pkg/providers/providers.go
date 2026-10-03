@@ -14,31 +14,25 @@ package providers
 import (
 	"context"
 	"errors"
-	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
 
 	"github.com/eggs-gd/perceplib/chain"
 )
 
-// Grouper: the logic of a provider's step — found files in, whole assets out
+// Grouper: the logic of a provider's step — the walk's files in, whole assets out
 // (chain.Decorator is a step's logic, not the step: no pipes, no goroutine). The
 // importer runs it between its pipes (chain.Decorate); on the walk's flush it gives
-// what it holds (chain.Flusher: the last group, the files held back). The provider
-// keeps the instance — its state is what Regroup works from.
-type Grouper = chain.Decorator[dto.ItemEntry, Group]
+// what it holds (chain.Flusher: the last group).
+type Grouper = chain.Decorator[*dto.FileDto, Asset]
 
 type Provider interface {
 	Name() string
 
 	// Claims: a found file is this library's — its grouper takes it
 	Claims(path string) bool
-	// Grouper: its files into whole assets; one instance per run (it keeps what
-	// Regroup needs)
+	// Grouper: its files into whole assets; one instance per run
 	Grouper() Grouper
-	// Regroup: one asset's group as it is on disk now (processed again on demand);
-	// false if the asset is not this provider's or has no file
-	Regroup(key string) (Asset, bool)
 
 	// Owns: the item is this library's (on-demand renditions go to it)
 	Owns(item *dto.ItemDto) bool
@@ -49,7 +43,8 @@ type Provider interface {
 	Rendition(item *dto.ItemDto, level string, opt Options) (Rendition, error)
 
 	// Start: its own work in the background (access, assets nothing shows yet);
-	// refresh processes one asset's item again when the library made a file local
+	// refresh marks one asset's item to be processed again (the next walk) when the
+	// library made a file local
 	Start(ctx context.Context, refresh Refresher)
 }
 
@@ -65,9 +60,9 @@ type Rendition struct {
 	Mime string
 }
 
-// Refresher processes one asset's item again now (the importer's Refresh), waiting
-// at most wait; false if it did not happen
-type Refresher func(key string, wait time.Duration) bool
+// Refresher marks one asset's item to be processed again on the next walk (the
+// importer's Refresh)
+type Refresher func(key string)
 
 var ErrNoRendition = errors.New("no rendition")
 

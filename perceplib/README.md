@@ -10,7 +10,7 @@ as a **git subtree** under `perceplib/`.
 | Package | What |
 |---|---|
 | `api` | perceptor contract (`Perceptor`, `ExifPerceptor` (+ `ExifTagger`: the tags it reads — only declared tags are read, `GetExif` of another is ""; + `Decorator(logger)`: its logic over one item, the host runs it as a step), every perceptor also navigates: `View` (its button) + `Order` (the gallery's sheet in its order, with sections); what it knows about an item: `Info` (facts for the info panel); its data: `Schema` + a typed `Store[T]` (`NewStore`, `Put`, `Get` — the host keeps the storage)), data types (`RawExif`, `Size`), item access interfaces (`RawItemR`, `ItemDataProvider/Editor`), `GetRatio` |
-| `chain` | steps connected by typed pipes that carry values and a flush (a batch done): `Decorate`, `Parallel`, `Route`, `Spread`, `End`, `New`; `Done` once a batch's flush has reached every end; `ErrSkippedItem` (a skip, not an error) — [README](chain/README.md) |
+| `chain` | steps connected by typed pipes that carry values and a flush (a batch done): `Entry` (the one input), `Decorate`, `Parallel`, `Route`, `End`, `New`; `Run` is a pass — it returns once the flush has reached every end; `ErrSkippedItem` (a skip, not an error) — [README](chain/README.md) |
 | `exif` | helpers for the values the host reads with exiftool `-n` (numbers as numbers): `Coordinates` (signed decimal degrees) + `CoordinateTags` to declare |
 | `logger` | zap wrapper with a custom console encoder |
 | `logger/decorators` | `GontrollerDecorator` — tree-style fields, SQL highlighting |
@@ -18,7 +18,7 @@ as a **git subtree** under `perceplib/`.
 ### chain
 
 Each step is a goroutine reading one typed pipe and writing another; its logic is
-plain Go (`Decorator`, `Router`, `Spreader`, `Consumer`). A `Spread` flushes after a batch; every
+plain Go (`Source`, `Decorator`, `Router`, `Consumer`). The entry flushes after a pass; every
 step passes the flush on after the values before it, and where branches join it
 passes once every branch has flushed — so a flush at the end means the batch is
 done. Errors go to the chain's error channel (a skip never does); a chain is a step
