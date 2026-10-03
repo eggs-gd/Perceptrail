@@ -20,7 +20,8 @@ func TestTranscodeSwitch(t *testing.T) {
 		files []*dto.FileDto
 		want  int
 	}{
-		{"video with its photo", "", []*dto.FileDto{file(dto.RoleOriginal, "video/quicktime"), file(dto.RoleStill, "image/heic")}, BranchLivePhoto},
+		{"a plain folder's video with a still: a video", "", []*dto.FileDto{file(dto.RoleOriginal, "video/quicktime"), file(dto.RoleStill, "image/heic")}, BranchVideo},
+		{"a photo with motion", "", []*dto.FileDto{file(dto.RoleOriginal, "image/heic"), file(dto.RoleMotion, "video/quicktime")}, BranchLivePhoto},
 		{"video", "", []*dto.FileDto{file(dto.RoleOriginal, "video/mp4")}, BranchVideo},
 		{"RAW with its JPEG", "", []*dto.FileDto{file(dto.RoleOriginal, "image/x-nikon-nef"), file(dto.RoleStill, "image/jpeg")}, BranchPhoto},
 		{"photo with a sidecar", "", []*dto.FileDto{file(dto.RoleOriginal, "image/jpeg"), file(dto.RoleMeta, "application/rdf+xml")}, BranchPhoto},

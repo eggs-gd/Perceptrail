@@ -17,10 +17,14 @@ type ItemsApi interface {
 	// - short hash gate,
 	// - full hash gate
 	//GetShortHash(rawExif t.RawExif, fileSizeBytes uint64) string
-	ValidateFile(item *dto.FileDto, hashShort string) (*dto.ItemDto, Outcome, error)
-	// ValidateKeyed: the item of a group whose source knows its identity (an Apple
-	// Photos asset UUID); found by the key — restored if deleted — or created
-	ValidateKeyed(key string, main *dto.FileDto, hash string) (*dto.ItemDto, error)
+	// An item's life (itemslife.go): the rules every chain goes by
+	ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, Outcome, error)
+	ValidateAsset(key string, files []*dto.FileDto, hash string) (*dto.ItemDto, error)
+	NeedsWork(files []*dto.FileDto, key, metaHash string) (needs bool, guid string, err error)
+	Gone(files []*dto.FileDto) (deleted, dirty int, err error)
+	Ignore(files []*dto.FileDto) error
+	Publish(item *dto.ItemDto) (*dto.ItemDto, error)
+	Unshown() ([]*dto.ItemDto, error)
 
 	GetAllItems() ([]*dto.ItemDto, error)
 	// GetAllGuids: the GUIDs of every item (deleted ones excluded)

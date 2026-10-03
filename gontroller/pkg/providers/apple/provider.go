@@ -11,10 +11,10 @@ import (
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
-// Items: what the provider reads of the import's items — the ones still waiting
-// for a viewable file (on demand: asked of Photos)
+// Items: what the provider reads of the library's items — the ones nothing can show
+// yet (on demand: asked of Photos)
 type Items interface {
-	GetItemsInStates(states ...dto.ItemState) ([]*dto.ItemDto, error)
+	Unshown() ([]*dto.ItemDto, error)
 }
 
 // Provider: Apple Photos — the files of a *.photoslibrary grouped by its DB (the

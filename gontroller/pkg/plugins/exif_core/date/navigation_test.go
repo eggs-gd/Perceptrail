@@ -6,19 +6,20 @@ import (
 	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/plugins/exif_core/exif_coretest"
 
 	"github.com/eggs-gd/perceplib/api"
 )
 
 func TestOrder(t *testing.T) {
 	kyiv := 120 // +02:00 in winter, minutes
-	item := func(guid, utc string, offset int) *dto.ItemDto {
+	item := func(guid, utc string, offset int) api.ItemDataProvider {
 		i := &dto.ItemDto{Guid: guid, DateOffset: offset}
 		if utc != "" {
 			i.Date, _ = time.Parse(time.RFC3339, utc)
 			i.DateSource = "DateTimeOriginal"
 		}
-		return i
+		return exif_coretest.Stored(i)
 	}
 	items := []api.ItemDataProvider{
 		item("old", "2024-05-01T10:00:00Z", 0),

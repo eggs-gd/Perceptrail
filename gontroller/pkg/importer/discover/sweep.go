@@ -12,14 +12,11 @@ import (
 )
 
 // SweepStore: what the deletions read and write — the files a walk did not stamp,
-// the items they belonged to, and every item's GUID (the perceptors' rows to keep)
+// what their being gone means (the model's rule), every item's GUID (the
+// perceptors' rows to keep)
 type SweepStore interface {
 	GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error)
-	DeleteFiles(files []*dto.FileDto) error
-	CountLinkedFiles(guid string) (int64, error)
-	GetItemByGuid(guid string) (*dto.ItemDto, error)
-	UpdateItem(item *dto.ItemDto) (*dto.ItemDto, error)
-	DeleteItem(item *dto.ItemDto) error
+	Gone(files []*dto.FileDto) (deleted, dirty int, err error)
 	GetAllGuids() ([]string, error)
 }
 
@@ -50,52 +47,10 @@ func (g *sweep) finalizeWalk(result Walk, held []string) {
 		return
 	}
 	gone := goneFiles(stale, result.Root, result.Unreadable, held)
-	deletedItems, dirtyItems := 0, 0
-
-	for _, f := range gone {
-		switch {
-		case f.IsIgnored() || f.LinkedTo == "":
-		case f.LinkedTo == f.GUID: // main file: the item is gone
-			item, err := g.db.GetItemByGuid(f.GUID)
-			if err != nil {
-				continue // never became an item, or already deleted
-			}
-			if err := g.db.DeleteItem(item); err != nil {
-				g.logger.Error("Deletions: can't delete item", l.String("guid", item.Guid), l.Error(err))
-				continue
-			}
-			deletedItems++
-		default: // sidecar: its item must be processed again
-			item, err := g.db.GetItemByGuid(f.LinkedTo)
-			if err != nil {
-				continue
-			}
-			item.State = dto.Dirty
-			if _, err := g.db.UpdateItem(item); err != nil {
-				g.logger.Error("Deletions: can't mark item dirty", l.String("guid", item.Guid), l.Error(err))
-				continue
-			}
-			dirtyItems++
-		}
-	}
-
-	if err := g.db.DeleteFiles(gone); err != nil {
-		g.logger.Error("Deletions: can't delete files", l.Error(err))
+	deletedItems, dirtyItems, err := g.db.Gone(gone)
+	if err != nil {
+		g.logger.Error("Deletions failed", l.Error(err))
 		return
-	}
-	// An item with no files left is gone too (a keyed asset: every file is "linked",
-	// none is "main" by its own GUID)
-	for _, f := range gone {
-		if f.LinkedTo == "" || f.IsIgnored() {
-			continue
-		}
-		if n, err := g.db.CountLinkedFiles(f.LinkedTo); err == nil && n == 0 {
-			if item, err := g.db.GetItemByGuid(f.LinkedTo); err == nil {
-				if err := g.db.DeleteItem(item); err == nil {
-					deletedItems++
-				}
-			}
-		}
 	}
 	g.logger.Info("Deletions", l.Int("files", len(gone)), l.Int("items", deletedItems), l.Int("dirty", dirtyItems))
 	g.pruneStores()

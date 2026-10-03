@@ -537,6 +537,32 @@ Design: roadmap "Expensive stage".
 
 ## Backend: gontroller, plugins, exiftool
 
+### The model decides, the steps gather facts (2026-10-03, decided)
+
+The proxy is meant as the model (the library's data and its rules), not a thin
+facade over the DB. So the rules went down into it (`model/itemslife.go`), not up
+into the steps: whether an unchanged group needs work (it was the gate's
+`needsProcessing` / `cheapStageDone`), what a file gone means (the sweep's per-file
+rules; the walk's safety — complete, unreadable directories, the root — stays in
+discover), linking a group and dropping the items it supersedes (validate's),
+ignoring a group that is no item, publishing an item (the closer chose Visible /
+Waiting), "items nothing can show yet" (the Apple provider read `Waiting` itself).
+The test for where a rule goes: would another chain (Refresh, an API provider, the
+maintenance) need the same rule? Then the model. Is it a tool, a format, the order of
+stages? Then a step.
+
+- **The asset's kind was one rule in two places, and they disagreed**: the client
+  said a plain folder's video with a still is a video, transcode said a Live Photo.
+  Now `dto.AssetKind`, the client's rule (the roles cannot tell a Live Photo's pair
+  from a camera's thumbnail; Apple says Live itself); the import saves it with the
+  item.
+- **The DB row no longer carries the plugin contract**: `dto.ItemDto` had a
+  non-column map of the perceptors' values and implemented `api.ItemDataProvider`.
+  The values live in `identify.Item` (the import) and in the web's `perceived`
+  wrapper (Order, Info); `GetDate` (the date in the shot's zone) stays on the item.
+- 27 of 38 log categories were never used (the old opener / closer among them):
+  removed.
+
 ### Registries are package functions, steps are instances (2026-10-03, decided)
 
 `providers` (one registry per process) exposed package functions (`Enabled`, `Of`),

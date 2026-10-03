@@ -13,19 +13,31 @@ import (
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
-// GateStore: what the gate reads and writes — the files table, and an item's state
-// (does its group need work)
+// GateStore: what the gate reads and writes — the files table, and whether a group
+// needs work (the model's rule)
 type GateStore interface {
 	GetFileByPath(path string) (*dto.FileDto, error)
 	CreateFile(entry dto.ItemEntry) (*dto.FileDto, error)
 	UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error)
-	GetItemByGuid(guid string) (*dto.ItemDto, error)
+	NeedsWork(files []*dto.FileDto, key, metaHash string) (needs bool, guid string, err error)
 }
 
 // Store: what discover reads and writes — the gate's and the deletions' needs
 type Store interface {
 	GateStore
 	SweepStore
+}
+
+// needsWork: nothing changed on disk — the model says whether the group still needs
+// work; a perceptor that has not processed its item (new, or its schema changed)
+// sends it too
+func (g *Gate) needsWork(files []*dto.FileDto, key, metaHash string) bool {
+	needs, guid, err := g.db.NeedsWork(files, key, metaHash)
+	if err != nil {
+		g.logger.Error("Gate: can't tell whether a group needs work", l.String("file", files[0].Path), l.Error(err))
+		return false
+	}
+	return needs || (guid != "" && g.perceptors.Unprocessed(guid))
 }
 
 // Perceptors: what discover asks of the perceptors — whether one still has to
@@ -111,7 +123,7 @@ func (g *Gate) pass(found []*dto.FileDto, key, metaHash string) ([]*dto.FileDto,
 	if err != nil {
 		return nil, err
 	}
-	if changed || g.needsProcessing(files, key, metaHash) {
+	if changed || g.needsWork(files, key, metaHash) {
 		return files, nil
 	}
 	return nil, chain.ErrSkippedItem
@@ -154,53 +166,4 @@ func (g *Gate) store(found []*dto.FileDto) ([]*dto.FileDto, bool, error) {
 		return nil, false, err
 	}
 	return files, changed, nil
-}
-
-// needsProcessing: nothing changed on disk, but the group is not done — a file
-// was never linked or is linked outside the group (its main file is gone: a RAW
-// deleted, its JPEG left), or the item is missing or not Ready (new, Dirty,
-// interrupted). Groups that are known not to be media stay ignored.
-func (g *Gate) needsProcessing(files []*dto.FileDto, key, metaHash string) bool {
-	inGroup := map[string]bool{key: key != ""}
-	for _, f := range files {
-		inGroup[f.GUID] = true
-	}
-	main := ""
-	for _, f := range files {
-		switch {
-		case f.LinkedTo == "":
-			return true
-		case !f.IsIgnored() && f.Role == "":
-			return true // from before roles existed: classified once more
-		case f.IsIgnored():
-		case !inGroup[f.LinkedTo]:
-			return true
-		case main == "":
-			main = f.LinkedTo
-		}
-	}
-	if main == "" {
-		return false // the whole group is ignored
-	}
-	item, err := g.db.GetItemByGuid(main)
-	if err != nil {
-		return errors.Is(err, model.ErrNotFound)
-	}
-	// No fingerprint (identify's changed: it gets the new one); the source's metadata
-	// changed (a date corrected in Photos), the files did not; or a perceptor has not
-	// processed it (new, or its schema changed)
-	return !cheapStageDone(item) || item.HashShort == "" || item.MetaHash != metaHash || g.perceptors.Unprocessed(item.Guid)
-}
-
-// cheapStageDone: the item went through the cheap stage (Visible, Waiting) or is
-// fully done (Ready). An item shown without a preview is from before the cheap
-// stage existed: it goes through once more.
-func cheapStageDone(item *dto.ItemDto) bool {
-	switch item.State {
-	case dto.Visible, dto.Ready:
-		return item.PreviewPath != ""
-	case dto.Waiting:
-		return true
-	}
-	return false
 }

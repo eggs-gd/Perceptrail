@@ -68,13 +68,13 @@ detail).
 | group | `discover/group/switch.go` | `providers.Found` -> `providers.Group` | A sub-chain: a switch sends a file to the grouper of the first enabled provider that claims it (the plain folder last: everything else), the walk's flush to every grouper (a `chain.Route`); each grouper is a step of it. |
 | (plain folder grouper) | `pkg/providers/folder` | `providers.Found` -> `providers.Group` | Sidecars by name, next to each other: one open group; a complete group goes out, the last one on the walk's flush. |
 | (Apple Photos grouper) | `pkg/providers/apple` | `providers.Found` -> `providers.Group` | The first file of a library loads the assets from a copy of `Photos.sqlite` and forms the groups (files that exist, per the naming layout); a group goes out when its last file arrives. Key = asset UUID; the main file = the source; `Show` = the edit, the original, then Apple's derivatives. Trashed / hidden assets are not sent; incomplete groups' files are `Held`, given on the walk's flush. Video renditions Photos downloads on request (`_2_3_o.mp4`, `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`; `_a` instead of `_o` for an edit, preferred) are `motion`, after the stills; `apple.Local` finds the best file for an on-demand want; `Regroup` forms one asset again (the last load's DB rows + the disk now). |
-| gate | `discover/gate.go` | `providers.Group` -> `discover.Group` | The files table (rows, stat, `CheckTime`); drops groups that need no work (and tells a keyed one's waiters); turns a provider's asset into our format (stored rows); on the walk's flush (once every grouper has flushed) runs the deletions (`discover/sweep.go`: files not stamped, their items, the perceptors' rows). |
+| gate | `discover/gate.go` | `providers.Group` -> `discover.Group` | The files table (rows, stat, `CheckTime`); a group whose files did not change passes only if the model says it needs work (`NeedsWork`) or a perceptor missed its item; tells a dropped keyed group's waiters; turns a provider's asset into our format (stored rows); on the walk's flush (once every grouper has flushed) runs the deletions (`discover/sweep.go`: the walk's safety — complete, not under an unreadable directory, under the root — then the model's `Gone`; the perceptors' rows pruned). |
 | **identify** | `identify/entry.go` | `discover.Group` -> `*identify.Item` | The item known: identity, metadata, kinds and roles, what to show now. exiftool lives here; its working item (`draft`: every file, its exif and kind) never leaves it. |
 | read | `identify/read.go` | `discover.Group` -> draft | One `exiftool -j -n` call for the whole group (a keyed group: the main file only), only the declared tags (see [exif](#exif-what-is-read-and-who-gets-it)), a map per file; N steps in parallel on the same channels, one pool. |
 | classify | `identify/classify.go` | draft -> draft | The kind of every file; the main file (the source) first; roles. |
 | merge | `identify/merge.go` | draft -> draft | The asset's metadata package: a tag from the source's metadata, else the metadata sidecars (.xmp), the main file, the derivatives; only the perceptors' tags. |
 | fingerprint | `identify/fingerprint.go` | draft -> draft | The main file's identity across paths: its size and sha256 of its first and last 64 KB (no exiftool). |
-| validate | `identify/validate.go` | draft -> draft | Links the group, same / changed / moved / duplicate / broken -> the item. |
+| validate | `identify/validate.go` | draft -> draft | Not media or broken: the model ignores the group (`Ignore`); else the model says which item it is (`ValidateGroup` / `ValidateAsset`: links, superseded items, same / changed / moved / duplicate); the kind saved with it (`dto.AssetKind`). |
 | embedded | `identify/embedded.go` | draft -> draft | Only when no file of the group shows (see pick): the main file's embedded preview (JpgFromRaw, PreviewImage, ThumbnailImage — the biggest first) extracted by exiftool into `cache/previews/<guid>/`, the RAW's Orientation copied onto it. After validate: needs the main file and the GUID. |
 | sizes | `identify/sizes.go` | draft -> draft | Pixels and codec of every file the client may show (the original's from the metadata, images from their header), written to the files table. |
 | pick | `identify/pick.go` | draft -> draft | What the browser shows now, no transcode: the source's `Show`, the main file (JPEG, PNG, …; H.264 video), the biggest viewable derivative, else the embedded one. Any size counts. |
@@ -83,7 +83,7 @@ detail).
 | **plugins** | `plugins/entry.go` | `*identify.Item` -> `*identify.Item` | The external `.so` perceptors, a step each with read-only adapters around it; none loaded: one pass step. |
 | **commit** | `commit/entry.go` | `*identify.Item` -> `*dto.ItemDto` | The item published. |
 | keep | `commit/keep.go` | `*identify.Item` -> `*identify.Item` | A row in every import perceptor's storage: its value, or "processed, nothing found". Before close: an item published without them would be taken as done. |
-| close | `commit/close.go` | `*identify.Item` -> `*dto.ItemDto` | The item saved `Visible` (a preview) or `Waiting` (none). |
+| close | `commit/close.go` | `*identify.Item` -> `*dto.ItemDto` | The model publishes the item (`Publish`: `Visible` with a preview, else `Waiting`). |
 
 ## Types: who owns what
 
@@ -130,6 +130,19 @@ detail).
   nothing is stored — it travels with the item.
 - **Plugins never run exiftool.** Only identify does: `read`, and `embedded` (the
   bytes of an embedded preview, only for a group with nothing to show).
+
+## The model decides, the steps gather facts
+
+The rules about the library's data live in the model ([`pkg/model/itemslife.go`](../model/itemslife.go)),
+not in the steps: every chain that touches items (the import, an asset again on
+demand, later the API providers and the maintenance) goes by the same ones. A step
+gathers the facts — stat, exif, kinds, the fingerprint — and the model decides and
+keeps: which item a group is (`ValidateGroup`, `ValidateAsset`), whether an unchanged
+group needs work (`NeedsWork`), what a file gone means (`Gone`), a group that is no
+item (`Ignore`), an item published (`Publish`), what nothing can show yet
+(`Unshown`), what an asset is (`dto.AssetKind`, saved with the item; the client and
+the transcoders read the same rule). Each step still sees only the model's methods
+it calls (its own small interface).
 
 ## Rules that are easy to break
 

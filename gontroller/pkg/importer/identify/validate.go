@@ -11,14 +11,12 @@ import (
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
-// ValidatorStore: what validate reads and writes — the item of a group (by its
-// main file's hash or its key), the files' links, a superseded item deleted
+// ValidatorStore: what validate asks of the model — which item a group is (the
+// model's identity rules), and a group that is no item remembered as ignored
 type ValidatorStore interface {
-	ValidateFile(main *dto.FileDto, hash string) (*dto.ItemDto, model.Outcome, error)
-	ValidateKeyed(key string, main *dto.FileDto, hash string) (*dto.ItemDto, error)
-	UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error)
-	GetItemByGuid(guid string) (*dto.ItemDto, error)
-	DeleteItem(item *dto.ItemDto) error
+	ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, model.Outcome, error)
+	ValidateAsset(key string, files []*dto.FileDto, hash string) (*dto.ItemDto, error)
+	Ignore(files []*dto.FileDto) error
 }
 
 // validator: the group's identity in the DB (Walker.puml). Links the files to the
@@ -32,15 +30,12 @@ func NewValidator(db ValidatorStore, logger *l.Logger) *Validator {
 	return &Validator{db: db, logger: logger}
 }
 
-// Decorate sets the item of the group (ranked by mime: the main file first)
+// Decorate sets the item of the group (ranked by classify: the main file first);
+// the model decides which item it is
 func (v *Validator) Decorate(g *draft) (*draft, error) {
 	main := g.Files[0]
-
 	if !g.isMedia() { // nothing to show: remembered, so the gate skips it from now on
-		for _, f := range g.Files {
-			f.SetIgnored()
-		}
-		if _, err := v.db.UpdateFiles(g.Files); err != nil {
+		if err := v.db.Ignore(g.Files); err != nil {
 			return nil, err
 		}
 		return nil, chain.ErrSkippedItem
@@ -50,64 +45,30 @@ func (v *Validator) Decorate(g *draft) (*draft, error) {
 	}
 
 	if g.Key != "" {
-		return v.keyed(g)
+		item, err := v.db.ValidateAsset(g.Key, g.Files, g.Hash)
+		if err != nil {
+			return nil, err
+		}
+		item.MetaHash, item.Kind = g.MetaHash, dto.AssetKind(g.Kind, g.Files) // saved by the closer
+		g.Item = item
+		return g, nil
 	}
 	if reason := broken(g); reason != "" {
-		return nil, v.ignoreBroken(g, reason)
-	}
-
-	for _, f := range g.Files {
-		f.LinkTo(main)
-	}
-	// A file that was the main file of its own item is a sidecar now (e.g. a JPEG
-	// imported alone, then its RAW appeared): that item goes
-	for _, f := range g.Files[1:] {
-		if old, err := v.db.GetItemByGuid(f.GUID); err == nil {
-			if err := v.db.DeleteItem(old); err != nil {
-				return nil, err
-			}
-			v.logger.Info("Former main file is a sidecar now", l.String("file", f.Path), l.String("main", main.Path))
+		v.logger.Warn("Broken file: ignored until it changes", l.String("file", main.Path), l.String("reason", reason))
+		if err := v.db.Ignore(g.Files); err != nil {
+			return nil, err
 		}
-	}
-	if _, err := v.db.UpdateFiles(g.Files); err != nil {
-		return nil, err
+		return nil, chain.ErrSkippedItem
 	}
 
 	// Moved items go on too: the cheap stage is cheap, and their preview path
 	// changed with them. Skipping outputs that already exist is the expensive
 	// stage's business.
-	item, _, err := v.db.ValidateFile(main, g.Hash)
+	item, _, err := v.db.ValidateGroup(g.Files, g.Hash)
 	if err != nil {
 		return nil, err
 	}
-
-	g.Item = item
-	return g, nil
-}
-
-// keyed: the source knows the identity (an Apple Photos asset UUID): the item's
-// GUID is the key, every file links to it, whatever the main file is
-func (v *Validator) keyed(g *draft) (*draft, error) {
-	for _, f := range g.Files {
-		// An item of the file's own from before (the plain folder's grouper read the
-		// library's originals): the asset's item replaces it
-		if f.GUID != g.Key {
-			if old, err := v.db.GetItemByGuid(f.GUID); err == nil {
-				if err := v.db.DeleteItem(old); err != nil {
-					return nil, err
-				}
-			}
-		}
-		f.LinkToItem(g.Key)
-	}
-	if _, err := v.db.UpdateFiles(g.Files); err != nil {
-		return nil, err
-	}
-	item, err := v.db.ValidateKeyed(g.Key, g.Files[0], g.Hash)
-	if err != nil {
-		return nil, err
-	}
-	item.MetaHash, item.Kind = g.MetaHash, g.Kind // saved by the closer
+	item.Kind = dto.AssetKind("", g.Files) // saved by the closer
 	g.Item = item
 	return g, nil
 }
@@ -132,24 +93,4 @@ func broken(g *draft) string {
 		return "no image size"
 	}
 	return ""
-}
-
-// ignoreBroken: the group's files are remembered as ignored — the gate skips them
-// until a file changes (then they are processed again); an item the file used to be
-// (it got corrupted) goes
-func (v *Validator) ignoreBroken(g *draft, reason string) error {
-	main := g.Files[0]
-	v.logger.Warn("Broken file: ignored until it changes", l.String("file", main.Path), l.String("reason", reason))
-	if item, err := v.db.GetItemByGuid(main.GUID); err == nil {
-		if err := v.db.DeleteItem(item); err != nil {
-			return err
-		}
-	}
-	for _, f := range g.Files {
-		f.SetIgnored()
-	}
-	if _, err := v.db.UpdateFiles(g.Files); err != nil {
-		return err
-	}
-	return chain.ErrSkippedItem
 }

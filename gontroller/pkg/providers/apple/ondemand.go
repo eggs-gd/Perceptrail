@@ -214,7 +214,7 @@ func (p *Provider) hydrateWaiting(ctx context.Context) {
 }
 
 func (p *Provider) hydrateRound(asked map[string]bool) {
-	items, err := p.items.GetItemsInStates(dto.Waiting)
+	items, err := p.items.Unshown()
 	if err != nil {
 		p.logger.Error("Waiting items not read", l.Error(err))
 		return

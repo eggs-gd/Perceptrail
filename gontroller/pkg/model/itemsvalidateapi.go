@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// Outcome of ValidateFile, per Walker.puml
+// Outcome of ValidateGroup, per Walker.puml
 type Outcome int
 
 const (
@@ -20,9 +20,9 @@ const (
 	OutcomeMoved                  // same hash, the old path is gone: the item keeps its GUID
 )
 
-// ValidateFile: the item of a plain folder's main file, by its path and its
+// validateFile: the item of a plain folder's main file, by its path and its
 // fingerprint (hashShort: the file's bytes, see identify's fingerprint)
-func (p *proxy) ValidateFile(item *dto.FileDto, hashShort string) (*dto.ItemDto, Outcome, error) {
+func (p *proxy) validateFile(item *dto.FileDto, hashShort string) (*dto.ItemDto, Outcome, error) {
 	itemByGUID, itemByPath, itemByHash := p.getItemsForValidation(item, hashShort)
 
 	if itemByGUID.Guid != itemByPath.Guid {
@@ -172,10 +172,10 @@ func (p *proxy) moveItem(item *dto.ItemDto, file *dto.FileDto) error {
 	return nil
 }
 
-// ValidateKeyed: the key is the item's identity (it never changes, whatever the
+// validateKeyed: the key is the item's identity (it never changes, whatever the
 // main file is): same hash -> as is; another hash -> Dirty (the main file changed,
 // e.g. a derivative replaced by the downloaded original); deleted -> restored.
-func (p *proxy) ValidateKeyed(key string, main *dto.FileDto, hash string) (*dto.ItemDto, error) {
+func (p *proxy) validateKeyed(key string, main *dto.FileDto, hash string) (*dto.ItemDto, error) {
 	var item dto.ItemDto
 	err := p.db.Unscoped().Where("guid = ?", key).First(&item).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/plugins/exif_core/exif_coretest"
 
 	"github.com/eggs-gd/perceplib/api"
 )
@@ -12,7 +13,9 @@ import (
 // Largest first; a section where the coarsest changed level changes (the value,
 // then the finer one); ties in the incoming order; no value last under none
 func TestOrderByValue(t *testing.T) {
-	item := func(guid string, d float64) api.ItemDataProvider { return &dto.ItemDto{Guid: guid, Duration: d} }
+	item := func(guid string, d float64) api.ItemDataProvider {
+		return exif_coretest.Stored(&dto.ItemDto{Guid: guid, Duration: d})
+	}
 	got := OrderByValue([]api.ItemDataProvider{
 		item("photo", 0), item("a", 125), item("b", 130), item("c", 61), item("c2", 61),
 	}, func(it api.ItemDataProvider) float64 { return it.GetDuration() },

@@ -6,12 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"perceptrail/gontroller/pkg/plugins/exif_core"
+	"perceptrail/gontroller/pkg/model/dto"
 
 	"github.com/eggs-gd/perceplib/api"
 )
-
-var _ exif_core.RawItemRW = (*Recorder)(nil)
 
 // Recorder: an item that remembers every tag asked of it (GetExif); Exif holds the
 // values it answers with
@@ -57,4 +55,30 @@ func (r *Recorder) AssertDeclared(t *testing.T, p api.ExifTagger) {
 			t.Errorf("reads %s, which it does not declare (ExifTags)", tag)
 		}
 	}
+}
+
+// Stored: a stored item as a perceptor's view reads it (Order, Info), the way the
+// web hands it over: the item and its perceptors' values
+func Stored(it *dto.ItemDto) api.ItemDataProvider { return &stored{ItemDto: it} }
+
+type stored struct {
+	*dto.ItemDto
+	values map[string]api.Values
+}
+
+func (s *stored) GetGuid() string      { return s.Guid }
+func (s *stored) GetSize() api.Size    { return s.Size }
+func (s *stored) GetRatio() api.Size   { return s.Ratio }
+func (s *stored) GetDuration() float64 { return s.Duration }
+
+func (s *stored) StoreValues(store string) (api.Values, bool) {
+	v, ok := s.values[store]
+	return v, ok
+}
+
+func (s *stored) SetStoreValues(store string, v api.Values) {
+	if s.values == nil {
+		s.values = map[string]api.Values{}
+	}
+	s.values[store] = v
 }

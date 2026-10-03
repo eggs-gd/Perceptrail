@@ -69,8 +69,9 @@ func (d *draft) hasKind(k mediaKind) bool {
 // and its metadata package. The perceptors read it (api.RawItemR) and the core ones
 // write into it (exif_core.RawItemRW); commit publishes Item.
 type Item struct {
-	Item *dto.ItemDto
-	meta api.RawExif
+	Item   *dto.ItemDto
+	meta   api.RawExif
+	values map[string]api.Values // the perceptors' values (commit keeps them)
 }
 
 // GetExif: a tag of the asset's metadata package (merge: the source, the
@@ -89,8 +90,17 @@ func (it *Item) SetSize(size api.Size)   { it.Item.Size = size }
 func (it *Item) SetRatio(ratio api.Size) { it.Item.Ratio = ratio }
 
 // The perceptors' values ride on the item (commit keeps them)
-func (it *Item) StoreValues(store string) (api.Values, bool) { return it.Item.StoreValues(store) }
-func (it *Item) SetStoreValues(store string, v api.Values)   { it.Item.SetStoreValues(store, v) }
+func (it *Item) StoreValues(store string) (api.Values, bool) {
+	v, ok := it.values[store]
+	return v, ok
+}
+
+func (it *Item) SetStoreValues(store string, v api.Values) {
+	if it.values == nil {
+		it.values = map[string]api.Values{}
+	}
+	it.values[store] = v
+}
 
 func (it *Item) SetDate(date time.Time) { it.SetDateInfo(date, "plugin", "tag") }
 
