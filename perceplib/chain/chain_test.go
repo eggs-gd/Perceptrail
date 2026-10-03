@@ -254,3 +254,27 @@ func TestSendFromOutside(t *testing.T) {
 		t.Errorf("got %v", got.got)
 	}
 }
+
+// Flush from outside: a sub-chain driven value by value — a skipped value still ends
+// with the flush, so the driver knows it is done
+func TestFlushFromOutside(t *testing.T) {
+	in, out := NewPipe[int](0), NewPipe[int](0)
+	got := newCollect[int]()
+	c := New(nil)
+	c.AddStep(Decorate(in, out, fn[int, int](func(v int) (int, error) {
+		if v < 0 {
+			return 0, ErrSkippedItem
+		}
+		return v, nil
+	})))
+	c.AddStep(got.sink(out))
+	defer run(t, c)()
+	for _, v := range []int{-1, 5} {
+		in.Send(t.Context(), v)
+		in.Flush(t.Context())
+		got.wait(t)
+	}
+	if !slices.Equal(got.got, []int{5}) || !slices.Equal(got.flushes, []int{0, 1}) {
+		t.Errorf("got %v, flushes %v", got.got, got.flushes)
+	}
+}

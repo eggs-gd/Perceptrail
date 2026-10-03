@@ -26,17 +26,8 @@ type pf struct {
 
 func pick(t *testing.T, files ...pf) (string, string, []string) {
 	t.Helper()
-	var extracted []string
-	e := &Embedded{
-		logger: l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}),
-		Extract: func(tag, src, guid string) (string, error) {
-			extracted = append(extracted, tag)
-			if tag == "JpgFromRaw" {
-				return "", errors.New("broken") // falls through to the next tag
-			}
-			return "/cache/" + guid + "/embedded.jpg", nil
-		},
-	}
+	tool := &fakeTool{}
+	e := NewEmbedded(tool, "/cache", l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
 	it := &draft{Item: &dto.ItemDto{Guid: "g"}}
 	for _, f := range files {
 		it.Files = append(it.Files, &dto.FileDto{ItemEntry: dto.ItemEntry{Path: "/lib/" + f.name, Name: f.name, MimeType: f.mime}})
@@ -45,7 +36,21 @@ func pick(t *testing.T, files ...pf) (string, string, []string) {
 	}
 	it, _ = e.Decorate(it)
 	it, _ = Pick{}.Decorate(it)
-	return it.Item.PreviewPath, it.Item.PreviewMime, extracted
+	return it.Item.PreviewPath, it.Item.PreviewMime, tool.extracted
+}
+
+// fakeTool: an Exiftool that writes nothing — JpgFromRaw fails (the next tag is
+// tried), every other tag "is written"
+type fakeTool struct{ extracted []string }
+
+func (f *fakeTool) Read(paths, tags []string) ([]api.RawExif, error) { return nil, nil }
+
+func (f *fakeTool) Extract(tag, src, dst string) error {
+	f.extracted = append(f.extracted, tag)
+	if tag == "JpgFromRaw" {
+		return errors.New("broken")
+	}
+	return nil
 }
 
 func TestCheapPreviewPick(t *testing.T) {
@@ -68,7 +73,7 @@ func TestCheapPreviewPick(t *testing.T) {
 			"/lib/d.jpg", "image/jpeg"},
 		{"RAW alone: its embedded preview (the next tag when one fails)",
 			[]pf{{"d.nef", "image/x-nikon-nef", kindRaw, api.RawExif{"JpgFromRaw": []byte("x"), "PreviewImage": []byte("x")}}},
-			"/cache/g/embedded.jpg", "image/jpeg"},
+			"/cache/previews/g/embedded.jpg", "image/jpeg"},
 		{"HEIC without anything viewable: waits",
 			[]pf{{"i.heic", "image/heic", kindImage, size("4032", "3024")}},
 			"", ""},
@@ -120,18 +125,17 @@ func TestEmbeddedPreviewOrientation(t *testing.T) {
 	}
 	src, thumb := writeJPEG("raw.jpg", 64, 48), writeJPEG("thumb.jpg", 16, 12)
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
-	pool := newExiftoolPool(1, logger)
+	pool := newPool(1, logger)
 	defer pool.Close()
-	if _, err := pool.Command("-overwrite_original", "-ThumbnailImage<="+thumb, "-Orientation#=6", src); err != nil {
+	if _, err := pool.command("-overwrite_original", "-ThumbnailImage<="+thumb, "-Orientation#=6", src); err != nil {
 		t.Fatal(err)
 	}
 
-	e := &Embedded{logger: logger, pool: pool, dir: filepath.Join(dir, "previews")}
-	dst, err := e.exiftoolExtract("ThumbnailImage", src, "g")
-	if err != nil {
+	dst := filepath.Join(dir, "previews", "g", "embedded.jpg")
+	if err := pool.Extract("ThumbnailImage", src, dst); err != nil {
 		t.Fatal(err)
 	}
-	out, err := pool.Command("-s3", "-n", "-Orientation", dst)
+	out, err := pool.command("-s3", "-n", "-Orientation", dst)
 	if err != nil {
 		t.Fatal(err)
 	}

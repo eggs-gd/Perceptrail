@@ -13,8 +13,8 @@ walk → group → gate → identify → exif → commit
 ```
 
 A step's constructor takes what it really depends on and its pipes: `walk` the root,
-`group` the providers, `gate` the model, `identify` the model and the cache directory (the tags it reads it asks the plugin
-registry: `plugins.ExifTags`), `exif` the logger (it reads the plugin
+`group` the providers, `gate` the model, `identify` the model, exiftool (`identify.Exiftool`) and the cache directory (the
+tags it reads it asks the plugin registry: `plugins.ExifTags`), `exif` the logger (it reads the plugin
 registry itself), `commit` the model. No callbacks between the steps.
 
 [`entry.go`](entry.go) (`NewImporterService`) wires the stages and holds what
@@ -36,9 +36,11 @@ importer/exif/             the EXIF perceptors (built in, then .so), their value
 importer/commit/           the item published
 ```
 
-Step packages export their logic (`gate.NewGate`, `identify.Steps`,
-`commit.NewKeep`, `commit.NewCloser`, …) — their `New` runs it between pipes;
-the tests of the whole import run it one group at a time (`identify.Steps.Run`).
+A step's `New` is its declaration: the chain of its steps, once. Step packages export
+their logic (`gate.NewGate`, `identify.NewReader`, …) for unit tests; the tests of the
+whole import drive the real chains (`identify.New` between pipes: `Send` a group,
+`Flush`, read what came out), with exiftool replaced — it is a dependency of
+identify (`identify.Exiftool`: the server's `Pool`, a fake in tests).
 **A type belongs to the package that produces it** (there is no shared package of
 messages): see [Types](#types-who-owns-what). Every step declares the DB methods it calls as its own small
 interface (`gate.Store`, `ValidatorStore`, `SizesStore`, `KindsStore`, `CloserStore`,
@@ -231,6 +233,6 @@ it calls (its own small interface).
   remembered, a former main file gone, a new fingerprint re-identifies every group
   once.
 - `validator_test.go` — whole walks through the stages' real steps on a temp library
-  and a temp sqlite, exiftool replaced by `fakeExif` (the file content is its
+  and a temp sqlite, exiftool replaced by `fakeTool` (the file content is its
   metadata): new / same / changed / moved / duplicate / deleted main and sidecar /
   unreadable / missing root / deleted then back / broken files.

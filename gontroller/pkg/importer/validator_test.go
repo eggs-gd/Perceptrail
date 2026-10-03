@@ -79,19 +79,6 @@ func fakeExif(path string) (api.RawExif, error) {
 	return api.RawExif{"Content": content, "ImageSize": []byte("4x3")}, nil
 }
 
-// perFile: a group's read as one call, from a read of one file
-func perFile(read func(path string) (api.RawExif, error)) func([]string) ([]api.RawExif, error) {
-	return func(paths []string) ([]api.RawExif, error) {
-		out := make([]api.RawExif, len(paths))
-		for i, p := range paths {
-			if m, err := read(p); err == nil {
-				out[i] = m
-			}
-		}
-		return out, nil
-	}
-}
-
 // harness: the import's steps as the chain has them, run one group at a time — the
 // providers (Apple, the plain folder last), the gate, identify's steps (a fake
 // exiftool), the core perceptors, close; after a walk its flush (every grouper gives
@@ -102,7 +89,11 @@ type harness struct {
 	ps     []providers.Provider
 	sw     group.Switch
 	gate   *gate.Gate
-	steps  *identify.Steps
+	// identify's own chain, driven a group at a time (Send, Flush)
+	stored     *chain.Pipe[gate.Group]
+	identified chan *identify.Item
+	flushed    chan struct{}
+	errs       chan error
 	// the main files that reached the perceptors
 	processed []string
 }
@@ -110,11 +101,51 @@ type harness struct {
 func newHarness(t *testing.T) *harness {
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
 	ps := []providers.Provider{apple.New("", nil, itemsProxy, logger), folder.New()}
-	steps := identify.NewSteps(nil, testDB, t.TempDir(), logger)
-	steps.Read.Extract = perFile(fakeExif)
-	steps.Embedded.Extract = func(string, string, string) (string, error) { return "", errors.New("no exiftool in tests") }
-	return &harness{t: t, logger: logger, ps: ps, sw: group.Switch{Providers: ps}, gate: gate.NewGate(testDB, logger), steps: steps}
+	h := &harness{t: t, logger: logger, ps: ps, sw: group.Switch{Providers: ps}, gate: gate.NewGate(testDB, logger),
+		stored: chain.NewPipe[gate.Group](0), identified: make(chan *identify.Item, 1),
+		flushed: make(chan struct{}, 1), errs: make(chan error, 10)}
+	out := chain.NewPipe[*identify.Item](0)
+	c := chain.New(h.errs)
+	c.AddStep(identify.New(testDB, fakeTool{}, t.TempDir(), logger, h.stored, out))
+	c.AddStep(chain.Sink(out, func(it *identify.Item) { h.identified <- it }, func() { h.flushed <- struct{}{} }))
+	go c.Process(t.Context())
+	return h
 }
+
+// identify: one group through identify's chain — what came out before its flush
+// (nothing: the group was skipped)
+func (h *harness) identify(g gate.Group) (*identify.Item, bool) {
+	h.stored.Send(h.t.Context(), g)
+	h.stored.Flush(h.t.Context())
+	var it *identify.Item
+	select {
+	case it = <-h.identified:
+		<-h.flushed
+	case <-h.flushed:
+	}
+	select {
+	case err := <-h.errs:
+		h.t.Fatal(err)
+	default:
+	}
+	return it, it != nil
+}
+
+// fakeTool stands in for exiftool: a file's content is its metadata (fakeExif); no
+// embedded previews
+type fakeTool struct{}
+
+func (fakeTool) Read(paths, _ []string) ([]api.RawExif, error) {
+	out := make([]api.RawExif, len(paths))
+	for i, p := range paths {
+		if m, err := fakeExif(p); err == nil {
+			out[i] = m
+		}
+	}
+	return out, nil
+}
+
+func (fakeTool) Extract(string, string, string) error { return errors.New("no exiftool in tests") }
 
 func (h *harness) ok(err error) bool {
 	if errors.Is(err, chain.ErrSkippedItem) {
@@ -132,8 +163,8 @@ func (h *harness) toGate(g providers.Group) {
 	if !h.ok(err) {
 		return
 	}
-	it, err := h.steps.Run(stored)
-	if !h.ok(err) {
+	it, ok := h.identify(stored)
+	if !ok {
 		return
 	}
 	runCorePlugins(h.t, it)

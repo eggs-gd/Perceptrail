@@ -51,7 +51,7 @@ func TestReadGroup(t *testing.T) {
 	gone := filepath.Join(dir, "gone.jpg")
 
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
-	pool := newExiftoolPool(1, logger)
+	pool := newPool(1, logger)
 	defer pool.Close()
 	r := NewReader(pool, []string{"DateTimeOriginal", "GPSLatitude", "GPSLongitude", "Orientation"}, logger)
 

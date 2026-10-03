@@ -31,6 +31,13 @@ func (p *Pipe[T]) Send(ctx context.Context, v T) bool {
 	return p.send(ctx, msg[T]{v: v})
 }
 
+// Flush: a flush from outside the chain (a test driving a sub-chain value by value:
+// Send, Flush, and what comes out before the flush at the end is all of it); false if
+// ctx ended first
+func (p *Pipe[T]) Flush(ctx context.Context) bool {
+	return p.send(ctx, msg[T]{flush: true})
+}
+
 func (p *Pipe[T]) send(ctx context.Context, m msg[T]) bool {
 	select {
 	case p.ch <- m:

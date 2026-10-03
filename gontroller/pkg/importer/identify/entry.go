@@ -28,57 +28,14 @@ type Store interface {
 	SizesStore
 }
 
-// exiftool processes and parallel readers (groups are independent)
+// Parallel readers, and the server Pool's exiftool processes (groups are independent)
 const workers = 5
 
-// Steps: the stage's steps' logic, in order — New runs them between channels, Run
-// one group at a time (the tests). exiftool comes in through Read.Extract and
-// Embedded.Extract (a fake in tests).
-type Steps struct {
-	Read        *Reader
-	Classify    Classifier
-	Merge       *Merge
-	Fingerprint Fingerprint
-	Validate    *Validator
-	Embedded    *Embedded
-	Sizes       *Sizes
-	Pick        Pick
-	Yield       Yield
-}
-
-// NewSteps: pool runs exiftool (nil in tests: set the Extract funcs); embedded
-// previews are extracted under cacheDir. What is read besides identify's own tags:
-// what the loaded perceptors declare (plugins.ExifTags)
-func NewSteps(pool *exiftoolPool, db Store, cacheDir string, logger *l.Logger) *Steps {
-	tags := plugins.ExifTags()
-	return &Steps{
-		Read:     NewReader(pool, tags, logger),
-		Merge:    NewMerge(tags),
-		Validate: NewValidator(db, logger),
-		Embedded: NewEmbedded(pool, cacheDir, logger),
-		Sizes:    NewSizes(db),
-	}
-}
-
-// Run: one group through every step, as the chain runs it
-func (s *Steps) Run(g gate.Group) (*Item, error) {
-	d, err := s.Read.Decorate(g)
-	for _, step := range []chain.Decorator[*draft, *draft]{s.Classify, s.Merge, s.Fingerprint, s.Validate, s.Embedded, s.Sizes, s.Pick} {
-		if err != nil {
-			return nil, err
-		}
-		d, err = step.Decorate(d)
-	}
-	if err != nil {
-		return nil, err
-	}
-	return s.Yield.Decorate(d)
-}
-
 // New: in — the groups that need work (stored: rows of the files table); out — the
-// identified items; embedded previews go under cacheDir. Its errors go to the chain
-// it runs in.
-func New(db Store, cacheDir string, logger *l.Logger, in *chain.Pipe[gate.Group], out *chain.Pipe[*Item]) chain.Processor {
+// identified items. tool reads the files (the server's Pool); embedded previews go
+// under cacheDir; what is read besides identify's own tags is what the loaded
+// perceptors declare (plugins.ExifTags). Its errors go to the chain it runs in.
+func New(db Store, tool Exiftool, cacheDir string, logger *l.Logger, in *chain.Pipe[gate.Group], out *chain.Pipe[*Item]) chain.Processor {
 	// The kinds' table changed since the files were judged "not media": judged again
 	if err := reclassifyIgnored(db, logger); err != nil {
 		logger.Error("MIME version check failed", l.Error(err))
@@ -87,7 +44,7 @@ func New(db Store, cacheDir string, logger *l.Logger, in *chain.Pipe[gate.Group]
 	if err := forgetOldHashes(db, logger); err != nil {
 		logger.Error("Fingerprint version check failed", l.Error(err))
 	}
-	s := NewSteps(newExiftoolPool(workers, logger), db, cacheDir, logger)
+	tags := plugins.ExifTags()
 
 	// read → classify: the files and their metadata
 	read := chain.NewPipe[*draft](0)
@@ -107,14 +64,14 @@ func New(db Store, cacheDir string, logger *l.Logger, in *chain.Pipe[gate.Group]
 	picked := chain.NewPipe[*draft](0)
 
 	stage := chain.New(nil)
-	stage.AddStep(chain.Parallel(workers, in, read, s.Read)) // groups are independent: one pool
-	stage.AddStep(chain.Decorate(read, classified, s.Classify))
-	stage.AddStep(chain.Decorate(classified, merged, s.Merge))
-	stage.AddStep(chain.Decorate(merged, fingerprinted, s.Fingerprint))
-	stage.AddStep(chain.Decorate(fingerprinted, validated, s.Validate))
-	stage.AddStep(chain.Decorate(validated, extracted, s.Embedded))
-	stage.AddStep(chain.Decorate(extracted, sized, s.Sizes))
-	stage.AddStep(chain.Decorate(sized, picked, s.Pick))
-	stage.AddStep(chain.Decorate(picked, out, s.Yield))
+	stage.AddStep(chain.Parallel(workers, in, read, NewReader(tool, tags, logger))) // groups are independent
+	stage.AddStep(chain.Decorate(read, classified, Classifier{}))
+	stage.AddStep(chain.Decorate(classified, merged, NewMerge(tags)))
+	stage.AddStep(chain.Decorate(merged, fingerprinted, Fingerprint{}))
+	stage.AddStep(chain.Decorate(fingerprinted, validated, NewValidator(db, logger)))
+	stage.AddStep(chain.Decorate(validated, extracted, NewEmbedded(tool, cacheDir, logger)))
+	stage.AddStep(chain.Decorate(extracted, sized, NewSizes(db)))
+	stage.AddStep(chain.Decorate(sized, picked, Pick{}))
+	stage.AddStep(chain.Decorate(picked, out, Yield{}))
 	return stage
 }
