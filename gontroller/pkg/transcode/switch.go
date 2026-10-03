@@ -1,7 +1,7 @@
 package transcode
 
 import (
-	"perceptrail/gontroller/pkg/importer/flow"
+	"perceptrail/gontroller/pkg/model/dto"
 
 	"github.com/eggs-gd/perceplib/chain"
 )
@@ -19,18 +19,18 @@ const (
 type Switch struct{}
 
 // NewSwitch: every asset to the transcoder of its kind
-func NewSwitch(chin <-chan *flow.RawItem, toPhoto, toVideo, toLivePhoto chan<- *flow.RawItem) chain.Processor {
-	return chain.NewSwitch(chin, []chan<- *flow.RawItem{BranchPhoto: toPhoto, BranchVideo: toVideo, BranchLivePhoto: toLivePhoto}, Switch{})
+func NewSwitch(chin <-chan *Item, toPhoto, toVideo, toLivePhoto chan<- *Item) chain.Processor {
+	return chain.NewSwitch(chin, []chan<- *Item{BranchPhoto: toPhoto, BranchVideo: toVideo, BranchLivePhoto: toLivePhoto}, Switch{})
 }
 
-func (Switch) Switch(it *flow.RawItem) (map[int]*flow.RawItem, error) {
-	switch {
-	case it.Kinds[0] == flow.KindVideo && it.HasKind(flow.KindImage): // the video with its photo
-		return map[int]*flow.RawItem{BranchLivePhoto: it}, nil
-	case it.Kinds[0] == flow.KindVideo:
-		return map[int]*flow.RawItem{BranchVideo: it}, nil
+func (Switch) Switch(it *Item) (map[int]*Item, error) {
+	switch it.kind() {
+	case dto.KindLive: // the video with its photo
+		return map[int]*Item{BranchLivePhoto: it}, nil
+	case dto.KindVideo:
+		return map[int]*Item{BranchVideo: it}, nil
 	default: // an image, or RAW (maybe with its JPEG: a ready preview later)
-		return map[int]*flow.RawItem{BranchPhoto: it}, nil
+		return map[int]*Item{BranchPhoto: it}, nil
 	}
 }
 

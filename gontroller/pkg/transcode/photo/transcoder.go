@@ -3,16 +3,16 @@
 package photo
 
 import (
-	"perceptrail/gontroller/pkg/importer/flow"
+	"perceptrail/gontroller/pkg/transcode"
 
 	"github.com/eggs-gd/perceplib/chain"
 )
 
 type Transcoder struct{}
 
-func NewTranscoder(chin <-chan *flow.RawItem, chout chan<- *flow.RawItem) chain.Processor {
+func NewTranscoder(chin <-chan *transcode.Item, chout chan<- *transcode.Item) chain.Processor {
 	return chain.NewDecorator(chin, chout, Transcoder{})
 }
 
-func (Transcoder) Decorate(it *flow.RawItem) (*flow.RawItem, error) { return it, nil }
-func (Transcoder) Stop()                                            {}
+func (Transcoder) Decorate(it *transcode.Item) (*transcode.Item, error) { return it, nil }
+func (Transcoder) Stop()                                                {}
