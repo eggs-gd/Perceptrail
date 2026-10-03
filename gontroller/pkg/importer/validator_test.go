@@ -92,7 +92,7 @@ func scanWith(t *testing.T, root string, dropped func(key string)) []string {
 	// validate, embedded, sizes, pick; the core perceptors; close
 	ps := []providers.Provider{apple.New("", nil, itemsProxy, logger), folder.New()}
 	sw := group.Switch{Providers: ps}
-	gate := discover.NewGate(testDB, plugins.Pm, len(ps), flow.NewProgress(), dropped, logger)
+	gate := discover.NewGate(testDB, plugins.Pm, len(ps), discover.NewProgress(), dropped, logger)
 	exif := identify.NewReader(nil, logger)
 	exif.Extract = fakeExif
 	valid := identify.NewValidator(testDB, logger)
@@ -110,7 +110,7 @@ func scanWith(t *testing.T, root string, dropped func(key string)) []string {
 		}
 		return true
 	}
-	toGroupers := func(ev flow.FileEvent) {
+	toGroupers := func(ev providers.Found) {
 		to, err := sw.Switch(ev)
 		if !ok(err) {
 			return

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/providers"
 
 	"github.com/eggs-gd/perceplib/chain"
 	l "github.com/eggs-gd/perceplib/logger"
@@ -117,7 +117,7 @@ func fixture() []fixtureAsset {
 }
 
 // walk feeds every file under root in the walker's order (sorted paths)
-func walk(t *testing.T, g *Grouper, root string, before func(path string)) (map[string]flow.FileGroup, flow.FileGroup) {
+func walk(t *testing.T, g *Grouper, root string, before func(path string)) (map[string]providers.Group, providers.Group) {
 	t.Helper()
 	var paths []string
 	filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
@@ -127,7 +127,7 @@ func walk(t *testing.T, g *Grouper, root string, before func(path string)) (map[
 		return nil
 	})
 	sort.Strings(paths)
-	groups := map[string]flow.FileGroup{}
+	groups := map[string]providers.Group{}
 	for _, p := range paths {
 		if before != nil {
 			before(p)
@@ -135,7 +135,7 @@ func walk(t *testing.T, g *Grouper, root string, before func(path string)) (map[
 		if _, err := os.Stat(p); err != nil {
 			continue // vanished: the walker would not see it
 		}
-		out, err := g.Decorate(flow.FileEvent{Entry: dto.ItemEntry{Path: p, Name: filepath.Base(p)}})
+		out, err := g.Decorate(providers.Found{Entry: dto.ItemEntry{Path: p, Name: filepath.Base(p)}})
 		if errors.Is(err, chain.ErrSkippedItem) {
 			continue
 		}
@@ -147,7 +147,7 @@ func walk(t *testing.T, g *Grouper, root string, before func(path string)) (map[
 		}
 		groups[out.Key] = out
 	}
-	marker, _ := g.Decorate(flow.FileEvent{Done: &flow.WalkResult{}})
+	marker, _ := g.Decorate(providers.Found{Done: &providers.Walk{}})
 	return groups, marker
 }
 

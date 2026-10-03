@@ -16,7 +16,6 @@ import (
 	"errors"
 	"time"
 
-	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/model/dto"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -26,7 +25,7 @@ import (
 // (chain.Decorator is a step's logic, not the step: no channels, no goroutine). The
 // importer runs it between its channels (chain.NewDecorator); the provider keeps the
 // instance — its state is what Regroup works from.
-type Grouper = chain.Decorator[flow.FileEvent, flow.FileGroup]
+type Grouper = chain.Decorator[Found, Group]
 
 type Provider interface {
 	Name() string
@@ -38,7 +37,7 @@ type Provider interface {
 	Grouper() Grouper
 	// Regroup: one asset's group as it is on disk now (processed again on demand);
 	// false if the asset is not this provider's or has no file
-	Regroup(key string) (flow.FileGroup, bool)
+	Regroup(key string) (Asset, bool)
 
 	// Owns: the item is this library's (on-demand renditions go to it)
 	Owns(item *dto.ItemDto) bool

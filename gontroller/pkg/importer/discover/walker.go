@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/providers"
 
 	"github.com/eggs-gd/perceplib/chain"
 
@@ -24,7 +24,7 @@ type inType struct {
 	path string
 	info os.DirEntry
 	// Set only on the end-of-walk marker
-	done *flow.WalkResult
+	done *providers.Walk
 }
 
 type fsMonitor struct {
@@ -36,12 +36,12 @@ type fsMonitor struct {
 
 	path     string
 	interval time.Duration // pause after the work of a walk is done
-	progress *flow.Progress
+	progress *Progress
 }
 
 // NewFsWalker walks the library again and again: interval after the chain has
 // processed the previous walk (progress), not after the walk itself
-func NewFsWalker(path string, interval time.Duration, progress *flow.Progress, chout chan<- flow.FileEvent, logger *l.Logger) chain.Processor {
+func NewFsWalker(path string, interval time.Duration, progress *Progress, chout chan<- providers.Found, logger *l.Logger) chain.Processor {
 	return chain.NewEntryPoint(chout, &fsMonitor{logger: logger, path: path, interval: interval, progress: progress})
 }
 
@@ -72,8 +72,8 @@ func (m *fsMonitor) Start(chin chan<- inType, ctx context.Context) {
 
 // walk sends every file under the root to chin. An unreadable subdirectory is
 // skipped and recorded; an unreadable root or a cancel makes the walk incomplete.
-func (m *fsMonitor) walk(chin chan<- inType) flow.WalkResult {
-	result := flow.WalkResult{Root: m.path, Started: time.Now()}
+func (m *fsMonitor) walk(chin chan<- inType) providers.Walk {
+	result := providers.Walk{Root: m.path, Started: time.Now()}
 
 	if info, err := os.Stat(m.path); err != nil || !info.IsDir() {
 		m.logger.Error("Library root is not a readable directory", l.String("path", m.path), l.Error(err))
@@ -129,15 +129,15 @@ func (m *fsMonitor) Stop() {
 
 // Decorate adds the stat. A file that vanished since it was listed is skipped: it
 // is not seen, so the gate will take it as deleted.
-func (m *fsMonitor) Decorate(in inType) (flow.FileEvent, error) {
+func (m *fsMonitor) Decorate(in inType) (providers.Found, error) {
 	if in.done != nil {
-		return flow.FileEvent{Done: in.done}, nil
+		return providers.Found{Done: in.done}, nil
 	}
 	info, err := in.info.Info()
 	if err != nil {
-		return flow.FileEvent{}, chain.ErrSkippedItem
+		return providers.Found{}, chain.ErrSkippedItem
 	}
-	return flow.FileEvent{Entry: dto.ItemEntry{
+	return providers.Found{Entry: dto.ItemEntry{
 		Path:    in.path,
 		Name:    in.info.Name(),
 		Size:    info.Size(),
@@ -147,12 +147,12 @@ func (m *fsMonitor) Decorate(in inType) (flow.FileEvent, error) {
 
 // WalkOnce: one walk of root as the walker does it — every file with its stat, then
 // the end-of-walk marker — synchronously and once (tests of the whole import)
-func WalkOnce(ctx context.Context, root string, logger *l.Logger, each func(flow.FileEvent)) {
+func WalkOnce(ctx context.Context, root string, logger *l.Logger, each func(providers.Found)) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	m := &fsMonitor{logger: logger, ctx: ctx, cancel: cancel, path: root}
 	found := make(chan inType)
-	result := make(chan flow.WalkResult)
+	result := make(chan providers.Walk)
 	go func() {
 		r := m.walk(found)
 		close(found)

@@ -60,7 +60,7 @@ type importerService struct {
 
 	errch    chan error
 	items    chan *dto.ItemDto
-	progress *flow.Progress
+	progress *discover.Progress
 
 	importChain chain.ChainProcessor
 
@@ -79,7 +79,7 @@ func NewImporterService(ctx app.AppContext) *importerService {
 			logger.Error("Import Error", l.Error(err))
 		}
 	}
-	progress := flow.NewProgress()
+	progress := discover.NewProgress()
 
 	// discover's errors (the walk, the groupers, the gate)
 	errch := make(chan error)
@@ -103,7 +103,7 @@ func NewImporterService(ctx app.AppContext) *importerService {
 
 	// Between the stages (the message types: flow)
 	// discover → identify: the groups that need work, stored (rows of the files table)
-	stored := make(chan flow.FileGroup)
+	stored := make(chan discover.Group)
 	// identify → core: the identified items
 	identified := make(chan *flow.RawItem)
 	// core → plugins: + what the core perceptors found

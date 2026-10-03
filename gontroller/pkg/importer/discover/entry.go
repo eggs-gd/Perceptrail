@@ -11,30 +11,49 @@ import (
 	"time"
 
 	"perceptrail/gontroller/pkg/importer/discover/group"
-	"perceptrail/gontroller/pkg/importer/flow"
+	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/providers"
 
+	"github.com/eggs-gd/perceplib/api"
 	"github.com/eggs-gd/perceplib/chain"
 	l "github.com/eggs-gd/perceplib/logger"
 )
+
+// Group: what discover yields — one whole asset that needs work, in our format: its
+// files are rows of the files table (GUIDs, links), the main file first when its
+// source knows it. What the source said about it rides along.
+type Group struct {
+	Files []*dto.FileDto
+	// The item's GUID when the source knows the asset (Apple Photos: its UUID; then
+	// Files[0] is the main file and is not re-ranked); "": a plain folder's group
+	Key string
+	// What to show first, best first (stored rows); nil: identify decides
+	Show []*dto.FileDto
+	// The source's own metadata (exiftool's tag names): wins over the files' EXIF;
+	// MetaHash is saved with the item (the gate compares it)
+	Meta     api.RawExif
+	MetaHash string
+	// What the asset is (dto.Kind*), when the source says it
+	Kind string
+}
 
 // Stage: the discover sub-chain, and its way in for one group (Regroup)
 type Stage struct {
 	chain.ChainProcessor
 	providers []providers.Provider
-	groups    chan flow.FileGroup // group → gate
+	groups    chan providers.Group // group → gate
 }
 
 // New: root is walked again every rescan after the previous walk's work is done
 // (progress); out gets the groups that need work; dropped hears of a keyed group
 // the gate let not through (nothing changed). Its steps report to errch.
-func New(root string, rescan time.Duration, ps []providers.Provider, progress *flow.Progress,
-	dropped func(key string), db Store, perceptors Perceptors, out chan<- flow.FileGroup, errch chan error, logger *l.Logger) *Stage {
+func New(root string, rescan time.Duration, ps []providers.Provider, progress *Progress,
+	dropped func(key string), db Store, perceptors Perceptors, out chan<- Group, errch chan error, logger *l.Logger) *Stage {
 
 	// walk → group: one file (path + stat), or the end-of-walk marker
-	found := make(chan flow.FileEvent)
+	found := make(chan providers.Found)
 	// group → gate: a complete group, and/or a grouper's marker (one per provider)
-	groups := make(chan flow.FileGroup)
+	groups := make(chan providers.Group)
 
 	stage := chain.NewChainProcessor(errch)
 	stage.AddStep(NewFsWalker(root, rescan, progress, found, logger))
@@ -48,12 +67,12 @@ func New(root string, rescan time.Duration, ps []providers.Provider, progress *f
 // it or the gate did not take it before timeout
 func (s *Stage) Regroup(key string, timeout <-chan time.Time) bool {
 	for _, p := range s.providers {
-		g, ok := p.Regroup(key)
+		a, ok := p.Regroup(key)
 		if !ok {
 			continue
 		}
 		select {
-		case s.groups <- g:
+		case s.groups <- providers.Group{Asset: a}:
 			return true
 		case <-timeout:
 			return false

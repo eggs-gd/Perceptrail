@@ -10,6 +10,7 @@
 package identify
 
 import (
+	"perceptrail/gontroller/pkg/importer/discover"
 	"perceptrail/gontroller/pkg/importer/flow"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -29,7 +30,7 @@ const workers = 5
 // New: in — the groups that need work (stored: rows of the files table); out — the
 // identified items; previews are extracted under cacheDir. Its steps report to
 // errch (every group ends here or as an item: the progress counts them).
-func New(cacheDir string, db Store, in <-chan flow.FileGroup, out chan<- *flow.RawItem, errch chan error, logger *l.Logger) chain.ChainProcessor {
+func New(cacheDir string, db Store, in <-chan discover.Group, out chan<- *flow.RawItem, errch chan error, logger *l.Logger) chain.ChainProcessor {
 	// The kinds' table changed since the files were judged "not media": judged again
 	if err := reclassifyIgnored(db, logger); err != nil {
 		logger.Error("MIME version check failed", l.Error(err))

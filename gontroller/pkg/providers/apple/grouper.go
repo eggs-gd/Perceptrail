@@ -23,7 +23,7 @@ import (
 	"perceptrail/gontroller/pkg/model/dto"
 
 	"github.com/eggs-gd/perceplib/api"
-	"perceptrail/gontroller/pkg/importer/flow"
+	"perceptrail/gontroller/pkg/providers"
 
 	"github.com/eggs-gd/perceplib/chain"
 
@@ -48,7 +48,7 @@ func newGrouper(logger *l.Logger) *Grouper {
 	return &Grouper{logger: logger, libs: map[string]*library{}, last: map[string]*library{}}
 }
 
-func (g *Grouper) Decorate(ev flow.FileEvent) (flow.FileGroup, error) {
+func (g *Grouper) Decorate(ev providers.Found) (providers.Group, error) {
 	if ev.Done != nil {
 		// Groups that did not complete (a file vanished during the walk) wait for the
 		// next walk; their files must not count as gone
@@ -57,12 +57,12 @@ func (g *Grouper) Decorate(ev flow.FileEvent) (flow.FileGroup, error) {
 			held = append(held, lib.pending()...)
 		}
 		g.libs = map[string]*library{}
-		return flow.FileGroup{Done: ev.Done, Held: held}, nil
+		return providers.Group{Done: ev.Done, Held: held}, nil
 	}
 
 	root := BundleRoot(ev.Entry.Path)
 	if root == "" {
-		return flow.FileGroup{}, fmt.Errorf("apple grouper: %s is not in a Photos library", ev.Entry.Path)
+		return providers.Group{}, fmt.Errorf("apple grouper: %s is not in a Photos library", ev.Entry.Path)
 	}
 	lib, ok := g.libs[root]
 	if !ok {
@@ -83,18 +83,18 @@ func (g *Grouper) Decorate(ev flow.FileEvent) (flow.FileGroup, error) {
 
 	if lib.failed {
 		lib.held = append(lib.held, ev.Entry.Path)
-		return flow.FileGroup{}, chain.ErrSkippedItem
+		return providers.Group{}, chain.ErrSkippedItem
 	}
 	a, ok := lib.byPath[ev.Entry.Path]
 	if !ok || a.sent {
-		return flow.FileGroup{}, chain.ErrSkippedItem // not an asset file (caches, DB, …)
+		return providers.Group{}, chain.ErrSkippedItem // not an asset file (caches, DB, …)
 	}
 	a.arrived[ev.Entry.Path] = &dto.FileDto{ItemEntry: ev.Entry}
 	if len(a.arrived) < len(a.files) {
-		return flow.FileGroup{}, chain.ErrSkippedItem // not complete yet
+		return providers.Group{}, chain.ErrSkippedItem // not complete yet
 	}
 	a.sent = true
-	return a.group(), nil
+	return providers.Group{Asset: a.group()}, nil
 }
 
 func (g *Grouper) Stop() {}
@@ -159,8 +159,8 @@ type candidate struct {
 	role role
 }
 
-func (a *asset) group() flow.FileGroup {
-	g := flow.FileGroup{Key: a.uuid, Meta: a.meta, MetaHash: a.metaHash, Kind: a.kind}
+func (a *asset) group() providers.Asset {
+	g := providers.Asset{Key: a.uuid, Meta: a.meta, MetaHash: a.metaHash, Kind: a.kind}
 	for _, c := range a.files {
 		f := a.arrived[c.path]
 		f.Role = c.role.fileRole()
@@ -360,7 +360,7 @@ func newAsset(root string, r assetRow) *asset {
 // of it local (on demand), its item is processed again without a walk. The DB's
 // metadata is the one the last walk loaded (it wins over the files' EXIF). false:
 // no such asset in a loaded library, or no file of it on disk.
-func (g *Grouper) Regroup(uuid string) (flow.FileGroup, bool) {
+func (g *Grouper) Regroup(uuid string) (providers.Asset, bool) {
 	g.lastMu.Lock()
 	var lib *library
 	var row assetRow
@@ -372,20 +372,20 @@ func (g *Grouper) Regroup(uuid string) (flow.FileGroup, bool) {
 	}
 	g.lastMu.Unlock()
 	if lib == nil {
-		return flow.FileGroup{}, false
+		return providers.Asset{}, false
 	}
 	a := newAsset(lib.root, row)
 	for _, c := range a.files {
 		info, err := os.Stat(c.path)
 		if err != nil {
-			return flow.FileGroup{}, false // vanished meanwhile: the next walk sees it
+			return providers.Asset{}, false // vanished meanwhile: the next walk sees it
 		}
 		a.arrived[c.path] = &dto.FileDto{ItemEntry: dto.ItemEntry{
 			Path: c.path, Name: filepath.Base(c.path), Size: info.Size(), ModTime: info.ModTime(),
 		}}
 	}
 	if len(a.files) == 0 {
-		return flow.FileGroup{}, false
+		return providers.Asset{}, false
 	}
 	return a.group(), true
 }

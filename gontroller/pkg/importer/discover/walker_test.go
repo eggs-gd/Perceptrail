@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"perceptrail/gontroller/pkg/importer/flow"
+	"perceptrail/gontroller/pkg/providers"
 	"testing"
 
 	l "github.com/eggs-gd/perceplib/logger"
@@ -23,9 +23,9 @@ func newTestMonitor(t *testing.T, root string) *fsMonitor {
 }
 
 // runWalk collects what walk sends and returns it with the result
-func runWalk(m *fsMonitor) (flow.WalkResult, []string) {
+func runWalk(m *fsMonitor) (providers.Walk, []string) {
 	ch := make(chan inType)
-	res := make(chan flow.WalkResult)
+	res := make(chan providers.Walk)
 	go func() {
 		r := m.walk(ch)
 		close(ch)
@@ -99,7 +99,7 @@ func TestWalkCancelled(t *testing.T) {
 
 	m := newTestMonitor(t, root)
 	ch := make(chan inType)
-	res := make(chan flow.WalkResult)
+	res := make(chan providers.Walk)
 	go func() { res <- m.walk(ch) }()
 	<-ch // take one file, then cancel
 	m.cancel()

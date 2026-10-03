@@ -2,6 +2,7 @@ package identify
 
 import (
 	"fmt"
+	"perceptrail/gontroller/pkg/importer/discover"
 	"perceptrail/gontroller/pkg/importer/flow"
 	"slices"
 
@@ -38,7 +39,7 @@ func NewReader(pool *exiftoolPool, logger *l.Logger) *Reader {
 
 // Decorate starts the item of the group: its files and their metadata (a nil
 // Exif: exiftool returned nothing). The item itself comes from the validator.
-func (e *Reader) Decorate(g flow.FileGroup) (*flow.RawItem, error) {
+func (e *Reader) Decorate(g discover.Group) (*flow.RawItem, error) {
 	files := g.Files
 	out := &flow.RawItem{Files: files, Exif: make([]api.RawExif, len(files)), Key: g.Key, Show: g.Show, Meta: g.Meta, MetaHash: g.MetaHash, Kind: g.Kind}
 	found := false

@@ -6,9 +6,9 @@ import (
 	"testing"
 
 	"perceptrail/gontroller/pkg/importer/discover"
-	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/plugins"
+	"perceptrail/gontroller/pkg/providers"
 )
 
 // A JPEG imported alone is an item; when its RAW appears, the RAW is the source:
@@ -60,8 +60,8 @@ func TestNotMediaIgnored(t *testing.T) {
 	if f, err := filesProxy.GetFileByPath(notes); err != nil || !f.IsIgnored() {
 		t.Fatalf("not ignored: %+v %v", f, err)
 	}
-	gate := discover.NewGate(testDB, plugins.Pm, 1, flow.NewProgress(), nil, nil)
-	if _, err := gate.Decorate(flow.FileGroup{Files: []*dto.FileDto{{ItemEntry: statEntry(t, notes)}}}); err == nil {
+	gate := discover.NewGate(testDB, plugins.Pm, 1, discover.NewProgress(), nil, nil)
+	if _, err := gate.Decorate(providers.Group{Asset: providers.Asset{Files: []*dto.FileDto{{ItemEntry: statEntry(t, notes)}}}}); err == nil {
 		t.Error("the gate let an unchanged ignored group through")
 	}
 }

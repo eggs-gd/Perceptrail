@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/providers"
 
@@ -60,7 +59,7 @@ func (p *Provider) Claims(path string) bool { return BundleRoot(path) != "" }
 
 func (p *Provider) Grouper() providers.Grouper { return p.grouper }
 
-func (p *Provider) Regroup(key string) (flow.FileGroup, bool) { return p.grouper.Regroup(key) }
+func (p *Provider) Regroup(key string) (providers.Asset, bool) { return p.grouper.Regroup(key) }
 
 // Owns: an item whose main file is in a Photos library (its GUID is the asset UUID)
 func (p *Provider) Owns(item *dto.ItemDto) bool { return BundleRoot(item.Path) != "" }

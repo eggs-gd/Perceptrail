@@ -3,7 +3,6 @@ package folder
 import (
 	"context"
 
-	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/providers"
 )
@@ -22,7 +21,7 @@ func New() *Provider { return &Provider{grouper: &Grouper{}} }
 func (p *Provider) Name() string                               { return "folder" }
 func (p *Provider) Claims(string) bool                         { return true }
 func (p *Provider) Grouper() providers.Grouper                 { return p.grouper }
-func (p *Provider) Regroup(string) (flow.FileGroup, bool)      { return flow.FileGroup{}, false }
+func (p *Provider) Regroup(string) (providers.Asset, bool)     { return providers.Asset{}, false }
 func (p *Provider) Owns(*dto.ItemDto) bool                     { return false }
 func (p *Provider) Levels(*dto.ItemDto) []string               { return nil }
 func (p *Provider) Start(context.Context, providers.Refresher) {}

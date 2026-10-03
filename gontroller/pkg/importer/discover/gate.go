@@ -4,9 +4,9 @@ import (
 	"errors"
 	"time"
 
-	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/providers"
 
 	"github.com/eggs-gd/perceplib/chain"
 
@@ -51,7 +51,7 @@ type Gate struct {
 	branches   int // markers to wait for
 	markers    int
 	held       []string // files the groupers held back in this walk: not gone
-	progress   *flow.Progress
+	progress   *Progress
 	// dropped hears of a keyed group the gate let not through (nothing to do): one
 	// asset processed again on demand (importer Refresh) answers at once
 	dropped func(key string)
@@ -59,19 +59,20 @@ type Gate struct {
 
 // NewGate: the gate step's logic. branches is the number of groupers that send an
 // end-of-walk marker; dropped hears of a keyed group let not through (nil: nobody).
-func NewGate(db Store, perceptors Perceptors, branches int, progress *flow.Progress, dropped func(key string), logger *l.Logger) *Gate {
+func NewGate(db Store, perceptors Perceptors, branches int, progress *Progress, dropped func(key string), logger *l.Logger) *Gate {
 	return &Gate{
 		db: db, perceptors: perceptors, sweep: sweep{db: db, perceptors: perceptors, logger: logger},
 		logger: logger, branches: branches, progress: progress, dropped: dropped,
 	}
 }
 
-func (g *Gate) Decorate(in flow.FileGroup) (flow.FileGroup, error) {
+func (g *Gate) Decorate(in providers.Group) (Group, error) {
 	// A grouper's last group comes with its end-of-walk marker: the group first
-	out, err := g.pass(in.Files, in.Key, in.MetaHash)
+	var out Group
+	files, err := g.pass(in.Files, in.Key, in.MetaHash)
 	if err == nil {
-		out.Key, out.Show = in.Key, stored(in.Show, out.Files)
-		out.Meta, out.MetaHash, out.Kind = in.Meta, in.MetaHash, in.Kind
+		out = Group{Files: files, Key: in.Key, Show: stored(in.Show, files),
+			Meta: in.Meta, MetaHash: in.MetaHash, Kind: in.Kind}
 		g.progress.Passed()
 	} else if in.Key != "" && in.Files != nil && g.dropped != nil {
 		g.dropped(in.Key)
@@ -109,18 +110,18 @@ func stored(files, rows []*dto.FileDto) []*dto.FileDto {
 }
 
 // pass stores the group and lets it through if it needs work
-func (g *Gate) pass(found []*dto.FileDto, key, metaHash string) (flow.FileGroup, error) {
+func (g *Gate) pass(found []*dto.FileDto, key, metaHash string) ([]*dto.FileDto, error) {
 	if len(found) == 0 {
-		return flow.FileGroup{}, chain.ErrSkippedItem
+		return nil, chain.ErrSkippedItem
 	}
 	files, changed, err := g.store(found)
 	if err != nil {
-		return flow.FileGroup{}, err
+		return nil, err
 	}
 	if changed || g.needsProcessing(files, key, metaHash) {
-		return flow.FileGroup{Files: files}, nil
+		return files, nil
 	}
-	return flow.FileGroup{}, chain.ErrSkippedItem
+	return nil, chain.ErrSkippedItem
 }
 
 func (g *Gate) Stop() {}

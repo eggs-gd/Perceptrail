@@ -1,6 +1,6 @@
-// Package flow holds what flows between the steps of the import chain
-// (_sb/puml/Import chain.puml): the chain and its sub-packages (groups/…,
-// transcode/…) share these types.
+// Package flow: what is left of the shared types — identify's working item and its
+// kinds. Being dissolved: every type moves to the package that produces it
+// (the provider contract is in providers, discover yields discover.Group).
 package flow
 
 import (
@@ -10,53 +10,6 @@ import (
 
 	"github.com/eggs-gd/perceplib/api"
 )
-
-// FileEvent: fswalker -> source switch -> groupers. One found file (Entry: path
-// and stat), or the end-of-walk marker (Done).
-type FileEvent struct {
-	Entry dto.ItemEntry
-	Done  *WalkResult
-}
-
-// FileGroup is one whole asset: all its files (a main file and its sidecars,
-// derivatives), or the end-of-walk marker. Groupers build it (files not stored
-// yet: only the stat is set), the files gate stores it (rows of the files table,
-// with GUIDs), exif turns it into a RawItem. Done is set on a grouper's marker,
-// which may come together with its last group.
-type FileGroup struct {
-	Files []*dto.FileDto
-	// Set by a grouper that knows the asset (Apple Photos: the asset UUID): the
-	// item's GUID, and Files[0] is the main file as the grouper decided — mime
-	// does not re-rank. "" (generic): the GUID of the main file, mime ranks.
-	Key string
-	// What to show first, best first (a keyed group; e.g. the edit before the
-	// original); nil: the cheap preview decides by itself
-	Show []*dto.FileDto
-	// Metadata from the source itself (the Apple Photos DB): wins over the files'
-	// EXIF; MetaHash tells the gate it changed while the files did not
-	Meta     api.RawExif
-	MetaHash string
-	// What the asset is (dto.Kind*), when the source says it
-	Kind string
-	Done *WalkResult
-	// With the marker: files the grouper saw but held back (their group did not
-	// complete in this walk) — not "gone" for the deletions
-	Held []string
-}
-
-// WalkResult describes a finished walk; it rides in the end-of-walk marker.
-// Deletions may be derived from it only if the walk was complete: a cancelled walk
-// or an unreadable root says nothing about which files are gone.
-type WalkResult struct {
-	Root    string
-	Started time.Time
-	// The walk reached the end
-	Complete bool
-	// Files seen (before grouping and filtering)
-	Files int
-	// Directories that could not be read: their files are not "deleted"
-	Unreadable []string
-}
 
 // MediaKind is the role a file can play in a group (set by the mime step)
 type MediaKind string

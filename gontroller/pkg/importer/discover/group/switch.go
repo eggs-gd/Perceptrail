@@ -1,7 +1,6 @@
 package group
 
 import (
-	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/providers"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -17,11 +16,11 @@ import (
 // NewGrouping: the sub-chain from chin (found files, the end-of-walk marker) to
 // chout (whole assets; a marker from every grouper — the gate waits for len(ps));
 // its steps report to errch (skips: files held, not complete yet)
-func NewGrouping(ps []providers.Provider, chin <-chan flow.FileEvent, chout chan<- flow.FileGroup, errch chan error) chain.ChainProcessor {
+func NewGrouping(ps []providers.Provider, chin <-chan providers.Found, chout chan<- providers.Group, errch chan error) chain.ChainProcessor {
 	grouping := chain.NewChainProcessor(errch)
-	toGroupers := make([]chan<- flow.FileEvent, len(ps))
+	toGroupers := make([]chan<- providers.Found, len(ps))
 	for i, p := range ps {
-		toGrouper := make(chan flow.FileEvent)
+		toGrouper := make(chan providers.Found)
 		toGroupers[i] = toGrouper
 		grouping.AddStep(chain.NewDecorator(toGrouper, chout, p.Grouper()))
 	}
@@ -36,9 +35,9 @@ type Switch struct {
 	Providers []providers.Provider
 }
 
-func (s Switch) Switch(ev flow.FileEvent) (map[int]flow.FileEvent, error) {
+func (s Switch) Switch(ev providers.Found) (map[int]providers.Found, error) {
 	if ev.Done != nil {
-		all := make(map[int]flow.FileEvent, len(s.Providers))
+		all := make(map[int]providers.Found, len(s.Providers))
 		for i := range s.Providers {
 			all[i] = ev
 		}
@@ -46,7 +45,7 @@ func (s Switch) Switch(ev flow.FileEvent) (map[int]flow.FileEvent, error) {
 	}
 	for i, p := range s.Providers {
 		if p.Claims(ev.Entry.Path) {
-			return map[int]flow.FileEvent{i: ev}, nil
+			return map[int]providers.Found{i: ev}, nil
 		}
 	}
 	return nil, chain.ErrSkippedItem // no plain folder enabled: nobody takes it

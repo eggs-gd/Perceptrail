@@ -5,15 +5,15 @@ import (
 	"reflect"
 	"testing"
 
-	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/providers"
 )
 
 func entry(path string) dto.ItemEntry {
 	return dto.ItemEntry{Path: path, Name: filepath.Base(path)}
 }
 
-func names(groups []flow.FileGroup) [][]string {
+func names(groups []providers.Group) [][]string {
 	var out [][]string
 	for _, g := range groups {
 		var n []string
@@ -28,14 +28,14 @@ func names(groups []flow.FileGroup) [][]string {
 // Files come in name order; one group is open, the next name closes it
 func TestGenericGrouper(t *testing.T) {
 	g := &Grouper{}
-	var out []flow.FileGroup
+	var out []providers.Group
 	for _, n := range []string{"IMG_1.HEIC", "IMG_1.MOV", "IMG_1.aae", "a.edited.jpg", "a.jpg", "a.jpg.xmp", "a.xmp", "b", "b.png"} {
-		if group, err := g.Decorate(flow.FileEvent{Entry: entry("/lib/" + n)}); err == nil {
+		if group, err := g.Decorate(providers.Found{Entry: entry("/lib/" + n)}); err == nil {
 			out = append(out, group)
 		}
 	}
-	marker := &flow.WalkResult{}
-	last, _ := g.Decorate(flow.FileEvent{Done: marker})
+	marker := &providers.Walk{}
+	last, _ := g.Decorate(providers.Found{Done: marker})
 	out = append(out, last)
 
 	want := [][]string{
@@ -53,8 +53,8 @@ func TestGenericGrouper(t *testing.T) {
 
 	// Another directory closes the group, even with the same name
 	g = &Grouper{}
-	g.Decorate(flow.FileEvent{Entry: entry("/lib/x.jpg")})
-	if group, err := g.Decorate(flow.FileEvent{Entry: entry("/lib/sub/x.xmp")}); err != nil || len(group.Files) != 1 {
+	g.Decorate(providers.Found{Entry: entry("/lib/x.jpg")})
+	if group, err := g.Decorate(providers.Found{Entry: entry("/lib/sub/x.xmp")}); err != nil || len(group.Files) != 1 {
 		t.Errorf("a file of another directory joined the group: %v %v", group, err)
 	}
 }

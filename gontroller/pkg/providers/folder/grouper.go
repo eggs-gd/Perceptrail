@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"perceptrail/gontroller/pkg/importer/flow"
 	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/pkg/providers"
 
 	"github.com/eggs-gd/perceplib/chain"
 )
@@ -20,23 +20,23 @@ type Grouper struct {
 	open []*dto.FileDto
 }
 
-func (g *Grouper) Decorate(ev flow.FileEvent) (flow.FileGroup, error) {
+func (g *Grouper) Decorate(ev providers.Found) (providers.Group, error) {
 	if ev.Done != nil {
 		last := g.open
 		g.open = nil
-		return flow.FileGroup{Files: last, Done: ev.Done}, nil
+		return providers.Group{Asset: providers.Asset{Files: last}, Done: ev.Done}, nil
 	}
 	if shouldSkipPath(ev.Entry.Path) {
-		return flow.FileGroup{}, chain.ErrSkippedItem
+		return providers.Group{}, chain.ErrSkippedItem
 	}
 	file := &dto.FileDto{ItemEntry: ev.Entry}
 	if len(g.open) == 0 || sameGroup(g.open, file) {
 		g.open = append(g.open, file)
-		return flow.FileGroup{}, chain.ErrSkippedItem // not complete yet
+		return providers.Group{}, chain.ErrSkippedItem // not complete yet
 	}
 	closed := g.open
 	g.open = []*dto.FileDto{file}
-	return flow.FileGroup{Files: closed}, nil
+	return providers.Group{Asset: providers.Asset{Files: closed}}, nil
 }
 
 func (g *Grouper) Stop() {}
