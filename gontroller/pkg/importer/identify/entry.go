@@ -13,7 +13,7 @@
 package identify
 
 import (
-	"perceptrail/gontroller/pkg/importer/discover"
+	"perceptrail/gontroller/pkg/importer/gate"
 
 	"github.com/eggs-gd/perceplib/chain"
 	l "github.com/eggs-gd/perceplib/logger"
@@ -57,7 +57,7 @@ func NewSteps(pool *exiftoolPool, cfg Config) *Steps {
 }
 
 // Run: one group through every step, as the chain runs it
-func (s *Steps) Run(g discover.Group) (*Item, error) {
+func (s *Steps) Run(g gate.Group) (*Item, error) {
 	d, err := s.Read.Decorate(g)
 	for _, step := range []chain.Decorator[*draft, *draft]{s.Classify, s.Merge, s.Fingerprint, s.Validate, s.Embedded, s.Sizes, s.Pick} {
 		if err != nil {
@@ -83,7 +83,7 @@ type Config struct {
 
 // New: in — the groups that need work (stored: rows of the files table); out — the
 // identified items. Its errors go to the chain it runs in.
-func New(cfg Config, in *chain.Pipe[discover.Group], out *chain.Pipe[*Item]) chain.Processor {
+func New(cfg Config, in *chain.Pipe[gate.Group], out *chain.Pipe[*Item]) chain.Processor {
 	// The kinds' table changed since the files were judged "not media": judged again
 	if err := reclassifyIgnored(cfg.DB, cfg.Logger); err != nil {
 		cfg.Logger.Error("MIME version check failed", l.Error(err))

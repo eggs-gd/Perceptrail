@@ -28,11 +28,11 @@ type draft struct {
 	Exif     []api.RawExif
 	Files    []*dto.FileDto
 	Kinds    []mediaKind
-	Key      string         // discover.Group.Key
-	Show     []*dto.FileDto // discover.Group.Show
-	Meta     api.RawExif    // discover.Group.Meta: the source's metadata
+	Key      string         // gate.Group.Key
+	Show     []*dto.FileDto // gate.Group.Show
+	Meta     api.RawExif    // gate.Group.Meta: the source's metadata
 	MetaHash string
-	Kind     string // discover.Group.Kind
+	Kind     string // gate.Group.Kind
 	// Merged: the asset's metadata package (merge) — what the perceptors read
 	Merged api.RawExif
 	// Hash: the main file's fingerprint (fingerprint), its identity across paths

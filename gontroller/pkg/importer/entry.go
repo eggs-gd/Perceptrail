@@ -1,31 +1,37 @@
 // Package importer: the import chain — files found, items published. Its top has
-// only linear stages, each a sub-chain of its own that knows its tools; the top
-// knows none of them (roadmap "Chains").
+// only linear steps, each in its own package (a sub-chain when it has several), each
+// knowing its tools; the top knows none of them (roadmap "Chains").
 //
-//	discover → identify → exif_core → exif_ext → commit
+//	walk → group → gate → identify → exif_core → exif_ext → commit
 //
-//	discover  the groups that need work; the files table up to date — walk, group
-//	          (the providers), gate (deletions after a walk)
-//	identify  the item known — exiftool, kinds and the main file, the item's
-//	          identity, sizes, the cheap preview
-//	core      the core perceptors (date, size, …): they write into the item
-//	plugins   the external perceptors (Go plugins): they only read it
-//	commit    the item published: Visible (a preview) or Waiting (none), with its
-//	          perceptors' values
+//	walk       the library's files (path + stat), one walk when asked; then a flush
+//	group      whole assets: the providers' groupers (the plain folder last)
+//	gate       the files table up to date; only the groups that need work pass
+//	identify   the item known — exiftool, kinds and the main file, the item's
+//	           identity, sizes, the cheap preview
+//	exif_core  the built-in EXIF perceptors (date, size, length): they write into it
+//	exif_ext   the external EXIF perceptors (Go plugins): they only read it
+//	commit     the item published: Visible (a preview) or Waiting (none), with its
+//	           perceptors' values
+//
+// What spans the steps is the top's: the walk cycle (cycle.go), one asset again
+// (Refresh), the perceptors' bookkeeping (perceptors.go).
 //
 // Diagrams: _sb/puml/Import chain.puml, _sb/puml/Walker.puml (gate, validator).
 //
 // Not obvious:
 //   - The walker flushes the chain after a walk: every step passes the flush on after
 //     the values before it, a grouper first gives what it holds; where branches join
-//     (the groupers into the gate) it passes once every branch has flushed. At the
-//     gate it runs the deletions (after a complete walk that found files, never
-//     under an unreadable directory); at the end of the chain it means the walk's work
-//     is done — the next walk starts only then (walks never overlap).
-//   - The chain is async: deletions may run before a moved file is validated, so the
-//     validator restores deleted items by hash.
-//   - One asset is processed again without a walk (Refresh): its provider forms its
-//     group, discover sends it to its gate.
+//     (the groupers into the gate) it passes once every branch has flushed. At the end
+//     of the chain it means the walk's work is done: then the deletions, the
+//     perceptors' rows of gone items, the pause, the next walk (cycle.go) — walks
+//     never overlap.
+//   - Deletions come after the walk's groups went through the whole chain; a moved
+//     file was validated before its old path is deleted, and validate restores a
+//     deleted item by fingerprint anyway: the GUID stays.
+//   - One asset again without a walk (Refresh): its provider forms its group, the top
+//     sends it into the gate's input asked for (Requested: processed even if nothing
+//     changed), and waits for its item at the end.
 package importer
 
 import (
@@ -35,10 +41,12 @@ import (
 
 	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/importer/commit"
-	"perceptrail/gontroller/pkg/importer/discover"
 	"perceptrail/gontroller/pkg/importer/exif_core"
 	"perceptrail/gontroller/pkg/importer/exif_ext"
+	"perceptrail/gontroller/pkg/importer/gate"
+	"perceptrail/gontroller/pkg/importer/group"
 	"perceptrail/gontroller/pkg/importer/identify"
+	"perceptrail/gontroller/pkg/importer/walk"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/providers"
@@ -52,21 +60,21 @@ import (
 const defaultRescan = time.Minute
 
 type importerService struct {
-	appCtx app.AppContext
-
 	importChain *chain.Chain
+	walker      *walk.Walker
 
-	// One asset again (Refresh): discover sends its group to the gate; whoever
-	// waits hears when its item leaves the chain or the gate drops the group
-	discover *discover.Stage
-	waits    *assetWaits
+	// One asset again (Refresh): its provider forms its group, it goes into the
+	// gate's input; whoever waits hears when its item leaves the chain
+	providers []providers.Provider
+	grouped   *chain.Pipe[providers.Group]
+	waits     *assetWaits
 }
 
 func NewImporterService(ctx app.AppContext) *importerService {
 	logger := ctx.Logger(string(app.LogImporter))
 	db := model.NewProxy(ctx.Logger(string(app.LogDB)))
 
-	// Every stage's errors (skips never get here: they are on purpose)
+	// Every step's errors (skips never get here: they are on purpose)
 	errch := make(chan error)
 	go func() {
 		for err := range errch {
@@ -77,10 +85,19 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	if rescan <= 0 {
 		rescan = defaultRescan
 	}
+	// A perceptor new or changed since the last run: its items are processed again
+	if err := markUnprocessed(db, logger); err != nil {
+		logger.Error("Perceptors' rows not checked", l.Error(err))
+	}
 
-	// Between the stages (each message type belongs to the stage that yields it)
-	// discover → identify: the groups that need work, stored (rows of the files table)
-	stored := chain.NewPipe[discover.Group](0)
+	// Between the steps (each message type belongs to the step that yields it)
+	// walk → group: one file (path + stat); the walk's flush
+	found := chain.NewPipe[dto.ItemEntry](0)
+	// group → gate: a whole asset; on the flush, what each grouper held. Refresh
+	// sends an asset asked for here too
+	grouped := chain.NewPipe[providers.Group](0)
+	// gate → identify: the groups that need work, stored (rows of the files table)
+	stored := chain.NewPipe[gate.Group](0)
 	// identify → exif_core: the identified items
 	identified := chain.NewPipe[*identify.Item](0)
 	// exif_core → exif_ext: + what the core perceptors found
@@ -91,67 +108,65 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	// the closer does not wait for the end
 	items := chain.NewPipe[*dto.ItemDto](1000)
 
+	ps := providers.Enabled()
+	walker := walk.New(ctx.Config().Path, logger)
 	waits := newAssetWaits()
-	// A perceptor new or changed since the last run: its items are processed again
-	if err := markUnprocessed(db, logger); err != nil {
-		logger.Error("Perceptors' rows not checked", l.Error(err))
-	}
-	disc := discover.New(ctx.Config().Path, rescan, discover.Deps{
-		Providers: providers.Enabled(),
-		DB:        db,
-		Dropped:   waits.done,
-		Logger:    logger,
-	}, stored)
+	c := &cycle{db: db, walker: walker, rescan: rescan, logger: logger}
 
 	importChain := chain.New(errch)
-	importChain.AddStep(disc)
+	importChain.AddStep(chain.Entry(found, walker))
+	importChain.AddStep(group.New(ps, found, grouped))
+	importChain.AddStep(gate.New(db, logger, grouped, stored))
 	importChain.AddStep(identify.New(identify.Config{Tags: exifTags(), CacheDir: ctx.Config().CacheDir(), DB: db, Logger: logger}, stored, identified))
 	importChain.AddStep(exif_core.New(corePerceptors(), identified, cored, logger))
 	importChain.AddStep(exif_ext.New(externalPerceptors(), cored, perceived, logger))
 	importChain.AddStep(commit.New(db, saveValues, perceived, items))
-	// The end: an item's waiters hear it; the walk's flush here means its work is done
-	// (its deletions too): the perceptors' rows of gone items go, the next walk may
-	// start
-	importChain.AddStep(chain.Sink(items, func(it *dto.ItemDto) { waits.done(it.Guid) }, func() {
-		prune(db, logger)
-		disc.WalkDone()
-	}))
+	// The end: an item's waiters hear it; the walk's flush here means its work is
+	// done — the cycle goes on
+	importChain.AddStep(chain.Sink(items, func(it *dto.ItemDto) { waits.done(it.Guid) }, c.walked))
 
 	return &importerService{
-		appCtx:      ctx,
 		importChain: importChain,
-		discover:    disc,
+		walker:      walker,
+		providers:   ps,
+		grouped:     grouped,
 		waits:       waits,
 	}
 }
 
 // Refresh processes one asset of a provider's library again, now — the library (Apple
 // Photos…) has just made a file of it local (on demand): no walk of the whole library
-// for one photo. Its group goes to the gate like any group (only what changed passes;
-// deletions are not touched — they come with the walk's flush; a walk sending the
-// same asset at the same time just processes it twice into the same item). Waits
-// until the item has left the chain or the gate dropped the group (nothing changed:
-// Photos drew from what was local), at most wait; false if neither (no such asset,
-// too slow) — the next walk catches up anyway.
+// for one photo. Its provider forms its group, it goes into the gate's input asked for
+// (processed even if nothing changed: Photos may have drawn from what was local);
+// deletions are not touched (they come after a walk). Waits until its item has left
+// the chain, at most wait; false if not (no such asset, too slow) — the next walk
+// catches up anyway.
 func (s *importerService) Refresh(uuid string, wait time.Duration) bool {
 	done := s.waits.add(uuid)
 	defer s.waits.drop(uuid, done)
 
 	ctx, cancel := context.WithTimeout(context.Background(), wait)
 	defer cancel()
-	if !s.discover.Regroup(ctx, uuid) {
-		return false
+	for _, p := range s.providers {
+		a, ok := p.Regroup(uuid)
+		if !ok {
+			continue
+		}
+		if !s.grouped.Send(ctx, providers.Group{Asset: a, Requested: true}) {
+			return false
+		}
+		select {
+		case <-done:
+			return true
+		case <-ctx.Done():
+			return false
+		}
 	}
-	select {
-	case <-done:
-		return true
-	case <-ctx.Done():
-		return false
-	}
+	return false
 }
 
 // assetWaits: who waits for an asset's item to be done (Refresh) — told when the
-// item leaves the chain or the gate drops its group
+// item leaves the chain
 type assetWaits struct {
 	mu sync.Mutex
 	by map[string][]chan struct{}
@@ -195,5 +210,6 @@ func (w *assetWaits) done(key string) {
 }
 
 func (s *importerService) Start(ctx context.Context) {
+	s.walker.Next() // the first walk; the cycle asks for the next ones
 	s.importChain.Process(ctx)
 }

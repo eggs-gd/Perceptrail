@@ -129,24 +129,25 @@ func TestAppleMetadataFromDB(t *testing.T) {
 	}
 }
 
-// The gate tells which keyed group it let not through: an asset processed again on
-// demand (Refresh) answers at once when Photos made nothing new local
-func TestGateTellsDropped(t *testing.T) {
+// One asset asked again on demand (Refresh): processed even if nothing changed (it
+// then always reaches the end, where its waiters hear it), its item kept
+func TestRefreshProcessesAsked(t *testing.T) {
 	root := t.TempDir()
 	photosLibrary(t, root)
-	scan(t, root)
-
-	var dropped []string
-	if got := scanWith(t, root, func(key string) { dropped = append(dropped, key) }); len(got) != 0 {
+	h := newHarness(t)
+	h.scan(root)
+	if got := h.scan(root); len(got) != 0 {
 		t.Fatalf("nothing changed, processed %v", got)
 	}
-	want := map[string]bool{appleEdited: true, appleCloud: true, appleLive: true}
-	if len(dropped) != len(want) {
-		t.Errorf("dropped %v, want the three assets", dropped)
+	// Asked again on demand: processed though nothing changed, its item kept
+	guid := appleEdited
+	if got := h.refresh(appleEdited); len(got) != 1 {
+		t.Fatalf("refresh processed %v, want the asset", got)
 	}
-	for _, k := range dropped {
-		if !want[k] {
-			t.Errorf("dropped %q, not an asset", k)
-		}
+	if item, err := itemsProxy.GetItemByGuid(guid); err != nil || item.State != dto.Visible {
+		t.Errorf("after refresh: %+v", item)
+	}
+	if got := h.refresh("no-such-asset"); len(got) != 0 {
+		t.Errorf("an unknown asset processed %v", got)
 	}
 }

@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"perceptrail/gontroller/pkg/importer/discover"
+	"perceptrail/gontroller/pkg/importer/gate"
 
 	"github.com/eggs-gd/perceplib/api"
 
@@ -51,7 +51,7 @@ func NewReader(pool *exiftoolPool, tags []string, logger *l.Logger) *Reader {
 // Decorate starts the item of the group: its files and their metadata, every file
 // of it at once (a keyed group: only the main file — the source knows the rest).
 // A nil Exif: exiftool could not read the file. The item itself comes from validate.
-func (e *Reader) Decorate(g discover.Group) (*draft, error) {
+func (e *Reader) Decorate(g gate.Group) (*draft, error) {
 	files := g.Files
 	out := &draft{Files: files, Exif: make([]api.RawExif, len(files)), Key: g.Key, Show: g.Show, Meta: g.Meta, MetaHash: g.MetaHash, Kind: g.Kind}
 	read := files

@@ -26,7 +26,7 @@ import (
 // importer runs it between its pipes (chain.Decorate); on the walk's flush it gives
 // what it holds (chain.Flusher: the last group, the files held back). The provider
 // keeps the instance — its state is what Regroup works from.
-type Grouper = chain.Decorator[Found, Group]
+type Grouper = chain.Decorator[dto.ItemEntry, Group]
 
 type Provider interface {
 	Name() string

@@ -67,17 +67,20 @@ Services (`pkg/app/services.go`) start in parallel: `ImporterService` and
 `WebService`. Import is a chain of steps over typed pipes (`perceplib/chain`):
 
 ```
-discover   walk → group (the providers' groupers) → gate: the files table, the
-           groups that need work (discover.Group); deletions after a walk
+walk       the library's files (path + stat), one walk when asked
+group      whole assets: the providers' groupers (the plain folder last)
+gate       the files table; only the groups that need work pass (gate.Group)
 identify   one exiftool call per group (the declared tags only) → kinds → the
            metadata package → fingerprint → the item → the cheap preview
            (identify.Item)
-core       the built-in perceptors (date, size, length)
-plugins    the external .so perceptors
+exif_core  the built-in EXIF perceptors (date, size, length)
+exif_ext   the external EXIF perceptors (.so)
 commit     the perceptors' values, then the item (Visible / Waiting)
 ```
 
-Details, the types and the rules: [`pkg/importer/README.md`](pkg/importer/README.md).
+After a walk's flush reached the end: its deletions, the perceptors' rows of gone
+items, the rescan pause, the next walk (the importer's cycle). Details, the types
+and the rules: [`pkg/importer/README.md`](pkg/importer/README.md).
 The transcoders (`pkg/transcode`) are not wired yet: a chain of their own, fed from
 the DB.
 
@@ -88,7 +91,7 @@ Item states (`dto.ItemState`): `New → Dirty → Processing → Ready`, `Delete
 | Package | What |
 |---|---|
 | `pkg/app` | app context, config, logger categories, services |
-| `pkg/importer` | the import chain: linear stages, each a sub-chain of its own — `discover` (walk, group, gate), `identify` (exiftool, kinds, the item, sizes, the cheap preview), `exif_core` / `exif_ext` (the EXIF perceptors: built in, external), `commit` (the closer); see its README |
+| `pkg/importer` | the import chain: linear stages, each a sub-chain of its own — `walk`, `group`, `gate`, `identify` (exiftool, kinds, the item, sizes, the cheap preview), `exif_core` / `exif_ext` (the EXIF perceptors: built in, external), `commit` (the closer); see its README |
 | `pkg/transcode` | the transcoders' switch and stubs (a chain of its own later) |
 | `pkg/plugins` | the perceptors' registry (built in + `.so`, their storages); the built-in EXIF perceptors `exif_date`, `exif_size`, `exif_duration`; `exif_core`: their contract (`RawItemRW`, `ExifCorePerceptor`) and shared helpers; `exif_coretest`: test helpers |
 | `pkg/model` | SQLite via GORM, `ItemsApi`/`FilesApi`, DTOs |

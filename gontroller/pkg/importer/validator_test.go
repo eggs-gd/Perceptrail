@@ -6,9 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"perceptrail/gontroller/pkg/importer/commit"
-	"perceptrail/gontroller/pkg/importer/discover"
-	"perceptrail/gontroller/pkg/importer/discover/group"
+	"perceptrail/gontroller/pkg/importer/gate"
+	"perceptrail/gontroller/pkg/importer/group"
 	"perceptrail/gontroller/pkg/importer/identify"
+	"perceptrail/gontroller/pkg/importer/walk"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/plugins/exif_core"
@@ -96,83 +97,99 @@ func coreTags() []string {
 	return tags
 }
 
-// scan runs one walk through the steps of the import chain in order, the way the
-// chain wires them, with fakeExif. Returns the main files that reached the plugins.
-func scan(t *testing.T, root string) []string {
-	t.Helper()
-	return scanWith(t, root, nil)
+// harness: the import's steps as the chain has them, run one group at a time — the
+// providers (Apple, the plain folder last), the gate, identify's steps (a fake
+// exiftool), the core perceptors, close; after a walk its flush (every grouper gives
+// what it holds) and the cycle's deletions
+type harness struct {
+	t      *testing.T
+	logger *l.Logger
+	ps     []providers.Provider
+	sw     group.Switch
+	gate   *gate.Gate
+	steps  *identify.Steps
+	// the main files that reached the perceptors
+	processed []string
 }
 
-// scanWith: scan with the gate's dropped hook (nil: none)
-func scanWith(t *testing.T, root string, dropped func(key string)) []string {
-	t.Helper()
+func newHarness(t *testing.T) *harness {
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
-	// The stages' steps as the chain has them, run one group at a time: the providers
-	// (Apple, the plain folder last), the gate; identify's steps (a fake exiftool);
-	// the core perceptors; close
 	ps := []providers.Provider{apple.New("", nil, itemsProxy, logger), folder.New()}
-	sw := group.Switch{Providers: ps}
-	progress := discover.NewProgress()
-	gate := discover.NewGate(discover.Deps{
-		DB:      testDB,
-		Dropped: dropped,
-		Logger:  logger,
-	}, progress)
 	steps := identify.NewSteps(nil, identify.Config{Tags: coreTags(), CacheDir: t.TempDir(), DB: testDB, Logger: logger})
 	steps.Read.Extract = perFile(fakeExif)
 	steps.Embedded.Extract = func(string, string, string) (string, error) { return "", errors.New("no exiftool in tests") }
+	return &harness{t: t, logger: logger, ps: ps, sw: group.Switch{Providers: ps}, gate: gate.NewGate(testDB, logger), steps: steps}
+}
 
-	var processed []string
-	ok := func(err error) bool {
-		if errors.Is(err, chain.ErrSkippedItem) {
-			return false
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		return true
+func (h *harness) ok(err error) bool {
+	if errors.Is(err, chain.ErrSkippedItem) {
+		return false
 	}
-	toGate := func(group providers.Group) {
-		stored, err := gate.Decorate(group)
-		if !ok(err) {
-			return
-		}
-		it, err := steps.Run(stored)
-		if !ok(err) {
-			return
-		}
-		runCorePlugins(t, it)
-		if _, err := commit.NewCloser(itemsProxy).Decorate(it); err != nil {
-			t.Fatal(err)
-		}
-		processed = append(processed, it.Item.Path)
+	if err != nil {
+		h.t.Fatal(err)
 	}
-	toGroupers := func(ev providers.Found) {
-		i, err := sw.Route(ev)
-		if !ok(err) {
-			return
-		}
-		if group, err := ps[i].Grouper().Decorate(ev); ok(err) {
-			toGate(group)
-		}
-	}
+	return true
+}
 
-	// The walk, then its flush as the chain gives it: every grouper gives what it
-	// holds, then the gate (the deletions)
-	progress.Walked(discover.WalkOnce(t.Context(), root, logger, toGroupers))
-	for _, p := range ps {
+// toGate: one group from the gate on, through every step
+func (h *harness) toGate(g providers.Group) {
+	stored, err := h.gate.Decorate(g)
+	if !h.ok(err) {
+		return
+	}
+	it, err := h.steps.Run(stored)
+	if !h.ok(err) {
+		return
+	}
+	runCorePlugins(h.t, it)
+	if _, err := commit.NewCloser(itemsProxy).Decorate(it); err != nil {
+		h.t.Fatal(err)
+	}
+	h.processed = append(h.processed, it.Item.Path)
+}
+
+// scan: one walk of root; the main files processed in it
+func (h *harness) scan(root string) []string {
+	h.processed = nil
+	r := walk.Once(h.t.Context(), root, h.logger, func(e dto.ItemEntry) {
+		i, err := h.sw.Route(e)
+		if !h.ok(err) {
+			return
+		}
+		if g, err := h.ps[i].Grouper().Decorate(e); h.ok(err) {
+			h.toGate(g)
+		}
+	})
+	// The walk's flush: every grouper gives what it holds; then the cycle's deletions
+	for _, p := range h.ps {
 		held, err := p.Grouper().(chain.Flusher[providers.Group]).Flush()
 		if err != nil {
-			t.Fatal(err)
+			h.t.Fatal(err)
 		}
 		for _, g := range held {
-			toGate(g)
+			h.toGate(g)
 		}
 	}
-	if _, err := gate.Flush(); err != nil {
-		t.Fatal(err)
+	deleteGone(testDB, r, h.logger)
+	return h.processed
+}
+
+// refresh: one asset asked again on demand, as Refresh sends it
+func (h *harness) refresh(key string) []string {
+	h.processed = nil
+	for _, p := range h.ps {
+		if a, ok := p.Regroup(key); ok {
+			h.toGate(providers.Group{Asset: a, Requested: true})
+		}
 	}
-	return processed
+	return h.processed
+}
+
+// scan runs one walk through the steps of the import chain (a new harness: the
+// groupers start empty, as on a restart)
+func scan(t *testing.T, root string) []string {
+	t.Helper()
+	return newHarness(t).scan(root)
 }
 
 func write(t *testing.T, path, content string) {

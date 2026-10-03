@@ -9,35 +9,42 @@ its steps; the top knows none of the tools — the file system, the providers,
 exiftool, the plugins belong to the stage that uses them. One step does one thing.
 
 ```
-discover → identify → exif_core → exif_ext → commit
+walk → group → gate → identify → exif_core → exif_ext → commit
 ```
 
-A stage's constructor takes its settings, its dependencies (a struct:
-`discover.Deps`, `identify.Config`) and its pipes — `New(settings, deps, in, out)`.
+A step's constructor takes what it really depends on and its pipes: `walk` the root,
+`group` the providers, `gate` the model, `identify` its `Config` (the perceptors'
+tags, the cache directory, the model), `exif_core` / `exif_ext` their perceptors,
+`commit` the model and the values' writer. No callbacks between the steps.
 
 [`entry.go`](entry.go) (`NewImporterService`) wires the stages and holds what
-spans them: the pipes between the stages (typed: a stage's in/out types are
-checked at compile time), the walk's progress, one error channel, the end of the
-chain (a `Sink`: an item's waiters hear it; the walk's flush means its work is
-done), `Refresh` (one asset again, without a walk).
+spans them: the pipes between the steps (typed: a step's in/out types are checked
+at compile time), one error channel, the end of the chain (a `Sink`: an item's
+waiters hear it; the walk's flush means its work is done), the **walk cycle**
+([`cycle.go`](cycle.go): after a walk's flush reached the end — its deletions, the
+perceptors' rows of gone items, the rescan pause, the next walk), `Refresh` (one
+asset again, without a walk), the perceptors' bookkeeping
+([`perceptors.go`](perceptors.go)).
 
 ```
-importer/                  the top: the stages, Refresh
-importer/discover/         walk → group → gate: the groups that need work, the files table up to date; the walk's progress
-importer/discover/group/   the grouping sub-chain: the providers' switch and their groupers
+importer/                  the top: the steps, the walk cycle, Refresh, the perceptors' bookkeeping
+importer/walk/             the library's files, one walk when asked; what a walk says is gone (Gone)
+importer/group/            whole assets: the providers' switch and their groupers (a sub-chain)
+importer/gate/             the files table up to date; only the groups that need work pass
 importer/identify/         read → classify → merge → fingerprint → validate → embedded → sizes → pick → yield: the item known
 importer/exif_core/        the core EXIF perceptors (built in: plugins/exif_date, …): they write into the item
 importer/exif_ext/         the external EXIF perceptors (.so): they only read it
 importer/commit/           keep (the perceptors' values) → close (the item): the item published
 ```
 
-Stage packages export their steps' logic (`discover.NewGate`, `identify.Steps`,
+Step packages export their logic (`gate.NewGate`, `identify.Steps`,
 `commit.NewKeep`, `commit.NewCloser`, …) — their `New` runs it between pipes;
 the tests of the whole import run it one group at a time (`identify.Steps.Run`).
 **A type belongs to the package that produces it** (there is no shared package of
 messages): see [Types](#types-who-owns-what). Every step declares the DB methods it calls as its own small
-interface (`GateStore`, `SweepStore`, `ValidatorStore`, `SizesStore`, `KindsStore`,
-`CloserStore`); a stage's `Store` embeds its steps'; the top passes the proxy.
+interface (`gate.Store`, `ValidatorStore`, `SizesStore`, `KindsStore`, `CloserStore`,
+the cycle's `CycleStore`); a sub-chain's `Store` embeds its steps'; the top passes
+the proxy.
 **What a perceptor means to the import lives here, not in the registry**
 ([`perceptors.go`](perceptors.go)): which ones run in the chain (EXIF data: core,
 external), the tags they read, their rows written (`keep` gets `saveValues`), and
@@ -45,7 +52,7 @@ two bits of bookkeeping the top does itself — **at start**, an item an import
 perceptor has no row for (the perceptor is new, or its schema changed) is marked
 for rework (`MarkRework`: the gate sends its group once more; publishing clears the
 mark); **after each walk** (its flush at the end of the chain) the rows of gone
-items are pruned. discover knows nothing of perceptors. All over `plugins.All` /
+items are pruned. walk, group and gate know nothing of perceptors. All over `plugins.All` /
 `plugins.Store`, which is all `pkg/plugins` offers. The sources are providers (`pkg/providers`: Apple Photos, the plain
 folder last); the transcoders (`pkg/transcode`, not wired yet) are a chain of their
 own later (fed from the DB).
@@ -55,7 +62,7 @@ chain), [`Walker.puml`](../../../_sb/puml/Walker.puml) (files gate and validator
 detail).
 
 ```
-[discover: walk → group (switch → a grouper per provider) → gate]
+[walk] → [group: switch → a grouper per provider] → [gate]
   → [identify: read (one exiftool call per group, N) → classify → merge → fingerprint
              → validate → embedded → sizes → pick → yield]
   → [exif_core: exif_date, exif_size, exif_duration — a step each]
@@ -67,14 +74,13 @@ detail).
 
 | Stage / step | File | In -> out | What it does |
 |---|---|---|---|
-| **discover** | `discover/entry.go` | root -> `discover.Group` | The groups that need work; the files table up to date; one asset's group again (`Regroup`). |
-| walk | `discover/walker.go` | root -> `providers.Found` | A `chain.Source`: reports every file (path + stat), records the walk (`discover.Walk`) and flushes the chain. Unreadable subdirectories are skipped and recorded. |
-| group | `discover/group/switch.go` | `providers.Found` -> `providers.Group` | A sub-chain: a switch sends a file to the grouper of the first enabled provider that claims it (the plain folder last: everything else), the walk's flush to every grouper (a `chain.Route`); each grouper is a step of it. |
-| (plain folder grouper) | `pkg/providers/folder` | `providers.Found` -> `providers.Group` | Sidecars by name, next to each other: one open group; a complete group goes out, the last one on the walk's flush. |
-| (Apple Photos grouper) | `pkg/providers/apple` | `providers.Found` -> `providers.Group` | The first file of a library loads the assets from a copy of `Photos.sqlite` and forms the groups (files that exist, per the naming layout); a group goes out when its last file arrives. Key = asset UUID; the main file = the source; `Show` = the edit, the original, then Apple's derivatives. Trashed / hidden assets are not sent; incomplete groups' files are `Held`, given on the walk's flush. Video renditions Photos downloads on request (`_2_3_o.mp4`, `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`; `_a` instead of `_o` for an edit, preferred) are `motion`, after the stills; `apple.Local` finds the best file for an on-demand want; `Regroup` forms one asset again (the last load's DB rows + the disk now). |
-| gate | `discover/gate.go` | `providers.Group` -> `discover.Group` | The files table (rows, stat, `CheckTime`); a group whose files did not change passes only if the model says it needs work (`NeedsWork`: not linked, not through the cheap stage, no fingerprint, the source's metadata changed, marked for rework); tells a dropped keyed group's waiters; turns a provider's asset into our format (stored rows); on the walk's flush (once every grouper has flushed) runs the deletions (`discover/sweep.go`: the walk's safety — complete, not under an unreadable directory, under the root — then the model's `Gone`). |
-| **identify** | `identify/entry.go` | `discover.Group` -> `*identify.Item` | The item known: identity, metadata, kinds and roles, what to show now. exiftool lives here; its working item (`draft`: every file, its exif and kind) never leaves it. |
-| read | `identify/read.go` | `discover.Group` -> draft | One `exiftool -j -n` call for the whole group (a keyed group: the main file only), only the declared tags (see [exif](#exif-what-is-read-and-who-gets-it)), a map per file; N steps in parallel on the same channels, one pool. |
+| **walk** | `walk/walker.go` | a request (`Next`) -> `dto.ItemEntry` | A `chain.Source`: on each request walks the root — every file (path + stat) — records the walk (`walk.Result`, `Last`) and flushes the chain. Unreadable subdirectories are skipped and recorded. `walk.Gone`: of the files a walk did not stamp, the ones it says are deleted. |
+| **group** | `group/switch.go` | `dto.ItemEntry` -> `providers.Group` | A sub-chain: a switch sends a file to the grouper of the first enabled provider that claims it (the plain folder last: everything else), the walk's flush to every grouper (a `chain.Route`); each grouper is a step of it. |
+| (plain folder grouper) | `pkg/providers/folder` | `dto.ItemEntry` -> `providers.Group` | Sidecars by name, next to each other: one open group; a complete group goes out, the last one on the walk's flush. |
+| (Apple Photos grouper) | `pkg/providers/apple` | `dto.ItemEntry` -> `providers.Group` | The first file of a library loads the assets from a copy of `Photos.sqlite` and forms the groups (files that exist, per the naming layout); a group goes out when its last file arrives. Key = asset UUID; the main file = the source; `Show` = the edit, the original, then Apple's derivatives. Trashed / hidden assets are not sent; incomplete groups' files are `Held`, given on the walk's flush. Video renditions Photos downloads on request (`_2_3_o.mp4`, `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`; `_a` instead of `_o` for an edit, preferred) are `motion`, after the stills; `apple.Local` finds the best file for an on-demand want; `Regroup` forms one asset again (the last load's DB rows + the disk now). |
+| **gate** | `gate/gate.go` | `providers.Group` -> `gate.Group` | The files table (rows, stat, `CheckTime`; the files a grouper held back stamped too); a group whose files did not change passes only if the model says it needs work (`NeedsWork`) or it was asked for (`Requested`); turns a provider's asset into our format (stored rows). Knows nothing of walks or deletions. |
+| **identify** | `identify/entry.go` | `gate.Group` -> `*identify.Item` | The item known: identity, metadata, kinds and roles, what to show now. exiftool lives here; its working item (`draft`: every file, its exif and kind) never leaves it. |
+| read | `identify/read.go` | `gate.Group` -> draft | One `exiftool -j -n` call for the whole group (a keyed group: the main file only), only the declared tags (see [exif](#exif-what-is-read-and-who-gets-it)), a map per file; N steps in parallel on the same channels, one pool. |
 | classify | `identify/classify.go` | draft -> draft | The kind of every file; the main file (the source) first; roles. |
 | merge | `identify/merge.go` | draft -> draft | The asset's metadata package: a tag from the source's metadata, else the metadata sidecars (.xmp), the main file, the derivatives; only the perceptors' tags. |
 | fingerprint | `identify/fingerprint.go` | draft -> draft | The main file's identity across paths: its size and sha256 of its first and last 64 KB (no exiftool). |
@@ -91,17 +97,18 @@ detail).
 
 ## Types: who owns what
 
-- **The provider contract** ([`pkg/providers/asset.go`](../providers/asset.go)), seen
-  only by discover: `Found` (a found file), `Asset` (one whole asset as its source
-  describes it: files with their stat, `Key`, `Show`, `Meta`, `MetaHash`, `Kind`),
-  `Group` (what a grouper sends: an `Asset`; on the walk's flush the files it held
-  back, `Held`). The end of a walk is not a value: the chain flushes.
-- **`discover.Group`** — what discover yields, in our format: the asset's files as
-  rows of the files table (GUIDs), what the source said about it. identify reads it
-  and never sees a provider type. `discover.Walk` (the walk's result: root, start,
-  complete or not, unreadable directories) and the stage's progress (the last walk,
-  and whether its flush reached the end of the chain: the top's `Sink` calls
-  `Stage.WalkDone`).
+- **walk** yields `dto.ItemEntry` (a file: path, stat) and, to the top, `walk.Result`
+  (root, start, complete or not, files, unreadable directories) — the deletions'
+  input.
+- **The provider contract** ([`pkg/providers/asset.go`](../providers/asset.go)),
+  between group and gate: a grouper takes `dto.ItemEntry`, gives `Group` — an
+  `Asset` (one whole asset as its source describes it: files with their stat, `Key`,
+  `Show`, `Meta`, `MetaHash`, `Kind`); on the walk's flush the files it held back
+  (`Held`: the gate stamps them, they are not gone); `Requested` (Refresh: processed
+  even if nothing changed). The end of a walk is not a value: the chain flushes.
+- **`gate.Group`** — what the gate yields, in our format: the asset's files as rows
+  of the files table (GUIDs), what the source said about it. identify reads it and
+  never sees a provider type.
 - **`identify.Item`** — what identify yields: the item and its metadata package. The
   perceptors read it (`api.RawItemR`), the core ones write into it
   (`exif_core.RawItemRW`), commit publishes `Item.Item`. identify's working `draft`
@@ -156,9 +163,9 @@ it calls (its own small interface).
   one group.
 - **The walk's flush passes through the groupers**, not around them: each gives
   what it holds (its last group, the files held back) before passing it on, and the
-  gate's input has a writer per grouper — the chain's barrier passes the flush to
-  the gate only once every grouper has flushed (all files stamped); then the gate
-  runs the deletions.
+  gate's input has a writer per grouper — the chain's barrier passes the flush on
+  only once every grouper has flushed. The deletions come when the flush reached
+  the end of the chain (the cycle): every file the walk saw is stamped by then.
 - **Deletions are conservative**: only after a complete walk that found files, never
   under an unreadable directory, only under the configured root. A main file gone
   -> the item is soft-deleted; a sidecar gone -> the item is `Dirty`.
@@ -166,10 +173,13 @@ it calls (its own small interface).
   previous walk's flush reached the end of the chain (every group of it went through
   every step: a flush passes a step only after the values before it, `Parallel`
   waits for the ones in flight), not from the end of the walk: walks never overlap,
-  no group is in the chain twice (`discover/progress.go`). Nothing is counted: a
-  group dropped (a skip) or failed on the way is simply not there.
-- **Moves race with deletions** (the chain is asynchronous): the validator also finds
-  soft-deleted items by fingerprint and restores them, so a moved file keeps its GUID.
+  no group is in the chain twice (`cycle.go`: the walker walks only when the cycle
+  asks). Nothing is counted: a group dropped (a skip) or failed on the way is simply
+  not there.
+- **Moves and deletions**: the deletions come after the walk's groups went through
+  the whole chain, so a moved file is validated before its old path is deleted; the
+  validator also finds soft-deleted items by fingerprint and restores them (a file
+  moved back later), so a moved file keeps its GUID.
 - **Item == asset**: a derivative never becomes an item of its own; in an Apple
   library every file of an asset links to its key.
 - **Keyed groups** (`Key`, Apple): the key is the item's GUID, so a main
@@ -206,11 +216,10 @@ it calls (its own small interface).
 
 ## Tests
 
-- `discover/walker_test.go`, `discover/progress_test.go` — walk results (complete,
-  unreadable dir, missing root, cancel); walks repeat only after the walk's flush
-  reached the end.
-- `discover/group/…_test.go`, `pkg/providers/folder/…_test.go` — the switch and the
-  plain folder's grouper (names, directories, the flush).
+- `walk/walker_test.go` — walk results (complete, unreadable dir, missing root,
+  cancel); a walk only when asked; what a walk says is gone.
+- `group/…_test.go`, `pkg/providers/folder/…_test.go` — the switch and the plain
+  folder's grouper (names, directories, the flush).
 - `pkg/providers/apple/grouper_test.go` — a fixture library: edit, cloud-only, Live
   Photo, trashed, Photos' own files, a file vanishing mid-walk (held, complete next
   walk).
@@ -218,11 +227,11 @@ it calls (its own small interface).
   pick (embedded → pick), an embedded preview's orientation and the group read
   (real exiftool), merge's priority, the fingerprint, the kinds' and the
   fingerprint's versions.
-- `pkg/plugins/exif_core/*/tags_test.go` — every core perceptor reads only the tags
-  it declares.
+- `pkg/plugins/exif_{date,size,duration}/tags_test.go` — every core perceptor reads
+  only the tags it declares.
 - `apple_test.go` — a fixture library through the whole import: keys, previews,
   nothing to do on the next walk, a downloaded original, an asset moved to the trash,
-  the gate telling a dropped asset.
+  one asset asked again on demand (Refresh: processed though nothing changed).
 - `steps_test.go` — a source that appears later, moved -> no reprocessing, not media
   remembered, a former main file gone, a new fingerprint re-identifies every group
   once.

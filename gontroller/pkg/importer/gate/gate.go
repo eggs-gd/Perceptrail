@@ -1,4 +1,8 @@
-package discover
+// Package gate: the third step of the import — keeps the files table (identity,
+// stat, CheckTime) and lets through only the groups that need work (the model says
+// which), in our format: so unchanged files never reach exiftool. It knows nothing
+// of walks or deletions: those are the importer's, after a walk.
+package gate
 
 import (
 	"errors"
@@ -8,24 +12,19 @@ import (
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/providers"
 
+	"github.com/eggs-gd/perceplib/api"
 	"github.com/eggs-gd/perceplib/chain"
 
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
-// GateStore: what the gate reads and writes — the files table, and whether a group
+// Store: what the gate reads and writes — the files table, and whether a group
 // needs work (the model's rule)
-type GateStore interface {
+type Store interface {
 	GetFileByPath(path string) (*dto.FileDto, error)
 	CreateFile(entry dto.ItemEntry) (*dto.FileDto, error)
 	UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error)
 	NeedsWork(files []*dto.FileDto, key, metaHash string) (needs bool, guid string, err error)
-}
-
-// Store: what discover reads and writes — the gate's and the deletions' needs
-type Store interface {
-	GateStore
-	SweepStore
 }
 
 // needsWork: nothing changed on disk — the model says whether the group still needs
@@ -39,49 +38,68 @@ func (g *Gate) needsWork(files []*dto.FileDto, key, metaHash string) bool {
 	return needs
 }
 
-// files gate: keeps the files table (identity, stat, CheckTime) and lets through
-// only groups that need work — so unchanged files never reach exiftool. On the walk's
-// flush (once every grouper has flushed) it derives deletions.
-type Gate struct {
-	db       GateStore
-	sweep    sweep
-	logger   *l.Logger
-	held     []string  // files the groupers held back in this walk: not gone
-	progress *Progress // the walk the deletions are derived from
-	// dropped hears of a keyed group the gate let not through (nothing to do): one
-	// asset processed again on demand (importer Refresh) answers at once
-	dropped func(key string)
+// Group: what the gate yields — one whole asset that needs work, in our format: its
+// files are rows of the files table (GUIDs, links), the main file first when its
+// source knows it. What the source said about it rides along.
+type Group struct {
+	Files []*dto.FileDto
+	// The item's GUID when the source knows the asset (Apple Photos: its UUID; then
+	// Files[0] is the main file and is not re-ranked); "": a plain folder's group
+	Key string
+	// What to show first, best first (stored rows); nil: identify decides
+	Show []*dto.FileDto
+	// The source's own metadata (exiftool's tag names): wins over the files' EXIF;
+	// MetaHash is saved with the item (the gate compares it)
+	Meta     api.RawExif
+	MetaHash string
+	// What the asset is (dto.Kind*), when the source says it
+	Kind string
 }
 
-// NewGate: the gate step's logic; progress gives the walk the deletions are
-// derived from
-func NewGate(deps Deps, progress *Progress) *Gate {
-	return &Gate{
-		db: deps.DB, logger: deps.Logger, dropped: deps.Dropped,
-		sweep:    sweep{db: deps.DB, logger: deps.Logger},
-		progress: progress,
-	}
+// Gate: the gate step's logic
+type Gate struct {
+	db     Store
+	logger *l.Logger
+}
+
+func NewGate(db Store, logger *l.Logger) *Gate {
+	return &Gate{db: db, logger: logger}
+}
+
+// New: in — whole assets (the groupers', and one asked again on demand); out — the
+// ones that need work
+func New(db Store, logger *l.Logger, in *chain.Pipe[providers.Group], out *chain.Pipe[Group]) chain.Processor {
+	return chain.Decorate(in, out, NewGate(db, logger))
 }
 
 func (g *Gate) Decorate(in providers.Group) (Group, error) {
-	g.held = append(g.held, in.Held...)
-	files, err := g.pass(in.Files, in.Key, in.MetaHash)
+	// Files a grouper held back are there (seen; their asset not complete yet): stamped,
+	// so the deletions after the walk do not take them as gone
+	if err := g.stamp(in.Held); err != nil {
+		return Group{}, err
+	}
+	files, err := g.pass(in.Files, in.Key, in.MetaHash, in.Requested)
 	if err != nil {
-		if in.Key != "" && in.Files != nil && g.dropped != nil {
-			g.dropped(in.Key)
-		}
 		return Group{}, err
 	}
 	return Group{Files: files, Key: in.Key, Show: stored(in.Show, files),
 		Meta: in.Meta, MetaHash: in.MetaHash, Kind: in.Kind}, nil
 }
 
-// Flush: every grouper has flushed (the chain's barrier) — all files of the walk are
-// stamped: the deletions
-func (g *Gate) Flush() ([]Group, error) {
-	g.sweep.finalizeWalk(g.progress.Last(), g.held)
-	g.held = nil
-	return nil, nil
+// stamp: these files were seen by this walk (their rows, if any, get CheckTime)
+func (g *Gate) stamp(paths []string) error {
+	var rows []*dto.FileDto
+	for _, p := range paths {
+		if f, err := g.db.GetFileByPath(p); err == nil {
+			f.CheckTime = time.Now()
+			rows = append(rows, f)
+		}
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	_, err := g.db.UpdateFiles(rows)
+	return err
 }
 
 // stored maps the grouper's files to the stored rows of the group (by path): the
@@ -103,8 +121,8 @@ func stored(files, rows []*dto.FileDto) []*dto.FileDto {
 	return out
 }
 
-// pass stores the group and lets it through if it needs work
-func (g *Gate) pass(found []*dto.FileDto, key, metaHash string) ([]*dto.FileDto, error) {
+// pass stores the group and lets it through if it needs work (or was asked for)
+func (g *Gate) pass(found []*dto.FileDto, key, metaHash string, requested bool) ([]*dto.FileDto, error) {
 	if len(found) == 0 {
 		return nil, chain.ErrSkippedItem
 	}
@@ -112,7 +130,7 @@ func (g *Gate) pass(found []*dto.FileDto, key, metaHash string) ([]*dto.FileDto,
 	if err != nil {
 		return nil, err
 	}
-	if changed || g.needsWork(files, key, metaHash) {
+	if changed || requested || g.needsWork(files, key, metaHash) {
 		return files, nil
 	}
 	return nil, chain.ErrSkippedItem

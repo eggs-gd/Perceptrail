@@ -6,14 +6,9 @@ import (
 	"github.com/eggs-gd/perceplib/api"
 )
 
-// The contract between the import's discover stage and a provider's grouper: found
-// files in, whole assets out; on the walk's flush, what the grouper still holds.
-
-// Found: one found file (its path and stat). The end of a walk is not a value: the
-// chain flushes, and a grouper gives what it holds (chain.Flusher).
-type Found struct {
-	Entry dto.ItemEntry
-}
+// The contract between the import and a provider's grouper: found files in (their
+// path and stat, dto.ItemEntry), whole assets out; on the walk's flush, what the
+// grouper still holds.
 
 // Asset: one whole asset as its source describes it — all its files (the main file
 // first when the source knows it, its sidecars, derivatives), with their stat only
@@ -36,9 +31,12 @@ type Asset struct {
 }
 
 // Group: what a grouper sends — a complete asset; on the walk's flush, the files it
-// saw but held back (their asset did not complete in this walk: not "gone" for the
-// deletions)
+// saw but held back (their asset did not complete in this walk: they are there, the
+// deletions must not take them as gone)
 type Group struct {
 	Asset
 	Held []string
+	// Requested: the importer asks for this asset again on demand (the library made
+	// a file of it local): processed even if nothing changed
+	Requested bool
 }

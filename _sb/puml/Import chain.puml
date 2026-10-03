@@ -2,14 +2,20 @@
 
 !pragma teoz true
 
-title Import chain (gontroller): stages discover -> identify -> exif_core -> exif_ext -> commit, each a sub-chain;\nevery participant is a step (own goroutine), every arrow is a typed pipe (values + the walk's flush)
+title Import chain (gontroller): walk -> group -> gate -> identify -> exif_core -> exif_ext -> commit;\nevery participant is a step (own goroutine), every arrow is a typed pipe (values + the walk's flush)
 
-box "discover: the groups that need work (walk, group by provider, gate)" #LightCyan
+box "walk: the files" #LightCyan
 control "walk\n(entry point)" as Walker
-control "group: switch\n(first that claims)" as Groups
+end box
+
+box "group: whole assets (a sub-chain)" #LightCyan
+control "switch\n(first that claims)" as Groups
 control "Apple Photos\ngrouper" as Photos
 control "plain folder\ngrouper (last)" as Generic
-control "gate" as Gate #LightGreen
+end box
+
+box "gate: the files table" #LightGreen
+control "gate" as Gate
 end box
 
 box "identify: the item known (exiftool lives here)" #Lavender
@@ -34,12 +40,16 @@ control "keep\n(the perceptors' values)" as Keep
 control "close" as Closer
 end box
 
+box "importer (the top)" #WhiteSmoke
+control "cycle,\nRefresh" as Top
+end box
+
 database "DB" as DB
 
 == files flow in; groups flow out one by one, steps run concurrently ==
 
 loop every file under the root
-    Walker -> Groups: providers.Found (path, stat)
+    Walker -> Groups: dto.ItemEntry (path, stat)
     note left of Walker
     Unreadable directory:
     skipped, recorded (V1)
@@ -58,10 +68,10 @@ end
 note over Groups: a provider not enabled is not asked:\nits files are a plain folder's
 
 Gate -> DB: stat vs files table,\nCheckTime of every file
-alt unchanged and the item is Ready
+alt unchanged, the model says no work (NeedsWork), not asked for
     Gate ->x Gate: drop
-else new / changed / not Ready
-    Gate -> Exif: discover.Group (our format:\nstored rows; no provider type past here)
+else new / changed / needs work / Requested
+    Gate -> Exif: gate.Group (our format:\nstored rows; no provider type past here)
 end
 
 Exif -> Exif: ONE exiftool -j call for the group,\nonly the declared tags (the perceptors'\nExifTags + identify's own); a map per file
@@ -97,20 +107,22 @@ end note
 
 == end of walk ==
 
-Walker -> Groups: FLUSH (the walk recorded in Progress)
+Walker -> Groups: FLUSH (the walk's Result kept: Last)
 Groups -> Photos: flush
 & Groups -> Generic: flush
 note right of Groups: to every grouper (Route)
 Generic -> Gate: what it holds (last group), flush
-Photos -> Gate: what it holds (files held back), flush
-Gate -> DB: once every grouper has flushed (the chain's barrier):\ndeletions (V2), only after a complete walk,\nnot under unreadable directories
-Closer --> Walker: the flush reached the end of the chain (Sink):\nevery group of the walk went through every step
-Walker -> Walker: rescan pause (1 min), then walk again
+Photos -> Gate: what it holds (files held back: stamped), flush
+note over Gate: once every grouper has flushed (the chain's barrier)\nthe flush goes on, through every step, to the end
+Closer --> Top: the flush reached the end of the chain (Sink):\nevery group of the walk went through every step
+Top -> DB: deletions (V2): walk.Gone (a complete walk, under the root,\nnot under unreadable directories), then the model's Gone
+Top -> Top: the perceptors' rows of gone items pruned
+Top -> Walker: rescan pause (1 min), then Next: walk again
 
 == One asset again (Apple Photos on demand) ==
 note over Photos: Photos made a file of an asset local\n(the viewer asked for it: PhotoKit)
-Photos -> Photos: Regroup(uuid): the last load's DB rows\n+ the disk now (no walk, no DB read)
-Photos -> Gate: providers.Group (asset UUID): like any group,\nonly what changed passes; no flush,\ndeletions untouched
-Closer --> Photos: the item is done: the request waiting\nfor it answers (importer Refresh)
+Top -> Photos: Refresh(uuid): Regroup - the last load's DB rows\n+ the disk now (no walk, no DB read)
+Top -> Gate: providers.Group (asset UUID, Requested):\nprocessed even if nothing changed; no flush,\ndeletions untouched
+Closer --> Top: the item is done: the request waiting\nfor it answers (importer Refresh)
 
 @enduml

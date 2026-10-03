@@ -537,6 +537,35 @@ Design: roadmap "Expensive stage".
 
 ## Backend: gontroller, plugins, exiftool
 
+### discover cut into walk, group, gate; the walk cycle is the top's (2026-10-03, decided)
+
+discover took nine arguments; a `Deps` struct only hid them. The cause: three things
+hung on it that are not the flow of groups — the walk cycle (when to walk again,
+what to do once a walk is done: `rescan`, a shared `Progress`, `WalkDone`, the gate
+as a `Flusher` carrying the walk's result into the sweep), `Refresh` (a second entry
+wedged into the middle, `Regroup`, plus a `Dropped` callback from the gate) and
+`Held` (riding to the sweep only so held files are not deleted). Cut by the
+artifacts, which differ at every step:
+
+- **walk** (`dto.ItemEntry`; to the top a `walk.Result`) — the root only; walks when
+  asked (`Next`). `walk.Gone`: what a walk says is deleted (complete, under the
+  root, not under an unreadable directory).
+- **group** (`dto.ItemEntry` → `providers.Group`) — the providers only.
+- **gate** (`providers.Group` → `gate.Group`) — the model only: the files table,
+  `NeedsWork`; no walk, no deletions, no callbacks. Held files: stamped.
+- **The cycle is the top's** (`cycle.go`): once the walk's flush reached the end —
+  the deletions (`walk.Gone`, then the model's `Gone`), the perceptors' rows of gone
+  items, the rescan pause, `Next`. Deletions now come after the walk's groups went
+  through the whole chain (a moved file is validated before its old path goes;
+  validate restores by fingerprint either way).
+- **Refresh** sends the provider's asset into the gate's input with `Requested`:
+  processed even if nothing changed, so it always reaches the end where its waiters
+  are; no `Dropped`. The cost: one exiftool pass for that one asset, on demand only.
+- `providers.Found` is gone: a grouper takes a `dto.ItemEntry`.
+
+Checked: the smoke run gives the same items, a removed file is deleted and its
+perceptor row pruned, a new one added; the real DB copy walks twice, idle.
+
 ### The model decides, the steps gather facts (2026-10-03, decided)
 
 The proxy is meant as the model (the library's data and its rules), not a thin

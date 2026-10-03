@@ -18,10 +18,10 @@ func (claimsJPEG) Claims(path string) bool { return strings.HasSuffix(path, ".jp
 // walk's flush reaches every grouper: the chain's Route sends it to every output)
 func TestSwitch(t *testing.T) {
 	s := Switch{Providers: []providers.Provider{claimsJPEG{}, folder.New()}}
-	if got, _ := s.Route(providers.Found{Entry: dto.ItemEntry{Path: "/lib/a.jpg"}}); got != 0 {
+	if got, _ := s.Route(dto.ItemEntry{Path: "/lib/a.jpg"}); got != 0 {
 		t.Errorf("a claimed file goes to its provider's grouper, got %d", got)
 	}
-	if got, _ := s.Route(providers.Found{Entry: dto.ItemEntry{Path: "/lib/a.mov"}}); got != 1 {
+	if got, _ := s.Route(dto.ItemEntry{Path: "/lib/a.mov"}); got != 1 {
 		t.Errorf("an unclaimed file goes to the plain folder, got %d", got)
 	}
 }

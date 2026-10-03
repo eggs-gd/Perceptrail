@@ -20,11 +20,11 @@ type Grouper struct {
 	open []*dto.FileDto
 }
 
-func (g *Grouper) Decorate(ev providers.Found) (providers.Group, error) {
-	if shouldSkipPath(ev.Entry.Path) {
+func (g *Grouper) Decorate(ev dto.ItemEntry) (providers.Group, error) {
+	if shouldSkipPath(ev.Path) {
 		return providers.Group{}, chain.ErrSkippedItem
 	}
-	file := &dto.FileDto{ItemEntry: ev.Entry}
+	file := &dto.FileDto{ItemEntry: ev}
 	if len(g.open) == 0 || sameGroup(g.open, file) {
 		g.open = append(g.open, file)
 		return providers.Group{}, chain.ErrSkippedItem // not complete yet

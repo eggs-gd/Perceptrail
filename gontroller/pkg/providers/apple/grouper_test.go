@@ -136,7 +136,7 @@ func walk(t *testing.T, g *Grouper, root string, before func(path string)) (map[
 		if _, err := os.Stat(p); err != nil {
 			continue // vanished: the walker would not see it
 		}
-		out, err := g.Decorate(providers.Found{Entry: dto.ItemEntry{Path: p, Name: filepath.Base(p)}})
+		out, err := g.Decorate(dto.ItemEntry{Path: p, Name: filepath.Base(p)})
 		if errors.Is(err, chain.ErrSkippedItem) {
 			continue
 		}

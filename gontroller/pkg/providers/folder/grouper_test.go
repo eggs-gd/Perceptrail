@@ -30,7 +30,7 @@ func TestGenericGrouper(t *testing.T) {
 	g := &Grouper{}
 	var out []providers.Group
 	for _, n := range []string{"IMG_1.HEIC", "IMG_1.MOV", "IMG_1.aae", "a.edited.jpg", "a.jpg", "a.jpg.xmp", "a.xmp", "b", "b.png"} {
-		if group, err := g.Decorate(providers.Found{Entry: entry("/lib/" + n)}); err == nil {
+		if group, err := g.Decorate(entry("/lib/" + n)); err == nil {
 			out = append(out, group)
 		}
 	}
@@ -52,8 +52,8 @@ func TestGenericGrouper(t *testing.T) {
 
 	// Another directory closes the group, even with the same name
 	g = &Grouper{}
-	g.Decorate(providers.Found{Entry: entry("/lib/x.jpg")})
-	if group, err := g.Decorate(providers.Found{Entry: entry("/lib/sub/x.xmp")}); err != nil || len(group.Files) != 1 {
+	g.Decorate(entry("/lib/x.jpg"))
+	if group, err := g.Decorate(entry("/lib/sub/x.xmp")); err != nil || len(group.Files) != 1 {
 		t.Errorf("a file of another directory joined the group: %v %v", group, err)
 	}
 }

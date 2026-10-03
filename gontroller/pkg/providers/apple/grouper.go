@@ -62,10 +62,10 @@ func (g *Grouper) Flush() ([]providers.Group, error) {
 	return []providers.Group{{Held: held}}, nil
 }
 
-func (g *Grouper) Decorate(ev providers.Found) (providers.Group, error) {
-	root := BundleRoot(ev.Entry.Path)
+func (g *Grouper) Decorate(ev dto.ItemEntry) (providers.Group, error) {
+	root := BundleRoot(ev.Path)
 	if root == "" {
-		return providers.Group{}, fmt.Errorf("apple grouper: %s is not in a Photos library", ev.Entry.Path)
+		return providers.Group{}, fmt.Errorf("apple grouper: %s is not in a Photos library", ev.Path)
 	}
 	lib, ok := g.libs[root]
 	if !ok {
@@ -85,14 +85,14 @@ func (g *Grouper) Decorate(ev providers.Found) (providers.Group, error) {
 	}
 
 	if lib.failed {
-		lib.held = append(lib.held, ev.Entry.Path)
+		lib.held = append(lib.held, ev.Path)
 		return providers.Group{}, chain.ErrSkippedItem
 	}
-	a, ok := lib.byPath[ev.Entry.Path]
+	a, ok := lib.byPath[ev.Path]
 	if !ok || a.sent {
 		return providers.Group{}, chain.ErrSkippedItem // not an asset file (caches, DB, …)
 	}
-	a.arrived[ev.Entry.Path] = &dto.FileDto{ItemEntry: ev.Entry}
+	a.arrived[ev.Path] = &dto.FileDto{ItemEntry: ev}
 	if len(a.arrived) < len(a.files) {
 		return providers.Group{}, chain.ErrSkippedItem // not complete yet
 	}
