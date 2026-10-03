@@ -21,6 +21,8 @@ type geoPerceptor struct{}
 func (p *geoPerceptor) Name() string                       { return "exif_geo" }
 func (p *geoPerceptor) DataProvider() api.DataProviderType { return api.ExifDataProvider }
 func (p *geoPerceptor) ProcessingMode() api.ProcessingMode { return api.SingleItem }
+// The tags it reads (api.ExifTagger): only declared tags are read from the files
+func (p *geoPerceptor) ExifTags() []string { return api.CoordinateTags }
 func (p *geoPerceptor) NewProcessor(chin <-chan api.RawItemR, chout chan<- api.RawItemR,
     logger *l.Logger) chain.Processor { … }
 
@@ -81,4 +83,8 @@ with `-count=1` (the test cache does not see other modules change).
 
 EXIF plugins may implement either `api.ExifPerceptor` (read-only `RawItemR`, e.g.
 `exif_geo`) or the core `exif_core.ExifCorePerceptor` (`RawItemRW`); the server wires
-both. A plugin whose `NewProcessor` returns `nil` is skipped.
+both. A plugin whose `NewProcessor` returns `nil` is skipped. Every EXIF plugin
+declares the tags it reads (`ExifTags`, `api.ExifTagger`): the server reads only
+declared tags, from the whole asset (the source's metadata first, then the .xmp
+sidecars, the main file, the derivatives) — `GetExif` of an undeclared tag is "".
+Plugins never run exiftool themselves.

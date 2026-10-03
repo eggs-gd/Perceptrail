@@ -15,10 +15,13 @@ end box
 box "identify: the item known (exiftool lives here)" #Lavender
 control "read\n(exiftool, N)" as Exif
 control "classify" as Mime
+control "merge" as Merge
+control "fingerprint" as Fingerprint
 control "validate" as Validator #LightGreen
 control "embedded\n(exiftool)" as Embedded
 control "sizes" as Sizes
 control "pick\n(cheap preview)" as Preview #LightYellow
+control "yield" as Yield
 end box
 
 box "core / plugins: the perceptors" #Honeydew
@@ -36,7 +39,7 @@ database "DB" as DB
 == files flow in; groups flow out one by one, steps run concurrently ==
 
 loop every file under the root
-    Walker -> Groups: file (path, stat)
+    Walker -> Groups: providers.Found (path, stat)
     note left of Walker
     Unreadable directory:
     skipped, recorded (V1)
@@ -46,11 +49,11 @@ end
 alt Apple claims it (inside *.photoslibrary)
     Groups -> Photos: file
     Photos -> Photos: first file: asset links from Photos.sqlite\n(original, render, Live Photo video); buffer of open\ngroups, a group goes out when all its files arrived
-    Photos -> Gate: group (asset UUID)
+    Photos -> Gate: providers.Group (asset UUID)
 else nobody else claims it (other providers: Immich, ... later)
     Groups -> Generic: file
     Generic -> Generic: sidecars by name, next to each other\n(buffer: one open group; a complete group goes out)
-    Generic -> Gate: group
+    Generic -> Gate: providers.Group
 end
 note over Groups: a provider not enabled is not asked:\nits files are a plain folder's
 
@@ -58,22 +61,28 @@ Gate -> DB: stat vs files table,\nCheckTime of every file
 alt unchanged and the item is Ready
     Gate ->x Gate: drop
 else new / changed / not Ready
-    Gate -> Exif: group
+    Gate -> Exif: discover.Group (our format:\nstored rows; no provider type past here)
 end
 
-Exif -> Mime: group + exif
-Mime -> Mime: kind of every file\n(exif FileType/MIMEType, own extension table,\ncontent sniff), rank: main file
-Mime -> Validator: ranked group
+Exif -> Exif: ONE exiftool -j call for the group,\nonly the declared tags (the perceptors'\nExifTags + identify's own); a map per file
+Exif -> Mime: draft (private to identify)
+Mime -> Mime: kind of every file\n(exif MIMEType, own extension table,\ncontent sniff), rank: main file, roles
+Mime -> Merge: ranked draft
+Merge -> Merge: the metadata package: a tag from\nthe source (Photos DB) > .xmp > main > derivatives;\nonly the perceptors' tags
+Merge -> Fingerprint: + package
+Fingerprint -> Fingerprint: the main file's bytes:\nsize + sha256(first, last 64 KB)
+Fingerprint -> Validator: + fingerprint
 
-Validator -> DB: hash of the main file:\nsame / changed / moved / duplicate
-Validator -> Embedded: item (GUID) + group
+Validator -> DB: by path and fingerprint:\nsame / changed / moved / duplicate
+Validator -> Embedded: item (GUID) + draft
 
 Embedded -> Embedded: nothing in the group shows:\nthe main file's embedded preview\n(exiftool -b into the cache)
 Embedded -> Sizes: + embedded ("" = none)
 Sizes -> DB: pixels, codec of every file
 Sizes -> Preview: + sizes
 Preview -> Preview: what the browser shows now, no transcode:\nShow / the main file (JPEG, PNG, ...; H.264 video) /\nthe biggest viewable derivative / the embedded one;\nany size counts
-Preview -> Core: item + preview ("" = nothing yet)
+Preview -> Yield: + preview ("" = nothing yet)
+Yield -> Core: identify.Item (the item + its metadata package;\nthe draft stays in identify)
 Core -> Plugins: + date, size, length (written into the item)
 Plugins -> Keep: + the external perceptors' values (read-only)
 Keep -> DB: a row in every import perceptor's storage
@@ -101,7 +110,7 @@ Walker -> Walker: rescan pause (1 min), then walk again
 == One asset again (Apple Photos on demand) ==
 note over Photos: Photos made a file of an asset local\n(the viewer asked for it: PhotoKit)
 Photos -> Photos: Regroup(uuid): the last load's DB rows\n+ the disk now (no walk, no DB read)
-Photos -> Gate: group (asset UUID): like any group,\nonly what changed passes; no marker,\ndeletions untouched
+Photos -> Gate: providers.Group (asset UUID): like any group,\nonly what changed passes; no marker,\ndeletions untouched
 Closer --> Photos: the item is done: the request waiting\nfor it answers (importer Refresh)
 
 @enduml

@@ -537,6 +537,62 @@ Design: roadmap "Expensive stage".
 
 ## Backend: gontroller, plugins, exiftool
 
+### Import data: types by producer, exif by declaration, a bytes fingerprint (2026-10-03, decided)
+
+`importer/flow` was a bag: the providers' contract (`FileEvent`, `FileGroup`,
+`WalkResult`), the walk's progress, identify's working item (`RawItem`: every file,
+its exif and kind) that rode all the way to commit, the kinds. It existed only to
+break the import cycle `providers ↔ discover`. Removed; **a type belongs to the
+package that produces it**:
+
+- **The provider contract lives in `providers`** (`Found`, `Walk`, `Asset`,
+  `Group`), next to the interface that uses it — the cycle is gone (discover imports
+  providers, not the other way). Only discover sees it: the gate turns a provider's
+  `Asset` into `discover.Group`, our format (stored rows). identify does not know
+  providers exist.
+- **identify's working item is private** (`draft`); it yields `identify.Item`: the
+  item and its metadata package. Measured: after pick nobody read the files, kinds,
+  `Show`, `Key` or the embedded path.
+- **`transcode.Item`**: the transcoders' own input (an item, its files with roles),
+  as they will be fed from the DB.
+
+**exif — what is read and who sees it.** Inventory before: `read` ran
+`exiftool -all` once per file; about 45 tags were used in all (identify's own
+technical ones and the perceptors'); `-all` was needed only by the short hash; every
+tag reached the perceptors, and `GetExif` ranked the sidecars below the main file —
+the opposite of what a sidecar is for. Now:
+
+- the perceptors declare their tags (perceplib `api.ExifTagger`, required of every
+  EXIF perceptor; `api.CoordinateTags`), `Pm.ExifTags` is the union; identify adds
+  its own. A test per core perceptor (`exif_coretest.Recorder`) checks it reads
+  nothing undeclared — an undeclared tag is always "";
+- one `exiftool -j` call per group (`-j`, not `-s2`: `-s2` prints no file header for
+  a single file and adds summary lines; `-j` keys every file by `SourceFile`, and a
+  value kept as its JSON text — a number's literal, a list joined by ", " — reads
+  the same as `-s2`);
+- **merge** builds the package: the source's metadata (Photos DB) > metadata
+  sidecars (.xmp) > the main file > derivatives (a fallback only: a JPEG's size or
+  orientation must not override its RAW's). Not stored: it travels with the item;
+- an embedded preview's presence is learned in `read` (without `-b` exiftool prints
+  only "(Binary data N bytes)"); its bytes are extracted in `embedded`, only for a
+  group with nothing to show — whether it is needed is known after classify, and its
+  path needs the GUID.
+
+Checked against the previous build on the same files (JPEG, HEIC, MOV): dates,
+offsets, date sources, sizes, durations and coordinates identical.
+
+**The fingerprint is the file's bytes**, not its tags: the size and sha256 of the
+first and last 64 KB (`identify/fingerprint.go`). It only says "the same file" across
+paths (moved / duplicate / changed); with the tags read now declared, a tag-based
+hash would change whenever the set of plugins does. Changing it needs a new
+`hashVersion`: at start every item forgets its fingerprint (`ClearHashes`), the gate
+passes a group whose item has none, validate gives it the new one (same path, same
+GUID). **Not `Dirty`**: the client shows only `Visible` and `Ready`, the whole
+library would vanish for the pass. Checked on a copy of the real DB (7009 items, the
+plain folders only — this session has no access to the Photos library): 581 items
+re-identified in ~2 s, every GUID kept, the next walk idle. The Apple items get the
+same one-time pass on the first start.
+
 ### The import chain: stages, not tools (2026-10-03, decided)
 
 `pkg/scan` did everything: the walk, the providers' switch, the gate, exiftool, the
@@ -554,7 +610,7 @@ yields:
   it), cut into `embedded → sizes → pick`; only `embedded` runs exiftool (besides
   `read`). The plan put `embedded` right after `read`; it runs **after validate**:
   whether to extract needs the main file (classify) and the cache path needs the
-  item's GUID (validate). `RawItem.Embedded` carries the extracted path to `pick`.
+  item's GUID (validate). The draft's `Embedded` carries the extracted path to `pick`.
 - **Perceptors by kind, a stage each**: `core` (built in, read-write
   `exif_core.RawItemRW`), `plugins` (external `.so`, read-only `api.RawItemR`, with
   adapters; none loaded → a pass step), `commit` (the closer). Each stage filters
@@ -562,8 +618,8 @@ yields:
   external ones (before: the manager's order, mixed).
 - **The DB goes into constructors**, not package variables: the steps' logic is
   exported so the whole-import tests run it one group at a time.
-- Sub-packages cannot import `importer`: what they share (`FileGroup`, `RawItem`, the
-  walk's progress) lives in `importer/flow`.
+- Sub-packages cannot import `importer`. What they shared lived in `importer/flow`
+  at first — removed, see the next entry.
 - **A step gets only the DB methods it calls**: each declares its own small interface
   next to it (`GateStore`, `SweepStore`, `ValidatorStore`, `SizesStore`,
   `KindsStore`, `CloserStore`, `apple.Items`); a stage's `Store` embeds its steps'

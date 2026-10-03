@@ -427,9 +427,26 @@ transcoders, plugins belong to the stage that uses them. One step does one thing
 
       Packages: `pkg/importer` (the top: five stages) with `discover`, `identify`,
       `core`, `plugins`, `commit`. Errors: discover reports to the walk's channel,
-      the rest to the processing one (progress is counted from the gate). Two
-      commits: the move without logic changes, then the cheap preview cut into
-      steps and the plugin processor into `core`, `plugins`, `commit`.
+      the rest to the processing one (progress is counted from the gate).
+      identify inside: read (one exiftool call per group, the declared tags) →
+      classify → merge (the metadata package: source > .xmp > main > derivatives) →
+      fingerprint (the file's bytes) → validate → embedded → sizes → pick → yield.
+      Every type belongs to its producer: the provider contract in `providers`,
+      `discover.Group`, `identify.Item`, `transcode.Item` — `importer/flow` is gone.
+      The perceptors declare their exif tags (`api.ExifTagger`); a step gets only
+      the DB methods it calls; no step knows the plugin manager. Findings:
+      "Import data: types by producer, exif by declaration, a bytes fingerprint".
+
+      Deferred:
+      - [ ] the end-of-walk marker out of band (needs perceplib's flush signal);
+      - [ ] `Steps` / `Run` for discover (its tests drive `NewGate` and the groupers
+            directly);
+      - [ ] storing the metadata package in the DB — when a consumer needs it (the
+            info panel's raw exif, a perceptor re-run without the files);
+      - [ ] reading the sidecars of keyed (Apple) groups (only the main file is
+            read: the DB is the source of truth there);
+      - [ ] the HTTP routes still hold package-level DB proxies with the whole API —
+            the same narrowing as the import's steps.
 
 **The next chains — a starting idea to brainstorm** (the rough stages only; each
 to be worked out on its own):

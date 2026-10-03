@@ -67,15 +67,19 @@ Services (`pkg/app/services.go`) start in parallel: `ImporterService` and
 `WebService`. Import is a chain of steps over channels (`perceplib/chain`):
 
 ```
-FsWalker          files → groups (main file + sidecars by name)
-                  → files table (GUID, LinkedTo, CheckTime)
-ExifExtractor     5 long-lived exiftool processes (-stay_open)
-                  → RawItem {Item, []RawExif}; ValidateFile creates/finds the item
-ExifPluginProcessor
-                  opener → exif_core/date → exif_core/size → [external] → closer
-                  closer writes the item to the items table
-(Transcoder)      disabled for now: thumbnails/transcoding (bimg + libvips)
+discover   walk → group (the providers' groupers) → gate: the files table, the
+           groups that need work (discover.Group); deletions after a walk
+identify   one exiftool call per group (the declared tags only) → kinds → the
+           metadata package → fingerprint → the item → the cheap preview
+           (identify.Item)
+core       the built-in perceptors (date, size, length)
+plugins    the external .so perceptors
+commit     the perceptors' values, then the item (Visible / Waiting)
 ```
+
+Details, the types and the rules: [`pkg/importer/README.md`](pkg/importer/README.md).
+The transcoders (`pkg/transcode`) are not wired yet: a chain of their own, fed from
+the DB.
 
 Item states (`dto.ItemState`): `New → Dirty → Processing → Ready`, `Deleted`.
 
