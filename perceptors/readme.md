@@ -7,7 +7,7 @@ also its own UI to the client (a map, face management) — see the
 [ML Flow](../_sb/puml/ML%20Flow.puml).
 
 The basics (date, size) are not here but in the core:
-`gontroller/pkg/plugins/exif_core`. What lives here can be implemented differently
+`gontroller/pkg/plugins/exif_date`, `exif_size`, `exif_duration` (their contract: `exif_core`). What lives here can be implemented differently
 (e.g. someone may write another geo plugin).
 
 ## Contract

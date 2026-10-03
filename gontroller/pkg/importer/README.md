@@ -9,7 +9,7 @@ its steps; the top knows none of the tools — the file system, the providers,
 exiftool, the plugins belong to the stage that uses them. One step does one thing.
 
 ```
-discover → identify → core → plugins → commit
+discover → identify → exif_core → exif_ext → commit
 ```
 
 A stage's constructor takes its settings, its dependencies (a struct:
@@ -26,8 +26,8 @@ importer/                  the top: the stages, Refresh
 importer/discover/         walk → group → gate: the groups that need work, the files table up to date; the walk's progress
 importer/discover/group/   the grouping sub-chain: the providers' switch and their groupers
 importer/identify/         read → classify → merge → fingerprint → validate → embedded → sizes → pick → yield: the item known
-importer/core/             the core perceptors (built in): they write into the item
-importer/plugins/          the external perceptors (.so): they only read it
+importer/exif_core/        the core EXIF perceptors (built in: plugins/exif_date, …): they write into the item
+importer/exif_ext/         the external EXIF perceptors (.so): they only read it
 importer/commit/           keep (the perceptors' values) → close (the item): the item published
 ```
 
@@ -58,8 +58,8 @@ detail).
 [discover: walk → group (switch → a grouper per provider) → gate]
   → [identify: read (one exiftool call per group, N) → classify → merge → fingerprint
              → validate → embedded → sizes → pick → yield]
-  → [core: open → date, size, … → release]
-  → [plugins: (to read-only → a .so perceptor → back) each, or pass]
+  → [exif_core: exif_date, exif_size, exif_duration — a step each]
+  → [exif_ext: a .so perceptor each (read-only), or pass]
   → [commit: keep (the perceptors' values) → close (Visible | Waiting)]
 ```
 
@@ -83,8 +83,8 @@ detail).
 | sizes | `identify/sizes.go` | draft -> draft | Pixels and codec of every file the client may show (the original's from the metadata, images from their header), written to the files table. |
 | pick | `identify/pick.go` | draft -> draft | What the browser shows now, no transcode: the source's `Show`, the main file (JPEG, PNG, …; H.264 video), the biggest viewable derivative, else the embedded one. Any size counts. |
 | yield | `identify/item.go` | draft -> `*identify.Item` | What leaves the stage: the item and its metadata package. |
-| **core** | `core/entry.go` | `*identify.Item` -> `*identify.Item` | The built-in perceptors (date + zone, size, length), a step each, between `open` (skips a non-item; read-write view) and `release`. |
-| **plugins** | `plugins/entry.go` | `*identify.Item` -> `*identify.Item` | The external `.so` perceptors, a step each with read-only adapters around it; none loaded: one pass step. |
+| **exif_core** | `exif_core/entry.go` | `*identify.Item` -> `*identify.Item` | The built-in perceptors (date + zone, size, length), a step each, between `open` (skips a non-item; read-write view) and `release`. |
+| **exif_ext** | `exif_ext/entry.go` | `*identify.Item` -> `*identify.Item` | The external `.so` perceptors, a step each with read-only adapters around it; none loaded: one pass step. |
 | **commit** | `commit/entry.go` | `*identify.Item` -> `*dto.ItemDto` | The item published. |
 | keep | `commit/keep.go` | `*identify.Item` -> `*identify.Item` | A row in every import perceptor's storage: its value, or "processed, nothing found". Before close: an item published without them would be taken as done. |
 | close | `commit/close.go` | `*identify.Item` -> `*dto.ItemDto` | The model publishes the item (`Publish`: `Visible` with a preview, else `Waiting`). |

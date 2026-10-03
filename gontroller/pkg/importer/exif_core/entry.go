@@ -1,9 +1,10 @@
-// Package core: the third stage of the import — the core perceptors (built in: the
-// date, the size, …) over the identified item. They write into it
+// Package exif_core: the third stage of the import — the core EXIF perceptors
+// (built in: pkg/plugins/exif_date, exif_size, exif_duration) over the identified
+// item. They write into it
 // (exif_core.RawItemRW): what they find goes into the item and their storages.
 //
 //	each core perceptor, a step each, in the plugin manager's order
-package core
+package exif_core
 
 import (
 	"fmt"

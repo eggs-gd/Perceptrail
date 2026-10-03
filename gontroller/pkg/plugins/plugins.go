@@ -13,9 +13,9 @@ import (
 
 	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/model"
-	"perceptrail/gontroller/pkg/plugins/exif_core/date"
-	"perceptrail/gontroller/pkg/plugins/exif_core/duration"
-	"perceptrail/gontroller/pkg/plugins/exif_core/size"
+	"perceptrail/gontroller/pkg/plugins/exif_date"
+	"perceptrail/gontroller/pkg/plugins/exif_duration"
+	"perceptrail/gontroller/pkg/plugins/exif_size"
 
 	"github.com/eggs-gd/perceplib/api"
 	l "github.com/eggs-gd/perceplib/logger"
@@ -43,7 +43,7 @@ func Load(ctx app.AppContext) error {
 	config = ctx.Config()
 	logger = ctx.Logger(string(app.LogPlugins))
 
-	core := []api.Perceptor{date.Perceptor, size.Perceptor, duration.Perceptor}
+	core := []api.Perceptor{exif_date.Perceptor, exif_size.Perceptor, exif_duration.Perceptor}
 	external := loadExternal()
 	perceptors = nil
 	for _, p := range append(core, external...) {

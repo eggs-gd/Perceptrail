@@ -2,7 +2,7 @@
 
 !pragma teoz true
 
-title Import chain (gontroller): stages discover -> identify -> core -> plugins -> commit, each a sub-chain;\nevery participant is a step (own goroutine), every arrow is a typed pipe (values + the walk's flush)
+title Import chain (gontroller): stages discover -> identify -> exif_core -> exif_ext -> commit, each a sub-chain;\nevery participant is a step (own goroutine), every arrow is a typed pipe (values + the walk's flush)
 
 box "discover: the groups that need work (walk, group by provider, gate)" #LightCyan
 control "walk\n(entry point)" as Walker
@@ -24,9 +24,9 @@ control "pick\n(cheap preview)" as Preview #LightYellow
 control "yield" as Yield
 end box
 
-box "core / plugins: the perceptors" #Honeydew
-control "core\n(date, size, ...)" as Core
-control "plugins\n(external .so)" as Plugins
+box "exif_core / exif_ext: the EXIF perceptors" #Honeydew
+control "exif_core\n(exif_date, exif_size, ...)" as Core
+control "exif_ext\n(external .so)" as Plugins
 end box
 
 box "commit: the item published" #MistyRose

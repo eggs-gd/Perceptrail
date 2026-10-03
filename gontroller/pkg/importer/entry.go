@@ -2,7 +2,7 @@
 // only linear stages, each a sub-chain of its own that knows its tools; the top
 // knows none of them (roadmap "Chains").
 //
-//	discover → identify → core → plugins → commit
+//	discover → identify → exif_core → exif_ext → commit
 //
 //	discover  the groups that need work; the files table up to date — walk, group
 //	          (the providers), gate (deletions after a walk)
@@ -35,10 +35,10 @@ import (
 
 	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/importer/commit"
-	"perceptrail/gontroller/pkg/importer/core"
 	"perceptrail/gontroller/pkg/importer/discover"
+	"perceptrail/gontroller/pkg/importer/exif_core"
+	"perceptrail/gontroller/pkg/importer/exif_ext"
 	"perceptrail/gontroller/pkg/importer/identify"
-	external "perceptrail/gontroller/pkg/importer/plugins"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/providers"
@@ -81,11 +81,11 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	// Between the stages (each message type belongs to the stage that yields it)
 	// discover → identify: the groups that need work, stored (rows of the files table)
 	stored := chain.NewPipe[discover.Group](0)
-	// identify → core: the identified items
+	// identify → exif_core: the identified items
 	identified := chain.NewPipe[*identify.Item](0)
-	// core → plugins: + what the core perceptors found
+	// exif_core → exif_ext: + what the core perceptors found
 	cored := chain.NewPipe[*identify.Item](0)
-	// plugins → commit: + what the external perceptors found
+	// exif_ext → commit: + what the external perceptors found
 	perceived := chain.NewPipe[*identify.Item](0)
 	// commit → the end: published items (later: events to the client); buffered so
 	// the closer does not wait for the end
@@ -106,8 +106,8 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	importChain := chain.New(errch)
 	importChain.AddStep(disc)
 	importChain.AddStep(identify.New(identify.Config{Tags: exifTags(), CacheDir: ctx.Config().CacheDir(), DB: db, Logger: logger}, stored, identified))
-	importChain.AddStep(core.New(corePerceptors(), identified, cored, logger))
-	importChain.AddStep(external.New(externalPerceptors(), cored, perceived, logger))
+	importChain.AddStep(exif_core.New(corePerceptors(), identified, cored, logger))
+	importChain.AddStep(exif_ext.New(externalPerceptors(), cored, perceived, logger))
 	importChain.AddStep(commit.New(db, saveValues, perceived, items))
 	// The end: an item's waiters hear it; the walk's flush here means its work is done
 	// (its deletions too): the perceptors' rows of gone items go, the next walk may

@@ -1,4 +1,4 @@
-package duration
+package exif_duration
 
 import (
 	"strconv"

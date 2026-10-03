@@ -88,9 +88,9 @@ Item states (`dto.ItemState`): `New → Dirty → Processing → Ready`, `Delete
 | Package | What |
 |---|---|
 | `pkg/app` | app context, config, logger categories, services |
-| `pkg/importer` | the import chain: linear stages, each a sub-chain of its own — `discover` (walk, group, gate), `identify` (exiftool, kinds, the item, sizes, the cheap preview), `core` / `plugins` (the perceptors: built in, external), `commit` (the closer); see its README |
+| `pkg/importer` | the import chain: linear stages, each a sub-chain of its own — `discover` (walk, group, gate), `identify` (exiftool, kinds, the item, sizes, the cheap preview), `exif_core` / `exif_ext` (the EXIF perceptors: built in, external), `commit` (the closer); see its README |
 | `pkg/transcode` | the transcoders' switch and stubs (a chain of its own later) |
-| `pkg/plugins` | plugin manager (core + `.so`), `exif_core/{date,size}` |
+| `pkg/plugins` | the perceptors' registry (built in + `.so`, their storages); the built-in EXIF perceptors `exif_date`, `exif_size`, `exif_duration`; `exif_core`: their contract (`RawItemRW`, `ExifCorePerceptor`), shared helpers, `exif_coretest` |
 | `pkg/model` | SQLite via GORM, `ItemsApi`/`FilesApi`, DTOs |
 | `pkg/client` | Echo, `/items`, `/assets`, `/perceptors` and `/p/:view/order` routes |
 | `pkg/providers` | the sources: one switch sends a file to the grouper of the first provider that claims it, and on-demand renditions come from the item's provider; `providers/folder`: the plain folder (last, takes the rest); `providers/apple`: Apple Photos (its DB, the grouper, on demand), `providers/apple/photokit`: PhotoKit (cgo, macOS only; a stub elsewhere; the main thread serves its main queue) |

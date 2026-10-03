@@ -1,4 +1,4 @@
-package size
+package exif_size
 
 import (
 	"context"

@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/plugins/exif_core/date"
-	"perceptrail/gontroller/pkg/plugins/exif_core/size"
+	"perceptrail/gontroller/pkg/plugins/exif_date"
+	"perceptrail/gontroller/pkg/plugins/exif_size"
 
 	"github.com/eggs-gd/perceplib/api"
 	l "github.com/eggs-gd/perceplib/logger"
@@ -24,7 +24,7 @@ import (
 // shown items: newest first with its sections
 func TestPerceptorsRoutes(t *testing.T) {
 	e := echo.New()
-	RegisterPerceptorsRoutes(e, []api.Perceptor{date.Perceptor, size.Perceptor}, nil,
+	RegisterPerceptorsRoutes(e, []api.Perceptor{exif_date.Perceptor, exif_size.Perceptor}, nil,
 		l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
 
 	at := func(s string) time.Time { v, _ := time.Parse(time.RFC3339, s); return v }
@@ -84,7 +84,7 @@ func TestPerceptorsRoutes(t *testing.T) {
 // A view is reached by its slug: a taken one is not given to the client
 func TestPerceptorsSlugTaken(t *testing.T) {
 	e := echo.New()
-	RegisterPerceptorsRoutes(e, []api.Perceptor{date.Perceptor, date.Perceptor, size.Perceptor}, nil,
+	RegisterPerceptorsRoutes(e, []api.Perceptor{exif_date.Perceptor, exif_date.Perceptor, exif_size.Perceptor}, nil,
 		l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/perceptors", nil))
@@ -101,7 +101,7 @@ func TestPerceptorsSlugTaken(t *testing.T) {
 // left out (Size: an item without a size)
 func TestPerceptorsInfo(t *testing.T) {
 	e := echo.New()
-	RegisterPerceptorsRoutes(e, []api.Perceptor{date.Perceptor, size.Perceptor}, nil,
+	RegisterPerceptorsRoutes(e, []api.Perceptor{exif_date.Perceptor, exif_size.Perceptor}, nil,
 		l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
 	at, _ := time.Parse(time.RFC3339, "2025-09-14T05:00:00Z")
 	if _, err := itemsProxy.UpdateItem(&dto.ItemDto{Guid: "info-1", State: dto.Visible, Date: at, DateSource: "tag", DateOffset: 180}); err != nil {

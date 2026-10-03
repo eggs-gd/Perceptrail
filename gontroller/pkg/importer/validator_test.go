@@ -12,8 +12,8 @@ import (
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/plugins/exif_core"
-	"perceptrail/gontroller/pkg/plugins/exif_core/date"
-	"perceptrail/gontroller/pkg/plugins/exif_core/size"
+	"perceptrail/gontroller/pkg/plugins/exif_date"
+	"perceptrail/gontroller/pkg/plugins/exif_size"
 	"perceptrail/gontroller/pkg/providers"
 	"perceptrail/gontroller/pkg/providers/apple"
 	"perceptrail/gontroller/pkg/providers/folder"
@@ -90,7 +90,7 @@ func perFile(read func(path string) (api.RawExif, error)) func([]string) ([]api.
 // enabled ones' from the plugin manager)
 func coreTags() []string {
 	var tags []string
-	for _, p := range []api.Perceptor{date.Perceptor, size.Perceptor} {
+	for _, p := range []api.Perceptor{exif_date.Perceptor, exif_size.Perceptor} {
 		tags = append(tags, p.(api.ExifTagger).ExifTags()...)
 	}
 	return tags
@@ -370,7 +370,7 @@ func TestValidatorDeletedThenBack(t *testing.T) {
 func runCorePlugins(t *testing.T, it *identify.Item) {
 	t.Helper()
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
-	for _, p := range []api.Perceptor{date.Perceptor, size.Perceptor} {
+	for _, p := range []api.Perceptor{exif_date.Perceptor, exif_size.Perceptor} {
 		if _, err := p.(exif_core.ExifCorePerceptor).Decorator(logger).Decorate(it); err != nil {
 			t.Fatal(err)
 		}

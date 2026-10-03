@@ -1,4 +1,4 @@
-package size
+package exif_size
 
 import (
 	"perceptrail/gontroller/pkg/plugins/exif_core"

@@ -1,4 +1,4 @@
-package date
+package exif_date
 
 import (
 	"testing"

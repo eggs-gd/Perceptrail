@@ -1,4 +1,4 @@
-package duration
+package exif_duration
 
 import (
 	"perceptrail/gontroller/pkg/plugins/exif_core"

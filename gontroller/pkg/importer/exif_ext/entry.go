@@ -1,9 +1,9 @@
-// Package plugins: the fourth stage of the import — the external perceptors (Go
-// plugins) over the item the core has perceived. They only read it (api.RawItemR):
+// Package exif_ext: the fourth stage of the import — the external EXIF perceptors
+// (Go plugins, api.ExifPerceptor) over the item the core ones have perceived. They only read it (api.RawItemR):
 // what they find goes into their storages, the commit writes it.
 //
 //	each external perceptor, a step each, in the plugin manager's order
-package plugins
+package exif_ext
 
 import (
 	"fmt"

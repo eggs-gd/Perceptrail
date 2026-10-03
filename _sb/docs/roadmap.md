@@ -415,7 +415,7 @@ transcoders, plugins belong to the stage that uses them. One step does one thing
       sub-chain in its own package; the DB passed to the steps, their logic
       exported for the tests:
 
-      discover → identify → core → plugins → commit
+      discover → identify → exif_core → exif_ext → commit
 
       | stage | yields | inside |
       |---|---|---|
@@ -426,7 +426,7 @@ transcoders, plugins belong to the stage that uses them. One step does one thing
       | commit | the item published | keep (the perceptors' values) → close (the state: Visible / Waiting) |
 
       Packages: `pkg/importer` (the top: five stages) with `discover`, `identify`,
-      `core`, `plugins`, `commit`. Errors: discover reports to the walk's channel,
+      `exif_core`, `exif_ext`, `commit`. Errors: discover reports to the walk's channel,
       the rest to the processing one (progress is counted from the gate).
       identify inside: read (one exiftool call per group, the declared tags) →
       classify → merge (the metadata package: source > .xmp > main > derivatives) →
@@ -468,7 +468,7 @@ to be worked out on its own):
   cache (a provider taking its files over too), perceptor values, orphans.
 - **API providers** (Immich…): no files to walk. Either a second source in
   discover (their change feed; the gate needs another sign of change than a stat),
-  or a chain of its own — `sync → identify → core → plugins → commit` — sharing
+  or a chain of its own — `sync → identify → exif_core → exif_ext → commit` — sharing
   the stages after discover. Leaning to the latter; with the first API provider.
 - Not a chain: on demand (a request path; it re-enters the import through
   `Refresh`).
