@@ -41,7 +41,6 @@ import (
 	external "perceptrail/gontroller/pkg/importer/plugins"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/plugins"
 	"perceptrail/gontroller/pkg/providers"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -94,14 +93,14 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	items := chain.NewPipe[*dto.ItemDto](1000)
 
 	waits := newAssetWaits()
-	disc := discover.New(ctx.Config().Path, rescan, providers.Enabled(), progress, waits.done, db, discover.Perceptors{Unprocessed: plugins.Unprocessed, Prune: plugins.Prune}, stored, logger)
+	disc := discover.New(ctx.Config().Path, rescan, providers.Enabled(), progress, waits.done, db, discover.Perceptors{Unprocessed: unprocessed, Prune: pruner(logger)}, stored, logger)
 
 	importChain := chain.New(errch)
 	importChain.AddStep(disc)
-	importChain.AddStep(identify.New(plugins.ExifTags(), ctx.Config().CacheDir(), db, stored, identified, logger))
-	importChain.AddStep(core.New(plugins.Core(), identified, cored, logger))
-	importChain.AddStep(external.New(plugins.External(), cored, perceived, logger))
-	importChain.AddStep(commit.New(db, plugins.SaveValues, perceived, items))
+	importChain.AddStep(identify.New(exifTags(), ctx.Config().CacheDir(), db, stored, identified, logger))
+	importChain.AddStep(core.New(corePerceptors(), identified, cored, logger))
+	importChain.AddStep(external.New(externalPerceptors(), cored, perceived, logger))
+	importChain.AddStep(commit.New(db, saveValues, perceived, items))
 	// The end: an item's waiters hear it; the walk's flush here means its work is done
 	importChain.AddStep(chain.Sink(items, func(it *dto.ItemDto) { waits.done(it.Guid) }, progress.Done))
 

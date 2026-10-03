@@ -543,9 +543,12 @@ Design: roadmap "Expensive stage".
 `plugins` exposed a global instance (`plugins.Pm.LoadPlugins`, `Pm.Core()`, …): a
 third more text in the package and at every call. Rule: **a top-level package that is
 one per process (a registry) gives package functions** — `plugins.Load`, `All`,
-`Core`, `External`, `ExifTags`, `Unprocessed`, `SaveValues`, `Prune`, `LoadValues`,
-`Client`; **instances where they encapsulate logic** (a chain's steps, a provider, a
-grouper). A step that needs one call of a registry gets that function
+`Store`, `LoadValues`, `Client`; **instances where they encapsulate logic** (a
+chain's steps, a provider, a grouper). **And a registry keeps only what it is**:
+what a perceptor means to the import (which run in the chain — EXIF core and
+external —, the tags they read, a missed item, their rows written and pruned) moved
+to `importer/perceptors.go`, over `All` and `Store`; it had been described "for the
+import" in the registry's own doc comments. A step that needs one call of a registry gets that function
 (`discover.Perceptors{Unprocessed, Prune}`, `commit.Values`), not the registry — a
 one-method dependency is a func, as the gate's `dropped` already was. Not singletons
 for everything: the DB proxy, the steps' stores stay passed in (narrow interfaces,

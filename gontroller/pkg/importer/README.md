@@ -35,10 +35,14 @@ the tests of the whole import run it one group at a time (`identify.Steps.Run`).
 messages): see [Types](#types-who-owns-what). Every step declares the DB methods it calls as its own small
 interface (`GateStore`, `SweepStore`, `ValidatorStore`, `SizesStore`, `KindsStore`,
 `CloserStore`); a stage's `Store` embeds its steps'; the top passes the proxy.
-**No step knows the plugin registry**: the top (`entry.go`) is the only one that calls
-`pkg/plugins` and hands each stage what it needs — `core` and `plugins` their lists
-of perceptors, the gate and the sweep `discover.Perceptors{Unprocessed, Prune}`,
-`keep` `plugins.SaveValues` — functions, so a step sees exactly one call. The sources are providers (`pkg/providers`: Apple Photos, the plain
+**What a perceptor means to the import lives here, not in the registry**
+([`perceptors.go`](perceptors.go)): which ones run in the chain (EXIF data: core,
+external), the tags they read, whether one missed an item, their rows written and
+pruned — over `plugins.All` / `plugins.Store`, which is all `pkg/plugins` offers. No
+step knows the registry: the top hands each stage what it needs — `core` and
+`plugins` their lists of perceptors, the gate and the sweep
+`discover.Perceptors{Unprocessed, Prune}`, `keep` its `Values` — functions, so a
+step sees exactly one call. The sources are providers (`pkg/providers`: Apple Photos, the plain
 folder last); the transcoders (`pkg/transcode`, not wired yet) are a chain of their
 own later (fed from the DB).
 
@@ -104,7 +108,7 @@ detail).
 
 - **Declared, never `-all`.** A perceptor declares the tags it reads
   (`api.ExifTagger`, required of every EXIF perceptor; `exif.CoordinateTags` for
-  perceplib's `exif.Coordinates`); `plugins.ExifTags` is their union. identify adds its own
+  perceplib's `exif.Coordinates`); the importer's `exifTags` is their union. identify adds its own
   (`read.go` `ownTags`: MIME type, errors, sizes, codec, whether embedded previews
   are there). A perceptor that reads an undeclared tag gets "" — each core
   perceptor's test checks it reads only what it declares (`exif_coretest`).
