@@ -83,7 +83,7 @@ func TestNotMediaIgnored(t *testing.T) {
 	if f, err := filesProxy.GetFileByPath(notes); err != nil || !f.IsIgnored() {
 		t.Fatalf("not ignored: %+v %v", f, err)
 	}
-	gate := discover.NewGate(testDB, discover.Perceptors{Unprocessed: unprocessed}, discover.NewProgress(), nil, nil)
+	gate := discover.NewGate(discover.Deps{DB: testDB, Perceptors: discover.Perceptors{Unprocessed: unprocessed}}, discover.NewProgress())
 	if _, err := gate.Decorate(providers.Group{Asset: providers.Asset{Files: []*dto.FileDto{{ItemEntry: statEntry(t, notes)}}}}); err == nil {
 		t.Error("the gate let an unchanged ignored group through")
 	}

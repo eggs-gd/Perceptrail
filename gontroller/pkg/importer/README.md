@@ -12,6 +12,9 @@ exiftool, the plugins belong to the stage that uses them. One step does one thin
 discover → identify → core → plugins → commit
 ```
 
+A stage's constructor takes its settings, its dependencies (a struct:
+`discover.Deps`, `identify.Config`) and its pipes — `New(settings, deps, in, out)`.
+
 [`entry.go`](entry.go) (`NewImporterService`) wires the stages and holds what
 spans them: the pipes between the stages (typed: a stage's in/out types are
 checked at compile time), the walk's progress, one error channel, the end of the
@@ -95,8 +98,9 @@ detail).
 - **`discover.Group`** — what discover yields, in our format: the asset's files as
   rows of the files table (GUIDs), what the source said about it. identify reads it
   and never sees a provider type. `discover.Walk` (the walk's result: root, start,
-  complete or not, unreadable directories) and `discover.Progress` (the last walk,
-  and whether its flush reached the end of the chain).
+  complete or not, unreadable directories) and the stage's progress (the last walk,
+  and whether its flush reached the end of the chain: the top's `Sink` calls
+  `Stage.WalkDone`).
 - **`identify.Item`** — what identify yields: the item and its metadata package. The
   perceptors read it (`api.RawItemR`), the core ones write into it
   (`exif_core.RawItemRW`), commit publishes `Item.Item`. identify's working `draft`

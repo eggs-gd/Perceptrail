@@ -56,21 +56,20 @@ type Gate struct {
 	perceptors Perceptors
 	sweep      sweep
 	logger     *l.Logger
-	branches   int // markers to wait for
-	markers    int
-	held       []string // files the groupers held back in this walk: not gone
-	progress   *Progress
+	held       []string  // files the groupers held back in this walk: not gone
+	progress   *Progress // the walk the deletions are derived from
 	// dropped hears of a keyed group the gate let not through (nothing to do): one
 	// asset processed again on demand (importer Refresh) answers at once
 	dropped func(key string)
 }
 
-// NewGate: the gate step's logic. progress gives the walk the deletions are
-// derived from; dropped hears of a keyed group let not through (nil: nobody).
-func NewGate(db Store, perceptors Perceptors, progress *Progress, dropped func(key string), logger *l.Logger) *Gate {
+// NewGate: the gate step's logic; progress gives the walk the deletions are
+// derived from
+func NewGate(deps Deps, progress *Progress) *Gate {
 	return &Gate{
-		db: db, perceptors: perceptors, sweep: sweep{db: db, perceptors: perceptors, logger: logger},
-		logger: logger, progress: progress, dropped: dropped,
+		db: deps.DB, perceptors: deps.Perceptors, logger: deps.Logger, dropped: deps.Dropped,
+		sweep:    sweep{db: deps.DB, perceptors: deps.Perceptors, logger: deps.Logger},
+		progress: progress,
 	}
 }
 

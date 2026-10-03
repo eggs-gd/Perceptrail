@@ -65,7 +65,6 @@ type importerService struct {
 func NewImporterService(ctx app.AppContext) *importerService {
 	logger := ctx.Logger(string(app.LogImporter))
 	db := model.NewProxy(ctx.Logger(string(app.LogDB)))
-	progress := discover.NewProgress()
 
 	// Every stage's errors (skips never get here: they are on purpose)
 	errch := make(chan error)
@@ -93,16 +92,22 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	items := chain.NewPipe[*dto.ItemDto](1000)
 
 	waits := newAssetWaits()
-	disc := discover.New(ctx.Config().Path, rescan, providers.Enabled(), progress, waits.done, db, discover.Perceptors{Unprocessed: unprocessed, Prune: pruner(logger)}, stored, logger)
+	disc := discover.New(ctx.Config().Path, rescan, discover.Deps{
+		Providers:  providers.Enabled(),
+		DB:         db,
+		Perceptors: discover.Perceptors{Unprocessed: unprocessed, Prune: pruner(logger)},
+		Dropped:    waits.done,
+		Logger:     logger,
+	}, stored)
 
 	importChain := chain.New(errch)
 	importChain.AddStep(disc)
-	importChain.AddStep(identify.New(exifTags(), ctx.Config().CacheDir(), db, stored, identified, logger))
+	importChain.AddStep(identify.New(identify.Config{Tags: exifTags(), CacheDir: ctx.Config().CacheDir(), DB: db, Logger: logger}, stored, identified))
 	importChain.AddStep(core.New(corePerceptors(), identified, cored, logger))
 	importChain.AddStep(external.New(externalPerceptors(), cored, perceived, logger))
 	importChain.AddStep(commit.New(db, saveValues, perceived, items))
 	// The end: an item's waiters hear it; the walk's flush here means its work is done
-	importChain.AddStep(chain.Sink(items, func(it *dto.ItemDto) { waits.done(it.Guid) }, progress.Done))
+	importChain.AddStep(chain.Sink(items, func(it *dto.ItemDto) { waits.done(it.Guid) }, disc.WalkDone))
 
 	return &importerService{
 		appCtx:      ctx,

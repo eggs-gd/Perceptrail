@@ -38,30 +38,45 @@ type Group struct {
 	Kind string
 }
 
-// Stage: the discover sub-chain, and its way in for one group (Regroup)
+// Deps: what discover works with — the libraries' providers, the model, the
+// perceptors' two calls, who hears of a keyed group the gate drops (nothing
+// changed: one asset again on demand answers at once), the logger
+type Deps struct {
+	Providers  []providers.Provider
+	DB         Store
+	Perceptors Perceptors
+	Dropped    func(key string) // nil: nobody
+	Logger     *l.Logger
+}
+
+// Stage: the discover sub-chain, its way in for one group (Regroup), and the walk's
+// end (WalkDone)
 type Stage struct {
 	*chain.Chain
 	providers []providers.Provider
 	groups    *chain.Pipe[providers.Group] // group → gate
+	progress  *Progress
 }
 
-// New: root is walked again every rescan after the previous walk's work is done
-// (progress: its flush reached the end of the chain); out gets the groups that need
-// work; dropped hears of a keyed group the gate let not through (nothing changed).
-func New(root string, rescan time.Duration, ps []providers.Provider, progress *Progress,
-	dropped func(key string), db Store, perceptors Perceptors, out *chain.Pipe[Group], logger *l.Logger) *Stage {
-
+// New: root is walked again every rescan, once the previous walk's work is done
+// (WalkDone); out gets the groups that need work
+func New(root string, rescan time.Duration, deps Deps, out *chain.Pipe[Group]) *Stage {
+	progress := NewProgress()
 	// walk → group: one file (path + stat); the walk's flush
 	found := chain.NewPipe[providers.Found](0)
 	// group → gate: a complete group; on the flush, what each grouper held
 	groups := chain.NewPipe[providers.Group](0)
 
 	stage := chain.New(nil)
-	stage.AddStep(chain.Entry(found, NewWalker(root, rescan, progress, logger)))
-	stage.AddStep(group.NewGrouping(ps, found, groups))
-	stage.AddStep(chain.Decorate(groups, out, NewGate(db, perceptors, progress, dropped, logger)))
-	return &Stage{Chain: stage, providers: ps, groups: groups}
+	stage.AddStep(chain.Entry(found, NewWalker(root, rescan, progress, deps.Logger)))
+	stage.AddStep(group.NewGrouping(deps.Providers, found, groups))
+	stage.AddStep(chain.Decorate(groups, out, NewGate(deps, progress)))
+	return &Stage{Chain: stage, providers: deps.Providers, groups: groups, progress: progress}
 }
+
+// WalkDone: the walk's flush reached the end of the chain (every group of it went
+// through every step) — the next walk may start after the rescan pause
+func (s *Stage) WalkDone() { s.progress.Done() }
 
 // Regroup: one asset's group formed again by its provider (the library made a file
 // of it local), sent to the gate like any group — no walk; false if no provider has
