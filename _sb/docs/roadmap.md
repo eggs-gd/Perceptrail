@@ -509,6 +509,7 @@ rewritten in place, see its README and findings "chain: pipes with a flush"):
       `perceptors/` (stubs aside) is built with the test's own Go and loaded with
       `plugin.Open` — a plugin built against other dependency versions than the host
       (it happened: `x/sync`, `testify`) fails it. CI runs it uncached.
+- [ ] Typed keys: GUIDs and providers' keys are plain `string` today.
 
 ## Deployment (first release)
 
