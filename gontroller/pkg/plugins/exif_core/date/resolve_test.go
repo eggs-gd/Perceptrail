@@ -47,7 +47,7 @@ func TestResolveDate(t *testing.T) {
 		{
 			name: "signed coordinates (west negative): New York in winter",
 			tags: tags{"DateTimeOriginal": "2024:01:10 09:00:00",
-				"GPSLatitude": "40.712778",
+				"GPSLatitude":  "40.712778",
 				"GPSLongitude": "-74.006111"},
 			want: "2024-01-10T09:00:00-05:00", source: "DateTimeOriginal", zone: ZoneCoords,
 		},
