@@ -73,9 +73,11 @@ Rewritten 2026-10-04 (PR #25) from the full log — the history is in git.
 - Re-taking the anchor on every resize walks the view back: take it once, keep it
   until the user scrolls. Tiles mounted by a relayout must not fade from 0 (a white
   flash when widening); a switch's relayout fades them by the wave.
-- Blank tiles: the grid shows originals (median 0.5 MB, 40 % HEIC) — decoding a
-  window of multi-megapixel images exceeds the browser's decoded-image budget. The
-  real fix is the photo transcode.
+- **Tiles stay `loading="lazy"`.** Blank tiles came from full-size originals in the
+  grid (median 0.5 MB, 40 % HEIC): decoding a window of multi-megapixel images
+  exceeds the browser's decoded-image budget. Dropping `lazy` made it much worse;
+  since tiles show previews (Apple's derivatives, then our renditions) `lazy` is
+  stable. Rule: never feed the sheet full-size photos — previews only.
 - `?at` kept with a shallow `replaceState`: Back gives `page.url` without it — read
   it from `location`. Back restores the router's scroll, which looks like the user's
   and drops a switch's anchor.

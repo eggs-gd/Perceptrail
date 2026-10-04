@@ -107,9 +107,10 @@ keeps in place.
   by the indexed `bottom` (rows can be taller than the window), then takes the rows
   starting before its end. All ranges are bounded: writes outside the window do not
   re-run it.
-- Tiles keep `loading="lazy"`: the gallery still loads **originals**, and lazy
-  loading limits how many are decoded at once (without it blank tiles get more
-  frequent). `overflow-anchor: none` — we anchor the view ourselves.
+- Tiles keep `loading="lazy"`: it limits how many images are decoded at once
+  (without it blank tiles get much more frequent). It holds as long as tiles get
+  previews, not full-size originals (findings). `overflow-anchor: none` — we anchor
+  the view ourselves.
 - On a width change the gallery takes an **anchor** — what stays pinned on screen:
   at the very top of the page the page stays at the top; at the very bottom the end
   of the gallery stays at the bottom; anywhere else the photo under the middle of the
