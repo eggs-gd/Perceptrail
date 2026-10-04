@@ -1,8 +1,9 @@
-// Package walk: the chain's entry — the library's files, one walk per pass. Every
-// file it sees is a row of the files table, written now (path, stat, the time it was
-// seen; Changed: new or its stat changed) and sent on; after a complete walk, the
-// rows it did not see that it says are gone are sent too (Missing: their provider
-// decides, the gate deletes them); then it returns and its output closes.
+// Package walk: the chain's entry — the library's files, one walk per pass. It reads
+// the files table once; every file it sees is sent on as its row — a new file's
+// row created, a changed one's stat saved (Changed), page by page, one transaction
+// each; an unchanged file costs no write. After a complete walk, the rows it did
+// not see that it says are gone are sent too (Missing: their provider decides, the
+// gate deletes them); then it returns and its output closes.
 package walk
 
 import (
@@ -13,7 +14,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"perceptrail/gontroller/internal/model/dto"
 
@@ -26,8 +26,7 @@ import (
 // walk was complete: a cancelled walk or an unreadable root says nothing about which
 // files are gone.
 type Result struct {
-	Root    string
-	Started time.Time
+	Root string
 	// The walk reached the end
 	Complete bool
 	// Files seen (before grouping and filtering)
@@ -36,13 +35,16 @@ type Result struct {
 	Unreadable []string
 }
 
-// Store: the files table as a walk writes and reads it
+// Store: the files table as a walk reads and writes it
 type Store interface {
-	FindFile(path string) (*dto.FileDto, error)
-	CreateFile(entry dto.ItemEntry) (*dto.FileDto, error)
-	UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error)
-	GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error)
+	GetAllFiles() ([]*dto.FileDto, error)
+	CreateFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error)
+	SaveStats(files []*dto.FileDto) error
 }
+
+// page: how many files a walk sends at once, their rows written in one transaction
+// first
+const page = 256
 
 // Walker: the walk step's logic (a chain.EntryPoint)
 type Walker struct {
@@ -56,17 +58,36 @@ func New(db Store, root string, logger *l.Logger, out chan<- dto.WalkedFile) cha
 	return chain.NewEntryPoint(out, &Walker{logger: logger, root: root, db: db})
 }
 
-// Start: one walk — the files seen, then the gone ones
+// Start: one walk — the files seen, then the missing ones
 func (m *Walker) Start(ctx context.Context, emit func(dto.WalkedFile) bool) error {
-	r := m.walk(ctx, func(e dto.ItemEntry) bool {
-		f, err := m.seen(e, time.Now())
-		if err != nil {
-			m.logger.Error("File not stored", l.String("path", e.Path), l.Error(err))
-			return true
+	rows, err := m.db.GetAllFiles()
+	if err != nil {
+		return err // nothing walked: no deletions either
+	}
+	// The rows not seen yet: what is left after the walk is missing
+	unseen := make(map[string]*dto.FileDto, len(rows))
+	for _, f := range rows {
+		unseen[f.Path] = f
+	}
+	var entries []dto.ItemEntry
+	send := func() bool {
+		files := m.seen(entries, unseen)
+		entries = entries[:0]
+		for _, f := range files {
+			if !emit(dto.WalkedFile{FileDto: f}) {
+				return false
+			}
 		}
-		return emit(dto.WalkedFile{FileDto: f})
+		return true
+	}
+	r := m.walk(ctx, func(e dto.ItemEntry) bool {
+		entries = append(entries, e)
+		return len(entries) < page || send()
 	})
-	missing := m.missing(r)
+	if !send() {
+		return nil
+	}
+	missing := m.missing(r, unseen)
 	for _, f := range missing {
 		if !emit(dto.WalkedFile{FileDto: f, Missing: true}) {
 			break
@@ -78,31 +99,47 @@ func (m *Walker) Start(ctx context.Context, emit func(dto.WalkedFile) bool) erro
 	return nil
 }
 
-// seen: the file's row — created, or its stat refreshed; stamped as seen at now.
-// Changed: new, or its size / mtime differ.
-func (m *Walker) seen(e dto.ItemEntry, now time.Time) (*dto.FileDto, error) {
-	f, err := m.db.FindFile(e.Path)
-	switch {
-	case err != nil:
-		return nil, err
-	case f == nil:
-		if f, err = m.db.CreateFile(e); err != nil {
-			return nil, err
+// seen: a page of the walk as rows, in its order — a new file's row created, a
+// changed one's stat saved (Changed: its size or mtime differ); unchanged rows are
+// not written. A page whose rows could not be written is not sent: the next pass
+// sees it again.
+func (m *Walker) seen(entries []dto.ItemEntry, unseen map[string]*dto.FileDto) []*dto.FileDto {
+	files := make([]*dto.FileDto, len(entries))
+	var fresh []dto.ItemEntry
+	var changed []*dto.FileDto
+	for i, e := range entries {
+		f, known := unseen[e.Path]
+		if !known {
+			fresh = append(fresh, e)
+			continue
 		}
-		f.Changed = true
-	case !f.ModTime.Equal(e.ModTime) || f.Size != e.Size:
-		// The fresh stat stored, or every walk sees the file as changed again (and
-		// the short hash would use the stale size)
-		f.Size, f.ModTime = e.Size, e.ModTime
-		f.Changed = true
+		delete(unseen, e.Path)
+		if !f.ModTime.Equal(e.ModTime) || f.Size != e.Size {
+			// The fresh stat stored, or every walk sees the file as changed again (and
+			// the fingerprint would use the stale size)
+			f.Size, f.ModTime, f.Changed = e.Size, e.ModTime, true
+			changed = append(changed, f)
+		}
+		files[i] = f
 	}
-	f.CheckTime = now
-	_, err = m.db.UpdateFiles([]*dto.FileDto{f})
-	return f, err
+	created, err := m.db.CreateFiles(fresh)
+	if err == nil {
+		err = m.db.SaveStats(changed)
+	}
+	if err != nil {
+		m.logger.Error("Files not stored", l.String("from", entries[0].Path), l.Int("files", len(entries)), l.Error(err))
+		return nil
+	}
+	for i := range files { // the new rows in the walk's order
+		if files[i] == nil {
+			files[i], created = created[0], created[1:]
+		}
+	}
+	return files
 }
 
-// missing: the rows the walk did not stamp that it says are deleted (sent as Missing)
-func (m *Walker) missing(r Result) []*dto.FileDto {
+// missing: the rows the walk did not see that it says are deleted (sent as Missing)
+func (m *Walker) missing(r Result, unseen map[string]*dto.FileDto) []*dto.FileDto {
 	switch {
 	case !r.Complete:
 		m.logger.Warn("Walk incomplete: deletions are not checked")
@@ -111,16 +148,16 @@ func (m *Walker) missing(r Result) []*dto.FileDto {
 		m.logger.Warn("Walk found no files: deletions are not checked", l.String("path", r.Root))
 		return nil
 	}
-	stale, err := m.db.GetFilesCheckedBefore(r.Started)
-	if err != nil {
-		m.logger.Error("Deletions: can't read files", l.Error(err))
-		return nil
+	stale := make([]*dto.FileDto, 0, len(unseen))
+	for _, f := range unseen {
+		stale = append(stale, f)
 	}
+	slices.SortFunc(stale, func(a, b *dto.FileDto) int { return strings.Compare(a.Path, b.Path) })
 	return Missing(r, stale)
 }
 
 func (m *Walker) walk(ctx context.Context, emit func(dto.ItemEntry) bool) Result {
-	result := Result{Root: m.root, Started: time.Now()}
+	result := Result{Root: m.root}
 
 	if info, err := os.Stat(m.root); err != nil || !info.IsDir() {
 		m.logger.Error("Library root is not a readable directory", l.String("path", m.root), l.Error(err))
@@ -169,10 +206,9 @@ func (m *Walker) walk(ctx context.Context, emit func(dto.ItemEntry) bool) Result
 	return result
 }
 
-// Missing: of the files a walk did not stamp (stale), the ones it says are deleted —
+// Missing: of the rows a walk did not see (stale), the ones it says are deleted —
 // only after a complete walk that found files, only under its root (another root:
-// the config changed, not ours to judge), never under an unreadable directory, never
-// a file it saw (stamped as it went)
+// the config changed, not ours to judge), never under an unreadable directory
 func Missing(r Result, stale []*dto.FileDto) []*dto.FileDto {
 	if !r.Complete || r.Files == 0 {
 		return nil // an empty root (an unmounted drive's mount point) must not delete the library

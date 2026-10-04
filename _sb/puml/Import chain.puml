@@ -45,7 +45,7 @@ database "DB" as DB
 Top -> Walker: a new chain, Process: a pass starts the entry
 
 loop every file under the root
-    Walker -> DB: its row: created / stat refreshed,\nCheckTime (Changed: new or stat changed)
+    Walker -> DB: page by page: new rows created, changed stats saved\n(an unchanged file is not written)
     Walker -> Groups: the file (its row)
     note left of Walker
     Unreadable directory:
@@ -96,7 +96,7 @@ end note
 
 == end of walk ==
 
-loop every row the walk did not stamp that it says is missing (V2: a complete walk,\nunder the root, not under unreadable directories)
+loop every row the walk did not see that it says is missing (V2: a complete walk,\nunder the root, not under unreadable directories)
     Walker -> Groups: the file, missing: to its library's grouper,\nwhich passes it through or makes something of it
 end
 Walker -> Groups: the walk returns: its channel CLOSES

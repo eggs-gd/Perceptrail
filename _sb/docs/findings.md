@@ -207,6 +207,12 @@ content is for when a second provider exists).
 - **The fingerprint is the file's bytes** (size + sha256 of the first and last
   64 KB), not the tags read: a change to the declared tags must not make every
   file new.
+- **The walk writes only what changed** (2026-10-04): it used to read and write
+  every file's row every pass (a `SELECT` + an `UPDATE` stamping `CheckTime`, a WAL
+  commit each) — an idle pass over 10 000 files took 5.8 s, now 0.1 s. The rows are
+  read once; what was not visited is missing (no stamp needed, `CheckTime` gone).
+  A changed stat is saved as its columns only: the row read at the walk's start
+  may have moved on (a role, sizes) by the time its page is written.
 - **Deletions are dangerous**: a cancel, a missing root, an empty mount point or an
   unreadable directory (no Full Disk Access to the Photos library) would delete the
   library. Only after a complete walk that found files, never under an unreadable
