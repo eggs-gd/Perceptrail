@@ -213,6 +213,13 @@ content is for when a second provider exists).
   read once; what was not visited is missing (no stamp needed, `CheckTime` gone).
   A changed stat is saved as its columns only: the row read at the walk's start
   may have moved on (a role, sizes) by the time its page is written.
+  The walk sends a page only once its rows are written (a new row's `ID` comes from
+  the database, and the steps after it update rows by `ID`): the chain gets files
+  in pages of 256, not one by one. Kept on purpose (the owner): the client's
+  progress comes from the server's answers, not from how the walk finds files,
+  and next to the expensive stages the difference is noise. Rejected: holding back
+  only new files (a stream while nothing is new) — order-preserving bookkeeping
+  for no visible gain.
 - **Photos' own files were 60 % of the files table** (2026-10-04, the owner's
   library: 28 253 of 47 609 rows — `database/search` 18 k, `resources/caches` 9 k),
   churning every pass for nothing: the Apple grouper dropped them. A library now
