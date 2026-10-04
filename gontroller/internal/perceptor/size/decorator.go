@@ -1,0 +1,95 @@
+package size
+
+import (
+	"perceptrail/gontroller/internal/perceptor/builtin"
+	"strconv"
+	"strings"
+
+	"github.com/eggs-gd/perceplib/api"
+
+	l "github.com/eggs-gd/perceplib/logger"
+)
+
+// sizePairs: width and height tags, the best first
+var sizePairs = []string{
+	"ImageWidth", "ImageHeight",
+	"ExifImageWidth", "ExifImageHeight",
+	"PixelXDimension", "PixelYDimension",
+}
+
+type sizesExtractor struct {
+	logger *l.Logger
+}
+
+func (cd *sizesExtractor) Decorate(in builtin.Item) (builtin.Item, error) {
+	w, h := firstSize(in, sizePairs...)
+	if w == 0 || h == 0 {
+		w, h = parseImageSize(in.GetExif("ImageSize"))
+	}
+
+	if w == 0 || h == 0 {
+		// Keep previous size; never write 0×0 (client maps that to a square 1×1).
+		return in, nil
+	}
+
+	if needsSwap(in.GetExif("Orientation")) || isRotatedVideo(in.GetExif("Rotation")) {
+		w, h = h, w
+	}
+
+	size := in.GetSize()
+	if size.W == w && size.H == h {
+		return in, nil
+	}
+
+	in.SetSize(api.Size{W: w, H: h})
+	in.SetRatio(api.GetRatio(in.GetSize()))
+
+	return in, nil
+}
+
+func firstSize(in builtin.Item, keys ...string) (int, int) {
+	for i := 0; i+1 < len(keys); i += 2 {
+		w, h := parseSizePair(in.GetExif(keys[i]), in.GetExif(keys[i+1]))
+		if w != 0 && h != 0 {
+			return w, h
+		}
+	}
+	return 0, 0
+}
+
+func parseSizePair(width, height string) (int, int) {
+	w, _ := strconv.Atoi(strings.TrimSpace(width))
+	h, _ := strconv.Atoi(strings.TrimSpace(height))
+	return w, h
+}
+
+// ImageSize (exiftool -n): "4032 3024"
+func parseImageSize(s string) (int, int) {
+	parts := strings.Fields(s)
+	if len(parts) != 2 {
+		return 0, 0
+	}
+	return parseSizePair(parts[0], parts[1])
+}
+
+// EXIF orientations 5–8 display with width/height swapped
+func needsSwap(orientation string) bool {
+	switch strings.TrimSpace(orientation) {
+	case "5", "6", "7", "8":
+		return true
+	default:
+		return false
+	}
+}
+
+// QuickTime/MP4 store unrotated track dimensions plus a Rotation in degrees (phone
+// portrait video = 90). HEIC's Rotation is not degrees (irot quarter turns): its
+// turn comes from Orientation, a quarter-turn count of 1 or 3 is never "90"/"270".
+func isRotatedVideo(rotation string) bool {
+	switch strings.TrimSpace(rotation) {
+	case "90", "270", "-90":
+		return true
+	default:
+		return false
+	}
+}

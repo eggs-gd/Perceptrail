@@ -7,7 +7,7 @@ also its own UI to the client (a map, face management) — see the
 [ML Flow](../_sb/puml/ML%20Flow.puml).
 
 The basics (date, size) are not here but in the core:
-`gontroller/pkg/plugins/exif_date`, `exif_size`, `exif_duration` (their contract: `plugins.ExifCorePerceptor`). What lives here can be implemented differently
+`gontroller/internal/perceptor/date`, `size`, `duration` (their contract: `builtin.Perceptor`). What lives here can be implemented differently
 (e.g. someone may write another geo plugin).
 
 ## Contract
@@ -72,7 +72,7 @@ make build-plugins
 Output: `gontroller/.build/plugins/<name>.so`, enabled in `config.yml` (`plugins:`).
 Host and plugin must be built with **the same Go** and **the same versions** of
 `perceplib`, zap, multierr — update all modules together.
-`TestLoadExternalPlugins` (gontroller, `pkg/plugins`) builds every perceptor here and
+`TestLoadExternalPlugins` (gontroller, `test/perceptor`) builds every perceptor here and
 loads it into the test process — a mismatch fails it. After changing a plugin run it
 with `-count=1` (the test cache does not see other modules change).
 
@@ -86,7 +86,7 @@ with `-count=1` (the test cache does not see other modules change).
 | `ml_objects` | empty `main.go`, no `Perceptor` symbol |
 
 EXIF plugins may implement either `api.ExifPerceptor` (read-only `RawItemR`, e.g.
-`exif_geo`) or the core `plugins.ExifCorePerceptor` (`RawItemRW`); the server wires
+`exif_geo`) or the core `builtin.Perceptor` (`RawItemRW`); the server wires
 both. A plugin whose `Decorator` returns `nil` is skipped. Every EXIF plugin
 declares the tags it reads (`ExifTags`, `api.ExifTagger`): the server reads only
 declared tags, from the whole asset (the source's metadata first, then the .xmp

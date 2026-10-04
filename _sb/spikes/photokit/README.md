@@ -25,4 +25,4 @@ disk (derivatives, a video's `cvt` frames, renders); a request without network, 
 `-wait` the resources, the DB and the files again. Run it from the terminal that runs
 gontroller (it can read the library — the agent's shell cannot).
 
-Results: `_sb/docs/findings.md`, "PhotoKit spike".
+Results: `gontroller/internal/library/README.md`, "Apple Photos".

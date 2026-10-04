@@ -1,10 +1,12 @@
 # Perceptrail docs
 
-- [roadmap.md](roadmap.md) — what is done, what is next, core vs. perceptors.
-- [findings.md](findings.md) — findings and decisions: what broke, why, what was
-  decided. [review-pr24.md](review-pr24.md) — the strict review of the import
-  refactor, and what is left for the next PRs. Read the relevant section before touching layout, streaming, plugins or
-  exiftool.
+- [roadmap.md](roadmap.md) — what is open, the designs not built yet, core vs.
+  perceptors; done work one line per PR.
+- [findings.md](findings.md) — the why: decisions, rejected approaches, traps. Read
+  the relevant section before touching the gallery, sync, the import, Apple Photos,
+  plugins or exiftool. How things work now is in the module READMEs (below).
+- [review-pr24.md](review-pr24.md) — the strict review of the import refactor; its
+  open items are in the roadmap ("Before the transcodes").
 - [../puml](../puml) — design diagrams (PlantUML sources), rendered in
   [../diagrams](../diagrams):
 
@@ -21,7 +23,9 @@
 
 Modules:
 
-- [gontroller](../../gontroller/readme.md) — Go backend: import, EXIF, HTTP API.
+- [gontroller](../../gontroller/readme.md) — Go backend: import, EXIF, HTTP API;
+  [importer](../../gontroller/internal/importer/README.md),
+  [library](../../gontroller/internal/library/README.md) (providers, Apple Photos).
 - [perceplib](../../perceplib/README.md) — shared library for the server and plugins.
 - [perceptors](../../perceptors/readme.md) — plugins.
 - [svebapp](../../svebapp/README.md) — frontend gallery.

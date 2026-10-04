@@ -36,7 +36,7 @@ jobs:
     - name: exiftool
       run: sudo apt-get update -qq && sudo apt-get install -y -qq libimage-exiftool-perl
 
-    # pkg/transcoder/images needs libvips (cgo) and is not used by the server yet
+    # internal/transcoder/images needs libvips (cgo) and is not used by the server yet
     - name: gontroller
       working-directory: gontroller
       run: |
@@ -50,7 +50,7 @@ jobs:
     - name: perceptors
       run: |
         make build-plugins
-        cd gontroller && go test -count=1 -run TestLoadExternalPlugins ./pkg/plugins/
+        cd gontroller && go test -count=1 -run TestLoadExternalPlugins ./test/perceptor/
 
   svebapp:
     runs-on: ubuntu-latest

@@ -4,7 +4,7 @@ The Perceptrail Go backend: scans the library, extracts metadata with ExifTool, 
 it through EXIF plugins, stores it in SQLite and serves it to the client over HTTP.
 
 The core implements the necessary minimum (date, size); core plugins live here, in
-`pkg/plugins/exif_date`, `exif_size`, `exif_duration`. Extended features are external perceptors
+`internal/perceptor/date`, `size`, `duration`. Extended features are external perceptors
 ([`../perceptors`](../perceptors/readme.md)).
 
 Design: [Import chain](../_sb/puml/Import%20chain.puml),
@@ -45,7 +45,7 @@ same config gives the same database and caches from any working directory. See
 `data_dir`, `exiftool`, `server` with CORS `allowed_origins`, `database`).
 
 Host and plugins must be built with the same Go and the same versions of shared
-packages — see [findings](../_sb/docs/findings.md#go-plugins-2026-09-28).
+packages — see [findings](../_sb/docs/findings.md#go-and-the-toolchain).
 
 ## HTTP API
 
@@ -63,7 +63,7 @@ packages — see [findings](../_sb/docs/findings.md#go-plugins-2026-09-28).
 
 ## Import pipeline
 
-Services (`pkg/app/services.go`) start in parallel: `ImporterService` and
+Services (`internal/app/services.go`) start in parallel: `ImporterService` and
 `WebService`. Import is a chain of steps over typed pipes (`perceplib/chain`):
 
 ```
@@ -81,30 +81,49 @@ commit     the item published (Visible / Waiting)
 
 A pass is a new chain run to its end (`Process`: the walk returns, each step ends
 after its input); the importer service pauses (`rescan`) and runs the next. Details, the types
-and the rules: [`pkg/importer/README.md`](pkg/importer/README.md).
-The transcoders (`pkg/transcode`) are not wired yet: a chain of their own, fed from
+and the rules: [`internal/importer/README.md`](internal/importer/README.md).
+The transcoders (`internal/transcode`) are not wired yet: a chain of their own, fed from
 the DB.
 
 Item states (`dto.ItemState`): `New → Dirty → Processing → Ready`, `Deleted`.
 
 ## Layout
 
+`main` ([`gontroller.go`](gontroller.go)) reads as the server's modules in the
+order they start: the config, the logger, the model, the perceptors, the
+libraries, then the services (the libraries' background work, the import, HTTP).
+Each module is set up the same way: `New(cfg, deps…, logger)` / `Load` / `Enable`,
+reading its own `Config` interface of the whole config.
+
+The packages live in `internal/` (Go's own rule: nothing outside this module may
+import them — gontroller is an application, not a library). `main` stays at the
+module's root while there is one binary (`cmd/<name>/` when a second one comes).
+
+`test/` holds the integration tests, by the path of what they test, through the
+public API only: `test/importer` (the server's own start, the import's passes;
+`test/importer/identify`: the stage alone over a real model and exiftool),
+`test/perceptor` (the built-ins' declared tags, loading the `.so` plugins),
+`test/web/route` (the HTTP API over a real model, read as the client reads its
+JSON), `test/library` (the Apple library's background work); `test/fake` stands in
+for what CI cannot have (Photos). A package's own unit tests stay next to it.
+
 | Package | What |
 |---|---|
-| `pkg/app` | app context, config, logger categories, services |
-| `pkg/importer` | the import chain: linear stages, each a sub-chain of its own — `walk`, `group`, `gate`, `identify` (exiftool, kinds, the item, sizes, the cheap preview), `exif` (the EXIF perceptors, built in and external, their values kept), `commit` (the item published); see its README |
-| `pkg/transcode` | the transcoders' switch and stubs (a chain of its own later) |
-| `pkg/plugins` | the perceptors' registry (built in + `.so`, their storages); the built-in EXIF perceptors `exif_date`, `exif_size`, `exif_duration`; their contract (`RawItemRW`, `ExifCorePerceptor`) and `OrderByValue` in `pkg/plugins` itself; `exif_coretest`: test helpers |
-| `pkg/model` | SQLite via GORM, `ItemsApi`/`FilesApi`, DTOs |
-| `pkg/client` | Echo, `/items`, `/assets`, `/perceptors` and `/p/:view/order` routes |
-| `pkg/providers` | the sources: one switch sends a file to the grouper of the first provider that claims it, and on-demand renditions come from the item's provider; `providers/folder`: the plain folder (last, takes the rest); `providers/apple`: Apple Photos (its DB, the grouper, on demand), `providers/apple/photokit`: PhotoKit (cgo, macOS only; a stub elsewhere; the main thread serves its main queue) |
-| `pkg/transcoder` | thumbnail stub (needs libvips) |
+| `internal/app` | the server as a whole: its services run together (`Services`), the version |
+| `internal/config` | the config file, read once (`Load`, `Read`); a leaf — a module declares the getters it reads as its own `Config` interface |
+| `internal/importer` | the import chain: linear stages, each a sub-chain of its own — `walk`, `group`, `gate`, `identify` (exiftool, kinds, the item, sizes, the cheap preview), `exif` (the EXIF perceptors, built in and external, their values kept), `commit` (the item published); see its README |
+| `internal/transcode` | the transcoders' switch and stubs (a chain of its own later) |
+| `internal/perceptor` | the perceptors' registry (built in + `.so`, their storages); `perceptor/builtin`: the built-ins' contract (`builtin.Item`, `builtin.Perceptor`, `OrderByValue`); the built-in EXIF perceptors `perceptor/date`, `size`, `duration` |
+| `internal/model` | the model over GORM (`Open`: SQLite), `ItemsApi`/`FilesApi`/`MetaApi` and the import's rules, DTOs |
+| `internal/web` | the HTTP service (Echo); `web/route`: `/items`, `/assets`, `/perceptors`, `/p/:view/order`, renditions |
+| `internal/library` | the libraries of this run (`Enable`, `Enabled`, `Of`, `Service`): one switch sends a file to the grouper of the first that claims it, and on-demand renditions come from the item's library; `library/provider`: the contract they implement; `library/folder`: the plain folder (last, takes the rest); `library/apple`: Apple Photos (its DB, the grouper, on demand), `library/apple/photokit`: PhotoKit (cgo, macOS only; a stub elsewhere; the main thread serves its main queue) |
+| `internal/transcoder` | thumbnail stub (needs libvips) |
 
 ## Worth knowing
 
 - SQLite: WAL, **a single connection**. Never query through `db` inside a `tx`
   transaction — deadlock.
-- `pkg/transcoder/images` does not build without libvips (`pkg-config vips`); it is
+- `internal/transcoder/images` does not build without libvips (`pkg-config vips`); it is
   not imported by `main`, so the server is unaffected. Run vet/tests without it:
   `go test $(go list ./... | grep -v transcoder/images)`.
 - Known issues and plans — [roadmap](../_sb/docs/roadmap.md).

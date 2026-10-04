@@ -14,19 +14,24 @@ No symlinks (Windows).
 
 ## Project knowledge — read before changing things
 
-- [`_sb/docs/findings.md`](_sb/docs/findings.md) — what was already tried, what
-  broke and why, decisions taken. Read the relevant section BEFORE working on the
-  gallery layout / resize / streaming, Go plugins, exiftool, or the import
-  pipeline. Do not re-propose approaches it lists as rejected without new reasons.
-- [`_sb/docs/roadmap.md`](_sb/docs/roadmap.md) — status, next steps, and what
-  belongs in the core vs. in perceptors.
+- [`_sb/docs/findings.md`](_sb/docs/findings.md) — the why: decisions not obvious
+  from the code, approaches rejected, traps. Read the relevant section BEFORE
+  working on the gallery, sync, perceptors, the import, Apple Photos, Go plugins or
+  exiftool. Do not re-propose approaches it lists as rejected without new reasons.
+- [`_sb/docs/roadmap.md`](_sb/docs/roadmap.md) — what is open and the designs not
+  built yet (done work is one line per PR), what belongs in the core vs. in
+  perceptors.
 - [`_sb/puml`](_sb/puml) — design diagrams (target architecture: import chain,
   file validation, client/ML event flow, workers, protocol). Check them before
   redesigning a flow; if the code deviates from a diagram, say so in findings.
-- Module READMEs: `gontroller/readme.md`, `perceplib/README.md`,
-  `perceptors/readme.md`, `svebapp/README.md`.
-- When you learn something non-obvious (a root cause, a dead end, a decision),
-  add a dated entry to `findings.md` and update the roadmap.
+- Module READMEs — how things work now: `gontroller/readme.md`,
+  `gontroller/internal/importer/README.md`, `gontroller/internal/library/README.md`,
+  `perceplib/README.md`, `perceptors/readme.md`, `svebapp/README.md`.
+- Where knowledge goes: how it works → the module's README; why, what was rejected,
+  a trap → `findings.md` (short, dated); what is still to do → the roadmap. Once a
+  design is built, its description moves to the README and leaves the roadmap; a
+  finding that became plain architecture moves to the README too. Keep both files
+  short.
 
 ## Git workflow (git flow)
 
@@ -50,9 +55,9 @@ No symlinks (Windows).
   is visible, CI runs on every push); mark it **ready for review** only when the
   feature is done.
 - Docs go in the same PR as the feature, never in a follow-up: before the PR is
-  ready, `_sb/docs/roadmap.md` reflects what the branch did (steps checked, finished
-  sections moved to Done, what is still open), `_sb/docs/findings.md` has what was
-  learned, and the diagrams / module READMEs match the code.
+  ready, the module READMEs and the diagrams match the code, `_sb/docs/roadmap.md`
+  has the PR as one line in Done and only what is still open, and
+  `_sb/docs/findings.md` has what was learned (the why, not the how).
 - Version: one for the whole monorepo, **derived from git history** — nothing to bump
   or commit per PR, so parallel PRs never race. The root [`VERSION`](VERSION) holds
   only `MAJOR.MINOR`; `PATCH` = first-parent commits since `VERSION` last changed
@@ -78,6 +83,57 @@ No symlinks (Windows).
   `develop`: admins may bypass only when merging a PR. `master`: admins may push
   directly — only for the fast-forward release push.
 
+
+## Code Style
+
+Before writing new code, read the neighbouring files of the package and follow
+them: their naming, comment density, error handling, how they declare their
+dependencies. Comments: one line per step (what it means for the product), plus a
+short "not obvious" list where there is something non-obvious.
+
+### Go — write it like Go
+
+- **Names: length follows distance.** Short where the whole use is on one screen —
+  a loop variable over a few lines (`for i, f := range files`), a method receiver
+  (`func (w *Walker)`), the common idioms (`ctx`, `err`, `db`, `cfg`). Telling where
+  the name lives longer or far from its declaration — struct fields, parameters,
+  variables used over half a screen, anything at package level: `libraries`, not
+  `ps`; `provider`, not `p`, when the loop body is long. No invented abbreviations
+  (`ps`, `gw`, `st`) unless the context makes them obvious. Readability comes
+  first; the Go convention does not excuse a cryptic name.
+- **Package names are singular, short, lower case, no underscores** (`library`,
+  `perceptor`, `route`, not `providers`, `exif_date`) — plural only where the
+  singular collides with a builtin (as `strings`, `bytes` do); never the name of a
+  standard library package (`plugin`). A repeated name for the package's main type
+  is fine (`provider.Provider`, as `time.Time`).
+- **The package name is part of the name**: `library.Enable`, not
+  `library.EnableLibraries`; `walk.New`, not `walk.NewWalker`; `identify.Item`,
+  not `identify.IdentifyItem`.
+- **An abstraction and its instance are named apart**: the package and the type
+  say what it is (`provider.Provider`), a value says which one (`library`,
+  `libraries`).
+- **Interfaces are declared by their consumer**, with only the methods it calls
+  (a step's `Store`, a module's `Config`); the producer passes its whole value.
+  No interface just in case: one implementation and no test fake — no interface.
+- **No Manager / Factory / Builder by default, no wrapper structs** that only
+  carry arguments (`Deps`, `Config` structs bundling a constructor's parameters
+  hide the coupling instead of cutting it).
+- **Constructors take, in one order**: what the module reads of the config (its
+  own `Config` interface), the dependencies, the logger, then (for a chain step)
+  `in`, `out`. A service gets its `context.Context` in `Start`, not in `New`.
+- **A registry (one per process) is package functions** (`perceptor.Load`,
+  `library.Enable`); instances where they hold logic (steps, providers,
+  groupers).
+- **Module layout** (Go's conventions, not `golang-standards/project-layout`'s):
+  an application's packages in `internal/` (the toolchain enforces it); `main` at
+  the module's root while there is one binary, `cmd/<name>/` from the second one;
+  integration tests in `test/`; fixture files in `testdata/` next to their test.
+  No `pkg/`, no `lib/`.
+- **Tests**: a package's unit tests stay next to it (they may reach unexported
+  code). Integration tests — a module through its public API, the server's own
+  start, real files and tools — live in `gontroller/test/`, by the path of what
+  they test (`test/importer`, `test/perceptor`). No test hooks in the code: a test
+  that needs one is either a unit test or uses the public API.
 
 ---
 
