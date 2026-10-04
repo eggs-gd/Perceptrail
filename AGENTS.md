@@ -188,6 +188,11 @@ project.
 
 ### Go MCP (gopls)
 
+The server runs from the repo root, which is no module: its MCP command takes the
+Go that `gontroller/go.mod` asks for and the workspace [`gopls.work`](gopls.work)
+(every Go module of the repo; not `go.work`, so the go command never sees it). A new
+Go module goes into `gopls.work` too.
+
 #### 5. go_diagnostics
 Runs compile-time and static analysis checks on Go files. Returns errors
 and warnings. You MUST call this tool on every Go file you create or
