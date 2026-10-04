@@ -61,31 +61,11 @@ packages — see [findings](../_sb/docs/findings.md#go-and-the-toolchain).
 | GET | `/p/:view/order?anchor=` | The sheet in that perceptor's order, NDJSON `{guid, sections?: [{level, label}]}` — the sections this photo starts, coarsest first (a path or one tag) |
 | GET | `/assets/:guid` | The original file of an item |
 
-## Import pipeline
+## Import
 
-Services (`internal/app/services.go`) start in parallel: `ImporterService` and
-`WebService`. Import is a chain of steps over typed pipes (`perceplib/chain`):
-
-```
-walk       the chain's entry: the library's files as rows (stat, seen), then the
-           ones it found missing
-group      whole assets: the providers' groupers (the plain folder last)
-gate       only the assets that need work pass (dto.Asset); what is missing deleted
-identify   one exiftool call per group (the declared tags only) → kinds → the
-           metadata package → fingerprint → the item → the cheap preview
-           (identify.Item)
-exif       the EXIF perceptors: built in (date, size, length), then the .so ones;
-           their values kept
-commit     the item published (Visible / Waiting)
-```
-
-A pass is a new chain run to its end (`Process`: the walk returns, each step ends
-after its input); the importer service pauses (`rescan`) and runs the next. Details, the types
-and the rules: [`internal/importer/README.md`](internal/importer/README.md).
-The transcoders (`internal/transcode`) are not wired yet: a chain of their own, fed from
-the DB.
-
-Item states (`dto.ItemState`): `New → Dirty → Processing → Ready`, `Deleted`.
+A chain of stages run pass after pass — walk → group → gate → identify → exif →
+commit: [`internal/importer/README.md`](internal/importer/README.md). The libraries
+it reads (Apple Photos, the plain folder): [`internal/library/README.md`](internal/library/README.md).
 
 ## Layout
 
@@ -100,23 +80,19 @@ import them — gontroller is an application, not a library). `main` stays at th
 module's root while there is one binary (`cmd/<name>/` when a second one comes).
 
 `test/` holds the integration tests, by the path of what they test, through the
-public API only: `test/importer` (the server's own start, the import's passes;
-`test/importer/identify`: the stage alone over a real model and exiftool),
-`test/perceptor` (the built-ins' declared tags, loading the `.so` plugins),
-`test/web/route` (the HTTP API over a real model, read as the client reads its
-JSON), `test/library` (the Apple library's background work); `test/fake` stands in
-for what CI cannot have (Photos). A package's own unit tests stay next to it.
+public API only (`test/fake` stands in for what CI cannot have: Photos); a
+package's own unit tests stay next to it.
 
 | Package | What |
 |---|---|
 | `internal/app` | the server as a whole: its services run together (`Services`), the version |
 | `internal/config` | the config file, read once (`Load`, `Read`); a leaf — a module declares the getters it reads as its own `Config` interface |
-| `internal/importer` | the import chain: linear stages, each a sub-chain of its own — `walk`, `group`, `gate`, `identify` (exiftool, kinds, the item, sizes, the cheap preview), `exif` (the EXIF perceptors, built in and external, their values kept), `commit` (the item published); see its README |
+| `internal/importer` | the import chain ([README](internal/importer/README.md)) |
 | `internal/transcode` | the transcoders' switch and stubs (a chain of its own later) |
 | `internal/perceptor` | the perceptors' registry (built in + `.so`, their storages); `perceptor/builtin`: the built-ins' contract (`builtin.Item`, `builtin.Perceptor`, `OrderByValue`); the built-in EXIF perceptors `perceptor/date`, `size`, `duration` |
 | `internal/model` | the model over GORM (`Open`: SQLite), `ItemsApi`/`FilesApi`/`MetaApi` and the import's rules, DTOs |
 | `internal/web` | the HTTP service (Echo); `web/route`: `/items`, `/assets`, `/perceptors`, `/p/:view/order`, renditions |
-| `internal/library` | the libraries of this run (`Enable`, `Enabled`, `Of`, `Service`): one switch sends a file to the grouper of the first that claims it, and on-demand renditions come from the item's library; `library/provider`: the contract they implement; `library/folder`: the plain folder (last, takes the rest); `library/apple`: Apple Photos (its DB, the grouper, on demand), `library/apple/photokit`: PhotoKit (cgo, macOS only; a stub elsewhere; the main thread serves its main queue) |
+| `internal/library` | the libraries the import reads and the web service asks on demand: Apple Photos, the plain folder ([README](internal/library/README.md)) |
 | `internal/transcoder` | thumbnail stub (needs libvips) |
 
 ## Worth knowing

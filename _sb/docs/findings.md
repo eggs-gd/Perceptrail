@@ -320,6 +320,11 @@ Layout, the DB's facts and PhotoKit's behaviour: the
   on uncommitted perceplib changes, two commits per change. It stays a separate
   public repo with tags for third-party perceptors; publishing is explicit
   (`perceplib/README.md`). A monorepo module later, once Perceptrail is public.
+- **One fact, one place** (2026-10-04, PR #26): a contract change (the walk's message)
+  touched 41 files, ten of them docs telling the same fact five times (two READMEs,
+  the program's README, two diagrams with type names). The rule is in AGENTS.md
+  ("Documentation contract"): the owner writes it, the rest link; diagrams name
+  steps, not types; no lists of test files.
 - Releases are a fast-forward of `master` to a tagged `develop` commit, never the
   GitHub rebase button (it rewrote every commit in PR #2 and the branches diverged).
 - `npm`: a stale lock pinning an old plugin — regenerate the lock, no `--force`.

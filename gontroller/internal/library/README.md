@@ -4,25 +4,20 @@ The libraries of this run, read through their own means — Apple Photos now, Im
 (roadmap "Providers"). A library that keeps renditions of its own is asked for them:
 we render and store nothing it keeps.
 
-- **The import chain**: grouping is a step of its own, a sub-chain (`importer/group.New`) — found
-  files in, whole assets out; inside, one switch asks the enabled providers in order
-  and a file goes to the grouper of the first that claims it (`Claims`) — each
-  grouper is a step of its own. The plain folder (`library/folder`) is a provider too, the
-  last: it claims what nobody else did. A provider not enabled is not asked: its
-  files are a plain folder's.
 - **The contract** ([`provider.go`](provider/provider.go)) has a part per consumer:
   `Grouping` for the import (`Claims`, `Grouper`), `Renditions` for the web
   service (`Levels`, `Rendition`); `Provider` is the whole library as the registry
-  keeps it (+ `Owns`, `Start`). A grouper
-  takes the walk's files (`dto.WalkedFile`: the row — path, stat, `Changed` — and
-  `Missing`) and gives whole `dto.Asset`s (its files' rows, `Key`, `Show`, the
-  source's `Meta` / `MetaHash`, `Kind`); when the walk ends — its input closes —
-  it gives what it holds (`chain.Flusher`: its last group). A file the walk found
-  missing comes too: the grouper passes it through (`Asset.Missing`, an asset of its
-  own) or makes something of it; it may also say a file on disk is gone for the
-  library (Apple: the files of an asset trashed or hidden in Photos). A grouper that
-  gives a file a role uses `SetRole` (a new role is new work). The source's `Meta`
-  uses exiftool's tag names and `-n` values (numbers as numbers).
+  keeps it (+ `Owns`, `Start`).
+- **Grouping**: the import's switch asks the enabled libraries in order and a file
+  goes to the grouper of the first that claims it; the plain folder
+  (`library/folder`) is last and claims the rest. A library not enabled is not
+  asked: its files are a plain folder's. A grouper turns the walk's files into whole
+  assets (the messages: [importer README](../importer/README.md#the-chains-messages))
+  and, when its input closes, gives what it holds (`chain.Flusher`). A missing file
+  it passes through, or makes something of it; it may also say a file still on disk
+  is gone for the library (Apple: an asset trashed or hidden in Photos). A role it
+  gives goes through `SetRole` (a new role is new work); its `Meta` uses exiftool's
+  tag names and `-n` values.
 - **On demand**: the web service asks the item's provider (`Of`, `Owns`) for a
   level (`Levels`: medium, hover, original) and serves what it gets — a file, or
   bytes it drew (`Rendition`). After its library made a file local, the provider
@@ -49,6 +44,17 @@ the routes do not reach the registry).
 
 Measured on the dev library (6 457 assets, Optimize Mac Storage) in two spikes
 (`_sb/spikes/photokit`). We only read the library; Photos writes into it.
+
+**The grouper.** The first file of a library loads its assets from a copy of
+`Photos.sqlite` and forms the groups up front (the files that exist, by the naming
+layout below); a group goes out when its last file arrives, one that did not
+complete waits for the next walk. The key is the asset UUID (the item's GUID: the
+main file may change — a derivative, then the downloaded original — the item
+stays); the main file is the source (a Live Photo's video before its photo); `Show`
+is the edit, the original, then Photos' derivatives; video renditions go after the
+stills. The DB's date + zone, oriented size, GPS, length and kind are the asset's
+`Meta` (they win over the files' EXIF). Trashed or hidden assets: their files are
+missing for us.
 
 **The bundle.** The DB stores only the original's path,
 `originals/<ZDIRECTORY>/<ZFILENAME>`; everything else follows a naming layout

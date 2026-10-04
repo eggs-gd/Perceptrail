@@ -16,7 +16,7 @@ database "DB (gorm)" as DB
 == gate ==
 
 note over Groups: the walk wrote the rows (new? size/mtime changed?\nCheckTime = this walk) before the groupers
-Groups -> Gate: dto.Asset: Files (the rows, Changed),\nMissing (gone for the library); no main file yet
+Groups -> Gate: a whole asset: its files (changed?) and\nthe files gone for the library; no main file yet
 activate Gate
 opt Missing
     Gate -> DB: the model's Gone (see the end of the walk)
@@ -93,7 +93,7 @@ The walk sends missing files only after a <b>complete</b> walk with files found
 (not on cancel, missing root, empty root), after the files it saw.
 Files with CheckTime older than this walk, under the root,
 not under an unreadable directory, are missing; their provider decides what is
-gone for the library (Asset.Missing; Apple also counts the files of assets
+gone for the library (Apple also counts the files of assets
 trashed or hidden in Photos).
 The gate has the model apply it:
 - main file gone -> item <b>Deleted</b> (soft delete, hidden from /items)

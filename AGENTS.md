@@ -27,11 +27,30 @@ No symlinks (Windows).
 - Module READMEs — how things work now: `gontroller/readme.md`,
   `gontroller/internal/importer/README.md`, `gontroller/internal/library/README.md`,
   `perceplib/README.md`, `perceptors/readme.md`, `svebapp/README.md`.
-- Where knowledge goes: how it works → the module's README; why, what was rejected,
-  a trap → `findings.md` (short, dated); what is still to do → the roadmap. Once a
-  design is built, its description moves to the README and leaves the roadmap; a
-  finding that became plain architecture moves to the README too. Keep both files
-  short.
+
+### Documentation contract — one fact, one place
+
+A fact is written once, by its owner; everywhere else it is a link, never a
+retelling (a retold fact goes stale on the next change and widens every PR).
+
+| What | Where |
+|---|---|
+| how a package works: its API, the non-obvious lines | godoc in the code |
+| a module's design: its parts, the rules across them, the types it owns | that module's README (`internal/importer`, `internal/library`, `svebapp`, `perceplib/chain`, `perceptors`) |
+| running, config, the HTTP API, the map of packages (one line each + a link) | the top README of the program (`gontroller/readme.md`) |
+| target flows: steps and who does what | `_sb/puml`, rendered to `_sb/diagrams/*.svg` (the READMEs show them: re-render with every `.puml` change) |
+| why it is so, what was rejected, traps | `_sb/docs/findings.md` |
+| what is open, designs not built yet | `_sb/docs/roadmap.md` |
+
+- **A contract is described by the side that defines it**: the chain's messages
+  (walk → group → gate → …) by the importer's README, the library contract
+  (`provider`) by the library README; the other side links.
+- **Diagrams name steps and responsibilities, not types or fields**: a rename must
+  not touch them.
+- **No lists of test files** in READMEs: one sentence on where the tests are and what
+  they run against (real files, a real exiftool, the public API).
+- Once a design is built, its description moves from the roadmap to the owner's
+  README; a finding that became plain architecture moves there too.
 
 ## Git workflow (git flow)
 
