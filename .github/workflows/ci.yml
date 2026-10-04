@@ -26,6 +26,12 @@ jobs:
         go-version-file: gontroller/go.mod
         cache-dependency-path: '**/go.sum'
 
+    # gopls (its MCP server) sees the repo through gopls.work: every Go module in it
+    - name: gopls.work lists every Go module
+      run: |
+        diff <(git ls-files '*go.mod' | xargs -n1 dirname | sed 's|^|./|' | sort) \
+             <(sed -n '/^use (/,/^)/p' gopls.work | grep -o '\./[^[:space:]]*' | sort)
+
     - name: perceplib
       working-directory: perceplib
       run: |

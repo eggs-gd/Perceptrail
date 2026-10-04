@@ -295,6 +295,14 @@ Layout, the DB's facts and PhotoKit's behaviour: the
   only for real steps.
 - gopls built with an older Go cannot read code for a newer one:
   `GOTOOLCHAIN=go1.27.1 go install golang.org/x/tools/gopls@latest`.
+- **The gopls MCP saw nothing** ("could not import … in GOROOT", 2026-10-04): it
+  runs from the repo root, which is no module, and with the system Go (1.26.3; only
+  inside a module does `go` switch to the 1.27.1 of `go.mod`). Both were needed: the
+  workspace `gopls.work` (via `GOWORK`) and the module's Go on `PATH`
+  (`go env GOROOT` from `gontroller/`). Rejected: a `go.work` at the root — the go
+  command would pick it up in CI and `make build-plugins`, unify the modules'
+  dependency versions and hide the plugin ↔ host mismatch the plugin test exists
+  to catch.
 - **Layout by Go's own conventions** (2026-10-04): `internal/` (the one directory the
   toolchain enforces; `pkg/` came from `golang-standards/project-layout`, which the
   Go team does not endorse); `main` at the root until a second binary; `test/` is

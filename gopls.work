@@ -1,0 +1,14 @@
+// The Go modules of this repo as one workspace for gopls only (its MCP server runs
+// from the repo root, which is no module). Not go.work on purpose: the go command
+// never picks it up, so builds and the plugin test keep each module's own versions.
+go 1.27.1
+
+use (
+	./gontroller
+	./perceplib
+	./perceptors/exif_geo
+	./perceptors/ml_color
+	./perceptors/ml_faces
+	./perceptors/ml_objects
+	./_sb/spikes/photokit
+)
