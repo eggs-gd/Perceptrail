@@ -24,7 +24,10 @@ One line each; the details are in the READMEs and the PRs.
   integration tests in `test/` · #26 import steps without `model`, `Missing` off
   the files' rows, perceptors' rows reconciled at start, the library contract
   narrowed by its consumers · #27 exiftool: no panic, no orphans (go-exiftool
-  v0.5.2); the plugin tests under `-race`.
+  v0.5.2); the plugin tests under `-race` · #28 the gopls MCP over every Go module
+  (`gopls.work`) · #29 the walk in pages, no write for an unchanged file; a
+  library's own directories (Photos' database, caches) not walked. The PR #24
+  review is done.
 
 ## Releases
 
@@ -32,14 +35,6 @@ One line each; the details are in the READMEs and the PRs.
   encoding) and Docker. A release is an image someone installs; without the
   transcode HEIC does not show in Chrome, iPhone HEVC does not play, big originals
   slow the grid. Until then everything stays in `develop`.
-
-## Next: before the transcodes
-
-The rest of the PR #24 review ([review-pr24.md](review-pr24.md), its numbers), each
-a PR of its own, so the next chains do not touch everything:
-
-- [x] The walk in batches (3.1) and Photos' own files not walked (3.2) — PR in
-      work, on top of #27.
 
 ## Next: the expensive stage (transcode)
 

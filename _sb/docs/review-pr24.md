@@ -4,8 +4,7 @@ A strict review of the import refactor before closing it: dependencies, duplicat
 missed code, docs. The goal of the work: prepare for the expensive stages
 (transcodes, ML) and cut responsibilities so that a change does not touch 50 files.
 
-Status: **[PR24]** — done in PR #24; **[PR26]** — done in PR #26; **[next]** — a separate PR before the
-transcodes (also in the roadmap).
+Status: every item is done; the tag says which PR did it — **[PR24]** … **[PR29]**.
 
 ## What PR #24 did
 
@@ -29,7 +28,7 @@ transcodes (also in the roadmap).
 
 ## 1. Dependencies, cross-dependencies, inversions
 
-- **1.1 [next] `app` imports `client`, `model`, `plugins/settings`** (`app.Config`
+- **1.1 [PR25] `app` imports `client`, `model`, `plugins/settings`** (`app.Config`
   aggregates their config types), and `importer` takes `app.AppContext`: so
   `importer → app → client → routes → providers/model` — the import depends on the
   HTTP layer. Fix: the importer service takes plain values (root, cache dir,
@@ -42,7 +41,7 @@ transcodes (also in the roadmap).
   `Grouper`), renditions (`Owns`, `Levels`, `Rendition`), background (`Start`).
   `group` and `client/routes` depend on the whole. Split: `Grouping` for the import,
   `Renditions` for the routes; a provider implements both.
-- **1.4 [next] The core perceptors' contract lives in the registry package**:
+- **1.4 [PR25] The core perceptors' contract lives in the registry package**:
   `exif_date` / `exif_size` / `exif_duration` import `pkg/plugins` for
   `RawItemRW` / `ExifCorePerceptor`. Move the contract to a small package of its
   own; the registry depends on it, not the other way round.
@@ -50,7 +49,7 @@ transcodes (also in the roadmap).
   `identify` (`Outcome`), `exif` (`*PerceptorStore`). Move `ErrNotFound` and
   `Outcome` to `dto`; exif needs a storage interface (`Name`, `Save`, `Guids`,
   `Prune`).
-- **1.6 [next] Global state**: `model.db` (lazy init in `NewProxy`, unsynchronised),
+- **1.6 [PR25] Global state**: `model.db` (lazy init in `NewProxy`, unsynchronised),
   `providers.Enable`, the `plugins` registry, five package-level DB proxies in the
   routes with the same lazy init. Registries as package functions is a decision;
   the routes' proxies and `model.db` are not (pass the proxy to `NewWebService`,
