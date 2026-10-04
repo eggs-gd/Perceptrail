@@ -497,8 +497,45 @@ files kept; see its README):
 **Before the transcodes** — the rest of the PR #24 review ([review-pr24.md](review-pr24.md)),
 each a PR of its own, so that the next chains do not touch everything:
 
-- [ ] the importer service without `app.AppContext` (plain values from `main`):
-      the import stops depending on the HTTP layer (1.1);
+- [ ] **The top level, declarative** (decided 2026-10-04; replaces 1.1): `main`
+      reads as the list of the server's modules, in the order they start, each set
+      up the same way.
+      - `config` — a leaf package (imports no module): reads the file, defaults,
+        validation, paths; getters named across the whole config (`LibraryRoot()`,
+        `DataDir()`, `CacheDir()`, `Rescan()`, `Exiftool()`); the sections' types
+        live in it (`config.Server`, `config.Database`, `config.Perceptors`). No
+        global variable.
+      - A module declares its own `Config` interface (the getters it reads) and
+        gets the whole `*config.Config`; it never imports `app`.
+      - The logger is an argument; `main` sets the level once, before any logger
+        is made. `AppContext` (a singleton of globals, not a context) and
+        `SetLogLevel` go; `app` keeps `Services` (`Add`, `Run(ctx)`: the real
+        `context.Context` reaches every `Start`) and `Version`.
+      - Registries return nothing: `plugins.Load(cfg, logger)`,
+        `providers.Enable(cfg, db, logger)`; the providers' background work is a
+        service, `providers.Service()`. Services: `importer.New(cfg, db, logger)`,
+        `web.New(cfg, db, logger)` (`client` renamed `web`). The DB is opened once
+        in `main` (`model.Open`) and passed in (no proxies made inside the
+        modules, the routes included).
+      - Errors in `main`: `must` / `check` (leaning; the modules wrap their errors
+        with their name), or explicit `if err != nil` — to settle.
+      - `plugins.Load` and `providers.Enable` knowing their built-in members need
+        the contracts out of the registries (1.3, 1.4, below).
+
+      ```go
+      cfg := must(config.Load())
+      logs := must(logger.New(cfg.LogLevel()))
+
+      db := must(model.Open(cfg, logs.Named("db")))
+      check(plugins.Load(cfg, logs.Named("plugins")))
+      check(providers.Enable(cfg, db, logs.Named("providers")))
+
+      services := app.NewServices()
+      services.Add(providers.Service())
+      services.Add(importer.New(cfg, db, logs.Named("importer")))
+      services.Add(web.New(cfg, db, logs.Named("http")))
+      services.Run(mainCtx)
+      ```
 - [ ] `providers.Provider` split: `Grouping` for the import, `Renditions` for the
       routes (1.3);
 - [ ] the core perceptors' contract out of the registry package (1.4);

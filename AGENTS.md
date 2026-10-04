@@ -79,6 +79,42 @@ No symlinks (Windows).
   directly — only for the fast-forward release push.
 
 
+## Code Style
+
+Before writing new code, read the neighbouring files of the package and follow
+them: their naming, comment density, error handling, how they declare their
+dependencies. Comments: one line per step (what it means for the product), plus a
+short "not obvious" list where there is something non-obvious.
+
+### Go — write it like Go
+
+- **Names: length follows distance.** Short where the whole use is on one screen —
+  a loop variable over a few lines (`for i, f := range files`), a method receiver
+  (`func (w *Walker)`), the common idioms (`ctx`, `err`, `db`, `cfg`). Telling where
+  the name lives longer or far from its declaration — struct fields, parameters,
+  variables used over half a screen, anything at package level: `libraries`, not
+  `ps`; `provider`, not `p`, when the loop body is long. No invented abbreviations
+  (`ps`, `gw`, `st`) unless the context makes them obvious. Readability comes
+  first; the Go convention does not excuse a cryptic name.
+- **The package name is part of the name**: `providers.Enable`, not
+  `providers.EnableProviders`; `walk.New`, not `walk.NewWalker`; `identify.Item`,
+  not `identify.IdentifyItem`.
+- **An abstraction and its instance are named apart**: the package and the type
+  say what it is (`providers.Provider`), a value says which one (`library`,
+  `libraries`).
+- **Interfaces are declared by their consumer**, with only the methods it calls
+  (a step's `Store`, a module's `Config`); the producer passes its whole value.
+  No interface just in case: one implementation and no test fake — no interface.
+- **No Manager / Factory / Builder by default, no wrapper structs** that only
+  carry arguments (`Deps`, `Config` structs bundling a constructor's parameters
+  hide the coupling instead of cutting it).
+- **Constructors take, in one order**: what the module reads of the config (its
+  own `Config` interface), the dependencies, the logger, then (for a chain step)
+  `in`, `out`. A service gets its `context.Context` in `Start`, not in `New`.
+- **A registry (one per process) is package functions** (`plugins.Load`,
+  `providers.Enable`); instances where they hold logic (steps, providers,
+  groupers).
+
 ---
 
 # MCP Tools
