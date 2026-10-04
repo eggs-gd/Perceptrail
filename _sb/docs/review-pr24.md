@@ -95,9 +95,9 @@ transcodes (also in the roadmap).
 - **3.6 [PR24] Stale comments** still describe the flush as a message
   (`importer/entry.go`, `exif/entry.go`, `exif/perceptors.go`, `walk/walker.go`,
   `group/switch.go`, `providers/providers.go`, `folder/grouper.go`).
-- **3.7 [next]** The exiftool pool panics when it cannot start — now lazily, in the
+- **3.7 [PR27]** The exiftool pool panics when it cannot start — now lazily, in the
   middle of a pass. Return an error instead.
-- **3.8** CI with exiftool on Linux not seen yet; `pkg/plugins` fails under `-race`
+- **3.8 [PR27]** CI with exiftool on Linux not seen yet; `pkg/plugins` fails under `-race`
   (the `.so` are built without it) — not written down anywhere.
 
 ## 4. Docs: lagging, and what to delete

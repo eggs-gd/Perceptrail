@@ -42,6 +42,7 @@ type pool struct {
 	exec      string // the executable
 	workers   []*exiftool.Server
 	free      chan *exiftool.Server
+	started   error // why the processes did not start: every command of the pass gets it
 	logger    *l.Logger
 	startOnce sync.Once
 	closeOnce sync.Once
@@ -51,6 +52,9 @@ func newPool(count int, exec string, logger *l.Logger) *pool {
 	return &pool{count: count, exec: exec, free: make(chan *exiftool.Server, count), logger: logger}
 }
 
+// start: every process, or none — one that cannot start (no exiftool, a wrong path)
+// fails the pass's commands with its reason instead of taking the server down; the
+// ones already started end
 func (p *pool) start() {
 	if p.exec != "" {
 		exiftool.Exec = p.exec // the library takes its executable from a package variable
@@ -58,16 +62,26 @@ func (p *pool) start() {
 	for range p.count {
 		et, err := exiftool.NewServer()
 		if err != nil {
-			p.logger.Panic("exiftool: can't start", l.Error(err))
+			p.started = fmt.Errorf("exiftool %q can't start: %w", exiftool.Exec, err)
+			for _, started := range p.workers {
+				started.Close()
+			}
+			p.workers = nil
+			return
 		}
 		et.SetTimeout(exiftoolTimeout)
 		p.workers = append(p.workers, et)
+	}
+	for _, et := range p.workers {
 		p.free <- et
 	}
 }
 
 func (p *pool) command(args ...string) ([]byte, error) {
 	p.startOnce.Do(p.start)
+	if p.started != nil {
+		return nil, p.started
+	}
 	et := <-p.free
 	defer func() { p.free <- et }()
 	return et.Command(args...)

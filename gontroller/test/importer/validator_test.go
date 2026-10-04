@@ -1,6 +1,7 @@
 package importer_test
 
 import (
+	"cmp"
 	"os"
 	"path/filepath"
 	"slices"
@@ -77,13 +78,14 @@ func scan(t *testing.T, root string) []string {
 	return published
 }
 
-// pass: what the import reads of the config, for one test's library
-type pass struct{ root, cache string }
+// pass: what the import reads of the config, for one test's library (exiftool: the
+// one on PATH unless set)
+type pass struct{ root, cache, exiftool string }
 
 func (p pass) LibraryRoot() string   { return p.root }
 func (p pass) CacheDir() string      { return p.cache }
 func (p pass) Rescan() time.Duration { return time.Minute }
-func (p pass) Exiftool() string      { return "exiftool" }
+func (p pass) Exiftool() string      { return cmp.Or(p.exiftool, "exiftool") }
 
 func itemAt(t *testing.T, path string) *dto.ItemDto {
 	t.Helper()
