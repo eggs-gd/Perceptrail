@@ -4,10 +4,10 @@ The libraries of this run, read through their own means — Apple Photos now, Im
 (roadmap "Providers"). A library that keeps renditions of its own is asked for them:
 we render and store nothing it keeps.
 
-- **The contract** ([`provider.go`](provider/provider.go)) has a part per consumer:
-  `Grouping` for the import (`Claims`, `Grouper`), `Renditions` for the web
-  service (`Levels`, `Rendition`); `Provider` is the whole library as the registry
-  keeps it (+ `Owns`, `Start`).
+- **The contract** ([`provider.go`](provider/provider.go)): `Provider` is what a
+  library implements; each consumer declares the part it uses — the import's
+  grouping `group.Library` (`Claims`, `Grouper`), the routes' `route.Library`
+  (`Levels`, `Rendition`); the registry uses the rest (`Owns`, `Start`).
 - **Grouping**: the import's switch asks the enabled libraries in order and a file
   goes to the grouper of the first that claims it; the plain folder
   (`library/folder`) is last and claims the rest. A library not enabled is not
@@ -28,14 +28,13 @@ we render and store nothing it keeps.
 
 `library.Enable(cfg, db, logger)` (in `main`) builds them from the config
 (`providers: {apple: {enabled: …}}`, enabled when not listed); the plain folder
-always, last. `Enabled` gives the import their `Grouping`, in order; `Of` the
-`Renditions` of the item's library (the web service gets `library.Of` passed in:
-the routes do not reach the registry).
+always, last. `Enabled` gives them in order, `Of` the item's (the web service
+passes it to the routes: they do not reach the registry).
 
 | package | what |
 |---|---|
 | `library` | the libraries of this run: `Enable`, `Enabled`, `Of`, `Service` |
-| `library/provider` | the contract a library implements: `Grouping` (the import), `Renditions` (the web service), `Provider` (both + `Owns`, `Start`); `Grouper`, `Rendition`, `Options` |
+| `library/provider` | the contract a library implements (`Provider`, `Grouper`, `Rendition`, `Options`) |
 | `library/apple` | Apple Photos: the grouper (the library's DB, the naming layout), on demand (`ondemand.go`) |
 | `library/apple/photokit` | PhotoKit through cgo (macOS; a stub elsewhere) |
 | `library/folder` | the plain folder: sidecars by name; nothing on demand (the transcode renders for it) |

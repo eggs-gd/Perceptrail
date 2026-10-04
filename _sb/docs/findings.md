@@ -180,12 +180,16 @@ pass (or "only when something was deleted") — they are reconciled once at star
 behind is never read, and a soft-deleted item may come back in the same pass (a
 move).
 
-**Contracts per consumer** (PR #26): a library's contract is split into what the
-import asks (`provider.Grouping`) and what the web service asks
-(`provider.Renditions`); the registry keeps the whole `Provider`. Declared in
-`provider`, not by each consumer: Go does not convert `[]provider.Provider` to a
-consumer's slice type, and the registry must not import the importer. An unused
-`Outcome` and `Name()` went instead of being moved.
+**Contracts per consumer** (PR #26, Codex review): the library contract
+(`provider.Provider`) stays one; each consumer declares the part it uses
+(`group.Library`, `route.Library`). Go does not convert `[]provider.Provider` to
+`[]group.Library`, so `group.New` takes `[]L` for any `L` that is a `Library` (a
+type parameter, no copying loop); `library.Of` reaches the routes through a
+wrapper in `web` that returns a plain nil for a plain folder's item (a nil provider
+inside the interface is not nil). Rejected first: two more producer-side interfaces
+in `provider`. Likewise a lookup only the walk needs (`FindFile`) stays off the
+model's broad `FilesApi`. An unused `Outcome` and `Name()` went instead of being
+moved.
 
 **Providers** (2026-10-02): rejected — a typed `sources:` list in the config (the user
 would have to know what each folder is), marker files (`.immich`, `@eaDir`) as a

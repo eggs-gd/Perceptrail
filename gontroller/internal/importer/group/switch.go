@@ -14,9 +14,16 @@ import (
 	"github.com/eggs-gd/perceplib/chain"
 )
 
+// Library: what grouping asks of a library — whether a found file is its, and its
+// grouper
+type Library interface {
+	Claims(path string) bool
+	Grouper() provider.Grouper
+}
+
 // New: the sub-chain from in (the walk's files) to out (whole assets: every grouper
 // writes to it, so it closes once every grouper has returned)
-func New(libraries []provider.Grouping, in <-chan dto.WalkedFile, out chan<- dto.Asset) chain.Processor {
+func New[L Library](libraries []L, in <-chan dto.WalkedFile, out chan<- dto.Asset) chain.Processor {
 	grouping := chain.NewChainProcessor(nil)
 	toGroupers := make([]chan<- dto.WalkedFile, len(libraries))
 	for i, library := range libraries {
@@ -24,17 +31,17 @@ func New(libraries []provider.Grouping, in <-chan dto.WalkedFile, out chan<- dto
 		toGroupers[i] = ch
 		grouping.AddStep(chain.NewDecorator(ch, out, library.Grouper()))
 	}
-	grouping.AddStep(chain.NewSwitch(in, toGroupers, Switch{Libraries: libraries}))
+	grouping.AddStep(chain.NewSwitch(in, toGroupers, Switch[L]{Libraries: libraries}))
 	return grouping
 }
 
 // Switch: a file to the grouper of the first library that claims it (its index in
 // Libraries)
-type Switch struct {
-	Libraries []provider.Grouping
+type Switch[L Library] struct {
+	Libraries []L
 }
 
-func (s Switch) Switch(f dto.WalkedFile) (int, error) {
+func (s Switch[L]) Switch(f dto.WalkedFile) (int, error) {
 	for i, library := range s.Libraries {
 		if library.Claims(f.Path) {
 			return i, nil

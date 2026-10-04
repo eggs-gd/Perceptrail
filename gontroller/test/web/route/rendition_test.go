@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"perceptrail/gontroller/internal/library/apple"
-	"perceptrail/gontroller/internal/library/provider"
 	"perceptrail/gontroller/internal/model/dto"
+	"perceptrail/gontroller/internal/web/route"
 	"perceptrail/gontroller/test/fake"
 
 	l "github.com/eggs-gd/perceplib/logger"
@@ -24,7 +24,7 @@ func TestRenditionOnDemand(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "Photos Library.photoslibrary")
 	photos := &fake.Photos{Root: root}
 	lib := apple.New(filepath.Dir(root), photos, testDB, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
-	e := server(func(item *dto.ItemDto) provider.Renditions {
+	e := server(func(item *dto.ItemDto) route.Library {
 		if lib.Owns(item) {
 			return lib
 		}

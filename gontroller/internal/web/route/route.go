@@ -20,9 +20,16 @@ type Store interface {
 	model.MetaApi
 }
 
+// Library: what the routes ask of an item's library — what may be asked for on
+// demand, and a rendition
+type Library interface {
+	Levels(item *dto.ItemDto) []string
+	Rendition(item *dto.ItemDto, level string, opt provider.Options) (provider.Rendition, error)
+}
+
 // LibraryOf: the library an item belongs to, nil for a plain folder's (the server
 // gives library.Of)
-type LibraryOf func(item *dto.ItemDto) provider.Renditions
+type LibraryOf func(item *dto.ItemDto) Library
 
 // routes: what the handlers share
 type routes struct {

@@ -22,8 +22,8 @@ One line each; the details are in the READMEs and the PRs.
   the chain's grouping (`internal/library`) · #24 the import in stages
   ([review](review-pr24.md)) · #25 the top level declarative, `internal/`,
   integration tests in `test/` · #26 import steps without `model`, `Missing` off
-  the files' rows, perceptors' rows reconciled at start, the provider contract
-  split by consumer.
+  the files' rows, perceptors' rows reconciled at start, the library contract
+  narrowed by its consumers.
 
 ## Releases
 

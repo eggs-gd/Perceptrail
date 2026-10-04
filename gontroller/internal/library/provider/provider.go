@@ -26,32 +26,21 @@ import (
 // input closes) it gives what it holds (chain.Flusher: the last group).
 type Grouper = chain.Decorator[dto.WalkedFile, dto.Asset]
 
-// Grouping: what the import asks of a library — which found files are its, and the
-// grouper that makes them whole assets
-type Grouping interface {
+// Provider: what a library implements. Its consumers declare the part they use
+// (the import's grouping: Claims, Grouper; the routes: Levels, Rendition).
+type Provider interface {
 	// Claims: a found file is this library's — its grouper takes it
 	Claims(path string) bool
 	// Grouper: its files into whole assets; one instance per run
 	Grouper() Grouper
-}
 
-// Renditions: what the web service asks of an item's library — what may be asked
-// for on demand, and a rendition
-type Renditions interface {
+	// Owns: the item is this library's (on-demand renditions go to it)
+	Owns(item *dto.ItemDto) bool
 	// Levels: what the client may ask for this item ("medium", "hover", "original")
 	Levels(item *dto.ItemDto) []string
 	// Rendition: a level of the item — a file, or bytes when the library drew it;
 	// ErrNoRendition when there is nothing to serve
 	Rendition(item *dto.ItemDto, level string, opt Options) (Rendition, error)
-}
-
-// Provider: a library as a whole — the registry (package library) keeps them and
-// hands each consumer its part
-type Provider interface {
-	Grouping
-	Renditions
-	// Owns: the item is this library's (on-demand renditions go to it)
-	Owns(item *dto.ItemDto) bool
 
 	// Start: its own work in the background (access, assets nothing shows yet)
 	Start(ctx context.Context)
