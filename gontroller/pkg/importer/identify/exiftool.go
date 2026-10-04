@@ -27,6 +27,8 @@ type Exiftool interface {
 	// Extract: src's embedded preview (tag) written to dst, src's Orientation copied
 	// onto it
 	Extract(tag, src, dst string) error
+	// Close: the processes end (the stage's last step stops)
+	Close()
 }
 
 // One file must not block an exiftool worker forever (broken or huge files)

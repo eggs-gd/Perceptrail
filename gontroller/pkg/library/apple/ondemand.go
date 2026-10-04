@@ -85,7 +85,7 @@ func (p *Provider) Rendition(item *dto.ItemDto, level string, opt provider.Optio
 	uuid := item.Guid // an Apple item's GUID is its asset UUID
 	path := Local(root, uuid, want)
 	var drawn []byte
-	if path == "" && p.photos != nil {
+	if path == "" {
 		var err error
 		drawn, err = p.once(uuid+"/"+level, func() ([]byte, error) { return ask(p.photos, uuid) })
 		if err != nil {
@@ -112,9 +112,6 @@ func (p *Provider) Rendition(item *dto.ItemDto, level string, opt provider.Optio
 // original: asked for by the user (the viewer's Original), one at a time per
 // request — no sharing between callers, the limit still holds
 func (p *Provider) original(item *dto.ItemDto) (provider.Rendition, error) {
-	if p.photos == nil {
-		return provider.Rendition{}, provider.ErrNoRendition
-	}
 	p.sem <- struct{}{}
 	defer func() { <-p.sem }()
 	fail := func(err error) (provider.Rendition, error) {

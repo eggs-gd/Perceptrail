@@ -24,7 +24,7 @@ type Items interface {
 type Provider struct {
 	root    string // the library root walked: access to Photos is asked only if one is there
 	grouper *Grouper
-	photos  Photos // nil: only what is on disk
+	photos  Photos // PhotoKit (macOS; elsewhere a stub that refuses)
 	items   Items
 	logger  *l.Logger
 
@@ -37,8 +37,8 @@ type Provider struct {
 
 var _ provider.Provider = (*Provider)(nil)
 
-// New: photos asks Photos for renditions (photokit.Library; nil: only what is on
-// disk); root is the library root walked
+// New: photos asks Photos for renditions (photokit.Library: PhotoKit on macOS, a
+// stub that refuses elsewhere); root is the library root walked
 func New(root string, photos Photos, items Items, logger *l.Logger) *Provider {
 	return &Provider{
 		root:     root,
@@ -64,7 +64,7 @@ func (p *Provider) Owns(item *dto.ItemDto) bool { return BundleRoot(item.Path) !
 // Start: access to Photos (asked once — the prompt names the app that started us,
 // the terminal), then the assets nothing shows yet, in the background
 func (p *Provider) Start(ctx context.Context) {
-	if p.photos == nil || !HasLibrary(p.root) {
+	if !HasLibrary(p.root) {
 		return
 	}
 	go func() {

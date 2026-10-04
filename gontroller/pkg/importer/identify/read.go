@@ -97,11 +97,3 @@ func (e *reader) read(g dto.Asset) (*draft, error) {
 	}
 	return out, nil
 }
-
-// closeTool: the stage's own exiftool ends when its last step stops (a test's fake
-// has nothing to close)
-func closeTool(tool Exiftool) {
-	if c, ok := tool.(interface{ Close() }); ok {
-		c.Close()
-	}
-}

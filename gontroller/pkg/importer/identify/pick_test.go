@@ -36,6 +36,7 @@ func pick(t *testing.T, files ...pf) (string, string, []string) {
 type fakeTool struct{ extracted []string }
 
 func (f *fakeTool) Read(paths, tags []string) ([]api.RawExif, error) { return nil, nil }
+func (f *fakeTool) Close()                                           {}
 
 func (f *fakeTool) Extract(tag, src, dst string) error {
 	f.extracted = append(f.extracted, tag)

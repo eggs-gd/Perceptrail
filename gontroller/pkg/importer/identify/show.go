@@ -29,4 +29,4 @@ func (s *show) Decorate(d *draft) (*Item, error) {
 	return yield(d), nil
 }
 
-func (s *show) Stop() { closeTool(s.tool) }
+func (s *show) Stop() { s.tool.Close() }
