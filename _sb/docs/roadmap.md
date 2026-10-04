@@ -181,8 +181,8 @@ the whole package, not only to find its main file.
 
 - [ ] **One item from the whole package** — the metadata merged from every file of
       the group, not only the main file's: rating, tags, captions, face regions from
-      the XMP sidecars those libraries write ([`Item flow.puml`](../puml/Item%20flow.puml)
-      — designed that way, not finished). Which library writes what, and what wins
+      the XMP sidecars those libraries write (merge reads the declared tags of
+      every file already; the rest is not finished). Which library writes what, and what wins
       when files disagree — to work out per library.
 - [ ] **Live Photo pairs by `ContentIdentifier`** in generic folders (today by name:
       a rename breaks the pair, two namesakes stick together); Apple libraries pair
@@ -407,7 +407,7 @@ Done). We only read the library.
 
 **The contract** (agreed): the top of a chain has only linear stages, each named by
 what it yields; every stage is a sub-chain of its own, in its own package, with one
-constructor (`New(deps, in, out, errch)`) that lists all its steps. No switches or
+constructor (`New(deps…, logger, in, out)`) that lists all its steps. No switches or
 branches on the top; the top knows nothing of the tools — exiftool, providers,
 transcoders, plugins belong to the stage that uses them. One step does one thing.
 
@@ -427,17 +427,16 @@ transcoders, plugins belong to the stage that uses them. One step does one thing
       | exif | the perceptors' values, kept | the built-in perceptors, the `.so` ones, a step each; keep |
       | commit | the item published | the state (Visible / Waiting) |
 
-      The passes (`Chain.Run`, the pause), Refresh (a rework mark): the service's.
+      The passes (a new chain run to its end, then the pause): the service's; on
+      demand a provider marks the item for rework itself.
       identify inside: read (one exiftool call per group, the declared tags;
       classify; merge — the metadata package: source > .xmp > main > derivatives;
       fingerprint — the file's bytes) → validate → show (sizes, pick).
-      Every type belongs to its producer: the provider contract in `providers`,
-      `discover.Group`, `identify.Item`, `transcode.Item` — `importer/flow` is gone.
-      The perceptors declare their exif tags (`api.ExifTagger`); a step gets only
-      the DB methods it calls; no step knows the plugin manager. exif is read as
-      numbers (`-n`). The chain library has pipes with a flush. Findings: "Import
-      data: types by producer, exif by declaration, a bytes fingerprint", "exif as
-      numbers", "chain: pipes with a flush".
+      Every type belongs to its producer: `dto.Asset`, `identify.Item`,
+      `transcode.Item` — `importer/flow` is gone. The perceptors declare their exif
+      tags (`api.ExifTagger`); a step gets only the DB methods it calls. exif is
+      read as numbers (`-n`). Findings: "The import chain, PR #24"; the review
+      before closing it: [review-pr24.md](review-pr24.md).
 
       Deferred:
       - [x] the end-of-walk marker out of band — the library's flush;
@@ -477,31 +476,42 @@ to be worked out on its own):
 - **Maintenance**: `find → prune` — what deleted items leave: renditions in the
   cache (a provider taking its files over too), perceptor values, orphans.
 - **API providers** (Immich…): no files to walk. Either a second source in
-  discover (their change feed; the gate needs another sign of change than a stat),
+  the walk (their change feed; the gate needs another sign of change than a stat),
   or a chain of its own — `sync → identify → exif → commit` — sharing
-  the stages after discover. Leaning to the latter; with the first API provider.
+  the stages after the gate. Leaning to the latter; with the first API provider.
 - Not a chain: on demand (a request path; it re-enters the import through
   `Refresh`).
 
-**perceplib `chain` — what the import taught** (done in PR #24: the chain is
-rewritten in place, see its README and findings "chain: pipes with a flush"):
+**perceplib `chain` — what the import taught** (done in PR #24, develop's names and
+files kept; see its README):
 
-- [x] **A flush signal in the library**: typed pipes carry values and a flush; a
-      `Flusher` gives what it holds; where branches join the flush passes once every
-      writer has flushed (the barrier). The end-of-walk marker is gone from the
-      data; a flush at the end of the chain means the walk is done (no counting).
-- [x] **Skips are not errors**: `ErrSkippedItem` never reaches the error channel.
-- [x] **Error channels at run time**: a sub-chain without its own uses its
-      parent's; the import has one.
-- [x] **Typed stages**: the stages take and give typed pipes — checked at compile
-      time (no separate `Stage` type needed).
-- [x] **Parallel steps**: `chain.Parallel(n, …)`; a flush waits for the values in
-      flight.
-- [x] **The switch**: `Route` returns one output index; the flush goes to every
-      output.
-- [x] **Stop**: optional, called once; every send selects on the context.
-- [x] **Plugins give logic only**: `Decorator(logger)` instead of building a step
-      on raw channels.
+- [x] **A pass ends from its input**: a step reads to the end, gives what it holds
+      (`Flusher`) and returns; an output closes once every writer returned (a
+      `WaitGroup` per output). No end-of-walk value in the data, no counting.
+- [x] **One runner, constructors pick the combination**: `NewSwitch` (route),
+      `NewSwitchDecorator` (route + convert), `…N` (n workers), `NewEnd`.
+- [x] **Skips are not errors**; the error channel is inherited at run time; every
+      send selects on the context; `Stop` optional, called once.
+- [x] **Plugins give logic only**: `Decorator(logger)`.
+
+**Before the transcodes** — the rest of the PR #24 review ([review-pr24.md](review-pr24.md)),
+each a PR of its own, so that the next chains do not touch everything:
+
+- [ ] the importer service without `app.AppContext` (plain values from `main`):
+      the import stops depending on the HTTP layer (1.1);
+- [ ] `providers.Provider` split: `Grouping` for the import, `Renditions` for the
+      routes (1.3);
+- [ ] the core perceptors' contract out of the registry package (1.4);
+- [ ] steps without `model` imports (`ErrNotFound`, `Outcome` to `dto`; a storage
+      interface for exif) (1.5); the routes' DB proxies passed in, `model.db` opened
+      in `Configure` (1.6); identify's tags passed in by the service (1.7);
+- [ ] the walk in batches: one read of the rows under the root, `CheckTime` stamped
+      per page, rows created in batches (3.1); Photos' own files not written as rows,
+      or measured and accepted (3.2);
+- [ ] a message type for walk → group (`dto.SeenFile`) instead of pass state on
+      `dto.FileDto` (3.3); `Prune` only when the pass deleted something (3.4);
+- [ ] exiftool's pool returns an error instead of panicking (3.7); `pkg/plugins`
+      under `-race` (3.8).
 
 ## Core — service (gontroller)
 
@@ -785,7 +795,7 @@ Rule: the server owns what the gallery cannot display correctly or cannot identi
 photo without, and what makes no sense to implement differently. Anything that adds
 its own navigation axis or its own UI is a perceptor.
 
-- **Core (exif_core):** date (+ time zone), size (+ orientation), media type, file
+- **Core (built in):** date (+ time zone), size (+ orientation), media type, file
   identity and grouping, embedded preview, basic capture info (display only), user
   XMP/IPTC metadata (rating, tags, captions).
 - **Perceptors:** geo and map, faces (`RegionInfo` as ready-made labels), objects,

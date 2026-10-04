@@ -5,16 +5,15 @@
 title Files gate and validator (details of the Import chain diagram)
 
 control "groups\n(any source)" as Groups
-box GateKeeper #LightSkyBlue
-control "files gate" as Gate
-control "exif" as Exif
-control "mime" as Mime
-control "validator" as Validator
-database "DB (gorm)" as DB
+control "gate" as Gate
+box identify #LightSkyBlue
+control "read\n(exiftool, classify,\nmerge, fingerprint)" as Exif
+control "validate" as Validator
+control "show\n(sizes, cheap preview)" as Transcode
 end box
-control "cheap preview" as Transcode
+database "DB (gorm)" as DB
 
-== files gate ==
+== gate ==
 
 note over Groups: the walk wrote the rows (new? size/mtime changed?\nCheckTime = this walk) before the groupers
 Groups -> Gate: group []File (the rows: Changed / Gone)\n(no main file yet)
@@ -33,13 +32,12 @@ else unchanged
 end
 deactivate Gate
 
-Exif -> Mime: group + exif
-Mime -> Validator: ranked group:\nmain file + sidecars
+Exif -> Validator: ranked group: main file + sidecars,\nexif, fingerprint
 activate Validator
 
 == validator ==
 
-Validator -> DB: hash(size,\nexif without volatile tags)\nof the main file
+Validator -> DB: the main file's fingerprint\n(size + sha256 of its ends)
 activate DB
 
 alt found the same
@@ -85,7 +83,7 @@ end
 
 Validator -> Transcode: item (guid), group, exif
 deactivate Validator
-note over Transcode #LightGreen: then plugins; the closer sets <b>Visible</b> or <b>Waiting</b>
+note over Transcode #LightGreen: then the exif step (perceptors); commit sets <b>Visible</b> or <b>Waiting</b>
 
 == end of walk: the gone files ==
 
@@ -95,7 +93,7 @@ The walk sends gone files only after a <b>complete</b> walk with files found
 Files with CheckTime older than this walk, under the root,
 not under an unreadable directory, are gone (their provider sees them first;
 Apple also sends the files of assets trashed or hidden in Photos as gone).
-The files gate has the model apply it:
+The gate has the model apply it:
 - main file gone -> item <b>Deleted</b> (soft delete, hidden from /items)
 - sidecar gone -> item <b>Dirty</b> (its group passes the gate again)
 - file rows deleted

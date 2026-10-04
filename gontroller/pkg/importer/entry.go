@@ -6,7 +6,7 @@
 //	walk → group → gate → identify → exif → commit
 //
 //	walk       the chain's entry: the library's files, their rows written as it goes
-//	           (stat, seen now); after the walk the rows it says are gone, then a flush
+//	           (stat, seen now); after the walk the rows it says are gone
 //	group      whole assets: the providers' groupers (the plain folder last); a gone
 //	           file goes to its provider too
 //	gate       only the groups that need work pass; a gone file: the model deletes it
@@ -18,7 +18,6 @@
 //
 // The service runs the passes: a pass is a new chain run to its end (the walk ends,
 // its output closes, each step ends after its input), then the rescan pause.
-// Refresh marks one asset's item for the next pass.
 //
 // Diagrams: _sb/puml/Import chain.puml, _sb/puml/Walker.puml (gate, validator).
 //
@@ -31,9 +30,10 @@
 //   - The gone files come after every file the walk saw, but a moved file's old path
 //     may be deleted before its new one is identified: validate restores a deleted
 //     item by fingerprint, the GUID stays.
-//   - Refresh does not wait: the client guesses meanwhile (the tile's cloud goes once
-//     it got the rendition), the next pass makes it true; the mark does not touch
-//     updated_at, so no delta brings the item back in its old state.
+//   - A library that made a file local on demand (Apple Photos) marks the item for
+//     rework itself; the next pass processes it. No waiting: the client guesses
+//     meanwhile; the mark does not touch updated_at, so no delta brings the item
+//     back in its old state.
 package importer
 
 import (
@@ -108,15 +108,6 @@ func (s *importerService) importChain() chain.ChainProcessor {
 	c.AddStep(exif.New(s.db, s.logger, identified, perceived))
 	c.AddStep(commit.New(s.db, perceived))
 	return c
-}
-
-// Refresh marks one asset's item to be processed again on the next pass — the
-// library (Apple Photos…) has just made a file of it local (on demand), or drawn
-// from what was local: processed even if no file changed
-func (s *importerService) Refresh(key string) {
-	if _, err := s.db.MarkRework([]string{key}); err != nil {
-		s.logger.Error("Refresh: item not marked", l.String("guid", key), l.Error(err))
-	}
 }
 
 // Start: what changed since the last run first (identify's detection, the

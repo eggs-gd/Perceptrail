@@ -74,7 +74,7 @@ func main() {
 	importer := importer.NewImporterService(ctx)
 	svc.AddService(importer)
 	for _, p := range ps {
-		p.Start(mainCtx, importer.Refresh)
+		p.Start(mainCtx)
 	}
 	web, err := client.NewWebService(ctx.Config().Server, routes.AppInfo{Version: app.Version, Mode: ctx.Config().Mode}, plugins.Client(), plugins.LoadValues, ctx.Logger(app.LogHTTP))
 	if err != nil {

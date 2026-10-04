@@ -2,7 +2,7 @@
 // file it sees is a row of the files table, written now (path, stat, the time it was
 // seen; Changed: new or its stat changed) and sent on; after a complete walk, the
 // rows it did not see that it says are gone are sent too (Gone: the gate deletes
-// them), then the chain's flush.
+// them); then it returns and its output closes.
 package walk
 
 import (
@@ -67,15 +67,15 @@ func (m *Walker) Start(ctx context.Context, emit func(*dto.FileDto) bool) error 
 		}
 		return emit(f)
 	})
-	gone := m.gone(r)
-	for _, f := range gone {
+	missing := m.missing(r)
+	for _, f := range missing {
 		f.Gone = true
 		if !emit(f) {
 			break
 		}
 	}
 	if r.Complete {
-		m.logger.Info("Walk complete", l.Int("files", r.Files), l.Int("unreadable", len(r.Unreadable)), l.Int("gone", len(gone)))
+		m.logger.Info("Walk complete", l.Int("files", r.Files), l.Int("unreadable", len(r.Unreadable)), l.Int("gone", len(missing)))
 	}
 	return nil
 }
@@ -103,8 +103,8 @@ func (m *Walker) seen(e dto.ItemEntry, now time.Time) (*dto.FileDto, error) {
 	return f, err
 }
 
-// gone: the rows the walk did not stamp that it says are deleted (Gone)
-func (m *Walker) gone(r Result) []*dto.FileDto {
+// missing: the rows the walk did not stamp that it says are deleted (sent as Gone)
+func (m *Walker) missing(r Result) []*dto.FileDto {
 	switch {
 	case !r.Complete:
 		m.logger.Warn("Walk incomplete: deletions are not checked")
@@ -118,7 +118,7 @@ func (m *Walker) gone(r Result) []*dto.FileDto {
 		m.logger.Error("Deletions: can't read files", l.Error(err))
 		return nil
 	}
-	return Gone(r, stale)
+	return Missing(r, stale)
 }
 
 func (m *Walker) walk(ctx context.Context, emit func(dto.ItemEntry) bool) Result {
@@ -171,11 +171,11 @@ func (m *Walker) walk(ctx context.Context, emit func(dto.ItemEntry) bool) Result
 	return result
 }
 
-// Gone: of the files a walk did not stamp (stale), the ones it says are deleted —
+// Missing: of the files a walk did not stamp (stale), the ones it says are deleted —
 // only after a complete walk that found files, only under its root (another root:
 // the config changed, not ours to judge), never under an unreadable directory, never
 // a file it saw (stamped as it went)
-func Gone(r Result, stale []*dto.FileDto) []*dto.FileDto {
+func Missing(r Result, stale []*dto.FileDto) []*dto.FileDto {
 	if !r.Complete || r.Files == 0 {
 		return nil // an empty root (an unmounted drive's mount point) must not delete the library
 	}

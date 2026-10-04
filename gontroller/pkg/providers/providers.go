@@ -21,9 +21,9 @@ import (
 )
 
 // Grouper: the logic of a provider's step — the walk's files in, whole assets out
-// (chain.Decorator is a step's logic, not the step: no pipes, no goroutine). The
-// importer runs it between its pipes (chain.NewDecorator); on the walk's flush it gives
-// what it holds (chain.Flusher: the last group).
+// (chain.Decorator is a step's logic, not the step: no channels, no goroutine). The
+// importer runs it between its channels (chain.NewDecorator); when the walk ends (its
+// input closes) it gives what it holds (chain.Flusher: the last group).
 type Grouper = chain.Decorator[*dto.FileDto, dto.Asset]
 
 type Provider interface {
@@ -42,10 +42,8 @@ type Provider interface {
 	// ErrNoRendition when there is nothing to serve
 	Rendition(item *dto.ItemDto, level string, opt Options) (Rendition, error)
 
-	// Start: its own work in the background (access, assets nothing shows yet);
-	// refresh marks one asset's item to be processed again (the next walk) when the
-	// library made a file local
-	Start(ctx context.Context, refresh Refresher)
+	// Start: its own work in the background (access, assets nothing shows yet)
+	Start(ctx context.Context)
 }
 
 // Options of a rendition request
@@ -59,10 +57,6 @@ type Rendition struct {
 	Data []byte
 	Mime string
 }
-
-// Refresher marks one asset's item to be processed again on the next walk (the
-// importer's Refresh)
-type Refresher func(key string)
 
 var ErrNoRendition = errors.New("no rendition")
 

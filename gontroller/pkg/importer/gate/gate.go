@@ -14,9 +14,8 @@ import (
 )
 
 // Store: what the gate asks the model — whether a group needs work, what a file gone
-// means; the rows a grouper gave a new role
+// means
 type Store interface {
-	UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error)
 	NeedsWork(files []*dto.FileDto, key, metaHash string) (needs bool, guid string, err error)
 	Gone(files []*dto.FileDto) (deleted, dirty int, err error)
 }
@@ -37,13 +36,9 @@ func (g *Gate) Decorate(in dto.Asset) (dto.Asset, error) {
 	if err != nil || len(files) == 0 {
 		return dto.Asset{}, skipOr(err)
 	}
+	// Changed: new, its stat or the role its grouper gave (stored later, with the
+	// sizes; a group that fails before shows the change again next walk)
 	changed := slices.ContainsFunc(files, func(f *dto.FileDto) bool { return f.Changed })
-	if changed {
-		// The walk stored the stat; a role the grouper gave is stored here
-		if _, err := g.db.UpdateFiles(files); err != nil {
-			return dto.Asset{}, err
-		}
-	}
 	if !changed && !g.needsWork(files, in.Key, in.MetaHash) {
 		return dto.Asset{}, chain.ErrSkippedItem
 	}

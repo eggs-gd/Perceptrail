@@ -1,11 +1,11 @@
 // Package exif: the import's EXIF perceptors over the identified item — the
 // built-in ones (they write into it: date, size, length), the external Go plugins
-// (they only read it), then their values kept, a row in each one's storage. And what
+// (they only read it), then their values kept, a row in each one's storage. And
 // what follows from them: the items one has not processed are processed again (at
 // start: MarkUnprocessed, the service's), the rows of gone items pruned (at the end
 // of a pass). It reads the plugin registry itself.
 //
-//	each built-in perceptor → each external one → keep (on a flush: prune)
+//	each built-in perceptor → each external one → keep (at the input's end: prune)
 package exif
 
 import (
@@ -103,7 +103,7 @@ func (keep) Decorate(it *identify.Item) (*identify.Item, error) {
 	return it, nil
 }
 
-// Flush: a walk's flush — the perceptors' rows of gone items are pruned
+// Flush: the pass's input ended — the perceptors' rows of gone items are pruned
 func (k keep) Flush() ([]*identify.Item, error) {
 	Prune(k.db, k.logger)
 	return nil, nil

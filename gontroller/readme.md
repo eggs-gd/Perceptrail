@@ -7,7 +7,7 @@ The core implements the necessary minimum (date, size); core plugins live here, 
 `pkg/plugins/exif_date`, `exif_size`, `exif_duration`. Extended features are external perceptors
 ([`../perceptors`](../perceptors/readme.md)).
 
-Design: [Item flow](../_sb/puml/Item%20flow.puml),
+Design: [Import chain](../_sb/puml/Import%20chain.puml),
 [Walker](../_sb/puml/Walker.puml), [Protocol](../_sb/puml/Protocol.puml).
 
 ## Running

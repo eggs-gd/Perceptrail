@@ -175,19 +175,19 @@ func TestWalkPass(t *testing.T) {
 	}
 }
 
-// Gone: only a complete walk that found files speaks; only under its root; never
+// Missing: only a complete walk that found files speaks; only under its root; never
 // under an unreadable directory
-func TestGone(t *testing.T) {
+func TestMissing(t *testing.T) {
 	file := func(p string) *dto.FileDto { return &dto.FileDto{ItemEntry: dto.ItemEntry{Path: p}} }
 	stale := []*dto.FileDto{file("/lib/a.jpg"), file("/lib/locked/b.jpg"), file("/other/c.jpg")}
 	r := Result{Root: "/lib", Complete: true, Files: 3, Unreadable: []string{"/lib/locked"}}
-	if g := Gone(r, stale); len(g) != 1 || g[0].Path != "/lib/a.jpg" {
+	if g := Missing(r, stale); len(g) != 1 || g[0].Path != "/lib/a.jpg" {
 		t.Errorf("gone %v", g)
 	}
-	if g := Gone(Result{Root: "/lib", Files: 3}, stale); g != nil {
+	if g := Missing(Result{Root: "/lib", Files: 3}, stale); g != nil {
 		t.Error("an incomplete walk deleted files")
 	}
-	if g := Gone(Result{Root: "/lib", Complete: true}, stale); g != nil {
+	if g := Missing(Result{Root: "/lib", Complete: true}, stale); g != nil {
 		t.Error("a walk that found nothing deleted files")
 	}
 }

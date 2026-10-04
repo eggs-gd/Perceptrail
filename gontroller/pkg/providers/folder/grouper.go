@@ -2,8 +2,8 @@
 // one claimed (the last in the switch). Its grouper: sidecars have the main file's
 // name and sit next to it, and the walk lists a directory in name order — so a
 // group's files come one after another. One group is open; a file that does not
-// belong to it closes it (the group goes out) and opens the next; the walk's flush
-// sends the last one. A file the walk says is gone passes through as it is (its own
+// belong to it closes it (the group goes out) and opens the next; the walk's end
+// (Flush) sends the last one. A file the walk says is gone passes through as it is (its own
 // group).
 package folder
 

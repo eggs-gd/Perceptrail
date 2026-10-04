@@ -14,23 +14,34 @@ import (
 // data), what they read, their rows. The registry (pkg/plugins) only knows what is
 // loaded and where each one keeps its data.
 
-// corePerceptors: the import chain's core perceptors (built in, EXIF data), in order
+// importPerceptors: the perceptors the import chain runs (EXIF data), in order
+func importPerceptors() []api.Perceptor {
+	var out []api.Perceptor
+	for _, p := range plugins.All() {
+		if p.DataProvider() == api.ExifDataProvider {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// corePerceptors: the built-in ones (they write into the item)
 func corePerceptors() []plugins.ExifCorePerceptor {
 	var out []plugins.ExifCorePerceptor
-	for _, p := range plugins.All() {
-		if c, ok := p.(plugins.ExifCorePerceptor); ok && p.DataProvider() == api.ExifDataProvider {
+	for _, p := range importPerceptors() {
+		if c, ok := p.(plugins.ExifCorePerceptor); ok {
 			out = append(out, c)
 		}
 	}
 	return out
 }
 
-// externalPerceptors: the import chain's external perceptors (Go plugins, EXIF
-// data), in order; one that is not an api.ExifPerceptor is not run
+// externalPerceptors: the Go plugins (they only read it); one that is not an
+// api.ExifPerceptor is not run
 func externalPerceptors() []api.ExifPerceptor {
 	var out []api.ExifPerceptor
-	for _, p := range plugins.All() {
-		if _, core := p.(plugins.ExifCorePerceptor); core || p.DataProvider() != api.ExifDataProvider {
+	for _, p := range importPerceptors() {
+		if _, core := p.(plugins.ExifCorePerceptor); core {
 			continue
 		}
 		if e, ok := p.(api.ExifPerceptor); ok {
@@ -40,12 +51,12 @@ func externalPerceptors() []api.ExifPerceptor {
 	return out
 }
 
-// importStores: the storages of the perceptors that run in the import chain: every
-// processed item gets a row in each (a value, or "nothing found")
+// importStores: their storages — every processed item gets a row in each (a value,
+// or "nothing found"); the rows of gone items are pruned
 func importStores() []*model.PerceptorStore {
 	var out []*model.PerceptorStore
-	for _, p := range plugins.All() {
-		if st, ok := plugins.Store(p.Name()); ok && p.DataProvider() == api.ExifDataProvider {
+	for _, p := range importPerceptors() {
+		if st, ok := plugins.Store(p.Name()); ok {
 			out = append(out, st)
 		}
 	}
@@ -108,8 +119,9 @@ func MarkUnprocessed(db Items, logger *l.Logger) error {
 	return err
 }
 
-// Prune drops every perceptor's rows of items that are gone — after a walk, once its
-// flush reached the end of the chain (its deletions are done)
+// Prune drops the import perceptors' rows of items that are gone — at the end of a
+// pass (the gate has done the walk's deletions by then). Other perceptors' rows are
+// the maintenance chain's (roadmap)
 func Prune(db Items, logger *l.Logger) {
 	guids, err := db.GetAllGuids()
 	if err != nil {
@@ -120,11 +132,7 @@ func Prune(db Items, logger *l.Logger) {
 	for _, g := range guids {
 		keep[g] = true
 	}
-	for _, p := range plugins.All() {
-		st, ok := plugins.Store(p.Name())
-		if !ok {
-			continue
-		}
+	for _, st := range importStores() {
 		n, err := st.Prune(func(guid string) bool { return keep[guid] })
 		if err != nil {
 			logger.Error("Perceptor storage: prune failed", l.String("store", st.Name()), l.Error(err))

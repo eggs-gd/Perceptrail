@@ -537,391 +537,115 @@ Design: roadmap "Expensive stage".
 
 ## Backend: gontroller, plugins, exiftool
 
-### identify in three steps, at the real boundaries (2026-10-04, decided)
+### The import chain, PR #24 (2026-10-04, decided)
 
-identify had nine steps — nine goroutines and eight channels for one draft passed
-from function to function; only the read gained from running apart. Seven of them
-had an empty `Stop`, the draft repeated the asset's fields, the embedded step ran
-pick's choice to know whether to extract (picked twice), `isMedia` was decided in
-fingerprint and again in validate, and two steps closed the shared exiftool pool.
-Now three steps where the work really differs:
+`pkg/scan` did everything in one constructor that knew every tool; its data rode
+in one bag (`importer/flow`). Now `pkg/importer`, cut by what each part yields. The
+strict review before closing it, with what is left for later:
+[review-pr24.md](review-pr24.md).
 
-- **read** — in parallel, no DB: exiftool, classify, merge, fingerprint (plain
-  functions, each tested alone).
-- **validate** — one at a time, the DB: two groups never decide one identity at once.
-- **show** — sizes (stored), the preview: pick, with the main file's embedded preview
-  as its last resort (extracted only then); the Item out. It is the last step to use
-  exiftool and closes the pool.
+**Shape.** `walk → group → gate → identify → exif → commit`, a package each, one
+`New` per stage; the top knows no tool. A step gets the DB methods it calls (a small
+`Store` next to it; the top's `store` embeds them). Constructors: the model, the
+step's own dependencies, the logger, `in`, `out`. The service builds a new chain
+for every pass (`importChain`) and runs it to its end, then the rescan pause; what
+runs once at start is in `Start` (`identify.Migrate`, `exif.MarkUnprocessed`), not
+in the constructors.
 
-The draft embeds `dto.Asset`. 1037 lines (was 1103).
+**Data: a type belongs to its producer.** `dto.Asset` (the asset before it is
+identified — its files' rows, the source's key, what to show, metadata, kind) is
+made by a provider's grouper, passed by the gate, read by identify; identify's
+working `draft` is private and it yields `identify.Item` (the item and its metadata
+package); `transcode.Item` is the transcoders' input. The rule for where logic
+goes: would another chain need the same rule? Then the model (`model/itemslife.go`:
+`NeedsWork`, `Gone`, `Ignore`, `Publish`, `MarkRework`, `Unshown`; `dto.AssetKind`
+— one rule for the import, the client and the transcoders). A tool, a format, the
+order of stages: a step.
 
-### chain: channels and a WaitGroup per output; a pass is a new chain (2026-10-04, decided)
+**The walk and deletions.** The walk is the chain's entry point: it writes every
+file's row as it goes (stat, `CheckTime`; `Changed` when new or the stat changed)
+and, after a complete walk, sends the rows it did not stamp that it says are gone
+(`walk.Missing`: under the root, not under an unreadable directory, never after an
+incomplete or empty walk), marked `Gone`. Groupers see gone files (the folder
+passes them through; Apple sends the files of assets trashed or hidden in Photos as
+gone — they are on disk, so the walk stamped them); the gate has the model apply
+`Gone`. A moved file's old path may go before the new one is validated: validate
+restores the deleted item by fingerprint, the GUID stays. A gone sidecar makes its
+item `Dirty` before the grouper gives the main file's group: processed in the same
+pass. No end-of-walk value in the data: the walk's output closes.
 
-The `Pipe` (a channel carrying values and a flush message, a writers counter as the
-barrier) was a hand-made `close` + `WaitGroup`: it existed only to keep the chain
-alive between passes, for Refresh to inject into. Refresh became a rework mark, so
-that reason went. Now the standard Go pipeline:
+**exif.** The perceptors declare their tags (`api.ExifTagger`); identify reads the
+union plus its own, one `exiftool -j -n` call per group (`-j`, not `-s2`: `-s2`
+prints no header for a single file; a JSON value is kept as its text). Merge builds
+the package: the source's metadata (Photos DB) > `.xmp` sidecars > the main file >
+derivatives (a fallback only). `-n` (no print conversion), measured on JPEG, HEIC,
+MOV and a written south-west JPEG / MOV: the composite `GPSLatitude` /
+`GPSLongitude` signed by their Ref (`EXIF:GPSLatitude` would be unsigned — never
+asked); QuickTime `GPSCoordinates` `"lat lon [alt]"`; `Orientation` 1–8;
+`Duration` seconds (exact); `ImageSize` `"W H"`; `Rotation` is degrees in QuickTime
+but quarter turns in HEIC (only a video's 90 / 270 turns the size; HEIC's turn is
+its `Orientation`); dates, MIME types, codecs unchanged. Pinned by a probe test
+(`identify/read_test.go`). The perceptors' parsers are `ParseFloat`; the Apple
+record writes numbers. Only the core writes into an item (`plugins.RawItemRW`);
+plugins give a `chain.Decorator`, no channels.
 
-- Steps take plain channels. A step reads its input until it closes, gives what it
-  holds (`Flusher`) and returns; the chain keeps a `WaitGroup` per output (one count
-  per writer) and closes it after the last writer — the join of the groupers into
-  the gate. `Process` is one pass: it returns when every step has. `Run`, the
-  passes channel, the ends counter, `msg{flush}` are gone (313 lines; develop 302).
-- Channels close once, so a pass is a new chain: the service builds it
-  (`importChain`) and runs it, then the pause. What ran once at start sat in the
-  steps' constructors (`exif` MarkUnprocessed, identify's kinds / fingerprint
-  versions); it moved to the service's `Start` (`identify.Migrate`,
-  `exif.MarkUnprocessed`), or it would run every pass.
-- exiftool starts with the first read of a pass (a lazy pool): an idle pass, where
-  the gate passes nothing, starts no process.
-- The perceptors' rows of gone items are pruned when the exif step's input ends —
-  after the gate did this walk's deletions (before, they went a walk late).
-- The API keeps develop's names and files (`cor_chain`, `cor_deco`, `cor_entry`,
-  `cor_switch`; `NewChainProcessor`, `NewDecorator`, `NewEntryPoint`, `NewSwitch`):
-  the diff is only what is new. Every step but the entry point is one runner (values
-  from the input, each through the logic, to the output it picks, on n workers);
-  the constructors pick the combination — `NewSwitch` only routes, `NewSwitchDecorator`
-  also turns the value into another, `…N` runs on n workers (as `strings.SplitN`,
-  `io.CopyN`: the variant with a count, `n` last). Go has no overloads, so these are
-  names, sharing a prefix for the autocomplete. 292 lines.
-- The import tests run the service's own `importChain` (the real exif and commit
-  steps); what a pass processed is read from the DB (the items it published). Test
-  hooks gone with it: `commit.NewCloser`, `gate.NewGate`, `runCorePlugins`. commit
-  is one file; its store is `commit.Store`.
+**The fingerprint is the file's bytes** (size + sha256 of the first and last 64
+KB): it says "the same file" across paths and does not change with the set of tags
+read. A new `hashVersion` makes every item forget its fingerprint once (the gate
+passes the group, validate gives the new one — same path, same GUID); not `Dirty`,
+or the library would vanish from the client for the pass. Checked on a real DB copy:
+581 items re-identified in ~2 s, every GUID kept.
 
-### Cleanup: dead code, the asset in dto, integration tests on a real exiftool (2026-10-04, decided)
+**identify in three steps**, at the real boundaries: **read** (in parallel, no DB:
+exiftool, classify, merge, fingerprint as plain functions), **validate** (one at a
+time: not media / broken → ignored, else the item), **show** (sizes stored; the
+preview — the source's `Show`, the main file, the biggest viewable derivative, the
+main file's embedded preview as the last resort, extracted only then; it closes the
+exiftool pool, which starts with the first read: an idle pass starts none).
 
-A review with `deadcode` / `staticcheck` and the model's methods without callers:
+**The chain library** keeps develop's names and files (`cor_chain`, `cor_deco`,
+`cor_entry`, `cor_switch`; `NewChainProcessor`, `NewDecorator`, `NewEntryPoint`,
+`NewSwitch`) — the diff is what is new: a pass ends from its input (a step reads to
+the end, gives what it holds — `Flusher` — and returns; an output closes once every
+writer returned: a `WaitGroup` per output; `Process` returns when every step has);
+one runner under every step but the entry point, the constructors pick the
+combination (`NewSwitch` only routes, `NewSwitchDecorator` also converts, `…N` on n
+workers — Go has no overloads, so names sharing a prefix, `n` last as in
+`strings.SplitN`); `NewEnd`; a skip is never an error; the error channel is
+inherited at run time; every send selects on the context; `Stop` optional, once.
 
-- Removed: `Item.SetDate` and `api.ItemDataEditor` (only the core writes into an
-  item: `plugins.RawItemRW` has its setters now; the first plugin API's `SetDate`
-  had no caller), `GetAllItems`, `GetItemByHash`, `UpdateItems`,
-  `PerceptorStore.Has` (`MarkUnprocessed` reads every GUID of a storage at once).
-- Used as meant: `AppContext.Logger` takes an `app.LogCategory`; the perceptors'
-  storages and the main DB are closed after the services stopped (`plugins.Close`,
-  `model.Close`) — before, nothing closed them: SQLite kept its `-wal` / `-shm`
-  files next to every DB (data safe, journal never merged on exit).
-- `dto.Asset` (was `providers.Asset`, and `gate.Group` a field-by-field copy of it):
-  the asset before identification is the system's unit next to the item; the gate
-  passes it on as it is.
-- The import tests are integration tests: the real chain over real files
-  (`fixtures_test.go`: JPEG, a TIFF named .NEF — exiftool takes a TIFF RAW's type
-  from the extension —, QuickTime, HEIF and XMP boxes, each with its content
-  inside) with a real exiftool; no test hook in the code (`identify.WithExiftool`
-  gone). Found while writing them: a text file named .jpg is `text/plain` to
-  exiftool (not media), not an Error; `FF D8` + garbage gives `Error: File format
-  error`, a JPEG cut after its header only a Warning and no size. CI installs
-  exiftool.
-- Kept on purpose: `pkg/transcode` and `pkg/transcoder` (the next chains),
-  `api.ProcessingMode` (until journeys / memories show whether it is needed),
-  `DataProvider` (it chooses the perceptors the exif step runs).
+**On demand (Apple Photos).** When Photos made a file local, the provider marks the
+item for rework itself (`MarkRework` through `UpdateColumn`: `updated_at` stays, so
+the client's delta does not bring the item back in its old state); the next pass
+processes it. No waiting: the client hides the tile's cloud once it got the original
+(a guess kept with the asset as the server sent it; a newer copy overrides it; lost
+on reload — accepted).
 
-### The walk writes the rows, gone files flow; Refresh is a mark (2026-10-04, decided)
+**Registries are package functions** (`plugins.Load`, `All`, `Store`; `providers.Enable`,
+`Enabled`): one per process; instances where they hold logic (steps, providers,
+groupers). The DB proxy and the stores stay passed in.
 
-Two tries came first and were rejected. (1) The walker cycled itself: a `Source`
-whose `Flush` waited for the end of the chain, the deletions after it. (2) The
-service cycled the chain through a `Spread` step fed walk requests, and the walk's
-result reached the gate through a variable shared by both steps — a side channel
-between packages, and a chain with two inputs. Now:
+**A clean stop.** `main` cancels and waits for the services (at most 10 s), the web
+service shuts down on the context, identify closes its exiftool, then the
+perceptors' storages and the main DB are closed (no SQLite journals left). Before,
+a stop orphaned every exiftool process.
 
-- **The chain library** is back to its shape: one input, `Entry` (an output only,
-  started by the chain); `Decorate`, `Parallel`, `Route`, `End`, the flush with its
-  barrier. `Chain.Process` runs the steps; `Chain.Run` is one pass — it starts the
-  entry and returns once its flush has reached every `End`. The importer service:
-  `for Run { pause }`.
-- **The walk writes the files table** as it goes (created, stat, `CheckTime`;
-  `Changed` when new or the stat changed) and sends rows. After a complete walk it
-  sends the rows it did not stamp that it says are gone (`Gone`: under the root, not
-  under an unreadable directory — the filter stays in walk), then the flush.
-  Groupers take rows; `Held` is gone (the walk stamped what it saw); the gate is a
-  filter only, and has the model delete gone files. A provider sees gone files: the
-  folder passes them through; Apple sends the files of an asset trashed or hidden in
-  Photos as gone (they are on disk, so the walk stamped them — before, the gate
-  stamped only grouped files and they went as unseen).
-- **Refresh is a mark** (`MarkRework`, through `UpdateColumn`: `updated_at` stays,
-  so the client's delta does not bring the item back in its old state). No
-  injection, no waiting, no `Regroup` / `Requested` / `assetWaits`. The client
-  guesses: once the viewer got the original from Photos, the tile's cloud goes
-  (`fullFetched`, kept with the asset as the server sent it); a newer copy from the
-  server overrides the guess. Not kept across reloads (accepted).
-- Consequences seen in the tests: a gone sidecar makes the item `Dirty` before the
-  grouper's flush gives the main file's group, so it is processed in the same pass.
-  A real-DB copy (Apple disabled): idle passes, ~0.3 s each.
-- Open: a Photos library has internal files (database, caches) the walk now writes
-  rows for (before, only grouped files had rows) — not measured on a real library
-  (unreadable from the sandbox here).
+**Tests.** The import tests are integration tests: the service's own chain over real
+files (`fixtures_test.go`: a JPEG; a TIFF named `.NEF` — exiftool takes a TIFF
+RAW's type from the extension; QuickTime and HEIF boxes; XMP), a real exiftool (CI
+installs it), what a pass published read from the DB. Found: a text file named
+`.jpg` is `text/plain` to exiftool (not media, not an Error); `FF D8` + garbage gives
+`Error: File format error`; a JPEG cut after its header only a warning and no size.
+No test hook in the code.
 
-### One exif step; the perceptors' contract in plugins (2026-10-03, decided)
-
-The perceptors' logic was spread over four places: the built-in ones a step
-(`importer/exif_core`), the external ones another (`importer/exif_ext`), their
-values kept in commit (`keep`), and what the import asks of them in the top
-(`perceptors.go`) — the top handing the steps lists and a `saveValues` lambda. Now
-one step, `importer/exif`: the built-in perceptors, the external ones, keep — it
-reads the plugin registry itself — and it gives the rest of the import what it asks
-(`MarkUnprocessed` at start, `Prune` after a walk). One generic
-adapter (`perceive[T]`) over the item for both kinds. commit only publishes.
-
-`plugins/exif_core` (two types and `OrderByValue`) was a sub-package for one and a
-half files: folded into `pkg/plugins`. To avoid a cycle (the built-in perceptors
-import it), the registry no longer imports them — `gontroller.go` gives them to
-`Load` — and no longer imports `app`: it pulled config → client → routes into every
-perceptor (an import cycle in the routes' tests); `Load` takes a `plugins.Config`.
-
-`identify.Config` was the same kind of wrapper: its `Tags` were carried by the top
-from the exif step. "Which tags do the loaded perceptors read" is a plain question
-to the registry (`plugins.ExifTags`, no import rules in it): identify asks it
-itself and takes only its real dependencies — `identify.New(db, cacheDir, logger,
-in, out)`. The import's tests load the registry with the built-in perceptors, as
-the server does.
-
-`identify.Steps` (a struct listing the stage's steps, plus `Run` for the tests) was
-a second declaration next to the chain's own: it existed because the tests had to
-replace exiftool, which lived in `Extract` func fields of the steps. exiftool is
-identify's own tool: the stage starts its pool of processes and its steps close it
-when they stop; a test gives a fake (`identify.WithExiftool`, behind the
-`identify.Exiftool` interface: `Read`, `Extract`); `Steps` and `Run` are gone; the tests drive the real
-chain (`Pipe.Send` a group, `Pipe.Flush`, read what came out before the flush).
-
-While at it: a stop left every exiftool process orphaned (329 of them had piled up
-from killed dev runs) — `main` returned as soon as PhotoKit's main queue was let go,
-without waiting for the services, and the web service never stopped at all (`e.Start`
-blocked forever). Now `main` cancels and waits for the services (at most 10 s), the
-web service shuts down on the context, identify's steps close its exiftool: a
-SIGTERM ends in a second, no orphans.
-
-### discover cut into walk, group, gate; the walk cycle is the top's (2026-10-03, decided)
-
-discover took nine arguments; a `Deps` struct only hid them. The cause: three things
-hung on it that are not the flow of groups — the walk cycle (when to walk again,
-what to do once a walk is done: `rescan`, a shared `Progress`, `WalkDone`, the gate
-as a `Flusher` carrying the walk's result into the sweep), `Refresh` (a second entry
-wedged into the middle, `Regroup`, plus a `Dropped` callback from the gate) and
-`Held` (riding to the sweep only so held files are not deleted). Cut by the
-artifacts, which differ at every step:
-
-- **walk** (`dto.ItemEntry`; to the top a `walk.Result`) — the root only; walks when
-  asked (`Next`). `walk.Gone`: what a walk says is deleted (complete, under the
-  root, not under an unreadable directory).
-- **group** (`dto.ItemEntry` → `providers.Group`) — the providers only.
-- **gate** (`providers.Group` → `gate.Group`) — the model only: the files table,
-  `NeedsWork`; no walk, no deletions, no callbacks. Held files: stamped.
-- **The cycle is the top's** (`cycle.go`): once the walk's flush reached the end —
-  the deletions (`walk.Gone`, then the model's `Gone`), the perceptors' rows of gone
-  items, the rescan pause, `Next`. Deletions now come after the walk's groups went
-  through the whole chain (a moved file is validated before its old path goes;
-  validate restores by fingerprint either way).
-- **Refresh** sends the provider's asset into the gate's input with `Requested`:
-  processed even if nothing changed, so it always reaches the end where its waiters
-  are; no `Dropped`. The cost: one exiftool pass for that one asset, on demand only.
-- `providers.Found` is gone: a grouper takes a `dto.ItemEntry`.
-
-Checked: the smoke run gives the same items, a removed file is deleted and its
-perceptor row pruned, a new one added; the real DB copy walks twice, idle.
-
-### The model decides, the steps gather facts (2026-10-03, decided)
-
-The proxy is meant as the model (the library's data and its rules), not a thin
-facade over the DB. So the rules went down into it (`model/itemslife.go`), not up
-into the steps: whether an unchanged group needs work (it was the gate's
-`needsProcessing` / `cheapStageDone`), what a file gone means (the sweep's per-file
-rules; the walk's safety — complete, unreadable directories, the root — stays in
-discover), linking a group and dropping the items it supersedes (validate's),
-ignoring a group that is no item, publishing an item (the closer chose Visible /
-Waiting), "items nothing can show yet" (the Apple provider read `Waiting` itself).
-The test for where a rule goes: would another chain (Refresh, an API provider, the
-maintenance) need the same rule? Then the model. Is it a tool, a format, the order of
-stages? Then a step.
-
-- **The asset's kind was one rule in two places, and they disagreed**: the client
-  said a plain folder's video with a still is a video, transcode said a Live Photo.
-  Now `dto.AssetKind`, the client's rule (the roles cannot tell a Live Photo's pair
-  from a camera's thumbnail; Apple says Live itself); the import saves it with the
-  item.
-- **The DB row no longer carries the plugin contract**: `dto.ItemDto` had a
-  non-column map of the perceptors' values and implemented `api.ItemDataProvider`.
-  The values live in `identify.Item` (the import) and in the web's `perceived`
-  wrapper (Order, Info); `GetDate` (the date in the shot's zone) stays on the item.
-- **discover no longer knows the perceptors.** The gate asked every perceptor's
-  storage, for every unchanged group on every walk, whether it had a row for the
-  item (thousands of queries a minute) — yet a row goes missing only when a
-  perceptor is new or its schema changed, i.e. at start. Now the importer checks
-  once at start and asks the model to mark those items (`MarkRework`, a column;
-  `NeedsWork` sees it, `Publish` clears it); pruning the rows of gone items moved
-  from the sweep to the end of the walk (the top's `Sink`). Checked live: two items'
-  rows removed by hand → exactly those two processed again on restart, the rest
-  untouched.
-- 27 of 38 log categories were never used (the old opener / closer among them):
-  removed.
-
-### Registries are package functions, steps are instances (2026-10-03, decided)
-
-`providers` (one registry per process) exposed package functions (`Enabled`, `Of`),
-`plugins` exposed a global instance (`plugins.Pm.LoadPlugins`, `Pm.Core()`, …): a
-third more text in the package and at every call. Rule: **a top-level package that is
-one per process (a registry) gives package functions** — `plugins.Load`, `All`,
-`Store`, `LoadValues`, `Client`; **instances where they encapsulate logic** (a
-chain's steps, a provider, a grouper). **And a registry keeps only what it is**:
-what a perceptor means to the import (which run in the chain — EXIF core and
-external —, the tags they read, a missed item, their rows written and pruned) moved
-to `importer/perceptors.go`, over `All` and `Store`; it had been described "for the
-import" in the registry's own doc comments. A step that needs one call of a registry gets that function
-(`discover.Perceptors{Unprocessed, Prune}`, `commit.Values`), not the registry — a
-one-method dependency is a func, as the gate's `dropped` already was. Not singletons
-for everything: the DB proxy, the steps' stores stay passed in (narrow interfaces,
-replaceable in tests); a global reached from inside a step hides the link.
-
-### chain: pipes with a flush (2026-10-03, decided)
-
-The end of a walk was a domain value: `Found.Done` / `Group.Done` rode in the data,
-every grouper checked it, the switch broadcast it, the gate counted one per branch,
-and `Progress` counted every group the gate passed until it came out as an item or
-as an error — which needed a second error channel and made skips travel as errors.
-perceplib's `chain` is rewritten in place (no v2 next to it: one commit with its
-users):
-
-- **Typed pipes carry values and a flush.** A source flushes after a batch; a step
-  passes it on after the values before it (a `Flusher` first gives what it holds); a
-  reader with several writers passes it once every writer has flushed — the barrier
-  that replaces the gate's marker counting. `Route` sends it to every output,
-  `Parallel` waits for the values in flight.
-- **Completion without counting**: pipes are FIFO and every step keeps the order of
-  values and flush, so the walk's flush at the end of the chain (a `Sink`) means
-  every group of it went through every step. `Progress` is now the last walk and
-  that signal; one error channel; a skip is never an error.
-- Also: a sub-chain inherits its parent's error channel at run time (it was bound
-  at `AddStep`, the sub-chain's own steps kept the old one); every send selects on
-  the context (`chout <- res` blocked forever on shutdown); `Stop` is optional and
-  called once (the walker guarded a double call with a mutex); `Series` for a list
-  of steps; plugins give a `chain.Decorator` (`Decorator(logger)`), the host wires
-  it — no channels in the plugin API.
-- **Checked**: the library's tests under `-race`; the smoke run gives the same items
-  and coordinates as before, the next walk idle, a removed file deleted and a new one
-  added on the following walk; the real DB copy walks twice, idle, no deletions.
-
-### exif as numbers: exiftool -n (2026-10-03, decided)
-
-Every perceptor parsed exiftool's printed text with a parser of its own
-(`50 deg 27' 12.34" N` plus the Ref, `"4032x3024"`, `"Rotate 90 CW"`, `"24.40 s"` /
-`"0:01:23"`), and the Apple provider faked that text (`dms()`) so the same parsers
-read the Photos DB. identify now reads with `-n` (no print conversion; value
-conversion and composite tags still apply). Measured on JPEG, HEIC and MOV, and with
-a written south-west JPEG and MOV:
-
-- the composite `GPSLatitude` / `GPSLongitude` (what an unqualified name gives) are
-  signed by their Ref — south and west negative; `EXIF:GPSLatitude` would be
-  unsigned (never asked). QuickTime `GPSCoordinates`: `"lat lon [alt]"`, signed;
-- `Orientation` 1–8; `Duration` seconds (exact: 9.80833, not the printed 9.81);
-  `ImageSize` `"W H"`;
-- `Rotation` differs by format: QuickTime degrees (90), HEIC `irot` quarter turns
-  (3) — size turns only a video by 90 / 270, HEIC's turn comes from `Orientation`;
-- dates, offsets, MIME types, codecs, binary markers: unchanged.
-
-So the parsers are `ParseFloat`; `Coordinates` left the `api` contract for a small
-`perceplib/exif` package of helpers; the Apple record writes numbers (its MetaHash
-changes once — the same pass as `hashVersion`). A probe test pins the behaviour with
-a real exiftool (`identify/read_test.go`). Compared with the text build on 8 files:
-dates, zones, sizes and coordinates identical, durations exact.
-
-### Import data: types by producer, exif by declaration, a bytes fingerprint (2026-10-03, decided)
-
-`importer/flow` was a bag: the providers' contract (`FileEvent`, `FileGroup`,
-`WalkResult`), the walk's progress, identify's working item (`RawItem`: every file,
-its exif and kind) that rode all the way to commit, the kinds. It existed only to
-break the import cycle `providers ↔ discover`. Removed; **a type belongs to the
-package that produces it**:
-
-- **The provider contract lives in `providers`** (`Found`, `Walk`, `Asset`,
-  `Group`), next to the interface that uses it — the cycle is gone (discover imports
-  providers, not the other way). Only discover sees it: the gate turns a provider's
-  `Asset` into `discover.Group`, our format (stored rows). identify does not know
-  providers exist.
-- **identify's working item is private** (`draft`); it yields `identify.Item`: the
-  item and its metadata package. Measured: after pick nobody read the files, kinds,
-  `Show`, `Key` or the embedded path.
-- **`transcode.Item`**: the transcoders' own input (an item, its files with roles),
-  as they will be fed from the DB.
-
-**exif — what is read and who sees it.** Inventory before: `read` ran
-`exiftool -all` once per file; about 45 tags were used in all (identify's own
-technical ones and the perceptors'); `-all` was needed only by the short hash; every
-tag reached the perceptors, and `GetExif` ranked the sidecars below the main file —
-the opposite of what a sidecar is for. Now:
-
-- the perceptors declare their tags (perceplib `api.ExifTagger`, required of every
-  EXIF perceptor; `api.CoordinateTags`), `Pm.ExifTags` is the union; identify adds
-  its own. A test per core perceptor (`exif_coretest.Recorder`) checks it reads
-  nothing undeclared — an undeclared tag is always "";
-- one `exiftool -j` call per group (`-j`, not `-s2`: `-s2` prints no file header for
-  a single file and adds summary lines; `-j` keys every file by `SourceFile`, and a
-  value kept as its JSON text — a number's literal, a list joined by ", " — reads
-  the same as `-s2`);
-- **merge** builds the package: the source's metadata (Photos DB) > metadata
-  sidecars (.xmp) > the main file > derivatives (a fallback only: a JPEG's size or
-  orientation must not override its RAW's). Not stored: it travels with the item;
-- an embedded preview's presence is learned in `read` (without `-b` exiftool prints
-  only "(Binary data N bytes)"); its bytes are extracted in `embedded`, only for a
-  group with nothing to show — whether it is needed is known after classify, and its
-  path needs the GUID.
-
-Checked against the previous build on the same files (JPEG, HEIC, MOV): dates,
-offsets, date sources, sizes, durations and coordinates identical.
-
-**The fingerprint is the file's bytes**, not its tags: the size and sha256 of the
-first and last 64 KB (`identify/fingerprint.go`). It only says "the same file" across
-paths (moved / duplicate / changed); with the tags read now declared, a tag-based
-hash would change whenever the set of plugins does. Changing it needs a new
-`hashVersion`: at start every item forgets its fingerprint (`ClearHashes`), the gate
-passes a group whose item has none, validate gives it the new one (same path, same
-GUID). **Not `Dirty`**: the client shows only `Visible` and `Ready`, the whole
-library would vanish for the pass. Checked on a copy of the real DB (7009 items, the
-plain folders only — this session has no access to the Photos library): 581 items
-re-identified in ~2 s, every GUID kept, the next walk idle. The Apple items get the
-same one-time pass on the first start.
-
-### The import chain: stages, not tools (2026-10-03, decided)
-
-`pkg/scan` did everything: the walk, the providers' switch, the gate, exiftool, the
-kinds, the validator, the cheap preview, the plugins and the closer, all wired in one
-constructor that knew every tool. Renamed to `pkg/importer` and cut by what each part
-yields:
-
-- **The top has only linear stages** (`discover → identify → core → plugins →
-  commit`), each a
-  sub-chain in its own package with one `New` that lists all its steps. The top knows
-  no tool (file system, providers, exiftool, plugins); a stage owns the tools it uses.
-- **walk, group and gate are one stage.** The gate is the grouper's result (the groups
-  that need work, the files table up to date), not a step of its own.
-- **The cheap preview belongs to identify** (what the item can show is part of knowing
-  it), cut into `embedded → sizes → pick`; only `embedded` runs exiftool (besides
-  `read`). The plan put `embedded` right after `read`; it runs **after validate**:
-  whether to extract needs the main file (classify) and the cache path needs the
-  item's GUID (validate). The draft's `Embedded` carries the extracted path to `pick`.
-- **Perceptors by kind, a stage each**: `core` (built in, read-write
-  `exif_core.RawItemRW`), `plugins` (external `.so`, read-only `api.RawItemR`, with
-  adapters; none loaded → a pass step), `commit` (the closer). Each stage filters
-  the plugin manager's list by type, so the core ones now always run before the
-  external ones (before: the manager's order, mixed).
-- **The DB goes into constructors**, not package variables: the steps' logic is
-  exported so the whole-import tests run it one group at a time.
-- Sub-packages cannot import `importer`. What they shared lived in `importer/flow`
-  at first — removed, see the next entry.
-- **A step gets only the DB methods it calls**: each declares its own small interface
-  next to it (`GateStore`, `SweepStore`, `ValidatorStore`, `SizesStore`,
-  `KindsStore`, `CloserStore`, `apple.Items`); a stage's `Store` embeds its steps'
-  (overlaps are fine). `model.ItemsApi` / `FilesApi` / `MetaApi` stay the proxy's
-  full API (routes, tests); `model.Store` is gone. The gate needed ten methods for
-  two jobs: the deletions after a walk moved to `sweep` (its own store), the gate
-  keeps the files table.
-- **No step knows the plugin manager.** The closer used to write the perceptors'
-  values (`Pm.ImportStores`), the gate asked `Pm` whether a perceptor missed an
-  item, the sweep pruned `Pm`'s storages, core / plugins filtered `Pm.GetPlugins()`.
-  Now `pkg/plugins` owns that knowledge (`Core`, `External`, `Unprocessed`,
-  `SaveValues`, `Prune`), the top passes `plugins.Pm` in, each step sees a one-method
-  interface. commit is `keep → close`: the values first — a crash between the two
-  leaves an item that is not done, the next walk sends it again; the other order
-  would publish an item the gate takes as done without its values. `model.ErrNotFound`
-  replaces `gorm.ErrRecordNotFound` in the gate (the DB stays behind `model`).
+**Rejected on the way**: the walker cycling itself (the cycle is the chain's);
+`Spread` steps fed walk requests and the walk's result handed to the gate through a
+shared variable (a second input, a side channel); a `Pipe` carrying a flush message
+with a writers counter (a hand-made `close` + `WaitGroup`, needed only to keep the
+chain alive for Refresh); Refresh injecting a group and waiting for it (a mark is
+enough); `Deps` / `Config` structs for constructors (they hide coupling, not cut it);
+a `Steps` struct next to the chain (a second declaration); exiftool passed in from
+outside identify; nine one-function steps in identify.
 
 ### Broken files (2026-10-01)
 
@@ -998,10 +722,9 @@ yields:
   scattered over the bundle, but the grouper forms the groups up front from the DB
   and a `stat` of every candidate path — the expected files are exactly those on
   disk, so each walked file closes at most one group. A file vanishing mid-walk
-  (Photos purging a derivative) leaves a group incomplete: it is held back with the
-  marker (`FileGroup.Held`), the gate does not count its files as gone, the next
-  walk reloads the DB.
-- **The asset UUID is the item's GUID** (`FileGroup.Key`): the main file of an asset
+  (Photos purging a derivative) leaves a group incomplete: it waits for the next
+  walk, which reloads the DB (the walk stamped its files: none is taken as gone).
+- **The asset UUID is the item's GUID** (`dto.Asset.Key`): the main file of an asset
   changes (a derivative while cloud-only, then the downloaded original) — the item
   stays. Every file links to the key; an item with no files left is deleted (the
   main/sidecar rule does not apply to keyed files).
@@ -1050,8 +773,7 @@ yields:
   gone items goes with them (a cleanup on delete — to add with the renders). The
   GUIDs change (a link to the old item breaks); carrying them over by content hash
   is for when a second provider exists.
-- `pkg/providers`: `Claims`, `Grouper`, `Regroup`, `Owns`, `Levels`, `Rendition`,
-  `Start`. Apple is the first: its grouper, PhotoKit and the on-demand logic moved
+- `pkg/providers`: `Claims`, `Grouper`, `Owns`, `Levels`, `Rendition`, `Start`. Apple is the first: its grouper, PhotoKit and the on-demand logic moved
   into `pkg/providers/apple`; the plain folder's grouper into `providers/folder`;
   outside them nothing names a source (the switch, `routes/rendition.go`, the
   importer and `main` only see providers).
@@ -1217,15 +939,10 @@ the binary by the linker; run from the user's terminal on the dev library.
   navigation or a return to the tab — back in the list before the walk, nothing
   told it later. First fix (a successful request cut the walk's pause short, the
   page polled every 20 s) — rejected by the owner: a whole walk for one known
-  photo. Now **one asset is processed again**: the Apple grouper keeps the DB rows
-  of its last load and forms that asset's group from them and the disk now
-  (`Regroup` — no walk, no DB read; the DB's metadata still wins over the files'
-  EXIF); the importer hands it to the files gate like any group (`Refresh`: only
-  what changed passes; deletions are untouched — they come with the walk's marker;
-  a walk sending the same asset at the same time processes it twice into the same
-  item) and waits until the item leaves the closer. The Original's answer waits for
-  it (≤ 10 s), the client asks for the delta once the original has loaded — the
-  cloud is gone on the way back to the list. A medium or a hover refreshes in the
+  photo. Then one asset was processed again on its own (`Regroup`, injected into
+  the gate, the answer waiting ≤ 10 s); since PR #24 the provider only marks the
+  item for the next pass and the client hides the cloud itself (see "The import
+  chain, PR #24"). A medium or a hover refreshes in the
   background. The download next to Photos' original is gone: it is a JPEG every
   browser shows — the download stays only as the fallback for a local original the
   browser cannot show.
@@ -1318,35 +1035,10 @@ Every file belongs to a known asset; the DB's local-resource counts match the fi
 
 ### Import chain as small steps (2026-09-29)
 
-- **Groupers are plain decorators with a buffer of open groups** (decision): a group
-  goes out when it is complete, so each incoming file closes at most one group —
-  one output per call is enough. A first version buffered a whole directory
-  (`WalkDir` visits subdirectories between a directory's files) and released many
-  groups at once, which needed a 1 → N step in perceplib (`Expander`); dropped:
-  sidecars are next to their main file, one open group suffices for `generic`.
-  Known limit: a name sorting between members splits a group (`a.aae`,
-  `a.edited.jpg`, `a.jpg`; a subdirectory `a.jpg.d/` between `a.jpg` and `a.xmp`).
-  Skipped items (`ErrSkippedItem`) are not logged any more.
-- **exif was serial.** A decorator runner is one goroutine: the pool of 5 exiftool
-  processes was used one at a time. Now N runners read the same channel (groups are
-  independent after the gate); `Stop` is called by each, closing is `sync.Once`.
-- **The main file is known only after exif**, so every file of a group gets `-all`
-  (same arguments as the main file had: short hashes stay stable) and the validator
-  links the group. **The main file is always the source** (decision): RAW > video >
-  image. The JPEG of RAW+JPEG and the photo of a Live Photo are derivatives —
-  sidecars that can later serve as ready previews. A file that was a main file and
-  becomes a sidecar (a JPEG imported before its RAW) loses its item. Side effect:
-  tags missing in the main file can now come from a sidecar's full set (`GetExif`
-  looks through the group, main first).
-- **The closer blocked after 1000 items**: it wrote to a buffered channel nobody
-  read. Finished items are drained now (later: events to the client).
-- Codex review: (1) a derivative whose main file was deleted stayed linked to the
-  deleted item and was dropped by the gate — now a link to a GUID outside the group
-  means "process"; (2) groups ignored by the old system-MIME logic would stay
-  ignored forever — a `meta` table keeps `mime_version`, a new version clears the
-  "ignored" marks once.
-- The gate stamps `CheckTime` with its own clock; the marker carries the walk start,
-  and "not stamped since the walk started" = gone.
+PR #14 split the first monolithic import into steps with groups as whole assets
+(a group goes out when complete, so each file closes at most one group) and the
+main file ranked as the source (RAW > video > image). Superseded by the stages of
+PR #24 (above); the two rules stay.
 
 ### Go plugins (2026-09-28)
 
@@ -1360,7 +1052,7 @@ Every file belongs to a known asset; the DB's local-resource counts match the fi
   `ml_color` — ok; `ml_faces`, `ml_objects` — stubs without a `Perceptor` symbol.
 - **Pipeline stall with external EXIF plugins (fixed 2026-09-29):**
   `ExifPluginProcessor` allocated a channel for every `ExifDataProvider` plugin but
-  added a step only for `exif_core.ExifCorePerceptor` (`RawItemRW`). External
+  added a step only for the core perceptors (`RawItemRW`). External
   `exif_geo` implements `api.ExifPerceptor` (`RawItemR`) → nobody read its channel →
   no item reached the closer. Confirmed with an end-to-end test (0 of 2 items).
   Now external plugins are wired through two adapter decorators
@@ -1406,7 +1098,7 @@ Every file belongs to a known asset; the DB's local-resource counts match the fi
 - **The zone is stored separately** (`DateOffset`, minutes): sqlite and Postgres
   `timestamptz` return times in UTC, the zone of `Date` is lost on read.
   `RawItem.GetDate()` returns the date in the zone of the shot, so external plugins
-  see it through the unchanged perceplib API; only the core `exif_core.RawItemRW`
+  see it through the unchanged perceplib API; only the core `plugins.RawItemRW`
   got `SetDateInfo` — no perceplib release, no plugin rebuild.
 - **No `-G` in exiftool:** groups would rename every tag (plugins read `ImageWidth`,
   the short hash hashes tag names). `CreateDate` is interpreted by file type instead:
@@ -1418,54 +1110,26 @@ Every file belongs to a known asset; the DB's local-resource counts match the fi
   (assumed). Not longitude/15: no DST, wrong at administrative borders. The time zone
   is core (the date), not the geo perceptor. `time/tzdata` is embedded for Docker.
 
-### Validator per `Walker.puml` (2026-09-29)
+### Validator and walk safety (2026-09-29)
 
-- **Walk safety first.** One unreadable directory aborted the whole walk (the
-  `WalkDir` callback returned the error). Now it is skipped and recorded; its files
-  are never taken as deleted. Deletions run only after a complete walk that found
-  files: a cancel, a missing root or an empty mount point would otherwise delete the
-  library. Real case: without Full Disk Access the Photos library is unreadable.
-- **Finalization runs in `Decorate` on the end-of-walk marker**, after the last group
-  is stored — `Start` (walk) and `Decorate` (DB writes) are different goroutines. It
-  was in `Stop()`, called by both goroutines and on cancel.
-- **Moves race with deletions.** Validation happens downstream (exiftool workers,
-  channels), so finalization may delete the vanished path's item before the moved
-  file is validated. Fix: move detection also looks at soft-deleted items with the
-  same hash whose path is gone, and restores them (as `Dirty`). Order-independent,
+What still holds from the first validator (the code moved on in PR #24):
+
+- **Walk safety**: an unreadable directory is skipped and recorded, its files never
+  taken as deleted; deletions only after a complete walk that found files (a cancel,
+  a missing root or an empty mount point would delete the library — e.g. without
+  Full Disk Access the Photos library is unreadable).
+- **Moves race with deletions**: move detection also looks at soft-deleted items
+  with the same fingerprint whose path is gone and restores them — order-independent,
   and a file that comes back later gets its old GUID.
-- **States are alive:** the closer sets `Ready`; the walker re-emits unchanged groups
-  whose item is not `Ready`. The first run after this change reprocesses everything
-  once (all items were `New`).
 - CheckTime is compared in Go: the driver stores times as text with the local
   offset, which changes across DST — a SQL string comparison is not reliable.
-- Tests without exiftool: the file content stands in for metadata
-  (`pkg/scan/validator_test.go`), one sqlite per package (`TestMain`).
-
-
-- **fswalker (fixed 2026-09-29, found by Codex review):** the last group of a walk was
-  never emitted (groups go out when the next group starts) — a library with a single
-  group imported nothing; now an end-of-walk marker flushes it. For changed files the
-  stale DB row (old size/mtime) was saved back — every scan saw them as changed and
-  `HashShort` used the old size; now fresh values are stored. `dbitems[i]` indexing
-  drifted after a `continue` (possible out-of-range).
-
-- **`HashShort` was unstable:** it hashed a pointer address (`&item.Size`), and after
-  `--File:all` was dropped also volatile File-group tags (`FileAccessDate`,
-  `FileName`, `Directory`). Fixed: size + EXIF without volatile tags. This is what
-  makes the "found moved" branch of the validator possible — see
-  [`Walker.puml`](../puml/Walker.puml) (same / moved / duplicate / changed).
-- **Video size:** QuickTime stores unrotated dimensions + `Rotation` (90/270) — handled
-  in `size` next to EXIF `Orientation` (5–8).
-- **MIME detection in fswalker is platform-dependent:** `mime.TypeByExtension` uses
-  system tables; in a minimal Docker image `.mov/.heic/RAW` → `application/octet-stream`
-  → the whole group is ignored. Needs an own media-type table (`MediaKind`).
-- Grouping: the main file of a Live Photo is currently the **video** (the comparator
-  ranks `video/` above `image/`); for RAW+JPEG the main file is nondeterministic.
-- `date`: the `FileModifyDate` fallback never parses (exiftool prints it with a zone,
-  `…+02:00`); no time zone handling at all (`OffsetTimeOriginal` is not read).
+- QuickTime stores unrotated dimensions + `Rotation` (90/270): handled in `size`
+  next to EXIF `Orientation` (5–8).
+- MIME detection never uses the system tables (a minimal Docker image has none):
+  exiftool, then our own extension table, then a sniff.
 - SQLite: WAL + `busy_timeout` in the DSN, **a single connection** (otherwise
-  "database is locked"). Consequence: never query through `db` instead of `tx` inside
-  a transaction — deadlock. `/items` streams NDJSON in keyset pages of 32.
+  "database is locked"). Never query through `db` instead of `tx` inside a
+  transaction — deadlock. `/items` streams NDJSON in keyset pages of 32.
 
 ---
 

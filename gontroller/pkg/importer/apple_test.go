@@ -8,9 +8,6 @@ import (
 	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
-
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
 )
 
 const (
@@ -132,7 +129,7 @@ func TestAppleMetadataFromDB(t *testing.T) {
 	}
 }
 
-// One asset asked again on demand (Refresh): marked, processed on the next walk
+// One asset asked again on demand (the provider marks it): processed on the next walk
 // though nothing changed, its item kept; the mark is no change the client sees
 func TestRefreshMarksForNextWalk(t *testing.T) {
 	root := t.TempDir()
@@ -142,9 +139,9 @@ func TestRefreshMarksForNextWalk(t *testing.T) {
 		t.Fatalf("nothing changed, processed %v", got)
 	}
 	before, _ := itemsProxy.GetItemByGuid(appleEdited)
-	s := &importerService{db: testDB, logger: l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})}
-	s.Refresh(appleEdited)
-	s.Refresh("no-such-asset")
+	if _, err := testDB.MarkRework([]string{appleEdited, "no-such-asset"}); err != nil { // as the provider does
+		t.Fatal(err)
+	}
 	if marked, _ := itemsProxy.GetItemByGuid(appleEdited); !marked.UpdatedAt.Equal(before.UpdatedAt) {
 		t.Errorf("the mark moved updated_at: %v -> %v (the client's delta would bring it)", before.UpdatedAt, marked.UpdatedAt)
 	}
