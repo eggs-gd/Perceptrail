@@ -1,8 +1,8 @@
-// Package plugin builds the perceptors in perceptors/ as Go plugins for the
+// Package pluginbuild builds the perceptors in perceptors/ as Go plugins for the
 // integration tests, the way the server would load them: with the Go that built the
 // test binary and its -race setting (plugin.Open refuses a plugin whose runtime or
 // packages differ from the host's).
-package plugin
+package pluginbuild
 
 import (
 	"os"
@@ -25,9 +25,9 @@ func Supported(t *testing.T) {
 	}
 }
 
-// Build: the perceptor perceptors/<name> built into dir; its .so path (perceptors:
+// Perceptor: perceptors/<name> built into dir; its .so path (perceptors:
 // the directory, relative to the test's own)
-func Build(t *testing.T, perceptors, name, dir string) string {
+func Perceptor(t *testing.T, perceptors, name, dir string) string {
 	t.Helper()
 	so := filepath.Join(dir, name+".so")
 	args := []string{"build", "-buildmode=plugin", "-o", so}

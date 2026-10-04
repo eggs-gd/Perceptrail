@@ -289,7 +289,7 @@ Layout, the DB's facts and PhotoKit's behaviour: the
   loads them; it must use the test binary's own Go (`GOTOOLCHAIN=` its `runtime.Version()`; `runtime.GOROOT` is deprecated), and run with `-count=1` (the test
   cache ignores files in other modules). Under `-race` the plugin must be built
   with `-race` too ("plugin was built with a different version of package
-  internal/runtime/sys"): `test/plugin` reads the test binary's own setting.
+  internal/runtime/sys"): `test/pluginbuild` reads the test binary's own setting.
 - External EXIF plugins once stalled the import: a channel was allocated for each
   but a step added only for the built-in ones — nobody read it. Allocate outputs
   only for real steps.

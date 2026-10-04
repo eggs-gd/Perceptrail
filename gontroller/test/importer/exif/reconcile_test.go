@@ -10,7 +10,7 @@ import (
 	"perceptrail/gontroller/internal/model"
 	"perceptrail/gontroller/internal/model/dto"
 	"perceptrail/gontroller/internal/perceptor"
-	"perceptrail/gontroller/test/plugin"
+	"perceptrail/gontroller/test/pluginbuild"
 
 	l "github.com/eggs-gd/perceplib/logger"
 	"github.com/eggs-gd/perceplib/logger/decorators"
@@ -21,9 +21,9 @@ import (
 // perceptors keep nothing, so a real plugin that keeps data (exif_geo) is built and
 // loaded, as the server does.
 func TestReconcile(t *testing.T) {
-	plugin.Supported(t)
+	pluginbuild.Supported(t)
 	dir := t.TempDir()
-	so := plugin.Build(t, "../../../../perceptors", "exif_geo", dir)
+	so := pluginbuild.Perceptor(t, "../../../../perceptors", "exif_geo", dir)
 	if err := os.WriteFile(filepath.Join(dir, "config.yml"), []byte("plugins:\n  - "+so+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
