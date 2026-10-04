@@ -233,6 +233,63 @@ content is for when a second provider exists).
 - **SQLite**: WAL + `busy_timeout`, **one connection** ("database is locked"
   otherwise); never query through `db` inside a `tx` — deadlock.
 
+## The write bus and the queue (SQLite, 2026-10-04, design)
+
+Design: roadmap "The write bus", "The work queue". SQLite for life (the owner).
+
+**Measured** (SQLite 3.51, WAL, this Mac; 200 k items, 1.08 M queue rows — six slugs
+an item):
+
+| | |
+|---|---|
+| 1.08 M rows in one transaction / 100 k | 1.1 s / 0.28 s (~1 M rows/s) |
+| a point read by primary key | microseconds |
+| the next 64 of a slug through the `(state, date)` index | 1–2 ms, even with everything due |
+| the same with `ORDER BY (state = Waiting) DESC` | 95 ms: sorts everything |
+| nothing due: a full scan to know it | 143 ms at 200 k |
+| 1000 one-row commits: `synchronous=FULL` / `NORMAL` | ~0.17 / ~0.03 ms a commit |
+| the database | 83 MB |
+
+- **What degrades SQLite is not size** (281 TB, 2⁶⁴ rows; ours is hundreds of MB to
+  a few GB) but one writer at a time, queries off an index (~0.7 µs a row scanned)
+  and a WAL kept from its checkpoint by long readers; `VACUUM` after mass deletes.
+  **Our real limit was ours**: one connection for everything (`MaxOpenConns(1)`
+  against "database is locked") — reads wait behind writes. One writer + a read
+  pool is the fix.
+- **Grouping commits gains little in speed** here (a commit is ~0.17 ms with FULL);
+  the bus is for one writer whatever writes, parallel reads, and steps that never
+  stall on a write.
+
+**Rejected on the way:**
+
+- One batching for everyone: a writer that does not care (the walk) and one whose
+  every result matters (render's commit) want opposite things — classes, by how
+  long a rule tolerates waiting.
+- A batch timer (30 fps) for synchronous callers: one waiting in a loop pays the
+  deadline per call (1000 validates × 33 ms). Kept as a class (Frame) once nobody
+  waits synchronously.
+- A result channel per call; then `any` results in one stream per caller — a topic
+  per write rule (`Op[A, R]`) is typed and needs no routing.
+- Blocking or failing a subscriber that does not read: the writer never waits —
+  a lost subscription is its owner's loss.
+- A new primitive in `chain` for asynchronous steps: a step keeps its own
+  operations; `chain` and everything above stay as they are.
+- A rule split into a read outside and a write through the bus: decisions on stale
+  data. The whole rule is one operation in the writer.
+- Ready-made packages: [qwr](https://pkg.go.dev/github.com/jpl-au/qwr) (a SQLite
+  writer with job IDs — but its batches are not one transaction, it takes SQL
+  strings, a default driver not ours, 25 dependencies, pre-1.0);
+  [go-relay](https://pkg.go.dev/github.com/binozo/go-relay), kelindar/event and the
+  like (broadcast only: no submit → result by ID, no batching). And any dependency
+  in perceplib is one every `.so` must match exactly (`x/sync`, testify bit us) —
+  the bus is stdlib, a few dozen lines on channels.
+- The queue as a column per perceptor (a schema that changes with the loaded `.so`
+  files, a dead column per removed one, an index per column, five columns of state
+  each); the queue in each perceptor's database (every poll a join with `items` in
+  another file — no `ATTACH`, so guid sets diffed in Go, O(N) per poll; leases and
+  backoff written into foreign files); rows of "to do" (someone must remember to
+  enqueue; a config change or a new version would not enqueue anything).
+
 ## Apple Photos
 
 Layout, the DB's facts and PhotoKit's behaviour: the

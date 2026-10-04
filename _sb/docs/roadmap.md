@@ -44,20 +44,28 @@ a PR of its own, so the next chains do not touch everything:
 
 ## Next: the expensive stage (transcode)
 
-In steps, each its own PR (design below, "Expensive stage"):
+In steps, each its own PR (designs below: "The write bus", "The work queue",
+"Expensive stage"):
 
-1. [ ] **Photo renditions** — libvips on the CPU, the source chosen to avoid a full
-   decode (Photos' JPEG, the HEIC's embedded thumbnail, a RAW's embedded JPEG), the
-   DB-state queue, benchmarks on the real library.
-2. [ ] **Video, software** — `libx264`, HDR → SDR, the hover clip, the poster; the
+0. [ ] **The write bus** — `perceplib/bus` (operations as topics, subscriptions,
+   classes) and the model's writer (one write connection, a read pool, batches by
+   class, `synchronous=NORMAL`); the import's steps on it, the walk without its own
+   pages. Before any new writer comes.
+1. [ ] **The work queue and the render service** — the `work` and `renditions`
+   tables, `render.New(cfg, db, logger)` with `feed → source → render → commit` and
+   a stand-in renderer (a copy): the queue's rules tested before any codec.
+2. [ ] **Photo renditions** — libvips on the CPU, the source chosen to avoid a full
+   decode (Photos' JPEG, the HEIC's embedded thumbnail, a RAW's embedded JPEG),
+   benchmarks on the real library.
+3. [ ] **Video, software** — `libx264`, HDR → SDR, the hover clip, the poster; the
    codec → encoder table and the probe with a software fallback from day one.
-3. [ ] **Docker** — the image (jellyfin-ffmpeg), a base compose with software
+4. [ ] **Docker** — the image (jellyfin-ffmpeg), a base compose with software
    encoding; the docs say a Mac with Photos runs the native binary.
-4. [ ] **Hardware** — QSV (`hwaccel.qsv.yml`), VideoToolbox (native on a Mac),
+5. [ ] **Hardware** — QSV (`hwaccel.qsv.yml`), VideoToolbox (native on a Mac),
    NVENC when there is one to test on; a macOS ImageIO HEIC decoder only if the
    benchmarks show HEIC is the bottleneck.
 
-0.2.0 needs 1–3; 4 is wanted. Only the plain folder's items are rendered (a library
+0.2.0 needs 0–4; 5 is wanted. Only the plain folder's items are rendered (a library
 renders itself: Apple — on demand through PhotoKit).
 
 ## Next: providers — other libraries as sources
@@ -123,12 +131,22 @@ Libraries write sidecars, so an asset is a package (the original, RAW + JPEG, ed
 
 The contract (the import follows it): the top of a chain has only linear stages,
 each named by what it yields, each a sub-chain in its own package with one `New`;
-the top knows no tool. The rough stages, each to be worked out on its own:
+the top knows no tool. **Every chain is a service of its own** in `main`
+(`render.New(cfg, db, logger)`, …), shaped as the importer: `Start` runs pass after
+pass, a pass is a new chain that ends from its input (its `feed` returns when the
+queue is empty), then a pause (polling its queue). Services know nothing of each
+other: what one leaves in the database is what another's queue finds. Apart, not as
+stages of the import: a video that takes minutes must not hold the import's pass;
+the resources differ (IO and exiftool, CPU / GPU, ML); roles later
+(`roles: [render]` on a GPU box) are a service switched on or off.
 
-- **Render** (the expensive pass): `feed → render → commit`. Feed: the DB-state
-  queue of the plain folder's items lacking renditions. Render: a switch by kind
-  (photo: libvips; video: ffmpeg; Live Photo), hardware inside. Commit: discard if
-  the item was deleted or changed meanwhile, else the renditions and `Ready`.
+- **Render** (the expensive pass): `feed → source → render → commit`. Feed: a page
+  of the `work` queue (the plain folder's items lacking current renditions),
+  leased. Source: what to decode, cheapest first (a big enough JPEG of the group,
+  an embedded preview, the original last; exiftool lives here). Render: a switch by
+  kind (photo: libvips; video: ffmpeg; Live Photo), hardware inside. Commit
+  (class Now): discard if the item was deleted or its fingerprint changed
+  meanwhile, else the renditions, `Ready`, the queue's row done.
 - **Pixel perceptors (ML)**: `feed → pixels → ml → commit`. Pixels from the render
   chain or the provider (Photos would mean asking in bulk — local thumbnails may do
   for faces). Maybe a service of its own (goMLer).
@@ -177,6 +195,120 @@ A stable core first.
 - Several codecs / formats at once (`codecs: [h264, av1]`, `formats: [avif, webp]`)
   — the asset contract is ready, but each is another encode: N× disk and time.
 
+## Design: the write bus
+
+One writer for SQLite, no lock errors whatever writes; every write is asynchronous
+inside, a step may still look synchronous outside. Measured, and why each choice:
+findings "The write bus".
+
+- **One write connection, owned by one goroutine; reads from a pool** (WAL lets
+  readers run beside the writer). Today everything shares one connection, so reads
+  queue behind writes — with render, import, web and ML writing, that is the limit,
+  not SQLite.
+- **An operation is a model rule, whole**: read → decide → write inside the
+  writer's transaction (`ValidateGroup`, `Gone`, `NeedsWork` keep the atomicity the
+  one connection gives now). Not "an UPDATE": a rule read outside and written
+  inside would decide on stale data.
+- **`perceplib/bus`, stdlib only** (every dependency of perceplib is one every
+  `.so` must match): one write rule = one topic, a typed value —
+
+  ```go
+  type Op[A, R any] struct{ … }               // its class is fixed when it is made
+  func (o *Op[A, R]) Submit(arg A) ID         // queued, returns at once
+  func (o *Op[A, R]) Subscribe() *Sub[R]      // every result of this rule; filter yours by ID
+  func (o *Op[A, R]) Do(arg A) (R, error)     // the sync wrapper: submit, wait for your own
+  type Result[R any] struct{ ID ID; Value R; Err error }
+  ```
+
+  The bus does not know who runs an operation: the host gives the executor (the
+  model's writer). Perceptors get their `Op`s from the host (their values, their
+  rows in `work`).
+- **Delivery never blocks the writer**: a subscriber's buffer full, or a
+  subscriber gone — its loss. Results reach a subscriber in submit order (one class
+  = one FIFO lane); across subscribers nothing is ordered.
+- **A result only after the commit**: what a receiver reads next is in the
+  database. Each operation of a batch under its own `SAVEPOINT`: a failing one rolls
+  back alone, the batch commits.
+- **Classes — how long a rule tolerates waiting for a batch**, a property of the
+  rule, not chosen by the caller:
+
+  | class | waits | for |
+  |---|---|---|
+  | **Now** | never; its own lane, taken first | render's commit, on-demand marks, the web |
+  | **Frame** | ~33 ms or ~1000 operations | the import's steps, the walk, perceptor values |
+  | **Idle** | ~250 ms or ~5000, only while nothing else waits | `Reconcile` / prune, maintenance |
+
+  Nobody waits on a deadline synchronously (a sync caller in a loop would pay it per
+  call): the deadline only delays a result, throughput comes from many in flight.
+  A transaction is cut at ~20–50 ms of work, so Now never waits longer.
+- **Steps stay as they are**: how a step handles its operations is its own
+  business — the walk submits (Frame) and sends a file on when its result came, so
+  its pages go (the writer batches); a step that needs the answer for its output
+  (validate: the item a group became) waits for it inside, or keeps its own queue.
+  `chain` does not change; nothing above the step does.
+- **`synchronous=NORMAL`** with WAL: a power loss may lose the last transactions,
+  never corrupts; our data comes back from the disk anyway.
+- Later, from qwr's ideas: error classes (lock / constraint / schema) and a
+  dead-letter list for operations that failed for good.
+
+## Design: the work queue
+
+SQLite for life (decided): the design stays within what one file does well —
+short transactions, indexed queries, one writer.
+
+- **In the main database: the queue and the renditions** (the core's facts); a
+  perceptor's results stay in its own file.
+- **What is needed is derived, not recorded**: a query — "the item is alive and has
+  no current result for this slug". A new photo enters by itself, a deleted one
+  leaves by the join, a changed config or a new perceptor version makes the need for
+  everything; nobody has to remember to enqueue (as the perceptors' rows and
+  `Reconcile` work today).
+- **One row per item and slug** — `work(guid, slug, …)`: a slug is the render or a
+  perceptor; slugs are independent (faces, objects, colour run in any order, each at
+  its pace), not stages of a chain. A new perceptor is new rows, not a new schema.
+
+  ```sql
+  CREATE TABLE work (
+    guid        TEXT NOT NULL,     -- the item (= asset)
+    slug        TEXT NOT NULL,     -- "render", "faces", "color"…
+    version     INTEGER,           -- done with: the render config's hash / the perceptor's version
+    input       TEXT,              -- done for: the item's fingerprint
+    step        TEXT,              -- the perceptor's own stage (detect → embed…); the core never reads it
+    done_at     INTEGER,           -- unix seconds: SQLite keeps times as text, text compares lie
+    attempts    INTEGER DEFAULT 0,
+    next_try    INTEGER,           -- backoff after failures
+    error       TEXT,
+    lease_until INTEGER,           -- taken into work until then
+    PRIMARY KEY (guid, slug)
+  ) WITHOUT ROWID;
+
+  CREATE TABLE renditions (guid, version, size, format, w, h, bytes, path);  -- cache/r/<guid>/<version>-<size>.<format>
+  ```
+- **The next page** of a slug walks the items' `(state, date)` index — Waiting first,
+  then Visible newest first, a keyset by date — and looks each up by the primary
+  key: 1–2 ms for 64 at 200 k items, even with everything due. Not
+  `ORDER BY (state = Waiting)`: it sorts everything (95 ms).
+- **A lease** (`lease_until` = now + 15 min) when feed takes an item; commit clears
+  it; a crash lets it expire and the item is taken again.
+- **Failures back off**: `attempts++`, `next_try` 1 min → 10 min → 1 h → 1 day;
+  after 5 the item waits for a new `input` or `version`; the error is kept (the info
+  panel can show it). Without it a broken video would come back every pass.
+- **Changed meanwhile**: commit compares the `input` taken with the item's now — a
+  new fingerprint discards the result, the item stays due.
+- **A config change** (sizes, format, codec) is a new `version`: re-rendering is
+  lazy, maintenance prunes the old files.
+- **A slug may require another**: a pixel perceptor's query asks for `render` done
+  with the same `input` (it works on our pixels) — a condition, not an order.
+- **Group perceptors** (journeys, face clusters) are not per item: a watermark row
+  per slug ("changed since I last ran"), in the same table with `guid = ''`.
+- **The item's state**: render's commit makes it `Ready` (`updated_at` moves: the
+  client's delta brings it, Waiting photos finally show); the asset contract gets
+  the renditions as files of their own role with `w`, `h`, format (`srcset`), a new
+  contract version.
+- **Idle polling**: when nothing is due the query scans every item (143 ms at
+  200 k per slug). A full scan at start and after a version change; between them
+  only the items changed since the last pass (`updated_at` is indexed).
+
 ## Design: the expensive stage
 
 The transcode belongs to the core (as in Immich, PhotoPrism, Jellyfin); ML apart.
@@ -192,15 +324,12 @@ render:           feed (the next item needing work, from the DB)
                   -> perceptors, full pass (on our previews): results replace the cheap ones
 ```
 
-- **The queue is DB state, not a channel**: "items that still lack X" — `Visible` /
-  `Waiting` / `Dirty` without outputs; a perceptor whose pass / version for the
-  item is behind. New photos appear in it, deleted ones drop out, a move changes
-  nothing (outputs live under the GUID: `cache/thumbs/<guid>/…`).
-- At commit: deleted → discard (long work checks between stages); a different
-  fingerprint → discard, still queued; only the path changed → keep.
-- Several workers: an "in work since" mark; stale marks go back to the queue.
-- Perceptors run on both passes (incremental refinement); per item and perceptor
-  the pass done and the perceptor's version are stored.
+- **The queue**: "The work queue" below — what is needed is derived, only what was
+  done, failed or taken is recorded. A move changes nothing (outputs live under
+  the GUID: `cache/r/<guid>/…`); long work checks between stages and is cancelled
+  with its context (`exec.CommandContext`).
+- Perceptors run on both passes (incremental refinement): a pixel perceptor's row
+  in `work` records the input it ran on.
 - Transcoders take the whole asset (group), not a file; regenerated for `Dirty`,
   dropped for deleted. Motion previews: a short muted clip on hover, the poster
   otherwise.
