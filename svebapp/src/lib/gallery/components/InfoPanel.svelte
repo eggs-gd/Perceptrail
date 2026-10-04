@@ -112,7 +112,7 @@
     <section>
         <h3>Files</h3>
         {#if asset}
-            <p class="note">Full resolution {fullHere(asset) ? 'here' : 'in iCloud only'}</p>
+            <p class="note">Full resolution {fullHere(asset, guid) ? 'here' : 'in iCloud only'}</p>
         {/if}
         {#await files then list}
             {@const set = frames(list)}

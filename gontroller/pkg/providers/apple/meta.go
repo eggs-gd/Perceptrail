@@ -5,8 +5,8 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
-	"math"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/eggs-gd/perceplib/api"
@@ -29,7 +29,8 @@ type assetMeta struct {
 	duration      sql.NullFloat64 // ZASSET.ZDURATION, seconds: a video (a cloud-only one too)
 }
 
-// record: the asset's metadata as exiftool would print it (-s2, no groups)
+// record: the asset's metadata as exiftool -n would give it (no groups): signed
+// decimal degrees, seconds, Orientation 1
 func (m assetMeta) record() api.RawExif {
 	r := api.RawExif{}
 	if m.created.Valid {
@@ -54,11 +55,11 @@ func (m assetMeta) record() api.RawExif {
 		r["Rotation"] = []byte("0")
 	}
 	if m.lat.Valid && m.lon.Valid && m.lat.Float64 != -180 && m.lon.Float64 != -180 {
-		r["GPSLatitude"] = []byte(dms(m.lat.Float64, "N", "S"))
-		r["GPSLongitude"] = []byte(dms(m.lon.Float64, "E", "W"))
+		r["GPSLatitude"] = []byte(strconv.FormatFloat(m.lat.Float64, 'f', -1, 64))
+		r["GPSLongitude"] = []byte(strconv.FormatFloat(m.lon.Float64, 'f', -1, 64))
 	}
 	if m.duration.Float64 > 0 {
-		r["Duration"] = []byte(fmt.Sprintf("%.2f s", m.duration.Float64))
+		r["Duration"] = []byte(strconv.FormatFloat(m.duration.Float64, 'f', -1, 64))
 	}
 	return r
 }
@@ -69,18 +70,6 @@ func offset(seconds int) string {
 		sign, seconds = '-', -seconds
 	}
 	return fmt.Sprintf("%c%02d:%02d", sign, seconds/3600, seconds%3600/60)
-}
-
-// dms: degrees as exiftool prints them: 50 deg 25' 45.45" N
-func dms(v float64, pos, neg string) string {
-	dir := pos
-	if v < 0 {
-		dir, v = neg, -v
-	}
-	d := math.Floor(v)
-	m := math.Floor((v - d) * 60)
-	s := ((v-d)*60 - m) * 60
-	return fmt.Sprintf("%.0f deg %.0f' %.2f\" %s", d, m, s, dir)
 }
 
 // hashRecord: changes when the DB metadata changes (a date corrected in Photos,

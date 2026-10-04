@@ -6,14 +6,13 @@ import (
 	"testing"
 
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/scan/flow"
 )
 
-func entry(path string) dto.ItemEntry {
-	return dto.ItemEntry{Path: path, Name: filepath.Base(path)}
+func entry(path string) *dto.FileDto {
+	return &dto.FileDto{ItemEntry: dto.ItemEntry{Path: path, Name: filepath.Base(path)}}
 }
 
-func names(groups []flow.FileGroup) [][]string {
+func names(groups []dto.Asset) [][]string {
 	var out [][]string
 	for _, g := range groups {
 		var n []string
@@ -28,33 +27,44 @@ func names(groups []flow.FileGroup) [][]string {
 // Files come in name order; one group is open, the next name closes it
 func TestGenericGrouper(t *testing.T) {
 	g := &Grouper{}
-	var out []flow.FileGroup
+	var out []dto.Asset
 	for _, n := range []string{"IMG_1.HEIC", "IMG_1.MOV", "IMG_1.aae", "a.edited.jpg", "a.jpg", "a.jpg.xmp", "a.xmp", "b", "b.png"} {
-		if group, err := g.Decorate(flow.FileEvent{Entry: entry("/lib/" + n)}); err == nil {
+		if group, err := g.Decorate(entry("/lib/" + n)); err == nil {
 			out = append(out, group)
 		}
 	}
-	marker := &flow.WalkResult{}
-	last, _ := g.Decorate(flow.FileEvent{Done: marker})
-	out = append(out, last)
+	last, _ := g.Flush()
+	out = append(out, last...)
 
 	want := [][]string{
 		{"IMG_1.HEIC", "IMG_1.MOV", "IMG_1.aae"}, // case-insensitive
 		{"a.edited.jpg"},
 		{"a.jpg", "a.jpg.xmp", "a.xmp"},
-		{"b", "b.png"}, // the last group goes out with the marker
+		{"b", "b.png"}, // the last group goes out on the walk's flush
 	}
 	if got := names(out); !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v\nwant %v", got, want)
 	}
-	if last.Done != marker {
-		t.Error("the marker must come with the last group")
+	if again, _ := g.Flush(); len(again) != 0 {
+		t.Errorf("a second flush gave %v", names(again))
+	}
+
+	// A file the walk says is gone passes through alone; the open group stays open
+	g = &Grouper{}
+	g.Decorate(entry("/lib/y.jpg"))
+	gone := entry("/lib/y.xmp")
+	gone.Gone = true
+	if group, err := g.Decorate(gone); err != nil || len(group.Files) != 1 || group.Files[0] != gone {
+		t.Errorf("gone: %v %v", group, err)
+	}
+	if last, _ := g.Flush(); !reflect.DeepEqual(names(last), [][]string{{"y.jpg"}}) {
+		t.Errorf("the open group after a gone file: %v", names(last))
 	}
 
 	// Another directory closes the group, even with the same name
 	g = &Grouper{}
-	g.Decorate(flow.FileEvent{Entry: entry("/lib/x.jpg")})
-	if group, err := g.Decorate(flow.FileEvent{Entry: entry("/lib/sub/x.xmp")}); err != nil || len(group.Files) != 1 {
+	g.Decorate(entry("/lib/x.jpg"))
+	if group, err := g.Decorate(entry("/lib/sub/x.xmp")); err != nil || len(group.Files) != 1 {
 		t.Errorf("a file of another directory joined the group: %v %v", group, err)
 	}
 }

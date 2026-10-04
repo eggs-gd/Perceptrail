@@ -537,6 +537,122 @@ Design: roadmap "Expensive stage".
 
 ## Backend: gontroller, plugins, exiftool
 
+### The import chain, PR #24 (2026-10-04, decided)
+
+`pkg/scan` did everything in one constructor that knew every tool; its data rode
+in one bag (`importer/flow`). Now `pkg/importer`, cut by what each part yields. The
+strict review before closing it, with what is left for later:
+[review-pr24.md](review-pr24.md).
+
+**Shape.** `walk → group → gate → identify → exif → commit`, a package each, one
+`New` per stage; the top knows no tool. A step gets the DB methods it calls (a small
+`Store` next to it; the top's `store` embeds them). Constructors: the model, the
+step's own dependencies, the logger, `in`, `out`. The service builds a new chain
+for every pass (`importChain`) and runs it to its end, then the rescan pause; what
+runs once at start is in `Start` (`identify.Migrate`, `exif.MarkUnprocessed`), not
+in the constructors.
+
+**Data: a type belongs to its producer.** `dto.Asset` (the asset before it is
+identified — its files' rows, the source's key, what to show, metadata, kind) is
+made by a provider's grouper, passed by the gate, read by identify; identify's
+working `draft` is private and it yields `identify.Item` (the item and its metadata
+package); `transcode.Item` is the transcoders' input. The rule for where logic
+goes: would another chain need the same rule? Then the model (`model/itemslife.go`:
+`NeedsWork`, `Gone`, `Ignore`, `Publish`, `MarkRework`, `Unshown`; `dto.AssetKind`
+— one rule for the import, the client and the transcoders). A tool, a format, the
+order of stages: a step.
+
+**The walk and deletions.** The walk is the chain's entry point: it writes every
+file's row as it goes (stat, `CheckTime`; `Changed` when new or the stat changed)
+and, after a complete walk, sends the rows it did not stamp that it says are gone
+(`walk.Missing`: under the root, not under an unreadable directory, never after an
+incomplete or empty walk), marked `Gone`. Groupers see gone files (the folder
+passes them through; Apple sends the files of assets trashed or hidden in Photos as
+gone — they are on disk, so the walk stamped them); the gate has the model apply
+`Gone`. A moved file's old path may go before the new one is validated: validate
+restores the deleted item by fingerprint, the GUID stays. A gone sidecar makes its
+item `Dirty` before the grouper gives the main file's group: processed in the same
+pass. No end-of-walk value in the data: the walk's output closes. **`Changed` is
+stored** and cleared only by validate (Codex review): the walk writes the new stat
+at once, so a pass that fails before identify decides the group (a library's DB not
+loaded, an asset not complete, an error) would otherwise lose the change — the next
+pass would compare an unchanged stat. Internal marks on items (`MarkRework`,
+`ClearHashes`) use `UpdateColumn`: `updated_at` stays, or the client's delta would
+stream them.
+
+**exif.** The perceptors declare their tags (`api.ExifTagger`); identify reads the
+union plus its own, one `exiftool -j -n` call per group (`-j`, not `-s2`: `-s2`
+prints no header for a single file; a JSON value is kept as its text). Merge builds
+the package: the source's metadata (Photos DB) > `.xmp` sidecars > the main file >
+derivatives (a fallback only). `-n` (no print conversion), measured on JPEG, HEIC,
+MOV and a written south-west JPEG / MOV: the composite `GPSLatitude` /
+`GPSLongitude` signed by their Ref (`EXIF:GPSLatitude` would be unsigned — never
+asked); QuickTime `GPSCoordinates` `"lat lon [alt]"`; `Orientation` 1–8;
+`Duration` seconds (exact); `ImageSize` `"W H"`; `Rotation` is degrees in QuickTime
+but quarter turns in HEIC (only a video's 90 / 270 turns the size; HEIC's turn is
+its `Orientation`); dates, MIME types, codecs unchanged. Pinned by a probe test
+(`identify/read_test.go`). The perceptors' parsers are `ParseFloat`; the Apple
+record writes numbers. Only the core writes into an item (`plugins.RawItemRW`);
+plugins give a `chain.Decorator`, no channels.
+
+**The fingerprint is the file's bytes** (size + sha256 of the first and last 64
+KB): it says "the same file" across paths and does not change with the set of tags
+read. A new `hashVersion` makes every item forget its fingerprint once (the gate
+passes the group, validate gives the new one — same path, same GUID); not `Dirty`,
+or the library would vanish from the client for the pass. Checked on a real DB copy:
+581 items re-identified in ~2 s, every GUID kept.
+
+**identify in three steps**, at the real boundaries: **read** (in parallel, no DB:
+exiftool, classify, merge, fingerprint as plain functions), **validate** (one at a
+time: not media / broken → ignored, else the item), **show** (sizes stored; the
+preview — the source's `Show`, the main file, the biggest viewable derivative, the
+main file's embedded preview as the last resort, extracted only then; it closes the
+exiftool pool, which starts with the first read: an idle pass starts none).
+
+**The chain library** keeps develop's names and files (`cor_chain`, `cor_deco`,
+`cor_entry`, `cor_switch`; `NewChainProcessor`, `NewDecorator`, `NewEntryPoint`,
+`NewSwitch`) — the diff is what is new: a pass ends from its input (a step reads to
+the end, gives what it holds — `Flusher` — and returns; an output closes once every
+writer returned: a `WaitGroup` per output; `Process` returns when every step has);
+one runner under every step but the entry point, the constructors pick the
+combination (`NewSwitch` only routes, `NewSwitchDecorator` also converts, `…N` on n
+workers — Go has no overloads, so names sharing a prefix, `n` last as in
+`strings.SplitN`); `NewEnd`; a skip is never an error; the error channel is
+inherited at run time; every send selects on the context; `Stop` optional, once.
+
+**On demand (Apple Photos).** When Photos made a file local, the provider marks the
+item for rework itself (`MarkRework` through `UpdateColumn`: `updated_at` stays, so
+the client's delta does not bring the item back in its old state); the next pass
+processes it. No waiting: the client hides the tile's cloud once it got the original
+(a guess kept with the asset as the server sent it; a newer copy overrides it; lost
+on reload — accepted).
+
+**Registries are package functions** (`plugins.Load`, `All`, `Store`; `providers.Enable`,
+`Enabled`): one per process; instances where they hold logic (steps, providers,
+groupers). The DB proxy and the stores stay passed in.
+
+**A clean stop.** `main` cancels and waits for the services (at most 10 s), the web
+service shuts down on the context, identify closes its exiftool, then the
+perceptors' storages and the main DB are closed (no SQLite journals left). Before,
+a stop orphaned every exiftool process.
+
+**Tests.** The import tests are integration tests: the service's own chain over real
+files (`fixtures_test.go`: a JPEG; a TIFF named `.NEF` — exiftool takes a TIFF
+RAW's type from the extension; QuickTime and HEIF boxes; XMP), a real exiftool (CI
+installs it), what a pass published read from the DB. Found: a text file named
+`.jpg` is `text/plain` to exiftool (not media, not an Error); `FF D8` + garbage gives
+`Error: File format error`; a JPEG cut after its header only a warning and no size.
+No test hook in the code.
+
+**Rejected on the way**: the walker cycling itself (the cycle is the chain's);
+`Spread` steps fed walk requests and the walk's result handed to the gate through a
+shared variable (a second input, a side channel); a `Pipe` carrying a flush message
+with a writers counter (a hand-made `close` + `WaitGroup`, needed only to keep the
+chain alive for Refresh); Refresh injecting a group and waiting for it (a mark is
+enough); `Deps` / `Config` structs for constructors (they hide coupling, not cut it);
+a `Steps` struct next to the chain (a second declaration); exiftool passed in from
+outside identify; nine one-function steps in identify.
+
 ### Broken files (2026-10-01)
 
 - exiftool reads a broken file and says so: garbage and empty files give only the
@@ -612,10 +728,9 @@ Design: roadmap "Expensive stage".
   scattered over the bundle, but the grouper forms the groups up front from the DB
   and a `stat` of every candidate path — the expected files are exactly those on
   disk, so each walked file closes at most one group. A file vanishing mid-walk
-  (Photos purging a derivative) leaves a group incomplete: it is held back with the
-  marker (`FileGroup.Held`), the gate does not count its files as gone, the next
-  walk reloads the DB.
-- **The asset UUID is the item's GUID** (`FileGroup.Key`): the main file of an asset
+  (Photos purging a derivative) leaves a group incomplete: it waits for the next
+  walk, which reloads the DB (the walk stamped its files: none is taken as gone).
+- **The asset UUID is the item's GUID** (`dto.Asset.Key`): the main file of an asset
   changes (a derivative while cloud-only, then the downloaded original) — the item
   stays. Every file links to the key; an item with no files left is deleted (the
   main/sidecar rule does not apply to keyed files).
@@ -664,8 +779,7 @@ Design: roadmap "Expensive stage".
   gone items goes with them (a cleanup on delete — to add with the renders). The
   GUIDs change (a link to the old item breaks); carrying them over by content hash
   is for when a second provider exists.
-- `pkg/providers`: `Claims`, `Grouper`, `Regroup`, `Owns`, `Levels`, `Rendition`,
-  `Start`. Apple is the first: its grouper, PhotoKit and the on-demand logic moved
+- `pkg/providers`: `Claims`, `Grouper`, `Owns`, `Levels`, `Rendition`, `Start`. Apple is the first: its grouper, PhotoKit and the on-demand logic moved
   into `pkg/providers/apple`; the plain folder's grouper into `providers/folder`;
   outside them nothing names a source (the switch, `routes/rendition.go`, the
   importer and `main` only see providers).
@@ -831,15 +945,10 @@ the binary by the linker; run from the user's terminal on the dev library.
   navigation or a return to the tab — back in the list before the walk, nothing
   told it later. First fix (a successful request cut the walk's pause short, the
   page polled every 20 s) — rejected by the owner: a whole walk for one known
-  photo. Now **one asset is processed again**: the Apple grouper keeps the DB rows
-  of its last load and forms that asset's group from them and the disk now
-  (`Regroup` — no walk, no DB read; the DB's metadata still wins over the files'
-  EXIF); the importer hands it to the files gate like any group (`Refresh`: only
-  what changed passes; deletions are untouched — they come with the walk's marker;
-  a walk sending the same asset at the same time processes it twice into the same
-  item) and waits until the item leaves the closer. The Original's answer waits for
-  it (≤ 10 s), the client asks for the delta once the original has loaded — the
-  cloud is gone on the way back to the list. A medium or a hover refreshes in the
+  photo. Then one asset was processed again on its own (`Regroup`, injected into
+  the gate, the answer waiting ≤ 10 s); since PR #24 the provider only marks the
+  item for the next pass and the client hides the cloud itself (see "The import
+  chain, PR #24"). A medium or a hover refreshes in the
   background. The download next to Photos' original is gone: it is a JPEG every
   browser shows — the download stays only as the fallback for a local original the
   browser cannot show.
@@ -932,35 +1041,10 @@ Every file belongs to a known asset; the DB's local-resource counts match the fi
 
 ### Import chain as small steps (2026-09-29)
 
-- **Groupers are plain decorators with a buffer of open groups** (decision): a group
-  goes out when it is complete, so each incoming file closes at most one group —
-  one output per call is enough. A first version buffered a whole directory
-  (`WalkDir` visits subdirectories between a directory's files) and released many
-  groups at once, which needed a 1 → N step in perceplib (`Expander`); dropped:
-  sidecars are next to their main file, one open group suffices for `generic`.
-  Known limit: a name sorting between members splits a group (`a.aae`,
-  `a.edited.jpg`, `a.jpg`; a subdirectory `a.jpg.d/` between `a.jpg` and `a.xmp`).
-  Skipped items (`ErrSkippedItem`) are not logged any more.
-- **exif was serial.** A decorator runner is one goroutine: the pool of 5 exiftool
-  processes was used one at a time. Now N runners read the same channel (groups are
-  independent after the gate); `Stop` is called by each, closing is `sync.Once`.
-- **The main file is known only after exif**, so every file of a group gets `-all`
-  (same arguments as the main file had: short hashes stay stable) and the validator
-  links the group. **The main file is always the source** (decision): RAW > video >
-  image. The JPEG of RAW+JPEG and the photo of a Live Photo are derivatives —
-  sidecars that can later serve as ready previews. A file that was a main file and
-  becomes a sidecar (a JPEG imported before its RAW) loses its item. Side effect:
-  tags missing in the main file can now come from a sidecar's full set (`GetExif`
-  looks through the group, main first).
-- **The closer blocked after 1000 items**: it wrote to a buffered channel nobody
-  read. Finished items are drained now (later: events to the client).
-- Codex review: (1) a derivative whose main file was deleted stayed linked to the
-  deleted item and was dropped by the gate — now a link to a GUID outside the group
-  means "process"; (2) groups ignored by the old system-MIME logic would stay
-  ignored forever — a `meta` table keeps `mime_version`, a new version clears the
-  "ignored" marks once.
-- The gate stamps `CheckTime` with its own clock; the marker carries the walk start,
-  and "not stamped since the walk started" = gone.
+PR #14 split the first monolithic import into steps with groups as whole assets
+(a group goes out when complete, so each file closes at most one group) and the
+main file ranked as the source (RAW > video > image). Superseded by the stages of
+PR #24 (above); the two rules stay.
 
 ### Go plugins (2026-09-28)
 
@@ -974,7 +1058,7 @@ Every file belongs to a known asset; the DB's local-resource counts match the fi
   `ml_color` — ok; `ml_faces`, `ml_objects` — stubs without a `Perceptor` symbol.
 - **Pipeline stall with external EXIF plugins (fixed 2026-09-29):**
   `ExifPluginProcessor` allocated a channel for every `ExifDataProvider` plugin but
-  added a step only for `exif_core.ExifCorePerceptor` (`RawItemRW`). External
+  added a step only for the core perceptors (`RawItemRW`). External
   `exif_geo` implements `api.ExifPerceptor` (`RawItemR`) → nobody read its channel →
   no item reached the closer. Confirmed with an end-to-end test (0 of 2 items).
   Now external plugins are wired through two adapter decorators
@@ -1020,7 +1104,7 @@ Every file belongs to a known asset; the DB's local-resource counts match the fi
 - **The zone is stored separately** (`DateOffset`, minutes): sqlite and Postgres
   `timestamptz` return times in UTC, the zone of `Date` is lost on read.
   `RawItem.GetDate()` returns the date in the zone of the shot, so external plugins
-  see it through the unchanged perceplib API; only the core `exif_core.RawItemRW`
+  see it through the unchanged perceplib API; only the core `plugins.RawItemRW`
   got `SetDateInfo` — no perceplib release, no plugin rebuild.
 - **No `-G` in exiftool:** groups would rename every tag (plugins read `ImageWidth`,
   the short hash hashes tag names). `CreateDate` is interpreted by file type instead:
@@ -1032,54 +1116,26 @@ Every file belongs to a known asset; the DB's local-resource counts match the fi
   (assumed). Not longitude/15: no DST, wrong at administrative borders. The time zone
   is core (the date), not the geo perceptor. `time/tzdata` is embedded for Docker.
 
-### Validator per `Walker.puml` (2026-09-29)
+### Validator and walk safety (2026-09-29)
 
-- **Walk safety first.** One unreadable directory aborted the whole walk (the
-  `WalkDir` callback returned the error). Now it is skipped and recorded; its files
-  are never taken as deleted. Deletions run only after a complete walk that found
-  files: a cancel, a missing root or an empty mount point would otherwise delete the
-  library. Real case: without Full Disk Access the Photos library is unreadable.
-- **Finalization runs in `Decorate` on the end-of-walk marker**, after the last group
-  is stored — `Start` (walk) and `Decorate` (DB writes) are different goroutines. It
-  was in `Stop()`, called by both goroutines and on cancel.
-- **Moves race with deletions.** Validation happens downstream (exiftool workers,
-  channels), so finalization may delete the vanished path's item before the moved
-  file is validated. Fix: move detection also looks at soft-deleted items with the
-  same hash whose path is gone, and restores them (as `Dirty`). Order-independent,
+What still holds from the first validator (the code moved on in PR #24):
+
+- **Walk safety**: an unreadable directory is skipped and recorded, its files never
+  taken as deleted; deletions only after a complete walk that found files (a cancel,
+  a missing root or an empty mount point would delete the library — e.g. without
+  Full Disk Access the Photos library is unreadable).
+- **Moves race with deletions**: move detection also looks at soft-deleted items
+  with the same fingerprint whose path is gone and restores them — order-independent,
   and a file that comes back later gets its old GUID.
-- **States are alive:** the closer sets `Ready`; the walker re-emits unchanged groups
-  whose item is not `Ready`. The first run after this change reprocesses everything
-  once (all items were `New`).
 - CheckTime is compared in Go: the driver stores times as text with the local
   offset, which changes across DST — a SQL string comparison is not reliable.
-- Tests without exiftool: the file content stands in for metadata
-  (`pkg/scan/validator_test.go`), one sqlite per package (`TestMain`).
-
-
-- **fswalker (fixed 2026-09-29, found by Codex review):** the last group of a walk was
-  never emitted (groups go out when the next group starts) — a library with a single
-  group imported nothing; now an end-of-walk marker flushes it. For changed files the
-  stale DB row (old size/mtime) was saved back — every scan saw them as changed and
-  `HashShort` used the old size; now fresh values are stored. `dbitems[i]` indexing
-  drifted after a `continue` (possible out-of-range).
-
-- **`HashShort` was unstable:** it hashed a pointer address (`&item.Size`), and after
-  `--File:all` was dropped also volatile File-group tags (`FileAccessDate`,
-  `FileName`, `Directory`). Fixed: size + EXIF without volatile tags. This is what
-  makes the "found moved" branch of the validator possible — see
-  [`Walker.puml`](../puml/Walker.puml) (same / moved / duplicate / changed).
-- **Video size:** QuickTime stores unrotated dimensions + `Rotation` (90/270) — handled
-  in `size` next to EXIF `Orientation` (5–8).
-- **MIME detection in fswalker is platform-dependent:** `mime.TypeByExtension` uses
-  system tables; in a minimal Docker image `.mov/.heic/RAW` → `application/octet-stream`
-  → the whole group is ignored. Needs an own media-type table (`MediaKind`).
-- Grouping: the main file of a Live Photo is currently the **video** (the comparator
-  ranks `video/` above `image/`); for RAW+JPEG the main file is nondeterministic.
-- `date`: the `FileModifyDate` fallback never parses (exiftool prints it with a zone,
-  `…+02:00`); no time zone handling at all (`OffsetTimeOriginal` is not read).
+- QuickTime stores unrotated dimensions + `Rotation` (90/270): handled in `size`
+  next to EXIF `Orientation` (5–8).
+- MIME detection never uses the system tables (a minimal Docker image has none):
+  exiftool, then our own extension table, then a sniff.
 - SQLite: WAL + `busy_timeout` in the DSN, **a single connection** (otherwise
-  "database is locked"). Consequence: never query through `db` instead of `tx` inside
-  a transaction — deadlock. `/items` streams NDJSON in keyset pages of 32.
+  "database is locked"). Never query through `db` instead of `tx` inside a
+  transaction — deadlock. `/items` streams NDJSON in keyset pages of 32.
 
 ---
 

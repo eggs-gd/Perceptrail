@@ -14,31 +14,25 @@ package providers
 import (
 	"context"
 	"errors"
-	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/scan/flow"
 
 	"github.com/eggs-gd/perceplib/chain"
 )
 
-// Grouper: the logic of a provider's step — found files in, whole assets out
+// Grouper: the logic of a provider's step — the walk's files in, whole assets out
 // (chain.Decorator is a step's logic, not the step: no channels, no goroutine). The
-// importer runs it between its channels (chain.NewDecorator); the provider keeps the
-// instance — its state is what Regroup works from.
-type Grouper = chain.Decorator[flow.FileEvent, flow.FileGroup]
+// importer runs it between its channels (chain.NewDecorator); when the walk ends (its
+// input closes) it gives what it holds (chain.Flusher: the last group).
+type Grouper = chain.Decorator[*dto.FileDto, dto.Asset]
 
 type Provider interface {
 	Name() string
 
 	// Claims: a found file is this library's — its grouper takes it
 	Claims(path string) bool
-	// Grouper: its files into whole assets; one instance per run (it keeps what
-	// Regroup needs)
+	// Grouper: its files into whole assets; one instance per run
 	Grouper() Grouper
-	// Regroup: one asset's group as it is on disk now (processed again on demand);
-	// false if the asset is not this provider's or has no file
-	Regroup(key string) (flow.FileGroup, bool)
 
 	// Owns: the item is this library's (on-demand renditions go to it)
 	Owns(item *dto.ItemDto) bool
@@ -48,9 +42,8 @@ type Provider interface {
 	// ErrNoRendition when there is nothing to serve
 	Rendition(item *dto.ItemDto, level string, opt Options) (Rendition, error)
 
-	// Start: its own work in the background (access, assets nothing shows yet);
-	// refresh processes one asset's item again when the library made a file local
-	Start(ctx context.Context, refresh Refresher)
+	// Start: its own work in the background (access, assets nothing shows yet)
+	Start(ctx context.Context)
 }
 
 // Options of a rendition request
@@ -64,10 +57,6 @@ type Rendition struct {
 	Data []byte
 	Mime string
 }
-
-// Refresher processes one asset's item again now (the importer's Refresh), waiting
-// at most wait; false if it did not happen
-type Refresher func(key string, wait time.Duration) bool
 
 var ErrNoRendition = errors.New("no rendition")
 

@@ -95,13 +95,6 @@ func sqlType(k api.Kind) string {
 	return "TEXT"
 }
 
-// Has: the item was processed by this perceptor (with or without a value)
-func (s *PerceptorStore) Has(guid string) (bool, error) {
-	var n int64
-	err := s.db.Raw(`SELECT COUNT(*) FROM `+valuesTable+` WHERE guid = ?`, guid).Row().Scan(&n)
-	return n > 0, err
-}
-
 // Save: the item's values; nil records "processed, nothing found"
 func (s *PerceptorStore) Save(guid string, v api.Values) error {
 	names := []string{"guid", "has"}
@@ -155,10 +148,17 @@ func (s *PerceptorStore) Load(guids []string) (map[string]api.Values, error) {
 	return out, nil
 }
 
+// Guids: every item this perceptor has processed (a row, with or without a value)
+func (s *PerceptorStore) Guids() ([]string, error) {
+	var guids []string
+	err := s.db.Raw(`SELECT guid FROM ` + valuesTable).Scan(&guids).Error
+	return guids, err
+}
+
 // Prune: drops the rows of items that are gone (keep says which stay)
 func (s *PerceptorStore) Prune(keep func(guid string) bool) (int, error) {
-	var guids []string
-	if err := s.db.Raw(`SELECT guid FROM ` + valuesTable).Scan(&guids).Error; err != nil {
+	guids, err := s.Guids()
+	if err != nil {
 		return 0, err
 	}
 	var gone []string
@@ -176,6 +176,7 @@ func (s *PerceptorStore) Prune(keep func(guid string) bool) (int, error) {
 	return len(gone), nil
 }
 
+// Close: the storage's connection closed (its journal merged into the file)
 func (s *PerceptorStore) Close() error {
 	db, err := s.db.DB()
 	if err != nil {

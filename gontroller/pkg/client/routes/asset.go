@@ -8,7 +8,6 @@ import (
 	_ "image/png"
 	"os"
 	"sort"
-	"strings"
 
 	"perceptrail/gontroller/pkg/model/dto"
 
@@ -86,26 +85,12 @@ func toClientAsset(item *dto.ItemDto, files []*dto.FileDto) clientAsset {
 	}
 	bySize(a.Edit)
 	bySize(a.Stills)
-	a.Kind, a.Duration = assetKind(item, a), item.Duration
+	a.Kind, a.Duration = dto.AssetKind(item.Kind, files), item.Duration
 	a.OnDemand = onDemandOf(item)
 	if item.Size.W > 0 && item.Size.H > 0 {
 		a.Full = &dims{W: int(item.Size.W), H: int(item.Size.H)}
 	}
 	return a
-}
-
-// assetKind: what the source said (Apple Photos), else by the roles — a video
-// original is a video, a photo with motion is a Live Photo
-func assetKind(item *dto.ItemDto, a clientAsset) string {
-	switch {
-	case item.Kind != "":
-		return item.Kind
-	case a.Original != nil && strings.HasPrefix(a.Original.Mime, "video/"):
-		return dto.KindVideo
-	case len(a.Motion) > 0:
-		return dto.KindLive
-	}
-	return dto.KindPhoto
 }
 
 func headerSize(path string) (int, int) {

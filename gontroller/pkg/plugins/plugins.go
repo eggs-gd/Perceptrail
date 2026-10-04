@@ -1,3 +1,8 @@
+// Package plugins: the registry of this run's perceptors — the core ones and the
+// external Go plugins, loaded once at start (Load), and their storages. What a
+// perceptor means to the import (which run there, what they read, their rows) is
+// the importer's business: it reads All and Store. One per process: package
+// functions, like providers.
 package plugins
 
 import (
@@ -6,126 +11,132 @@ import (
 	"plugin"
 	"sync"
 
-	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/model"
-	"perceptrail/gontroller/pkg/plugins/exif_core/date"
-	"perceptrail/gontroller/pkg/plugins/exif_core/duration"
-	"perceptrail/gontroller/pkg/plugins/exif_core/size"
+	"perceptrail/gontroller/pkg/plugins/settings"
 
 	"github.com/eggs-gd/perceplib/api"
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
-type pluginManager struct {
-	ctx       app.AppContext
-	logger    *l.Logger
-	pluginsMu sync.RWMutex
-	plugins   []api.Perceptor
-	loaded    bool
-	// The storage of each perceptor that keeps data (its Schema), by perceptor name
-	stores map[string]*model.PerceptorStore
+// Config: what the registry needs — the external plugins' files, which perceptors
+// run and which the client sees, where their storages go (the DB driver, the data
+// directory), the logger
+type Config struct {
+	Plugins    []string
+	Perceptors settings.Perceptors
+	Driver     string
+	DataDir    string
+	Logger     *l.Logger
 }
 
-var Pm *pluginManager = &pluginManager{}
+// The loaded perceptors (enabled in the config), the core ones first, and the
+// storage of each that keeps data (its Schema), by perceptor name
+var (
+	mu         sync.RWMutex
+	perceptors []api.Perceptor
+	stores     map[string]*model.PerceptorStore
+	config     Config
+	logger     *l.Logger
+	loaded     bool
+)
 
-// GetPlugins returns loaded plugins list. Thread-safe.
-func (pm *pluginManager) GetPlugins() []api.Perceptor {
-	pm.pluginsMu.RLock()
-	defer pm.pluginsMu.RUnlock()
-
-	result := make([]api.Perceptor, len(pm.plugins))
-	copy(result, pm.plugins)
-	return result
-}
-
-// LoadPlugins loads all plugins once at startup
-func (pm *pluginManager) LoadPlugins(ctx app.AppContext) error {
-	pm.ctx = ctx
-	pm.logger = ctx.Logger(string(app.LogPlugins))
-
-	pm.pluginsMu.Lock()
-	defer pm.pluginsMu.Unlock()
-
-	if pm.loaded {
+// Load loads every perceptor once, at start: the built-in ones (core: given by the
+// caller — they import this package for their contract, it does not import them),
+// then the external plugins of the config; the ones switched off in the config do not
+// run
+func Load(cfg Config, core ...api.Perceptor) error {
+	mu.Lock()
+	defer mu.Unlock()
+	if loaded {
 		return nil
 	}
+	config, logger = cfg, cfg.Logger
 
-	// Load core plugins first
-	corePlugins := []api.Perceptor{
-		date.Perceptor,
-		size.Perceptor,
-		duration.Perceptor,
-	}
-
-	// Load external plugins
-	externalPlugins, err := pm.loadExternalPlugins()
-	if err != nil {
-		pm.logger.Error("failed to load external plugins:", l.Error(err))
-		return err
-	}
-
-	// Combine all plugins; the ones switched off in the config do not run
-	cfg := ctx.Config().Perceptors
-	pm.plugins = nil
-	for _, p := range append(corePlugins, externalPlugins...) {
-		if !cfg.Enabled(p.Name()) {
-			pm.logger.Info("Perceptor disabled", l.String("name", p.Name()))
+	external := loadExternal()
+	perceptors = nil
+	for _, p := range append(core, external...) {
+		if !config.Perceptors.Enabled(p.Name()) {
+			logger.Info("Perceptor disabled", l.String("name", p.Name()))
 			continue
 		}
-		pm.plugins = append(pm.plugins, p)
+		perceptors = append(perceptors, p)
 	}
-	pm.loaded = true
-	pm.openStores()
+	loaded = true
+	openStores()
 
-	pm.logger.Info("Loaded plugins", l.Any("core", len(corePlugins)), l.Any("external", len(externalPlugins)), l.Any("total", len(pm.plugins)))
-
+	logger.Info("Loaded plugins", l.Any("core", len(core)), l.Any("external", len(external)), l.Any("total", len(perceptors)))
 	return nil
+}
+
+// All: the loaded perceptors, in order
+func All() []api.Perceptor {
+	mu.RLock()
+	defer mu.RUnlock()
+	return append([]api.Perceptor(nil), perceptors...)
+}
+
+// Close: every perceptor's storage closed (the end of the run)
+func Close() {
+	mu.Lock()
+	defer mu.Unlock()
+	for name, st := range stores {
+		if err := st.Close(); err != nil {
+			logger.Error("Perceptor storage not closed", l.String("perceptor", name), l.Error(err))
+		}
+	}
+	stores = nil
 }
 
 // openStores: a storage per perceptor that declares data — data_dir/perceptors/
 // (SQLite: a file each). One that cannot be opened is logged: its perceptor runs,
 // its values are not kept.
-func (pm *pluginManager) openStores() {
-	pm.stores = map[string]*model.PerceptorStore{}
-	cfg := pm.ctx.Config()
-	for _, p := range pm.plugins {
+func openStores() {
+	stores = map[string]*model.PerceptorStore{}
+	for _, p := range perceptors {
 		s := p.Schema()
 		if s.Store == "" {
 			continue
 		}
-		st, err := model.OpenPerceptorStore(cfg.Database.Driver, filepath.Join(cfg.DataDir, "perceptors"), s)
+		st, err := model.OpenPerceptorStore(config.Driver, filepath.Join(config.DataDir, "perceptors"), s)
 		if err != nil {
-			pm.logger.Error("Perceptor storage not opened", l.String("perceptor", p.Name()), l.Error(err))
+			logger.Error("Perceptor storage not opened", l.String("perceptor", p.Name()), l.Error(err))
 			continue
 		}
-		pm.stores[p.Name()] = st
+		stores[p.Name()] = st
 	}
 }
 
-// ImportStores: the storages of the perceptors that run in the import chain (EXIF
-// data): every processed item gets a row in each (a value, or "nothing found")
-func (pm *pluginManager) ImportStores() []*model.PerceptorStore {
-	var out []*model.PerceptorStore
-	for _, p := range pm.GetPlugins() {
-		if st, ok := pm.stores[p.Name()]; ok && p.DataProvider() == api.ExifDataProvider {
-			out = append(out, st)
+// ExifTags: every tag the loaded perceptors read (api.ExifTagger), once each
+func ExifTags() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, p := range All() {
+		t, ok := p.(api.ExifTagger)
+		if !ok {
+			continue
+		}
+		for _, tag := range t.ExifTags() {
+			if !seen[tag] {
+				seen[tag] = true
+				out = append(out, tag)
+			}
 		}
 	}
 	return out
 }
 
-// Stores: every perceptor storage (pruning gone items)
-func (pm *pluginManager) Stores() []*model.PerceptorStore {
-	var out []*model.PerceptorStore
-	for _, st := range pm.stores {
-		out = append(out, st)
-	}
-	return out
+// Store: the storage of a perceptor that keeps data (its Schema); false: it keeps
+// nothing, or it could not be opened
+func Store(perceptor string) (*model.PerceptorStore, bool) {
+	mu.RLock()
+	defer mu.RUnlock()
+	st, ok := stores[perceptor]
+	return st, ok
 }
 
 // LoadValues: a perceptor's values for these items (none if it keeps nothing)
-func (pm *pluginManager) LoadValues(perceptor string, guids []string) (string, map[string]api.Values, error) {
-	st, ok := pm.stores[perceptor]
+func LoadValues(perceptor string, guids []string) (string, map[string]api.Values, error) {
+	st, ok := stores[perceptor]
 	if !ok {
 		return "", nil, nil
 	}
@@ -133,32 +144,31 @@ func (pm *pluginManager) LoadValues(perceptor string, guids []string) (string, m
 	return st.Name(), v, err
 }
 
-// ClientPerceptors: the loaded perceptors whose view the client is given (config
-// `client`), core first — the first is the gallery's default view
-func (pm *pluginManager) ClientPerceptors() []api.Perceptor {
+// Client: the loaded perceptors whose view the client is given (config `client`),
+// core first — the first is the gallery's default view
+func Client() []api.Perceptor {
 	var out []api.Perceptor
-	for _, p := range pm.GetPlugins() {
-		if pm.ctx.Config().Perceptors.Client(p.Name()) {
+	for _, p := range All() {
+		if config.Perceptors.Client(p.Name()) {
 			out = append(out, p)
 		}
 	}
 	return out
 }
 
-func (pm *pluginManager) loadExternalPlugins() ([]api.Perceptor, error) {
-	var result []api.Perceptor
-
-	for _, file := range pm.ctx.Config().Plugins {
+// loadExternal: the plugins of the config; one that cannot be loaded is logged
+func loadExternal() []api.Perceptor {
+	var out []api.Perceptor
+	for _, file := range config.Plugins {
 		p, err := loadPlugin(file)
 		if err != nil {
-			pm.logger.Error("Failed to load plugin", l.Any("file", file), l.Error(err))
+			logger.Error("Failed to load plugin", l.Any("file", file), l.Error(err))
 			continue
 		}
-		result = append(result, p)
-		pm.logger.Info("Loaded external plugin", l.Any("name", p.Name()), l.Any("type", p))
+		out = append(out, p)
+		logger.Info("Loaded external plugin", l.Any("name", p.Name()), l.Any("type", p))
 	}
-
-	return result, nil
+	return out
 }
 
 func loadPlugin(path string) (api.Perceptor, error) {

@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/scan/flow"
 
 	"github.com/eggs-gd/perceplib/chain"
 	l "github.com/eggs-gd/perceplib/logger"
@@ -116,8 +115,9 @@ func fixture() []fixtureAsset {
 	}
 }
 
-// walk feeds every file under root in the walker's order (sorted paths)
-func walk(t *testing.T, g *Grouper, root string, before func(path string)) (map[string]flow.FileGroup, flow.FileGroup) {
+// walk feeds every file under root in the walker's order (sorted paths), then the
+// walk's flush: the groups by key (the files sent as gone under "")
+func walk(t *testing.T, g *Grouper, root string, before func(path string)) map[string]dto.Asset {
 	t.Helper()
 	var paths []string
 	filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
@@ -127,7 +127,7 @@ func walk(t *testing.T, g *Grouper, root string, before func(path string)) (map[
 		return nil
 	})
 	sort.Strings(paths)
-	groups := map[string]flow.FileGroup{}
+	groups := map[string]dto.Asset{}
 	for _, p := range paths {
 		if before != nil {
 			before(p)
@@ -135,20 +135,28 @@ func walk(t *testing.T, g *Grouper, root string, before func(path string)) (map[
 		if _, err := os.Stat(p); err != nil {
 			continue // vanished: the walker would not see it
 		}
-		out, err := g.Decorate(flow.FileEvent{Entry: dto.ItemEntry{Path: p, Name: filepath.Base(p)}})
+		out, err := g.Decorate(&dto.FileDto{ItemEntry: dto.ItemEntry{Path: p, Name: filepath.Base(p)}})
 		if errors.Is(err, chain.ErrSkippedItem) {
 			continue
 		}
 		if err != nil {
 			t.Fatal(err)
 		}
+		if len(out.Files) == 1 && out.Files[0].Gone {
+			gone := groups[""]
+			gone.Files = append(gone.Files, out.Files...)
+			groups[""] = gone
+			continue
+		}
 		if _, dup := groups[out.Key]; dup {
 			t.Fatalf("asset %s sent twice", out.Key)
 		}
 		groups[out.Key] = out
 	}
-	marker, _ := g.Decorate(flow.FileEvent{Done: &flow.WalkResult{}})
-	return groups, marker
+	if held, err := g.Flush(); err != nil || len(held) != 0 {
+		t.Fatalf("the flush gave %v, %v", held, err)
+	}
+	return groups
 }
 
 func names(files []*dto.FileDto) []string {
@@ -165,11 +173,13 @@ func TestGrouper(t *testing.T) {
 	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
 
 	vanished := filepath.Join(bundle, "resources/derivatives/masters/E/"+vanishing+"_4_5005_c.jpeg")
-	groups, marker := walk(t, g, root, func(p string) {
+	groups := walk(t, g, root, func(p string) {
 		if filepath.Base(p) == filepath.Base(vanished) {
 			os.Remove(vanished) // Photos purged it after the library was loaded
 		}
 	})
+	gone := groups[""]
+	delete(groups, "")
 
 	if len(groups) != 3 {
 		t.Fatalf("groups %v, want edited, cloud-only, live", groups)
@@ -190,19 +200,32 @@ func TestGrouper(t *testing.T) {
 	if _, ok := groups[trashed]; ok {
 		t.Error("a trashed asset was sent")
 	}
-	if len(marker.Held) != 2 {
-		t.Errorf("held %v, want both files of the asset that did not complete", marker.Held)
+	if len(gone.Files) == 0 || !strings.Contains(gone.Files[0].Path, trashed) {
+		t.Errorf("gone %v, want the trashed asset's files", names(gone.Files))
+	}
+	if _, ok := groups[vanishing]; ok {
+		t.Error("an asset whose file vanished during the walk was sent")
 	}
 
 	// The next walk loads the library again: the vanished file is not expected
-	groups, marker = walk(t, g, root, nil)
-	if _, ok := groups[vanishing]; !ok || len(marker.Held) != 0 {
-		t.Errorf("next walk: %v, held %v", groups[vanishing], marker.Held)
+	groups = walk(t, g, root, nil)
+	if _, ok := groups[vanishing]; !ok {
+		t.Errorf("next walk: %v", groups[vanishing])
 	}
 }
 
-// A DB that cannot be read groups nothing and holds every file of the library:
-// the walk must not take its assets for gone
+// A file the walk says is gone passes through as it is, an asset of its own
+func TestGrouperGone(t *testing.T) {
+	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	gone := &dto.FileDto{ItemEntry: dto.ItemEntry{Path: "/lib/x.photoslibrary/originals/A/A.heic"}, Gone: true}
+	out, err := g.Decorate(gone)
+	if err != nil || len(out.Files) != 1 || out.Files[0] != gone {
+		t.Errorf("got %+v, %v", out, err)
+	}
+}
+
+// A DB that cannot be read groups nothing (the walk stamped its files: none is
+// taken for gone)
 func TestGrouperUnreadableLibrary(t *testing.T) {
 	root := t.TempDir()
 	bundle := makeLibrary(t, root, fixture())
@@ -210,19 +233,8 @@ func TestGrouperUnreadableLibrary(t *testing.T) {
 		t.Fatal(err)
 	}
 	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
-	groups, marker := walk(t, g, root, nil)
-	if len(groups) != 0 {
+	if groups := walk(t, g, root, nil); len(groups) != 0 {
 		t.Errorf("groups %v, want none", groups)
-	}
-	walked := 0
-	filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
-		if err == nil && !d.IsDir() {
-			walked++
-		}
-		return nil
-	})
-	if len(marker.Held) != walked {
-		t.Errorf("held %d files, want all %d walked", len(marker.Held), walked)
 	}
 }
 
@@ -241,7 +253,7 @@ func TestMetaRecord(t *testing.T) {
 	root := t.TempDir()
 	makeLibrary(t, root, fixture())
 	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
-	groups, _ := walk(t, g, root, nil)
+	groups := walk(t, g, root, nil)
 	m := groups[edited].Meta
 	want := map[string]string{
 		// 758992569.5 s after 2001-01-01 UTC = 2025-01-19 15:16:09.5 UTC, +02:00
@@ -251,8 +263,8 @@ func TestMetaRecord(t *testing.T) {
 		"ImageWidth":         "3024",
 		"ImageHeight":        "4032",
 		"Orientation":        "1",
-		"GPSLatitude":        `50 deg 25' 45.48" N`,
-		"GPSLongitude":       `30 deg 32' 17.16" W`,
+		"GPSLatitude":        "50.4293",
+		"GPSLongitude":       "-30.5381",
 	}
 	for k, v := range want {
 		if got := string(m[k]); got != v {
@@ -265,8 +277,8 @@ func TestMetaRecord(t *testing.T) {
 	if k := groups[edited].Kind; k != dto.KindPhoto {
 		t.Errorf("edited: kind %q, want photo", k)
 	}
-	if d := string(groups[live].Meta["Duration"]); d != "2.50 s" {
-		t.Errorf("live: Duration %q, want exiftool's 2.50 s", d)
+	if d := string(groups[live].Meta["Duration"]); d != "2.5" {
+		t.Errorf("live: Duration %q, want 2.5 (seconds, as exiftool -n)", d)
 	}
 	if _, ok := groups[edited].Meta["Duration"]; ok {
 		t.Error("a photo got a Duration")
@@ -281,7 +293,7 @@ func TestGrouperRoles(t *testing.T) {
 	root := t.TempDir()
 	makeLibrary(t, root, fixture())
 	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
-	groups, _ := walk(t, g, root, nil)
+	groups := walk(t, g, root, nil)
 
 	roles := func(uuid string) map[string]string {
 		out := map[string]string{}
@@ -332,7 +344,7 @@ func TestGrouperVideoRenditions(t *testing.T) {
 		}},
 	})
 	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
-	groups, _ := walk(t, g, root, nil)
+	groups := walk(t, g, root, nil)
 
 	for uuid, want := range map[string][]string{
 		video:     {video + "_4_5005_c.jpeg", dto.RoleStill, video + "_2_201_o.mov", dto.RoleMotion, video + "_2_4_o.mp4", dto.RoleMotion},
@@ -375,41 +387,5 @@ func TestHasLibrary(t *testing.T) {
 	makeLibrary(t, root, nil)
 	if !HasLibrary(root) || !HasLibrary(filepath.Join(root, "Photos Library.photoslibrary")) {
 		t.Error("a library at the top, or the library itself")
-	}
-}
-
-// One asset's group again after Photos made a file of it local: from the DB rows
-// of the last load (its metadata) and the disk now — no walk, no DB read
-func TestRegroup(t *testing.T) {
-	root := t.TempDir()
-	bundle := makeLibrary(t, root, fixture())
-	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
-	walk(t, g, root, nil)
-
-	if _, ok := g.Regroup("NOT-AN-ASSET"); ok {
-		t.Error("an unknown asset")
-	}
-	// The cloud-only asset's original arrives
-	write := func(rel string) {
-		t.Helper()
-		p := filepath.Join(bundle, rel)
-		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(p, []byte(rel), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write("originals/B/" + cloudOnly + ".jpeg")
-	group, ok := g.Regroup(cloudOnly)
-	if !ok {
-		t.Fatal("no group")
-	}
-	if group.Key != cloudOnly || filepath.Base(group.Files[0].Path) != cloudOnly+".jpeg" ||
-		group.Files[0].Role != dto.RoleOriginal || group.Files[0].Size == 0 {
-		t.Errorf("group %s: main %+v, want the arrived original", group.Key, group.Files[0])
-	}
-	if len(group.Meta) == 0 || group.MetaHash == "" {
-		t.Error("the DB's metadata is missing: the files' EXIF would win")
 	}
 }

@@ -201,28 +201,24 @@ func TestHydrateWaiting(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	refreshed := make(chan string, 4)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	p.Start(ctx, func(uuid string, _ time.Duration) bool {
-		refreshed <- uuid
-		return true
-	})
-	select {
-	case uuid := <-refreshed:
-		if uuid != "H1111111-WAITING" {
-			t.Errorf("refreshed %s, want the waiting Photos asset", uuid)
+	p.Start(ctx)
+	marked := func(guid string) bool {
+		it, err := itemsProxy.GetItemByGuid(guid)
+		return err == nil && it.Rework
+	}
+	for deadline := time.Now().Add(5 * time.Second); !marked("H1111111-WAITING"); time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the waiting asset was not asked for (not marked for the next walk)")
 		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("the waiting asset was not asked for")
 	}
 	if _, err := os.Stat(filepath.Join(root, "resources/derivatives/H/H1111111-WAITING_1_102_o.jpeg")); err != nil {
 		t.Error("the image is not in the library")
 	}
-	select {
-	case uuid := <-refreshed:
-		t.Errorf("refreshed %s too, want only the waiting Photos asset", uuid)
-	case <-time.After(200 * time.Millisecond):
+	time.Sleep(200 * time.Millisecond)
+	if marked("H2222222-SHOWN") || marked("H3333333-FOLDER") {
+		t.Error("marked more than the waiting Photos asset")
 	}
 }
 

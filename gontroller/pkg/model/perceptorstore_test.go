@@ -1,6 +1,7 @@
 package model
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -31,11 +32,6 @@ func TestPerceptorStore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for guid, want := range map[string]bool{"a": true, "b": true, "c": false} {
-		if has, err := st.Has(guid); err != nil || has != want {
-			t.Errorf("Has(%s) = %v %v, want %v", guid, has, err, want)
-		}
-	}
 	got, err := st.Load([]string{"a", "b", "c"})
 	if err != nil {
 		t.Fatal(err)
@@ -49,7 +45,10 @@ func TestPerceptorStore(t *testing.T) {
 		t.Errorf("a = %v", v)
 	}
 
-	// Gone items: their rows go
+	// Gone items: their rows go (both processed: with a value or without)
+	if guids, err := st.Guids(); err != nil || len(guids) != 2 {
+		t.Errorf("guids %v %v, want both rows", guids, err)
+	}
 	if n, err := st.Prune(func(g string) bool { return g == "a" }); err != nil || n != 1 {
 		t.Errorf("prune: %d %v, want 1", n, err)
 	}
@@ -57,8 +56,8 @@ func TestPerceptorStore(t *testing.T) {
 
 	// The same schema keeps the values; a new version drops them
 	st, _ = OpenPerceptorStore(DriverSQLite, dir, schema)
-	if has, _ := st.Has("a"); !has {
-		t.Error("reopened: a lost")
+	if guids, _ := st.Guids(); !slices.Equal(guids, []string{"a"}) {
+		t.Errorf("reopened: %v, want a", guids)
 	}
 	st.Close()
 	schema.Version = 2
@@ -66,7 +65,7 @@ func TestPerceptorStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if has, _ := st.Has("a"); has {
+	if guids, _ := st.Guids(); len(guids) != 0 {
 		t.Error("a new schema version kept the old values")
 	}
 	st.Close()
