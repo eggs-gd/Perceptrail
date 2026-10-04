@@ -66,7 +66,8 @@ func cheapStageDone(item *dto.ItemDto) bool {
 	return false
 }
 
-// Gone: these files are known to be deleted (a complete walk did not see them).
+// Gone: these files are gone for the library (the walk found them missing, or
+// their provider says so).
 // A main file gone: its item is deleted; a sidecar gone: its item is Dirty (processed
 // again); an item with no files left is gone too (a keyed asset: every file is
 // "linked", none is "main" by its own GUID). The files' rows go.

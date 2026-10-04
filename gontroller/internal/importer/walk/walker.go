@@ -1,8 +1,8 @@
 // Package walk: the chain's entry — the library's files, one walk per pass. Every
 // file it sees is a row of the files table, written now (path, stat, the time it was
 // seen; Changed: new or its stat changed) and sent on; after a complete walk, the
-// rows it did not see that it says are gone are sent too (Gone: the gate deletes
-// them); then it returns and its output closes.
+// rows it did not see that it says are gone are sent too (Missing: their provider
+// decides, the gate deletes them); then it returns and its output closes.
 package walk
 
 import (
@@ -52,24 +52,23 @@ type Walker struct {
 }
 
 // New: the chain's entry — out gets every file of a walk, then the gone ones
-func New(db Store, root string, logger *l.Logger, out chan<- *dto.FileDto) chain.Processor {
+func New(db Store, root string, logger *l.Logger, out chan<- dto.WalkedFile) chain.Processor {
 	return chain.NewEntryPoint(out, &Walker{logger: logger, root: root, db: db})
 }
 
 // Start: one walk — the files seen, then the gone ones
-func (m *Walker) Start(ctx context.Context, emit func(*dto.FileDto) bool) error {
+func (m *Walker) Start(ctx context.Context, emit func(dto.WalkedFile) bool) error {
 	r := m.walk(ctx, func(e dto.ItemEntry) bool {
 		f, err := m.seen(e, time.Now())
 		if err != nil {
 			m.logger.Error("File not stored", l.String("path", e.Path), l.Error(err))
 			return true
 		}
-		return emit(f)
+		return emit(dto.WalkedFile{FileDto: f})
 	})
 	missing := m.missing(r)
 	for _, f := range missing {
-		f.Gone = true
-		if !emit(f) {
+		if !emit(dto.WalkedFile{FileDto: f, Missing: true}) {
 			break
 		}
 	}
@@ -102,7 +101,7 @@ func (m *Walker) seen(e dto.ItemEntry, now time.Time) (*dto.FileDto, error) {
 	return f, err
 }
 
-// missing: the rows the walk did not stamp that it says are deleted (sent as Gone)
+// missing: the rows the walk did not stamp that it says are deleted (sent as Missing)
 func (m *Walker) missing(r Result) []*dto.FileDto {
 	switch {
 	case !r.Complete:

@@ -4,7 +4,7 @@
 // grouper of the first that claims it — each grouper a step of its own. Every grouper
 // keeps a buffer of open groups and sends a group when it is complete; when its
 // input closes (the walk ended, the switch returned) it sends what it still holds.
-// A file the walk says is gone goes to its provider too.
+// A file the walk found missing goes to its provider too.
 package group
 
 import (
@@ -16,11 +16,11 @@ import (
 
 // New: the sub-chain from in (the walk's files) to out (whole assets: every grouper
 // writes to it, so it closes once every grouper has returned)
-func New(ps []provider.Provider, in <-chan *dto.FileDto, out chan<- dto.Asset) chain.Processor {
+func New(ps []provider.Provider, in <-chan dto.WalkedFile, out chan<- dto.Asset) chain.Processor {
 	grouping := chain.NewChainProcessor(nil)
-	toGroupers := make([]chan<- *dto.FileDto, len(ps))
+	toGroupers := make([]chan<- dto.WalkedFile, len(ps))
 	for i, p := range ps {
-		ch := make(chan *dto.FileDto)
+		ch := make(chan dto.WalkedFile)
 		toGroupers[i] = ch
 		grouping.AddStep(chain.NewDecorator(ch, out, p.Grouper()))
 	}
@@ -34,7 +34,7 @@ type Switch struct {
 	Providers []provider.Provider
 }
 
-func (s Switch) Switch(f *dto.FileDto) (int, error) {
+func (s Switch) Switch(f dto.WalkedFile) (int, error) {
 	for i, p := range s.Providers {
 		if p.Claims(f.Path) {
 			return i, nil

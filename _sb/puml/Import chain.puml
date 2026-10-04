@@ -46,7 +46,7 @@ Top -> Walker: a new chain, Process: a pass starts the entry
 
 loop every file under the root
     Walker -> DB: its row: created / stat refreshed,\nCheckTime (Changed: new or stat changed)
-    Walker -> Groups: *dto.FileDto (the row)
+    Walker -> Groups: dto.WalkedFile (the row)
     note left of Walker
     Unreadable directory:
     skipped, recorded (V1)
@@ -56,7 +56,7 @@ end
 alt Apple claims it (inside *.photoslibrary)
     Groups -> Photos: file
     Photos -> Photos: first file: asset links from Photos.sqlite\n(original, render, Live Photo video); buffer of open\ngroups, a group goes out when all its files arrived
-    Photos -> Gate: dto.Asset (asset UUID; a file of an asset\ntrashed / hidden in Photos: sent as gone)
+    Photos -> Gate: dto.Asset (asset UUID; a file of an asset\ntrashed / hidden in Photos: in Missing)
 else nobody else claims it (other providers: Immich, ... later)
     Groups -> Generic: file
     Generic -> Generic: sidecars by name, next to each other\n(buffer: one open group; a complete group goes out)
@@ -64,9 +64,10 @@ else nobody else claims it (other providers: Immich, ... later)
 end
 note over Groups: a provider not enabled is not asked:\nits files are a plain folder's
 
-alt a gone file
+opt the asset's Missing
     Gate -> DB: the model's Gone: a main file's item deleted,\na sidecar's item Dirty
-else unchanged, the model says no work (NeedsWork)
+end
+alt unchanged, the model says no work (NeedsWork)
     Gate ->x Gate: drop
 else changed (stat, a role the grouper gave) / needs work (Rework, ...)
     Gate -> Exif: dto.Asset
@@ -95,8 +96,8 @@ end note
 
 == end of walk ==
 
-loop every row the walk did not stamp that it says is gone (V2: a complete walk,\nunder the root, not under unreadable directories)
-    Walker -> Groups: *dto.FileDto (Gone): to its provider's grouper,\nwhich passes it through (or makes something of it)
+loop every row the walk did not stamp that it says is missing (V2: a complete walk,\nunder the root, not under unreadable directories)
+    Walker -> Groups: dto.WalkedFile (Missing): to its provider's grouper,\nwhich passes it through (Asset.Missing) or makes something of it
 end
 Walker -> Groups: the walk returns: its channel CLOSES
 Groups -> Photos: the switch returns: every grouper's input closes
@@ -104,7 +105,6 @@ Groups -> Photos: the switch returns: every grouper's input closes
 Generic -> Gate: what it holds (last group); returns
 Photos -> Gate: returns (an incomplete group waits for the next walk)
 note over Gate: the gate's input closes once every grouper has returned\n(a WaitGroup per channel); so on, step by step, to the end
-note over Core, Keep: keep: its input ended - the perceptors' rows\nof gone items pruned (this walk's deletions are done)
 Closer --> Top: Process returns: every step has;\nevery group of the walk went through every step
 Top -> Top: rescan pause (1 min), then the next pass
 

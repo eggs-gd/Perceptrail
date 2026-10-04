@@ -68,9 +68,9 @@ Services (`internal/app/services.go`) start in parallel: `ImporterService` and
 
 ```
 walk       the chain's entry: the library's files as rows (stat, seen), then the
-           ones it says are gone
+           ones it found missing
 group      whole assets: the providers' groupers (the plain folder last)
-gate       only the assets that need work pass (dto.Asset); gone files deleted
+gate       only the assets that need work pass (dto.Asset); what is missing deleted
 identify   one exiftool call per group (the declared tags only) → kinds → the
            metadata package → fingerprint → the item → the cheap preview
            (identify.Item)

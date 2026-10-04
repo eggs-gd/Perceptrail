@@ -98,13 +98,12 @@ func TestWalkCancelled(t *testing.T) {
 	}
 }
 
-// rows: the files table in memory (Gone is not stored)
+// rows: the files table in memory
 type rows struct{ byPath map[string]*dto.FileDto }
 
 func (r *rows) FindFile(path string) (*dto.FileDto, error) {
 	if f, ok := r.byPath[path]; ok {
 		c := *f
-		c.Gone = false
 		return &c, nil
 	}
 	return nil, nil
@@ -126,7 +125,6 @@ func (r *rows) GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error) {
 	for _, f := range r.byPath {
 		if f.CheckTime.Before(t) {
 			c := *f
-			c.Gone = false
 			out = append(out, &c)
 		}
 	}
@@ -136,10 +134,10 @@ func (r *rows) GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error) {
 // files: the end of a test chain — what it got, by name
 type files struct{ got []string }
 
-func (f *files) Consume(r *dto.FileDto) error {
+func (f *files) Consume(r dto.WalkedFile) error {
 	mark := ""
 	switch {
-	case r.Gone:
+	case r.Missing:
 		mark = " gone"
 	case r.Changed:
 		mark = " changed"
@@ -149,14 +147,14 @@ func (f *files) Consume(r *dto.FileDto) error {
 }
 
 // A pass: every file as a row (new or changed: Changed), then the rows it did not
-// see (Gone); then its output closes (the pass ends)
+// see (Missing); then its output closes (the pass ends)
 func TestWalkPass(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "a.jpg"))
 	writeFile(t, filepath.Join(root, "b.jpg"))
 	db := &rows{byPath: map[string]*dto.FileDto{}}
 	pass := func() []string {
-		found := make(chan *dto.FileDto)
+		found := make(chan dto.WalkedFile)
 		got := &files{}
 		c := chain.NewChainProcessor(nil)
 		c.AddStep(New(db, root, testLogger, found))

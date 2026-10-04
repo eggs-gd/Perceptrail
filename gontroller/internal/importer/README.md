@@ -26,18 +26,17 @@ and gets the model (`Store`: what its steps ask). `Pass` is one pass — a new c
 end (`walk`, the chain's one input, returns and its output closes; each step ends
 after its input; `commit` last); its steps' errors are logged and returned. `Start`
 first does what changed since the last run (`identify.Migrate`: the kinds' table,
-the fingerprint; `exif.MarkUnprocessed`: new perceptors), then pass after pass with
-the pause (`rescan`). On demand a library marks the item for rework itself: the
-next pass processes it. `walk` writes the rows of what it
-sees and, after the walk, sends the rows it says are gone; the gate has the model
-delete those; `exif` prunes the perceptors' rows of gone items at the end of a
-pass.
+the fingerprint; `exif.Reconcile`: the perceptors' rows against the items), then
+pass after pass with the pause (`rescan`). On demand a library marks the item for
+rework itself: the next pass processes it. `walk` writes the rows of what it sees
+and, after the walk, sends the rows it found missing; their provider decides what
+is gone for the library (`dto.Asset.Missing`), the gate has the model apply it.
 
 ```
 importer/                  the service: the steps wired, the passes
-importer/walk/             the chain's entry: the library's files as rows, then what the walk says is gone (Gone)
+importer/walk/             the chain's entry: the library's files as rows, then the ones it found missing
 importer/group/            whole assets: the providers' switch and their groupers (a sub-chain)
-importer/gate/             only the groups that need work pass; gone files deleted (the model's Gone)
+importer/gate/             only the groups that need work pass; what is missing applied (the model's Gone)
 importer/identify/         read (exiftool, classify, merge, fingerprint) → validate → show (sizes, pick): the item known
 importer/exif/             the EXIF perceptors (built in, then .so), their values kept; their tags, rework, pruning
 importer/commit/           the item published
@@ -61,10 +60,11 @@ interface (`walk.Store`, `gate.Store`, `ValidatorStore`, `SizesStore`, `KindsSto
 **What a perceptor means to the import is the exif step's**
 ([`exif/`](exif/)), not the registry's and not scattered over the steps: which ones
 run (EXIF data: the built-in ones, then the external), their rows written (its last step, `keep`), and two bits of
-bookkeeping the top calls — **at start** (`MarkUnprocessed`) an item an import
+bookkeeping the service calls **at start** (`Reconcile`): an item an import
 perceptor has no row for (the perceptor is new, or its schema changed) is marked
 for rework (`MarkRework`: the gate sends its group once more; publishing clears the
-mark); **after each walk** (`Prune`) the rows of gone items go. It reads the
+mark), and the rows of items gone meanwhile are dropped (not per pass: a row left
+behind harms nothing — values are read by the shown items' GUIDs). It reads the
 registry itself (`perceptor.All`, `perceptor.Store`); walk, group, gate and commit know
 nothing of perceptors. The sources are providers (`internal/library`: Apple Photos, the plain
 folder last); the transcoders (`internal/transcode`, not wired yet) are a chain of their
@@ -86,11 +86,11 @@ detail).
 
 | Stage / step | File | In -> out | What it does |
 |---|---|---|---|
-| **walk** | `walk/walker.go` | the root -> `*dto.FileDto` | The chain's entry point, a walk per pass: every file's row written as it goes (created, or its stat refreshed; `CheckTime`; `Changed`: new or its stat changed — stored, cleared only by identify's validate, so a pass that fails before deciding the group leaves it for the next) and sent; after a complete walk the rows it did not stamp that it says are gone (`walk.Missing`: under the root, not under an unreadable directory) sent with `Gone`; then it returns (its output closes). Unreadable subdirectories are skipped and recorded. |
-| **group** | `group/switch.go` | `*dto.FileDto` -> `dto.Asset` | A sub-chain: a switch sends a file (a gone one too) to the grouper of the first enabled provider that claims it (the plain folder last: everything else), its end reaches every grouper (a `chain.NewSwitch`: its outputs close when it returns); each grouper is a step of it. |
-| (plain folder grouper) | `internal/library/folder` | `*dto.FileDto` -> `dto.Asset` | Sidecars by name, next to each other: one open group; a complete group goes out, the last one when its input ends. A gone file passes through (an asset of its own). |
-| (Apple Photos grouper) | `internal/library/apple` | `*dto.FileDto` -> `dto.Asset` | The first file of a library loads the assets from a copy of `Photos.sqlite` and forms the groups (files that exist, per the naming layout); a group goes out when its last file arrives. Key = asset UUID; the main file = the source; `Show` = the edit, the original, then Apple's derivatives. Trashed / hidden assets: their files are sent as gone (their items go); a gone file passes through; a group that did not complete waits for the next walk. Video renditions Photos downloads on request (`_2_3_o.mp4`, `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`; `_a` instead of `_o` for an edit, preferred) are `motion`, after the stills; `apple.Local` finds the best file for an on-demand want. |
-| **gate** | `gate/gate.go` | `dto.Asset` -> `dto.Asset` | Gone files: the model's `Gone` (a main file's item deleted, a sidecar's item `Dirty`). A group passes if a file changed (new, its stat or the role its grouper gave: stored here) or the model says it needs work (`NeedsWork`: links, state, fingerprint, `MetaHash`, `Rework`). |
+| **walk** | `walk/walker.go` | the root -> `dto.WalkedFile` | The chain's entry point, a walk per pass: every file's row written as it goes (created, or its stat refreshed; `CheckTime`; `Changed`: new or its stat changed — stored, cleared only by identify's validate, so a pass that fails before deciding the group leaves it for the next) and sent; after a complete walk the rows it did not stamp that it says are gone (`walk.Missing`: under the root, not under an unreadable directory) sent as `Missing`; then it returns (its output closes). Unreadable subdirectories are skipped and recorded. |
+| **group** | `group/switch.go` | `dto.WalkedFile` -> `dto.Asset` | A sub-chain: a switch sends a file (a missing one too) to the grouper of the first enabled provider that claims it (the plain folder last: everything else), its end reaches every grouper (a `chain.NewSwitch`: its outputs close when it returns); each grouper is a step of it. |
+| (plain folder grouper) | `internal/library/folder` | `dto.WalkedFile` -> `dto.Asset` | Sidecars by name, next to each other: one open group; a complete group goes out, the last one when its input ends. A missing file passes through (an asset of its own, `Missing`). |
+| (Apple Photos grouper) | `internal/library/apple` | `dto.WalkedFile` -> `dto.Asset` | The first file of a library loads the assets from a copy of `Photos.sqlite` and forms the groups (files that exist, per the naming layout); a group goes out when its last file arrives. Key = asset UUID; the main file = the source; `Show` = the edit, the original, then Apple's derivatives. Trashed / hidden assets: their files are `Missing` (their items go); a missing file passes through; a group that did not complete waits for the next walk. Video renditions Photos downloads on request (`_2_3_o.mp4`, `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`; `_a` instead of `_o` for an edit, preferred) are `motion`, after the stills; `apple.Local` finds the best file for an on-demand want. |
+| **gate** | `gate/gate.go` | `dto.Asset` -> `dto.Asset` | The asset's `Missing`: the model's `Gone` (a main file's item deleted, a sidecar's item `Dirty`). A group passes if a file changed (new, its stat or the role its grouper gave: stored here) or the model says it needs work (`NeedsWork`: links, state, fingerprint, `MetaHash`, `Rework`). |
 | **identify** | `identify/entry.go` | `dto.Asset` -> `*identify.Item` | The item known: identity, metadata, kinds and roles, what to show now. exiftool lives here; its working item (`draft`: every file, its exif and kind) never leaves it. |
 | read | `identify/read.go` | `dto.Asset` -> draft | Everything known without the DB, groups in parallel (N workers, one exiftool pool): one `exiftool -j -n` call for the whole group (a keyed group: the main file only), only the declared tags (see [exif](#exif-what-is-read-and-who-gets-it)); the kind of every file, the main file (the source) first, roles (`classify.go`); the metadata package — a tag from the source's metadata, else the .xmp sidecars, the main file, the derivatives; only the perceptors' tags (`merge.go`); the main file's fingerprint — its size and sha256 of its first and last 64 KB (`fingerprint.go`). |
 | validate | `identify/validate.go` | draft -> draft | One at a time: not media or broken, the model ignores the group (`Ignore`); else the model says which item it is (`ValidateGroup` / `ValidateAsset`: links, superseded items, same / changed / moved / duplicate); the kind saved with it (`dto.AssetKind`). |
@@ -100,15 +100,17 @@ detail).
 
 ## Types: who owns what
 
-- **walk** yields `*dto.FileDto` — a row of the files table, with what this walk
-  found (not stored: `Changed`, `Gone`). `walk.Result` (root, start, complete or not,
-  files, unreadable directories) stays inside it: what it says is gone.
+- **walk** yields `dto.WalkedFile` — a row of the files table (`*dto.FileDto`;
+  `Changed` is stored) and whether this walk found it missing (`Missing`, a fact of
+  the pass: not on the row). `walk.Result` (root, start, complete or not, files,
+  unreadable directories) stays inside it: what it says is missing.
 - **`dto.Asset`** ([`internal/model/dto/asset.go`](../model/dto/asset.go)) — one whole
   asset before it is identified, the system's unit next to the item it becomes
   (`ItemDto`: item == asset): its files' rows, `Key`, `Show`, the source's `Meta` /
-  `MetaHash`, `Kind`. A provider's grouper makes it from the walk's rows (a gone
-  file it passes through, or makes something of it: an Apple asset trashed in Photos
-  — its files sent as gone); the gate passes the ones that need work; identify reads
+  `MetaHash`, `Kind`; and `Missing` — the files gone for the library. A provider's
+  grouper makes it from the walk's files (a missing one it passes through, or makes
+  something of it; an Apple asset trashed in Photos: its files are missing for us);
+  the gate applies `Missing` and passes the ones that need work; identify reads
   it. The end of a walk is not a value: the walk's output closes.
 - **`identify.Item`** — what identify yields: the item and its metadata package. The
   perceptors read it (`api.RawItemR`), the core ones write into it
@@ -167,7 +169,8 @@ it calls (its own small interface).
   input has a writer per grouper and closes only after the last of them returned.
 - **Seen is stamped by the walk**, not by the gate: a file of a group that did not
   complete, of a library whose DB did not load, or that no grouper wants is seen —
-  not gone. Gone is what the walk did not see (or what a provider says is gone).
+  not missing. Missing is what the walk did not see (or what a provider says is
+  gone for the library).
 - **Deletions are conservative**: only after a complete walk that found files, never
   under an unreadable directory, only under the configured root. A main file gone
   -> the item is soft-deleted; a sidecar gone -> the item is `Dirty`.
@@ -181,9 +184,10 @@ it calls (its own small interface).
   item (`Rework`, not touching `updated_at`, so no delta brings the item back in
   its old state); the client guesses meanwhile (the tile's cloud goes once it got
   the original), the next pass makes it true or takes it back.
-- **The perceptors' rows of gone items** are pruned at the end of a pass (the exif
-  step's input ended: the gate has done the walk's deletions by then).
-- **Moves and deletions**: the gone files come after every file the walk saw, but
+- **The perceptors' rows of gone items** are dropped at start (`Reconcile`), not
+  per pass: a soft-deleted item may come back (a move, a file restored), and a row
+  left behind is never read.
+- **Moves and deletions**: the missing files come after every file the walk saw, but
   a moved file's old path may be deleted before identify has validated the new one;
   the validator finds soft-deleted items by fingerprint and restores them, so a
   moved file keeps its GUID. A sidecar gone makes its item `Dirty` before the
@@ -226,11 +230,11 @@ it calls (its own small interface).
 ## Tests
 
 - `walk/walker_test.go` — walk results (complete, unreadable dir, missing root,
-  cancel); a pass: the rows, then the gone ones; what a walk says is gone.
+  cancel); a pass: the rows, then the missing ones; what a walk says is missing.
 - `group/…_test.go`, `internal/library/folder/…_test.go` — the switch and the plain
   folder's grouper (names, directories, the end of its input).
 - `internal/library/apple/grouper_test.go` — a fixture library: edit, cloud-only, Live
-  Photo, trashed (sent as gone), Photos' own files, a file vanishing mid-walk (its
+  Photo, trashed (missing), Photos' own files, a file vanishing mid-walk (its
   asset complete next walk).
 - `identify/…_test.go` (unit) — kinds and the main file, roles, sizes, the cheap
   preview's pick (an embedded preview last), merge's priority, the fingerprint.
@@ -242,6 +246,9 @@ it calls (its own small interface).
   and the fingerprint's versions).
 - `gontroller/test/perceptor/builtin_test.go` — every built-in perceptor reads only
   the tags it declares.
+- `gontroller/test/importer/exif/reconcile_test.go` — at start, with a real plugin
+  that keeps data (`exif_geo`, built and loaded): an item without a row is marked
+  for rework, a row of a gone item dropped.
 - `gontroller/test/importer/apple_test.go` — a fixture library through the whole import: keys, previews,
   nothing to do on the next walk, a downloaded original, an asset moved to the trash,
   one asset marked on demand (processed though nothing changed), a change kept over

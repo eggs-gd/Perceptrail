@@ -3,8 +3,8 @@
 // name and sit next to it, and the walk lists a directory in name order — so a
 // group's files come one after another. One group is open; a file that does not
 // belong to it closes it (the group goes out) and opens the next; the walk's end
-// (Flush) sends the last one. A file the walk says is gone passes through as it is (its own
-// group).
+// (Flush) sends the last one. A file the walk found missing passes through as it is
+// (an asset of its own, Missing).
 package folder
 
 import (
@@ -20,18 +20,18 @@ type Grouper struct {
 	open []*dto.FileDto
 }
 
-func (g *Grouper) Decorate(file *dto.FileDto) (dto.Asset, error) {
+func (g *Grouper) Decorate(file dto.WalkedFile) (dto.Asset, error) {
 	switch {
-	case file.Gone:
-		return dto.Asset{Files: []*dto.FileDto{file}}, nil
+	case file.Missing:
+		return dto.Asset{Missing: []*dto.FileDto{file.FileDto}}, nil
 	case shouldSkipPath(file.Path):
 		return dto.Asset{}, chain.ErrSkippedItem
-	case len(g.open) == 0 || sameGroup(g.open, file):
-		g.open = append(g.open, file)
+	case len(g.open) == 0 || sameGroup(g.open, file.FileDto):
+		g.open = append(g.open, file.FileDto)
 		return dto.Asset{}, chain.ErrSkippedItem // not complete yet
 	}
 	closed := g.open
-	g.open = []*dto.FileDto{file}
+	g.open = []*dto.FileDto{file.FileDto}
 	return dto.Asset{Files: closed}, nil
 }
 

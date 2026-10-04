@@ -61,7 +61,7 @@ type Storage interface {
 }
 
 // importStores: their storages — every processed item gets a row in each (a value,
-// or "nothing found"); the rows of gone items are pruned
+// or "nothing found")
 func importStores() []Storage {
 	var out []Storage
 	for _, p := range importPerceptors() {
@@ -91,14 +91,20 @@ type Items interface {
 	MarkRework(guids []string) (int64, error)
 }
 
-// MarkUnprocessed runs at start: an item an import perceptor has no row for (the
-// perceptor is new, or its schema changed: its storage was recreated) is marked for
-// rework — the gate sends its group once more, its files unchanged. Once at start,
-// not per group per walk: a perceptor's rows change only with the perceptors.
-func MarkUnprocessed(db Items, logger *l.Logger) error {
+// Reconcile runs at start: the import perceptors' rows against the items. An item
+// a perceptor has no row for (the perceptor is new, or its schema changed: its
+// storage was recreated) is marked for rework — the gate sends its group once more,
+// its files unchanged. A row of an item that is gone is dropped. Once at start, not
+// per pass: a perceptor's rows change only with the perceptors, and a row left
+// behind meanwhile harms nothing (values are read by the shown items' GUIDs).
+func Reconcile(db Items, logger *l.Logger) error {
 	guids, err := db.GetAllGuids()
 	if err != nil {
 		return err
+	}
+	live := make(map[string]bool, len(guids))
+	for _, g := range guids {
+		live[g] = true
 	}
 	missing := map[string]bool{}
 	for _, st := range importStores() {
@@ -115,6 +121,13 @@ func MarkUnprocessed(db Items, logger *l.Logger) error {
 				missing[g] = true
 			}
 		}
+		n, err := st.Prune(func(guid string) bool { return live[guid] })
+		if err != nil {
+			return fmt.Errorf("perceptor %s: %w", st.Name(), err)
+		}
+		if n > 0 {
+			logger.Info("Perceptor storage: rows of gone items dropped", l.String("store", st.Name()), l.Int("rows", n))
+		}
 	}
 	if len(missing) == 0 {
 		return nil
@@ -126,27 +139,4 @@ func MarkUnprocessed(db Items, logger *l.Logger) error {
 	n, err := db.MarkRework(rework)
 	logger.Info("Perceptors without a row: items processed again", l.Int("items", int(n)))
 	return err
-}
-
-// Prune drops the import perceptors' rows of items that are gone — at the end of a
-// pass (the gate has done the walk's deletions by then). Other perceptors' rows are
-// the maintenance chain's (roadmap)
-func Prune(db Items, logger *l.Logger) {
-	guids, err := db.GetAllGuids()
-	if err != nil {
-		logger.Error("Perceptor storage: can't read items", l.Error(err))
-		return
-	}
-	keep := make(map[string]bool, len(guids))
-	for _, g := range guids {
-		keep[g] = true
-	}
-	for _, st := range importStores() {
-		n, err := st.Prune(func(guid string) bool { return keep[guid] })
-		if err != nil {
-			logger.Error("Perceptor storage: prune failed", l.String("store", st.Name()), l.Error(err))
-		} else if n > 0 {
-			logger.Info("Perceptor storage: pruned", l.String("store", st.Name()), l.Int("rows", n))
-		}
-	}
 }
