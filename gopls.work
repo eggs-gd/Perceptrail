@@ -10,4 +10,5 @@ use (
 	./perceptors/ml_color
 	./perceptors/ml_faces
 	./perceptors/ml_objects
+	./_sb/spikes/photokit
 )
