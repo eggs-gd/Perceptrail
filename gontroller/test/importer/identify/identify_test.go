@@ -68,7 +68,7 @@ func identifyGroup(t *testing.T, cacheDir string, paths ...string) *identify.Ite
 	errs := make(chan error, 10)
 	c := chain.NewChainProcessor(errs)
 	c.AddStep(chain.NewEntryPoint(in, one{group}))
-	c.AddStep(identify.New(testDB, cacheDir, "exiftool", l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}), in, out))
+	c.AddStep(identify.New(testDB, cacheDir, "exiftool", perceptor.ExifTags(), l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}), in, out))
 	c.AddStep(chain.NewEnd(out, got))
 	c.Process(context.Background())
 	select {

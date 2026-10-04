@@ -9,8 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"perceptrail/gontroller/internal/model"
-
 	"github.com/eggs-gd/perceplib/chain"
 	l "github.com/eggs-gd/perceplib/logger"
 	"github.com/eggs-gd/perceplib/logger/decorators"
@@ -103,13 +101,13 @@ func TestWalkCancelled(t *testing.T) {
 // rows: the files table in memory (Gone is not stored)
 type rows struct{ byPath map[string]*dto.FileDto }
 
-func (r *rows) GetFileByPath(path string) (*dto.FileDto, error) {
+func (r *rows) FindFile(path string) (*dto.FileDto, error) {
 	if f, ok := r.byPath[path]; ok {
 		c := *f
 		c.Gone = false
 		return &c, nil
 	}
-	return nil, model.ErrNotFound
+	return nil, nil
 }
 func (r *rows) CreateFile(e dto.ItemEntry) (*dto.FileDto, error) {
 	f := &dto.FileDto{ItemEntry: e}

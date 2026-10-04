@@ -9,6 +9,8 @@ import (
 
 type FilesApi interface {
 	GetFileByPath(path string) (*dto.FileDto, error)
+	// FindFile: the file's row, nil when there is none (not an error: a new file)
+	FindFile(path string) (*dto.FileDto, error)
 
 	CreateFile(entry dto.ItemEntry) (*dto.FileDto, error)
 
@@ -49,6 +51,14 @@ func (p *Proxy) GetFileByPath(path string) (*dto.FileDto, error) {
 
 	err := p.db.Where("path = ?", path).First(&file).Error
 	return &file, err
+}
+
+func (p *Proxy) FindFile(path string) (*dto.FileDto, error) {
+	var files []*dto.FileDto
+	if err := p.db.Where("path = ?", path).Limit(1).Find(&files).Error; err != nil || len(files) == 0 {
+		return nil, err
+	}
+	return files[0], nil
 }
 
 func (p *Proxy) GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error) {

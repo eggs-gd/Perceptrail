@@ -3,7 +3,6 @@ package exif
 import (
 	"fmt"
 
-	"perceptrail/gontroller/internal/model"
 	"perceptrail/gontroller/internal/perceptor"
 	"perceptrail/gontroller/internal/perceptor/builtin"
 
@@ -12,7 +11,7 @@ import (
 )
 
 // The perceptors as the import sees them: the ones that run in the chain (EXIF
-// data), what they read, their rows. The registry (pkg/plugin) only knows what is
+// data), what they read, their rows. The registry (internal/perceptor) only knows what is
 // loaded and where each one keeps its data.
 
 // importPerceptors: the perceptors the import chain runs (EXIF data), in order
@@ -52,10 +51,19 @@ func externalPerceptors() []api.ExifPerceptor {
 	return out
 }
 
+// Storage: a perceptor's rows as the import keeps them — one per processed item
+// (its value, or "processed, nothing found")
+type Storage interface {
+	Name() string
+	Save(guid string, v api.Values) error
+	Guids() ([]string, error)
+	Prune(keep func(guid string) bool) (int, error)
+}
+
 // importStores: their storages — every processed item gets a row in each (a value,
 // or "nothing found"); the rows of gone items are pruned
-func importStores() []*model.PerceptorStore {
-	var out []*model.PerceptorStore
+func importStores() []Storage {
+	var out []Storage
 	for _, p := range importPerceptors() {
 		if st, ok := perceptor.Store(p.Name()); ok {
 			out = append(out, st)

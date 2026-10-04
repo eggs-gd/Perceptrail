@@ -3,7 +3,6 @@ package identify
 import (
 	"fmt"
 
-	"perceptrail/gontroller/internal/model"
 	"perceptrail/gontroller/internal/model/dto"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -14,7 +13,7 @@ import (
 // ValidatorStore: what validate asks of the model — which item a group is (the
 // model's identity rules), and a group that is no item remembered as ignored
 type ValidatorStore interface {
-	ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, model.Outcome, error)
+	ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, error)
 	ValidateAsset(key string, files []*dto.FileDto, hash string) (*dto.ItemDto, error)
 	Ignore(files []*dto.FileDto) error
 }
@@ -63,7 +62,7 @@ func (v *validate) Decorate(g *draft) (*draft, error) {
 	// Moved items go on too: the cheap stage is cheap, and their preview path
 	// changed with them. Skipping outputs that already exist is the expensive
 	// stage's business.
-	item, _, err := v.db.ValidateGroup(g.Files, g.Hash)
+	item, err := v.db.ValidateGroup(g.Files, g.Hash)
 	if err != nil {
 		return nil, err
 	}

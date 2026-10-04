@@ -17,7 +17,6 @@ package identify
 
 import (
 	"perceptrail/gontroller/internal/model/dto"
-	"perceptrail/gontroller/internal/perceptor"
 
 	"github.com/eggs-gd/perceplib/chain"
 	l "github.com/eggs-gd/perceplib/logger"
@@ -46,11 +45,11 @@ func Migrate(db Store, logger *l.Logger) {
 	}
 }
 
-// New: in — the assets that need work; out — the identified items; embedded previews go under cacheDir. It runs its own exiftool
-// (a pool of processes, closed when its steps stop); what is read besides
-// identify's own tags is what the loaded perceptors declare (perceptor.ExifTags). Its
-// errors go to the chain it runs in.
-func New(db Store, cacheDir, exiftool string, logger *l.Logger, in <-chan dto.Asset, out chan<- *Item) chain.Processor {
+// New: in — the assets that need work; out — the identified items; embedded
+// previews go under cacheDir. It runs its own exiftool (a pool of processes, closed
+// when its steps stop); tags: what is read besides identify's own (what the
+// perceptors declare). Its errors go to the chain it runs in.
+func New(db Store, cacheDir, exiftool string, tags []string, logger *l.Logger, in <-chan dto.Asset, out chan<- *Item) chain.Processor {
 	tool := newPool(workers, exiftool, logger)
 
 	// read → validate: + metadata, kinds and the main file, the package, the
@@ -60,7 +59,7 @@ func New(db Store, cacheDir, exiftool string, logger *l.Logger, in <-chan dto.As
 	validated := make(chan *draft)
 
 	stage := chain.NewChainProcessor(nil)
-	stage.AddStep(chain.NewDecoratorN(in, read, newReader(tool, perceptor.ExifTags(), logger), workers)) // groups are independent
+	stage.AddStep(chain.NewDecoratorN(in, read, newReader(tool, tags, logger), workers)) // groups are independent
 	stage.AddStep(chain.NewDecorator(read, validated, &validate{db: db, logger: logger}))
 	stage.AddStep(chain.NewDecorator(validated, out, newShow(db, tool, cacheDir, logger)))
 	return stage

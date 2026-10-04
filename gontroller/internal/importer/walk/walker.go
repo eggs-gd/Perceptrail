@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"perceptrail/gontroller/internal/model"
 	"perceptrail/gontroller/internal/model/dto"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -39,7 +38,7 @@ type Result struct {
 
 // Store: the files table as a walk writes and reads it
 type Store interface {
-	GetFileByPath(path string) (*dto.FileDto, error)
+	FindFile(path string) (*dto.FileDto, error)
 	CreateFile(entry dto.ItemEntry) (*dto.FileDto, error)
 	UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error)
 	GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error)
@@ -83,15 +82,15 @@ func (m *Walker) Start(ctx context.Context, emit func(*dto.FileDto) bool) error 
 // seen: the file's row — created, or its stat refreshed; stamped as seen at now.
 // Changed: new, or its size / mtime differ.
 func (m *Walker) seen(e dto.ItemEntry, now time.Time) (*dto.FileDto, error) {
-	f, err := m.db.GetFileByPath(e.Path)
+	f, err := m.db.FindFile(e.Path)
 	switch {
-	case errors.Is(err, model.ErrNotFound):
+	case err != nil:
+		return nil, err
+	case f == nil:
 		if f, err = m.db.CreateFile(e); err != nil {
 			return nil, err
 		}
 		f.Changed = true
-	case err != nil:
-		return nil, err
 	case !f.ModTime.Equal(e.ModTime) || f.Size != e.Size:
 		// The fresh stat stored, or every walk sees the file as changed again (and
 		// the short hash would use the stale size)
