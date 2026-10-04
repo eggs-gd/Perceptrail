@@ -23,7 +23,8 @@ One line each; the details are in the READMEs and the PRs.
   ([review](review-pr24.md)) · #25 the top level declarative, `internal/`,
   integration tests in `test/` · #26 import steps without `model`, `Missing` off
   the files' rows, perceptors' rows reconciled at start, the library contract
-  narrowed by its consumers.
+  narrowed by its consumers · #27 exiftool: no panic, no orphans (go-exiftool
+  v0.5.2); the plugin tests under `-race`.
 
 ## Releases
 
@@ -40,9 +41,6 @@ a PR of its own, so the next chains do not touch everything:
 - [ ] The walk in batches: one read of the rows under the root, `CheckTime` stamped
       per page, rows created in batches (3.1); Photos' own files not written as
       rows, or measured and accepted (3.2).
-- [ ] exiftool's pool returns an error instead of panicking (3.7); the plugin
-      tests under `-race` (3.8); no orphaned exiftool (go-exiftool v0.5.2) — PR
-      in work.
 
 ## Next: the expensive stage (transcode)
 
