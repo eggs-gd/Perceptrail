@@ -232,10 +232,14 @@ it calls (its own small interface).
 - `pkg/library/apple/grouper_test.go` — a fixture library: edit, cloud-only, Live
   Photo, trashed (sent as gone), Photos' own files, a file vanishing mid-walk (its
   asset complete next walk).
-- `identify/…_test.go` — kinds and the main file, roles, sizes, the cheap preview's
-  pick (an embedded preview last), an embedded preview's orientation and the group read
-  (real exiftool), merge's priority, the fingerprint, the kinds' and the
-  fingerprint's versions.
+- `identify/…_test.go` (unit) — kinds and the main file, roles, sizes, the cheap
+  preview's pick (an embedded preview last), merge's priority, the fingerprint.
+- `gontroller/test/importer/identify` — identify as the import runs it (a real
+  model, a real exiftool, the perceptors' declared tags): the group read as numbers
+  (GPS signed, the orientation, the sidecar's date over the main file's, nothing
+  undeclared), a RAW's embedded preview extracted with its orientation (a TIFF
+  built as a RAW: IFD0 the image, IFD1 the embedded JPEG), `Migrate` (the kinds'
+  and the fingerprint's versions).
 - `gontroller/test/perceptor/builtin_test.go` — every built-in perceptor reads only
   the tags it declares.
 - `gontroller/test/importer/apple_test.go` — a fixture library through the whole import: keys, previews,

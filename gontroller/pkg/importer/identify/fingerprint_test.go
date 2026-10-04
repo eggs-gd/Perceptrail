@@ -5,11 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"perceptrail/gontroller/pkg/model/dto"
-
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
 )
 
 // The same bytes anywhere: the same fingerprint; another byte at either end or
@@ -44,47 +39,5 @@ func TestFingerprint(t *testing.T) {
 		if fp(write(name, content)) == a {
 			t.Errorf("%s: the same fingerprint as another file", name)
 		}
-	}
-}
-
-// A new hashVersion clears every item's fingerprint once (the gate then sends their
-// groups again); the same version clears nothing
-func TestForgetOldHashes(t *testing.T) {
-	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
-	f, err := testDB.CreateFile(dto.ItemEntry{Path: filepath.Join(t.TempDir(), "old.jpg"), Name: "old.jpg"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	item, err := testDB.CreateItem(f)
-	if err != nil {
-		t.Fatal(err)
-	}
-	item.HashShort = "exif-hash"
-	if _, err := testDB.UpdateItem(item); err != nil {
-		t.Fatal(err)
-	}
-	if err := testDB.SetMeta(hashVersionKey, "1"); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := forgetOldHashes(testDB, logger); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := testDB.GetItemByGuid(item.Guid); got.HashShort != "" {
-		t.Errorf("fingerprint kept: %q", got.HashShort)
-	}
-	if v, _ := testDB.GetMeta(hashVersionKey); v != hashVersion {
-		t.Errorf("version %q, want %q", v, hashVersion)
-	}
-
-	item.HashShort = "new-hash"
-	if _, err := testDB.UpdateItem(item); err != nil {
-		t.Fatal(err)
-	}
-	if err := forgetOldHashes(testDB, logger); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := testDB.GetItemByGuid(item.Guid); got.HashShort != "new-hash" {
-		t.Errorf("the same version cleared it: %q", got.HashShort)
 	}
 }

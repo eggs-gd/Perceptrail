@@ -96,7 +96,8 @@ Each module is set up the same way: `New(cfg, deps…, logger)` / `Load` / `Enab
 reading its own `Config` interface of the whole config.
 
 `test/` holds the integration tests, by the path of what they test, through the
-public API only: `test/importer` (the server's own start, the import's passes),
+public API only: `test/importer` (the server's own start, the import's passes;
+`test/importer/identify`: the stage alone over a real model and exiftool),
 `test/perceptor` (the built-ins' declared tags, loading the `.so` plugins),
 `test/web/route` (the HTTP API over a real model, read as the client reads its
 JSON), `test/library` (the Apple library's background work); `test/fake` stands in
