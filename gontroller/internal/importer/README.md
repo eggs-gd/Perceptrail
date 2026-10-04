@@ -87,7 +87,9 @@ is (`dto.AssetKind`). A step gathers stat, exif, kinds, the fingerprint.
 - **Seen is what the walk visited**, not what reached the gate: a file of a group
   that did not complete, or of a library whose DB did not load, is seen — not
   missing. The walk keeps it in memory (the rows read at its start, minus the ones
-  it visited); nothing is stamped on the rows.
+  it visited); nothing is stamped on the rows. Before they are sent, the missing
+  rows are read again: the chain worked meanwhile (a moved file's old row may be
+  gone, its item moved to the new path).
 - **Deletions are conservative**: only after a complete walk that found files, never
   under an unreadable directory, only under the root. A main file gone → the item is
   soft-deleted; a sidecar gone → the item is `Dirty`.

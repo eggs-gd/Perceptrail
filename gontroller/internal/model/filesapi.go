@@ -64,6 +64,20 @@ func (p *Proxy) GetAllFiles() ([]*dto.FileDto, error) {
 	return files, p.db.Find(&files).Error
 }
 
+// GetFilesByID: the rows of these IDs as they are now (an ID whose row is gone
+// gives nothing)
+func (p *Proxy) GetFilesByID(ids []uint) ([]*dto.FileDto, error) {
+	var files []*dto.FileDto
+	for start := 0; start < len(ids); start += 500 { // under SQLite's variable limit
+		var page []*dto.FileDto
+		if err := p.db.Where("id IN ?", ids[start:min(start+500, len(ids))]).Find(&page).Error; err != nil {
+			return nil, err
+		}
+		files = append(files, page...)
+	}
+	return files, nil
+}
+
 // CreateFiles: the rows of new files, in one transaction; each gets its GUID and
 // is marked Changed (new work)
 func (p *Proxy) CreateFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error) {

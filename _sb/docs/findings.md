@@ -211,6 +211,11 @@ content is for when a second provider exists).
   every file's row every pass (a `SELECT` + an `UPDATE` stamping `CheckTime`, a WAL
   commit each) — an idle pass over 10 000 files took 5.8 s, now 0.1 s. The rows are
   read once; what was not visited is missing (no stamp needed, `CheckTime` gone).
+  **The missing rows are read again before they are sent** (Codex, PR #29): the
+  rows are from the walk's start and the chain works meanwhile — a moved file
+  validated before the walk ends has its old row deleted and its item moved; sent
+  from the snapshot, that row went to `Gone` with its stale `LinkedTo` and deleted
+  the moved item.
   A changed stat is saved as its columns only: the row read at the walk's start
   may have moved on (a role, sizes) by the time its page is written.
   The walk sends a page only once its rows are written (a new row's `ID` comes from

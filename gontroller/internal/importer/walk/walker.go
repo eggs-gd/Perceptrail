@@ -38,6 +38,7 @@ type Result struct {
 // Store: the files table as a walk reads and writes it
 type Store interface {
 	GetAllFiles() ([]*dto.FileDto, error)
+	GetFilesByID(ids []uint) ([]*dto.FileDto, error)
 	CreateFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error)
 	SaveStats(files []*dto.FileDto) error
 }
@@ -159,8 +160,20 @@ func (m *Walker) missing(r Result, unseen map[string]*dto.FileDto) []*dto.FileDt
 	for _, f := range unseen {
 		stale = append(stale, f)
 	}
-	slices.SortFunc(stale, func(a, b *dto.FileDto) int { return strings.Compare(a.Path, b.Path) })
-	return Missing(r, stale)
+	// Read again as they are now: the rows were read at the walk's start, and the
+	// chain works meanwhile — a moved file's old row may be gone already (its item
+	// moved to the new path); sent as missing, it would delete that item
+	ids := make([]uint, 0, len(stale))
+	for _, f := range Missing(r, stale) {
+		ids = append(ids, f.ID)
+	}
+	current, err := m.db.GetFilesByID(ids)
+	if err != nil {
+		m.logger.Error("Deletions: can't read the files again", l.Error(err))
+		return nil
+	}
+	slices.SortFunc(current, func(a, b *dto.FileDto) int { return strings.Compare(a.Path, b.Path) })
+	return current
 }
 
 func (m *Walker) walk(ctx context.Context, emit func(dto.ItemEntry) bool) Result {

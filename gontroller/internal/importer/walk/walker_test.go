@@ -99,10 +99,13 @@ func TestWalkCancelled(t *testing.T) {
 	}
 }
 
-// rows: the files table in memory; writes counts the rows written
+// rows: the files table in memory; writes counts the rows written; meanwhile runs
+// after a page's rows are written (what the chain does at the same time)
 type rows struct {
-	byPath map[string]*dto.FileDto
-	writes int
+	byPath    map[string]*dto.FileDto
+	writes    int
+	lastID    uint
+	meanwhile func()
 }
 
 func (r *rows) GetAllFiles() ([]*dto.FileDto, error) {
@@ -113,15 +116,29 @@ func (r *rows) GetAllFiles() ([]*dto.FileDto, error) {
 	}
 	return out, nil
 }
+func (r *rows) GetFilesByID(ids []uint) ([]*dto.FileDto, error) {
+	var out []*dto.FileDto
+	for _, f := range r.byPath {
+		if slices.Contains(ids, f.ID) {
+			c := *f
+			out = append(out, &c)
+		}
+	}
+	return out, nil
+}
 func (r *rows) CreateFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error) {
 	var out []*dto.FileDto
 	for _, e := range entries {
-		f := &dto.FileDto{ItemEntry: e, Changed: true}
+		r.lastID++
+		f := &dto.FileDto{ID: 100 + r.lastID, ItemEntry: e, Changed: true} // an ID as the database gives
 		c := *f
 		r.byPath[e.Path] = &c
 		out = append(out, f)
 	}
 	r.writes += len(entries)
+	if r.meanwhile != nil {
+		r.meanwhile()
+	}
 	return out, nil
 }
 func (r *rows) SaveStats(fs []*dto.FileDto) error {
@@ -206,6 +223,27 @@ func TestWalkSkipped(t *testing.T) {
 	c.Process(t.Context())
 	if !slices.Equal(got.got, []string{"a.jpg changed", "old.db gone"}) {
 		t.Errorf("got %v", got.got)
+	}
+}
+
+// A file moved while the walk runs: the chain validates the new path before the
+// walk ends and the model deletes the old path's row (the item moves to the new
+// one). The old row was read at the walk's start, but is not missing: it is gone
+// already — sent as missing it would delete the moved item.
+func TestWalkMovedMeanwhile(t *testing.T) {
+	root := t.TempDir()
+	old, moved := filepath.Join(root, "a", "old.jpg"), filepath.Join(root, "b", "new.jpg")
+	writeFile(t, moved)
+	db := &rows{byPath: map[string]*dto.FileDto{old: {ID: 1, GUID: "g", ItemEntry: dto.ItemEntry{Path: old, Name: "old.jpg"}}}}
+	db.meanwhile = func() { delete(db.byPath, old) } // validate: the old row goes
+	found := make(chan dto.WalkedFile)
+	got := &files{}
+	c := chain.NewChainProcessor(nil)
+	c.AddStep(New(db, root, nil, testLogger, found))
+	c.AddStep(chain.NewEnd(found, got))
+	c.Process(t.Context())
+	if !slices.Equal(got.got, []string{"new.jpg changed"}) {
+		t.Errorf("got %v: a row deleted meanwhile was sent as missing", got.got)
 	}
 }
 
