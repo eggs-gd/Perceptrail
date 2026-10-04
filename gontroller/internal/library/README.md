@@ -10,7 +10,10 @@ we render and store nothing it keeps.
   grouper is a step of its own. The plain folder (`library/folder`) is a provider too, the
   last: it claims what nobody else did. A provider not enabled is not asked: its
   files are a plain folder's.
-- **The contract** ([`provider.go`](provider/provider.go) `Grouper`): a grouper
+- **The contract** ([`provider.go`](provider/provider.go)) has a part per consumer:
+  `Grouping` for the import (`Claims`, `Grouper`), `Renditions` for the web
+  service (`Levels`, `Rendition`); `Provider` is the whole library as the registry
+  keeps it (+ `Owns`, `Start`). A grouper
   takes the walk's files (`dto.WalkedFile`: the row — path, stat, `Changed` — and
   `Missing`) and gives whole `dto.Asset`s (its files' rows, `Key`, `Show`, the
   source's `Meta` / `MetaHash`, `Kind`); when the walk ends — its input closes —
@@ -30,13 +33,14 @@ we render and store nothing it keeps.
 
 `library.Enable(cfg, db, logger)` (in `main`) builds them from the config
 (`providers: {apple: {enabled: …}}`, enabled when not listed); the plain folder
-always, last. `Enabled` gives them in order, `Of` the item's (the web service gets
-`library.Of` passed in: the routes do not reach the registry).
+always, last. `Enabled` gives the import their `Grouping`, in order; `Of` the
+`Renditions` of the item's library (the web service gets `library.Of` passed in:
+the routes do not reach the registry).
 
 | package | what |
 |---|---|
 | `library` | the libraries of this run: `Enable`, `Enabled`, `Of`, `Service` |
-| `library/provider` | the contract a library implements (`Provider`, `Grouper`, `Rendition`, `Options`) |
+| `library/provider` | the contract a library implements: `Grouping` (the import), `Renditions` (the web service), `Provider` (both + `Owns`, `Start`); `Grouper`, `Rendition`, `Options` |
 | `library/apple` | Apple Photos: the grouper (the library's DB, the naming layout), on demand (`ondemand.go`) |
 | `library/apple/photokit` | PhotoKit through cgo (macOS; a stub elsewhere) |
 | `library/folder` | the plain folder: sidecars by name; nothing on demand (the transcode renders for it) |

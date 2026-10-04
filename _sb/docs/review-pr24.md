@@ -4,7 +4,7 @@ A strict review of the import refactor before closing it: dependencies, duplicat
 missed code, docs. The goal of the work: prepare for the expensive stages
 (transcodes, ML) and cut responsibilities so that a change does not touch 50 files.
 
-Status: **[PR24]** — done in PR #24; **[next]** — a separate PR before the
+Status: **[PR24]** — done in PR #24; **[PR26]** — done in PR #26; **[next]** — a separate PR before the
 transcodes (also in the roadmap).
 
 ## What PR #24 did
@@ -38,7 +38,7 @@ transcodes (also in the roadmap).
   `importer.Refresh` → `db.MarkRework`. The Apple provider has its own `Items`
   store; it marks the rework itself. `providers.Refresher`, `importer.Refresh` and
   the wiring in `main` go.
-- **1.3 [next] `providers.Provider` mixes three roles**: import (`Claims`,
+- **1.3 [PR26] `providers.Provider` mixes three roles**: import (`Claims`,
   `Grouper`), renditions (`Owns`, `Levels`, `Rendition`), background (`Start`).
   `group` and `client/routes` depend on the whole. Split: `Grouping` for the import,
   `Renditions` for the routes; a provider implements both.
@@ -46,7 +46,7 @@ transcodes (also in the roadmap).
   `exif_date` / `exif_size` / `exif_duration` import `pkg/plugins` for
   `RawItemRW` / `ExifCorePerceptor`. Move the contract to a small package of its
   own; the registry depends on it, not the other way round.
-- **1.5 [next] Steps import `model` for small things**: `walk` (`ErrNotFound`),
+- **1.5 [PR26] Steps import `model` for small things**: `walk` (`ErrNotFound`),
   `identify` (`Outcome`), `exif` (`*PerceptorStore`). Move `ErrNotFound` and
   `Outcome` to `dto`; exif needs a storage interface (`Name`, `Save`, `Guids`,
   `Prune`).
@@ -55,7 +55,7 @@ transcodes (also in the roadmap).
   routes with the same lazy init. Registries as package functions is a decision;
   the routes' proxies and `model.db` are not (pass the proxy to `NewWebService`,
   open the DB in `Configure`). Already deferred: "the HTTP routes' DB proxies".
-- **1.7 [next] `identify` imports `plugins` for `ExifTags()`** (decided in
+- **1.7 [PR26] `identify` imports `plugins` for `ExifTags()`** (decided in
   `fc46706`). With a chain built per pass, the service can pass the tags in.
 
 ## 2. Duplicated code and logic
@@ -85,10 +85,10 @@ transcodes (also in the roadmap).
   bundle); before, only grouped files had rows. Not measured (the library is not
   readable from the agent's sandbox). Either the walk skips what a provider says is
   not its media, or measure and accept.
-- **3.3 [next] `dto.FileDto` carries the pass's state** (`Changed`, `Gone` with
+- **3.3 [PR26] `dto.FileDto` carries the pass's state** (`Changed`, `Gone` with
   `gorm:"-"`): a DB DTO is also a chain message. A message type
   (`dto.SeenFile{*FileDto; Changed, Gone}`) for walk → group.
-- **3.4 [next] `Prune` every pass** reads every GUID and every storage's GUIDs, even
+- **3.4 [PR26] `Prune` every pass** reads every GUID and every storage's GUIDs, even
   when nothing was deleted. Run it when the gate deleted something.
 - **3.5** `exif_coretest/recorder.go`: a test helper in a plain package file — fine
   as a test-support package (like `httptest`); keep.

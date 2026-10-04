@@ -21,7 +21,9 @@ One line each; the details are in the READMEs and the PRs.
   #21 Apple Photos on demand (PhotoKit) · #22 providers listed · #23 providers as
   the chain's grouping (`internal/library`) · #24 the import in stages
   ([review](review-pr24.md)) · #25 the top level declarative, `internal/`,
-  integration tests in `test/`.
+  integration tests in `test/` · #26 import steps without `model`, `Missing` off
+  the files' rows, perceptors' rows reconciled at start, the provider contract
+  split by consumer.
 
 ## Releases
 
@@ -35,15 +37,9 @@ One line each; the details are in the READMEs and the PRs.
 The rest of the PR #24 review ([review-pr24.md](review-pr24.md), its numbers), each
 a PR of its own, so the next chains do not touch everything:
 
-- [ ] `provider.Provider` split: `Grouping` for the import, `Renditions` for the
-      routes (1.3).
-- [ ] Steps without `model` imports: `ErrNotFound`, `Outcome` to `dto`; a storage
-      interface for exif (1.5). identify's tags passed in by the service (1.7).
 - [ ] The walk in batches: one read of the rows under the root, `CheckTime` stamped
       per page, rows created in batches (3.1); Photos' own files not written as
       rows, or measured and accepted (3.2).
-- [ ] A message type for walk → group (`dto.SeenFile`) instead of pass state on
-      `dto.FileDto` (3.3); `Prune` only when the pass deleted something (3.4).
 - [ ] exiftool's pool returns an error instead of panicking (3.7);
       `internal/perceptor` under `-race` (3.8).
 

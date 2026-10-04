@@ -170,6 +170,23 @@ chain (a second declaration); exiftool passed in from outside identify; nine
 one-function steps in identify; a 1 → N step for Apple assets (the grouper forms the
 groups up front from the DB and a `stat`: each walked file closes at most one group).
 
+**Deletions, two places** (2026-10-04, PR #26): the walk states a fact (a file
+is missing on disk), the provider says what is gone for the library (`Asset.Missing`:
+Apple's trashed assets are on disk; a file Optimize Storage offloaded may be kept),
+the gate has the model apply it. The walk does not delete rows itself: "not on
+disk" is not "not in the library". Rejected: `Prune` of the perceptors' rows every
+pass (or "only when something was deleted") — they are reconciled once at start
+(`exif.Reconcile`, with the rework of items a perceptor has no row for): a row left
+behind is never read, and a soft-deleted item may come back in the same pass (a
+move).
+
+**Contracts per consumer** (PR #26): a library's contract is split into what the
+import asks (`provider.Grouping`) and what the web service asks
+(`provider.Renditions`); the registry keeps the whole `Provider`. Declared in
+`provider`, not by each consumer: Go does not convert `[]provider.Provider` to a
+consumer's slice type, and the registry must not import the importer. An unused
+`Outcome` and `Name()` went instead of being moved.
+
 **Providers** (2026-10-02): rejected — a typed `sources:` list in the config (the user
 would have to know what each folder is), marker files (`.immich`, `@eaDir`) as a
 filter of their own, a claim step per provider. Decided: one switch, the first

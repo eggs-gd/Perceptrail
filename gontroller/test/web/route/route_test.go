@@ -49,7 +49,7 @@ func TestMain(m *testing.M) {
 // (nil: only plain folders), perceptors the ones the client is given
 func server(of route.LibraryOf, perceptors ...api.Perceptor) *echo.Echo {
 	if of == nil {
-		of = func(*dto.ItemDto) provider.Provider { return nil }
+		of = func(*dto.ItemDto) provider.Renditions { return nil }
 	}
 	e := echo.New()
 	route.Register(e, testDB, of, route.AppInfo{}, perceptors, nil, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))

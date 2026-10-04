@@ -22,7 +22,7 @@ type Store interface {
 
 // LibraryOf: the library an item belongs to, nil for a plain folder's (the server
 // gives library.Of)
-type LibraryOf func(item *dto.ItemDto) provider.Provider
+type LibraryOf func(item *dto.ItemDto) provider.Renditions
 
 // routes: what the handlers share
 type routes struct {

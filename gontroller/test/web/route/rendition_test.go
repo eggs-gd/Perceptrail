@@ -24,7 +24,7 @@ func TestRenditionOnDemand(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "Photos Library.photoslibrary")
 	photos := &fake.Photos{Root: root}
 	lib := apple.New(filepath.Dir(root), photos, testDB, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
-	e := server(func(item *dto.ItemDto) provider.Provider {
+	e := server(func(item *dto.ItemDto) provider.Renditions {
 		if lib.Owns(item) {
 			return lib
 		}

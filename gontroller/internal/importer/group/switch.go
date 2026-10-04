@@ -16,27 +16,27 @@ import (
 
 // New: the sub-chain from in (the walk's files) to out (whole assets: every grouper
 // writes to it, so it closes once every grouper has returned)
-func New(ps []provider.Provider, in <-chan dto.WalkedFile, out chan<- dto.Asset) chain.Processor {
+func New(libraries []provider.Grouping, in <-chan dto.WalkedFile, out chan<- dto.Asset) chain.Processor {
 	grouping := chain.NewChainProcessor(nil)
-	toGroupers := make([]chan<- dto.WalkedFile, len(ps))
-	for i, p := range ps {
+	toGroupers := make([]chan<- dto.WalkedFile, len(libraries))
+	for i, library := range libraries {
 		ch := make(chan dto.WalkedFile)
 		toGroupers[i] = ch
-		grouping.AddStep(chain.NewDecorator(ch, out, p.Grouper()))
+		grouping.AddStep(chain.NewDecorator(ch, out, library.Grouper()))
 	}
-	grouping.AddStep(chain.NewSwitch(in, toGroupers, Switch{Providers: ps}))
+	grouping.AddStep(chain.NewSwitch(in, toGroupers, Switch{Libraries: libraries}))
 	return grouping
 }
 
-// Switch: a file to the grouper of the first provider that claims it (its index in
-// Providers)
+// Switch: a file to the grouper of the first library that claims it (its index in
+// Libraries)
 type Switch struct {
-	Providers []provider.Provider
+	Libraries []provider.Grouping
 }
 
 func (s Switch) Switch(f dto.WalkedFile) (int, error) {
-	for i, p := range s.Providers {
-		if p.Claims(f.Path) {
+	for i, library := range s.Libraries {
+		if library.Claims(f.Path) {
 			return i, nil
 		}
 	}

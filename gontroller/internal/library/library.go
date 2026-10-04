@@ -40,11 +40,17 @@ func Enable(cfg Config, db apple.Items, logger *l.Logger) error {
 	return nil
 }
 
-// Enabled: the libraries in the chain, in order
-func Enabled() []provider.Provider { return enabled }
+// Enabled: the libraries as the import's grouping asks them, in order
+func Enabled() []provider.Grouping {
+	out := make([]provider.Grouping, len(enabled))
+	for i, lib := range enabled {
+		out[i] = lib
+	}
+	return out
+}
 
-// Of: the library an item belongs to, nil for a plain folder's
-func Of(item *dto.ItemDto) provider.Provider {
+// Of: the renditions of the library an item belongs to, nil for a plain folder's
+func Of(item *dto.ItemDto) provider.Renditions {
 	for _, lib := range enabled {
 		if lib.Owns(item) {
 			return lib

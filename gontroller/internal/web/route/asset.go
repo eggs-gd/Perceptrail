@@ -57,7 +57,7 @@ const embeddedName = "embedded"
 
 // toClientAsset: every file of the asset by role, for the client; lib: the item's
 // library (nil: a plain folder's), which says what can be asked for on demand
-func toClientAsset(item *dto.ItemDto, files []*dto.FileDto, lib provider.Provider) clientAsset {
+func toClientAsset(item *dto.ItemDto, files []*dto.FileDto, lib provider.Renditions) clientAsset {
 	a := clientAsset{Edit: []rendition{}, Stills: []rendition{}, Motion: []rendition{}, Frames: []rendition{}}
 	previewIsFile := false
 	for _, f := range files {

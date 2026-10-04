@@ -18,7 +18,6 @@ var _ provider.Provider = (*Provider)(nil)
 
 func New() *Provider { return &Provider{grouper: &Grouper{}} }
 
-func (p *Provider) Name() string                 { return "folder" }
 func (p *Provider) Claims(string) bool           { return true }
 func (p *Provider) Grouper() provider.Grouper    { return p.grouper }
 func (p *Provider) Owns(*dto.ItemDto) bool       { return false }
