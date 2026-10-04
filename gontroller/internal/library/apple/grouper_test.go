@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -135,7 +136,7 @@ func walk(t *testing.T, g *Grouper, root string, before func(path string)) map[s
 		if _, err := os.Stat(p); err != nil {
 			continue // vanished: the walker would not see it
 		}
-		out, err := g.Decorate(dto.WalkedFile{FileDto: &dto.FileDto{ItemEntry: dto.ItemEntry{Path: p, Name: filepath.Base(p)}}})
+		out, err := g.Decorate(dto.WalkedFile{FileDto: &dto.FileDto{Path: p, Name: filepath.Base(p)}})
 		if errors.Is(err, chain.ErrSkippedItem) {
 			continue
 		}
@@ -217,7 +218,7 @@ func TestGrouper(t *testing.T) {
 // A file the walk found missing passes through as it is, an asset of its own
 func TestGrouperMissing(t *testing.T) {
 	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
-	gone := &dto.FileDto{ItemEntry: dto.ItemEntry{Path: "/lib/x.photoslibrary/originals/A/A.heic"}}
+	gone := &dto.FileDto{Path: "/lib/x.photoslibrary/originals/A/A.heic"}
 	out, err := g.Decorate(dto.WalkedFile{FileDto: gone, Missing: true})
 	if err != nil || len(out.Files) != 0 || len(out.Missing) != 1 || out.Missing[0] != gone {
 		t.Errorf("got %+v, %v", out, err)
@@ -387,5 +388,30 @@ func TestHasLibrary(t *testing.T) {
 	makeLibrary(t, root, nil)
 	if !HasLibrary(root) || !HasLibrary(filepath.Join(root, "Photos Library.photoslibrary")) {
 		t.Error("a library at the top, or the library itself")
+	}
+}
+
+// Inside a library only the originals and Photos' renders and derivatives are
+// walked: the rest of the bundle is skipped, as it is on disk
+func TestSkipped(t *testing.T) {
+	root := t.TempDir()
+	bundle := filepath.Join(root, "Photos Library.photoslibrary")
+	for _, dir := range []string{"originals/A", "resources/renders/A", "resources/derivatives/masters",
+		"resources/caches/compute", "resources/journals", "database/search", "internal", "private", "scopes"} {
+		if err := os.MkdirAll(filepath.Join(bundle, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	os.MkdirAll(filepath.Join(root, "trip"), 0o755) // a plain folder next to it: not Photos'
+	got := (&Provider{}).Skipped(root)
+	var rel []string
+	for _, dir := range got {
+		r, _ := filepath.Rel(bundle, dir)
+		rel = append(rel, r)
+	}
+	slices.Sort(rel)
+	want := []string{"database", "internal", "private", "resources/caches", "resources/journals", "scopes"}
+	if !slices.Equal(rel, want) {
+		t.Errorf("skipped %v, want %v", rel, want)
 	}
 }

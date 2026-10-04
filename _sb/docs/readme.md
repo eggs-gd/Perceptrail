@@ -5,8 +5,8 @@
 - [findings.md](findings.md) — the why: decisions, rejected approaches, traps. Read
   the relevant section before touching the gallery, sync, the import, Apple Photos,
   plugins or exiftool. How things work now is in the module READMEs (below).
-- [review-pr24.md](review-pr24.md) — the strict review of the import refactor; its
-  open items are in the roadmap ("Before the transcodes").
+- [review-pr24.md](review-pr24.md) — the strict review of the import refactor
+  (history: every item done, PRs #24–#29).
 - [../puml](../puml) — design diagrams (PlantUML sources), rendered in
   [../diagrams](../diagrams):
 
