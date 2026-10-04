@@ -143,10 +143,10 @@ library").
 - A cloud-only original is not described (its name, format, weight): for local
   files the original is what is on disk; a provider's own description waits for a
   second provider — the abstraction comes from two or more, not from one.
-- [x] **The mechanism** (PR #23): `pkg/providers` — one switch sends a found file to
+- [x] **The mechanism** (PR #23): `pkg/library` — one switch sends a found file to
       the grouper of the first provider that claims it (the plain folder,
-      `providers/folder`, last), and the item's provider gives on-demand renditions;
-      Apple Photos is the first library (`pkg/providers/apple`), enabled by the
+      `library/folder`, last), and the item's provider gives on-demand renditions;
+      Apple Photos is the first library (`pkg/library/apple`), enabled by the
       config. A provider that comes later
       takes its files over through the usual deletions (findings "Providers as steps
       of the chain").
@@ -511,15 +511,15 @@ each a PR of its own, so that the next chains do not touch everything:
         is made. `AppContext` (a singleton of globals, not a context) and
         `SetLogLevel` go; `app` keeps `Services` (`Add`, `Run(ctx)`: the real
         `context.Context` reaches every `Start`) and `Version`.
-      - Registries return nothing: `plugins.Load(cfg, logger)`,
-        `providers.Enable(cfg, db, logger)`; the providers' background work is a
-        service, `providers.Service()`. Services: `importer.New(cfg, db, logger)`,
+      - Registries return nothing: `perceptor.Load(cfg, logger)`,
+        `library.Enable(cfg, db, logger)`; the providers' background work is a
+        service, `library.Service()`. Services: `importer.New(cfg, db, logger)`,
         `web.New(cfg, db, logger)` (`client` renamed `web`). The DB is opened once
         in `main` (`model.Open`) and passed in (no proxies made inside the
         modules, the routes included).
       - Errors in `main`: an explicit `if err != nil` after every step, the step
         named in the message (decided: what failed is plain to read).
-      - `plugins.Load` and `providers.Enable` knowing their built-in members need
+      - `perceptor.Load` and `library.Enable` knowing their built-in members need
         the contracts out of the registries (1.3, 1.4, below).
 
       ```go
@@ -533,20 +533,20 @@ each a PR of its own, so that the next chains do not touch everything:
       if err != nil {
           log.Fatalf("database: %v", err)
       }
-      if err := plugins.Load(cfg, logs.Named("plugins")); err != nil {
+      if err := perceptor.Load(cfg, logs.Named("plugins")); err != nil {
           log.Fatalf("plugins: %v", err)
       }
-      if err := providers.Enable(cfg, db, logs.Named("providers")); err != nil {
+      if err := library.Enable(cfg, db, logs.Named("providers")); err != nil {
           log.Fatalf("providers: %v", err)
       }
 
       services := app.NewServices()
-      services.Add(providers.Service())
+      services.Add(library.Service())
       services.Add(importer.New(cfg, db, logs.Named("importer")))
       services.Add(web.New(cfg, db, logs.Named("http")))
       services.Run(mainCtx)
       ```
-- [ ] `providers.Provider` split: `Grouping` for the import, `Renditions` for the
+- [ ] `provider.Provider` split: `Grouping` for the import, `Renditions` for the
       routes (1.3);
 - [ ] the core perceptors' contract out of the registry package (1.4);
 - [ ] steps without `model` imports (`ErrNotFound`, `Outcome` to `dto`; a storage
@@ -557,7 +557,7 @@ each a PR of its own, so that the next chains do not touch everything:
       or measured and accepted (3.2);
 - [ ] a message type for walk → group (`dto.SeenFile`) instead of pass state on
       `dto.FileDto` (3.3); `Prune` only when the pass deleted something (3.4);
-- [ ] exiftool's pool returns an error instead of panicking (3.7); `pkg/plugins`
+- [ ] exiftool's pool returns an error instead of panicking (3.7); `pkg/perceptor`
       under `-race` (3.8).
 
 ## Core — service (gontroller)

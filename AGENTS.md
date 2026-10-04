@@ -96,11 +96,16 @@ short "not obvious" list where there is something non-obvious.
   `ps`; `provider`, not `p`, when the loop body is long. No invented abbreviations
   (`ps`, `gw`, `st`) unless the context makes them obvious. Readability comes
   first; the Go convention does not excuse a cryptic name.
-- **The package name is part of the name**: `providers.Enable`, not
-  `providers.EnableProviders`; `walk.New`, not `walk.NewWalker`; `identify.Item`,
+- **Package names are singular, short, lower case, no underscores** (`library`,
+  `perceptor`, `route`, not `providers`, `exif_date`) — plural only where the
+  singular collides with a builtin (as `strings`, `bytes` do); never the name of a
+  standard library package (`plugin`). A repeated name for the package's main type
+  is fine (`provider.Provider`, as `time.Time`).
+- **The package name is part of the name**: `library.Enable`, not
+  `library.EnableLibraries`; `walk.New`, not `walk.NewWalker`; `identify.Item`,
   not `identify.IdentifyItem`.
 - **An abstraction and its instance are named apart**: the package and the type
-  say what it is (`providers.Provider`), a value says which one (`library`,
+  say what it is (`provider.Provider`), a value says which one (`library`,
   `libraries`).
 - **Interfaces are declared by their consumer**, with only the methods it calls
   (a step's `Store`, a module's `Config`); the producer passes its whole value.
@@ -111,8 +116,8 @@ short "not obvious" list where there is something non-obvious.
 - **Constructors take, in one order**: what the module reads of the config (its
   own `Config` interface), the dependencies, the logger, then (for a chain step)
   `in`, `out`. A service gets its `context.Context` in `Start`, not in `New`.
-- **A registry (one per process) is package functions** (`plugins.Load`,
-  `providers.Enable`); instances where they hold logic (steps, providers,
+- **A registry (one per process) is package functions** (`perceptor.Load`,
+  `library.Enable`); instances where they hold logic (steps, providers,
   groupers).
 
 ---

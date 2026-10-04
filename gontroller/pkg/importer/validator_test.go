@@ -3,14 +3,14 @@ package importer
 import (
 	"os"
 	"path/filepath"
+	"perceptrail/gontroller/pkg/library"
+	"perceptrail/gontroller/pkg/library/apple"
+	"perceptrail/gontroller/pkg/library/folder"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/plugins"
-	"perceptrail/gontroller/pkg/plugins/exif_date"
-	"perceptrail/gontroller/pkg/plugins/exif_size"
-	"perceptrail/gontroller/pkg/providers"
-	"perceptrail/gontroller/pkg/providers/apple"
-	"perceptrail/gontroller/pkg/providers/folder"
+	"perceptrail/gontroller/pkg/perceptor"
+	"perceptrail/gontroller/pkg/perceptor/date"
+	"perceptrail/gontroller/pkg/perceptor/size"
 	"slices"
 	"testing"
 	"time"
@@ -45,10 +45,10 @@ func TestMain(m *testing.M) {
 	filesProxy, itemsProxy = testDB, testDB
 	// The registry and the providers as the server loads them: the built-in
 	// perceptors (their tags are what identify reads); Apple, the plain folder last
-	if err := plugins.Load(plugins.Config{DataDir: dir, Logger: logger}, exif_date.Perceptor, exif_size.Perceptor); err != nil {
+	if err := perceptor.Load(perceptor.Config{DataDir: dir, Logger: logger}, date.Perceptor, size.Perceptor); err != nil {
 		panic(err)
 	}
-	providers.Enable(apple.New("", nil, itemsProxy, logger), folder.New())
+	library.Enable(apple.New("", nil, itemsProxy, logger), folder.New())
 
 	code := m.Run()
 	os.RemoveAll(dir)

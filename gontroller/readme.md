@@ -4,7 +4,7 @@ The Perceptrail Go backend: scans the library, extracts metadata with ExifTool, 
 it through EXIF plugins, stores it in SQLite and serves it to the client over HTTP.
 
 The core implements the necessary minimum (date, size); core plugins live here, in
-`pkg/plugins/exif_date`, `exif_size`, `exif_duration`. Extended features are external perceptors
+`pkg/perceptor/date`, `size`, `duration`. Extended features are external perceptors
 ([`../perceptors`](../perceptors/readme.md)).
 
 Design: [Import chain](../_sb/puml/Import%20chain.puml),
@@ -94,10 +94,10 @@ Item states (`dto.ItemState`): `New → Dirty → Processing → Ready`, `Delete
 | `pkg/app` | app context, config, logger categories, services |
 | `pkg/importer` | the import chain: linear stages, each a sub-chain of its own — `walk`, `group`, `gate`, `identify` (exiftool, kinds, the item, sizes, the cheap preview), `exif` (the EXIF perceptors, built in and external, their values kept), `commit` (the item published); see its README |
 | `pkg/transcode` | the transcoders' switch and stubs (a chain of its own later) |
-| `pkg/plugins` | the perceptors' registry (built in + `.so`, their storages); the built-in EXIF perceptors `exif_date`, `exif_size`, `exif_duration`; their contract (`RawItemRW`, `ExifCorePerceptor`) and `OrderByValue` in `pkg/plugins` itself; `exif_coretest`: test helpers |
+| `pkg/perceptor` | the perceptors' registry (built in + `.so`, their storages); `perceptor/builtin`: the built-ins' contract (`builtin.Item`, `builtin.Perceptor`, `OrderByValue`); the built-in EXIF perceptors `perceptor/date`, `size`, `duration`; `builtintest`: test helpers |
 | `pkg/model` | SQLite via GORM, `ItemsApi`/`FilesApi`, DTOs |
-| `pkg/client` | Echo, `/items`, `/assets`, `/perceptors` and `/p/:view/order` routes |
-| `pkg/providers` | the sources: one switch sends a file to the grouper of the first provider that claims it, and on-demand renditions come from the item's provider; `providers/folder`: the plain folder (last, takes the rest); `providers/apple`: Apple Photos (its DB, the grouper, on demand), `providers/apple/photokit`: PhotoKit (cgo, macOS only; a stub elsewhere; the main thread serves its main queue) |
+| `pkg/web` | the HTTP service (Echo); `web/route`: `/items`, `/assets`, `/perceptors`, `/p/:view/order`, renditions |
+| `pkg/library` | the libraries of this run (`Enable`, `Enabled`, `Of`): one switch sends a file to the grouper of the first that claims it, and on-demand renditions come from the item's library; `library/provider`: the contract they implement; `library/folder`: the plain folder (last, takes the rest); `library/apple`: Apple Photos (its DB, the grouper, on demand), `library/apple/photokit`: PhotoKit (cgo, macOS only; a stub elsewhere; the main thread serves its main queue) |
 | `pkg/transcoder` | thumbnail stub (needs libvips) |
 
 ## Worth knowing

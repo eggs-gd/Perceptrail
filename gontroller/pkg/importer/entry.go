@@ -47,9 +47,9 @@ import (
 	"perceptrail/gontroller/pkg/importer/group"
 	"perceptrail/gontroller/pkg/importer/identify"
 	"perceptrail/gontroller/pkg/importer/walk"
+	"perceptrail/gontroller/pkg/library"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/providers"
 
 	"github.com/eggs-gd/perceplib/chain"
 
@@ -102,7 +102,7 @@ func (s *importerService) importChain() chain.ChainProcessor {
 
 	c := chain.NewChainProcessor(s.errch)
 	c.AddStep(walk.New(s.db, s.root, s.logger, found))
-	c.AddStep(group.New(providers.Enabled(), found, grouped))
+	c.AddStep(group.New(library.Enabled(), found, grouped))
 	c.AddStep(gate.New(s.db, s.logger, grouped, stored))
 	c.AddStep(identify.New(s.db, s.cacheDir, s.logger, stored, identified))
 	c.AddStep(exif.New(s.db, s.logger, identified, perceived))

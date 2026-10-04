@@ -592,7 +592,7 @@ asked); QuickTime `GPSCoordinates` `"lat lon [alt]"`; `Orientation` 1–8;
 but quarter turns in HEIC (only a video's 90 / 270 turns the size; HEIC's turn is
 its `Orientation`); dates, MIME types, codecs unchanged. Pinned by a probe test
 (`identify/read_test.go`). The perceptors' parsers are `ParseFloat`; the Apple
-record writes numbers. Only the core writes into an item (`plugins.RawItemRW`);
+record writes numbers. Only the core writes into an item (`builtin.Item`);
 plugins give a `chain.Decorator`, no channels.
 
 **The fingerprint is the file's bytes** (size + sha256 of the first and last 64
@@ -627,7 +627,7 @@ processes it. No waiting: the client hides the tile's cloud once it got the orig
 (a guess kept with the asset as the server sent it; a newer copy overrides it; lost
 on reload — accepted).
 
-**Registries are package functions** (`plugins.Load`, `All`, `Store`; `providers.Enable`,
+**Registries are package functions** (`perceptor.Load`, `All`, `Store`; `library.Enable`,
 `Enabled`): one per process; instances where they hold logic (steps, providers,
 groupers). The DB proxy and the stores stay passed in.
 
@@ -760,7 +760,7 @@ outside identify; nine one-function steps in identify.
   a typed list of sources in the config. Every source is a provider; one switch
   asks the enabled ones in order and a found file goes to the grouper of the first
   that claims it — each grouper a step of its own. The plain folder is a provider
-  too (`providers/folder`), the last: it claims what nobody else did. (First built
+  too (`library/folder`), the last: it claims what nobody else did. (First built
   as a claim step per provider, one after another, the generic grouper apart — the
   owner: one switch over all, and the plain folder is the same kind of grouper.)
   Grouping is a sub-chain of its own (`groups.NewGrouping`), as processing is:
@@ -779,8 +779,8 @@ outside identify; nine one-function steps in identify.
   gone items goes with them (a cleanup on delete — to add with the renders). The
   GUIDs change (a link to the old item breaks); carrying them over by content hash
   is for when a second provider exists.
-- `pkg/providers`: `Claims`, `Grouper`, `Owns`, `Levels`, `Rendition`, `Start`. Apple is the first: its grouper, PhotoKit and the on-demand logic moved
-  into `pkg/providers/apple`; the plain folder's grouper into `providers/folder`;
+- `pkg/library`: `Claims`, `Grouper`, `Owns`, `Levels`, `Rendition`, `Start`. Apple is the first: its grouper, PhotoKit and the on-demand logic moved
+  into `pkg/library/apple`; the plain folder's grouper into `library/folder`;
   outside them nothing names a source (the switch, `routes/rendition.go`, the
   importer and `main` only see providers).
 
@@ -1104,7 +1104,7 @@ PR #24 (above); the two rules stay.
 - **The zone is stored separately** (`DateOffset`, minutes): sqlite and Postgres
   `timestamptz` return times in UTC, the zone of `Date` is lost on read.
   `RawItem.GetDate()` returns the date in the zone of the shot, so external plugins
-  see it through the unchanged perceplib API; only the core `plugins.RawItemRW`
+  see it through the unchanged perceplib API; only the core `builtin.Item`
   got `SetDateInfo` — no perceplib release, no plugin rebuild.
 - **No `-G` in exiftool:** groups would rename every tag (plugins read `ImageWidth`,
   the short hash hashes tag names). `CreateDate` is interpreted by file type instead:

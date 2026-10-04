@@ -4,9 +4,9 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
-	"perceptrail/gontroller/pkg/client"
 	"perceptrail/gontroller/pkg/model"
-	"perceptrail/gontroller/pkg/plugins/settings"
+	"perceptrail/gontroller/pkg/perceptor/settings"
+	"perceptrail/gontroller/pkg/web"
 	"time"
 
 	l "github.com/eggs-gd/perceplib/logger"
@@ -39,7 +39,7 @@ type Config struct {
 	// "30s"). Default: 1 minute
 	Rescan time.Duration `yaml:"rescan"`
 	// HTTP: listen address, CORS
-	Server client.ServerConfig `yaml:"server"`
+	Server web.ServerConfig `yaml:"server"`
 	// Behind GORM: sqlite, postgres (not implemented yet)
 	Database model.DBConfig `yaml:"database"`
 }

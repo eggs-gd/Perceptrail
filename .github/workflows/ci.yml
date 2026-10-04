@@ -50,7 +50,7 @@ jobs:
     - name: perceptors
       run: |
         make build-plugins
-        cd gontroller && go test -count=1 -run TestLoadExternalPlugins ./pkg/plugins/
+        cd gontroller && go test -count=1 -run TestLoadExternalPlugins ./pkg/perceptor/
 
   svebapp:
     runs-on: ubuntu-latest

@@ -6,18 +6,19 @@ import (
 	"os"
 	"os/signal"
 	"perceptrail/gontroller/pkg/app"
-	"perceptrail/gontroller/pkg/client"
-	"perceptrail/gontroller/pkg/client/routes"
 	"perceptrail/gontroller/pkg/importer"
+	"perceptrail/gontroller/pkg/library"
+	"perceptrail/gontroller/pkg/library/apple"
+	"perceptrail/gontroller/pkg/library/apple/photokit"
+	"perceptrail/gontroller/pkg/library/folder"
+	"perceptrail/gontroller/pkg/library/provider"
 	"perceptrail/gontroller/pkg/model"
-	"perceptrail/gontroller/pkg/plugins"
-	"perceptrail/gontroller/pkg/plugins/exif_date"
-	"perceptrail/gontroller/pkg/plugins/exif_duration"
-	"perceptrail/gontroller/pkg/plugins/exif_size"
-	"perceptrail/gontroller/pkg/providers"
-	"perceptrail/gontroller/pkg/providers/apple"
-	"perceptrail/gontroller/pkg/providers/apple/photokit"
-	"perceptrail/gontroller/pkg/providers/folder"
+	"perceptrail/gontroller/pkg/perceptor"
+	"perceptrail/gontroller/pkg/perceptor/date"
+	"perceptrail/gontroller/pkg/perceptor/duration"
+	"perceptrail/gontroller/pkg/perceptor/size"
+	"perceptrail/gontroller/pkg/web"
+	"perceptrail/gontroller/pkg/web/route"
 	"syscall"
 	"time"
 
@@ -49,13 +50,13 @@ func main() {
 	log.Printf("mode: %s", ctx.Config().Mode)
 	svc := app.NewSvcContext()
 
-	err := plugins.Load(plugins.Config{
+	err := perceptor.Load(perceptor.Config{
 		Plugins:    ctx.Config().Plugins,
 		Perceptors: ctx.Config().Perceptors,
 		Driver:     ctx.Config().Database.Driver,
 		DataDir:    ctx.Config().DataDir,
 		Logger:     ctx.Logger(app.LogPlugins),
-	}, exif_date.Perceptor, exif_size.Perceptor, exif_duration.Perceptor)
+	}, date.Perceptor, size.Perceptor, duration.Perceptor)
 	if err != nil {
 		log.Fatalf("Failed to load plugins: %v", err)
 	}
@@ -63,24 +64,24 @@ func main() {
 	// The providers, in the order the switch asks them; the plain folder last (it
 	// takes what nobody claimed). Apple Photos: its library's DB and files; PhotoKit
 	// on demand (macOS).
-	var ps []providers.Provider
+	var ps []provider.Provider
 	if ctx.Config().Providers.Enabled("apple") {
 		ps = append(ps, apple.New(ctx.Config().Path, photokit.Library{},
 			model.NewProxy(ctx.Logger(app.LogDB)), ctx.Logger(app.LogImporter)))
 	}
 	ps = append(ps, folder.New())
-	providers.Enable(ps...)
+	library.Enable(ps...)
 
 	importer := importer.NewImporterService(ctx)
 	svc.AddService(importer)
 	for _, p := range ps {
 		p.Start(mainCtx)
 	}
-	web, err := client.NewWebService(ctx.Config().Server, routes.AppInfo{Version: app.Version, Mode: ctx.Config().Mode}, plugins.Client(), plugins.LoadValues, ctx.Logger(app.LogHTTP))
+	server, err := web.NewWebService(ctx.Config().Server, route.AppInfo{Version: app.Version, Mode: ctx.Config().Mode}, perceptor.Client(), perceptor.LoadValues, ctx.Logger(app.LogHTTP))
 	if err != nil {
 		log.Fatalf("Server: %v", err)
 	}
-	svc.AddService(web)
+	svc.AddService(server)
 	//svc.AddService(importer.NewMaintenanceService(ctx)) // later
 
 	stopped := make(chan struct{})
@@ -100,7 +101,7 @@ func main() {
 	select {
 	case <-stopped:
 		// Nothing writes any more: the databases closed (their journals merged)
-		plugins.Close()
+		perceptor.Close()
 		if err := model.Close(); err != nil {
 			log.Printf("Database not closed: %v", err)
 		}

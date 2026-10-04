@@ -16,7 +16,7 @@ A step's constructor takes what it really depends on, then its channels — alwa
 one order: the model, the step's own dependencies, the logger, `in`, `out`.
 `walk` the model (the files table) and the root,
 `group` the providers, `gate` the model, `identify` the model and the cache directory (its exiftool is its own; the tags it
-reads it asks the plugin registry: `plugins.ExifTags`), `exif` the model (rework, pruning; it reads the plugin
+reads it asks the plugin registry: `perceptor.ExifTags`), `exif` the model (rework, pruning; it reads the plugin
 registry itself), `commit` the model. No callbacks between the steps.
 
 [`entry.go`](entry.go) is the service: `importChain` wires one pass — the channels
@@ -61,8 +61,8 @@ bookkeeping the top calls — **at start** (`MarkUnprocessed`) an item an import
 perceptor has no row for (the perceptor is new, or its schema changed) is marked
 for rework (`MarkRework`: the gate sends its group once more; publishing clears the
 mark); **after each walk** (`Prune`) the rows of gone items go. It reads the
-registry itself (`plugins.All`, `plugins.Store`); walk, group, gate and commit know
-nothing of perceptors. The sources are providers (`pkg/providers`: Apple Photos, the plain
+registry itself (`perceptor.All`, `perceptor.Store`); walk, group, gate and commit know
+nothing of perceptors. The sources are providers (`pkg/library`: Apple Photos, the plain
 folder last); the transcoders (`pkg/transcode`, not wired yet) are a chain of their
 own later (fed from the DB).
 
@@ -84,14 +84,14 @@ detail).
 |---|---|---|---|
 | **walk** | `walk/walker.go` | the root -> `*dto.FileDto` | The chain's entry point, a walk per pass: every file's row written as it goes (created, or its stat refreshed; `CheckTime`; `Changed`: new or its stat changed — stored, cleared only by identify's validate, so a pass that fails before deciding the group leaves it for the next) and sent; after a complete walk the rows it did not stamp that it says are gone (`walk.Missing`: under the root, not under an unreadable directory) sent with `Gone`; then it returns (its output closes). Unreadable subdirectories are skipped and recorded. |
 | **group** | `group/switch.go` | `*dto.FileDto` -> `dto.Asset` | A sub-chain: a switch sends a file (a gone one too) to the grouper of the first enabled provider that claims it (the plain folder last: everything else), its end reaches every grouper (a `chain.NewSwitch`: its outputs close when it returns); each grouper is a step of it. |
-| (plain folder grouper) | `pkg/providers/folder` | `*dto.FileDto` -> `dto.Asset` | Sidecars by name, next to each other: one open group; a complete group goes out, the last one when its input ends. A gone file passes through (an asset of its own). |
-| (Apple Photos grouper) | `pkg/providers/apple` | `*dto.FileDto` -> `dto.Asset` | The first file of a library loads the assets from a copy of `Photos.sqlite` and forms the groups (files that exist, per the naming layout); a group goes out when its last file arrives. Key = asset UUID; the main file = the source; `Show` = the edit, the original, then Apple's derivatives. Trashed / hidden assets: their files are sent as gone (their items go); a gone file passes through; a group that did not complete waits for the next walk. Video renditions Photos downloads on request (`_2_3_o.mp4`, `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`; `_a` instead of `_o` for an edit, preferred) are `motion`, after the stills; `apple.Local` finds the best file for an on-demand want. |
+| (plain folder grouper) | `pkg/library/folder` | `*dto.FileDto` -> `dto.Asset` | Sidecars by name, next to each other: one open group; a complete group goes out, the last one when its input ends. A gone file passes through (an asset of its own). |
+| (Apple Photos grouper) | `pkg/library/apple` | `*dto.FileDto` -> `dto.Asset` | The first file of a library loads the assets from a copy of `Photos.sqlite` and forms the groups (files that exist, per the naming layout); a group goes out when its last file arrives. Key = asset UUID; the main file = the source; `Show` = the edit, the original, then Apple's derivatives. Trashed / hidden assets: their files are sent as gone (their items go); a gone file passes through; a group that did not complete waits for the next walk. Video renditions Photos downloads on request (`_2_3_o.mp4`, `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`; `_a` instead of `_o` for an edit, preferred) are `motion`, after the stills; `apple.Local` finds the best file for an on-demand want. |
 | **gate** | `gate/gate.go` | `dto.Asset` -> `dto.Asset` | Gone files: the model's `Gone` (a main file's item deleted, a sidecar's item `Dirty`). A group passes if a file changed (new, its stat or the role its grouper gave: stored here) or the model says it needs work (`NeedsWork`: links, state, fingerprint, `MetaHash`, `Rework`). |
 | **identify** | `identify/entry.go` | `dto.Asset` -> `*identify.Item` | The item known: identity, metadata, kinds and roles, what to show now. exiftool lives here; its working item (`draft`: every file, its exif and kind) never leaves it. |
 | read | `identify/read.go` | `dto.Asset` -> draft | Everything known without the DB, groups in parallel (N workers, one exiftool pool): one `exiftool -j -n` call for the whole group (a keyed group: the main file only), only the declared tags (see [exif](#exif-what-is-read-and-who-gets-it)); the kind of every file, the main file (the source) first, roles (`classify.go`); the metadata package — a tag from the source's metadata, else the .xmp sidecars, the main file, the derivatives; only the perceptors' tags (`merge.go`); the main file's fingerprint — its size and sha256 of its first and last 64 KB (`fingerprint.go`). |
 | validate | `identify/validate.go` | draft -> draft | One at a time: not media or broken, the model ignores the group (`Ignore`); else the model says which item it is (`ValidateGroup` / `ValidateAsset`: links, superseded items, same / changed / moved / duplicate); the kind saved with it (`dto.AssetKind`). |
 | show | `identify/show.go` | draft -> `*identify.Item` | Pixels and codec of every file the client may show (the original's from the metadata, images from their header), written to the files table (`sizes.go`); what the browser shows now, no transcode: the source's `Show`, the main file (JPEG, PNG, …; H.264 video), the biggest viewable derivative, else the main file's embedded preview (JpgFromRaw, PreviewImage, ThumbnailImage — the biggest first) extracted by exiftool into `cache/previews/<guid>/`, the RAW's Orientation copied onto it (`pick.go`); then the item leaves the stage. It closes the exiftool pool when it stops. |
-| **exif** | `exif/entry.go` | `*identify.Item` -> `*identify.Item` | The EXIF perceptors, a step each: the built-in ones (date + zone, size, length; read-write `plugins.RawItemRW`), then the external `.so` ones (read-only `api.RawItemR`); then keep — a row in every import perceptor's storage (its value, or "processed, nothing found"), before the item is published; at start the items a perceptor has not processed are marked for rework (`MarkUnprocessed`, at the service's start), at the end of every pass the rows of gone items pruned. |
+| **exif** | `exif/entry.go` | `*identify.Item` -> `*identify.Item` | The EXIF perceptors, a step each: the built-in ones (date + zone, size, length; read-write `builtin.Item`), then the external `.so` ones (read-only `api.RawItemR`); then keep — a row in every import perceptor's storage (its value, or "processed, nothing found"), before the item is published; at start the items a perceptor has not processed are marked for rework (`MarkUnprocessed`, at the service's start), at the end of every pass the rows of gone items pruned. |
 | **commit** | `commit/commit.go` | `*identify.Item` -> (the chain's end) | The model publishes the item (`Publish`: `Visible` with a preview, else `Waiting`). |
 
 ## Types: who owns what
@@ -108,7 +108,7 @@ detail).
   it. The end of a walk is not a value: the walk's output closes.
 - **`identify.Item`** — what identify yields: the item and its metadata package. The
   perceptors read it (`api.RawItemR`), the core ones write into it
-  (`plugins.RawItemRW`), commit publishes `Item.Item`. identify's working `draft`
+  (`builtin.Item`), commit publishes `Item.Item`. identify's working `draft`
   (`Files`, `Exif`, `Kinds` aligned) is private to it.
 - **`transcode.Item`** — the transcoders' input (an item and its files with roles),
   fed from the DB later, not by the import.
@@ -117,10 +117,10 @@ detail).
 
 - **Declared, never `-all`.** A perceptor declares the tags it reads
   (`api.ExifTagger`, required of every EXIF perceptor; `exif.CoordinateTags` for
-  perceplib's `exif.Coordinates`); the registry's `plugins.ExifTags` is their union (identify asks it). identify adds its own
+  perceplib's `exif.Coordinates`); the registry's `perceptor.ExifTags` is their union (identify asks it). identify adds its own
   (`read.go` `ownTags`: MIME type, errors, sizes, codec, whether embedded previews
   are there). A perceptor that reads an undeclared tag gets "" — each core
-  perceptor's test checks it reads only what it declares (`exif_coretest`).
+  perceptor's test checks it reads only what it declares (`builtintest`).
 - **One call per group**: `exiftool -j -n -<tag>… file1 file2 …` — every file of
   the group, the sidecars too (a keyed group: the main file). **`-n`**: no print
   conversion, numbers as numbers — the composite `GPSLatitude` / `GPSLongitude`
@@ -193,7 +193,7 @@ it calls (its own small interface).
   follows `Show`. An item with no files left is deleted.
 - **The asset contract**: every file has a role (`original`, `edit`, `still`,
   `motion`, `frames`, `meta`) and a size; `/items` sends the asset by roles and
-  the client decides what to show when (`pkg/client/routes/asset.go`). Roles come
+  the client decides what to show when (`pkg/web/route/asset.go`). Roles come
   from the Apple grouper, else from mime; sizes from the header (images) or the
   metadata (the original only).
 - **The source's metadata wins** (`Meta`, Apple: date + zone, oriented
@@ -223,16 +223,16 @@ it calls (its own small interface).
 
 - `walk/walker_test.go` — walk results (complete, unreadable dir, missing root,
   cancel); a pass: the rows, then the gone ones; what a walk says is gone.
-- `group/…_test.go`, `pkg/providers/folder/…_test.go` — the switch and the plain
+- `group/…_test.go`, `pkg/library/folder/…_test.go` — the switch and the plain
   folder's grouper (names, directories, the end of its input).
-- `pkg/providers/apple/grouper_test.go` — a fixture library: edit, cloud-only, Live
+- `pkg/library/apple/grouper_test.go` — a fixture library: edit, cloud-only, Live
   Photo, trashed (sent as gone), Photos' own files, a file vanishing mid-walk (its
   asset complete next walk).
 - `identify/…_test.go` — kinds and the main file, roles, sizes, the cheap preview's
   pick (an embedded preview last), an embedded preview's orientation and the group read
   (real exiftool), merge's priority, the fingerprint, the kinds' and the
   fingerprint's versions.
-- `pkg/plugins/exif_{date,size,duration}/tags_test.go` — every core perceptor reads
+- `pkg/perceptor/exif_{date,size,duration}/tags_test.go` — every core perceptor reads
   only the tags it declares.
 - `apple_test.go` — a fixture library through the whole import: keys, previews,
   nothing to do on the next walk, a downloaded original, an asset moved to the trash,

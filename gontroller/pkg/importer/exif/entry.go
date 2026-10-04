@@ -12,7 +12,7 @@ import (
 	"fmt"
 
 	"perceptrail/gontroller/pkg/importer/identify"
-	"perceptrail/gontroller/pkg/plugins"
+	"perceptrail/gontroller/pkg/perceptor/builtin"
 
 	"github.com/eggs-gd/perceplib/api"
 	"github.com/eggs-gd/perceplib/chain"
@@ -22,8 +22,8 @@ import (
 // The item as the perceptors see it: the built-in ones read and write it, the
 // external ones only read it
 var (
-	_ plugins.RawItemRW = (*identify.Item)(nil)
-	_ api.RawItemR      = (*identify.Item)(nil)
+	_ builtin.Item = (*identify.Item)(nil)
+	_ api.RawItemR = (*identify.Item)(nil)
 )
 
 // New: in — the identified items; out — the same, perceived, their values kept.
@@ -34,7 +34,7 @@ func New(db Items, logger *l.Logger, in <-chan *identify.Item, out chan<- *ident
 	var steps []chain.Decorator[*identify.Item, *identify.Item]
 	for _, p := range corePerceptors() {
 		if d := p.Decorator(logger.Named(p.Name())); d != nil {
-			steps = append(steps, perceive[plugins.RawItemRW]{name: p.Name(), logic: d})
+			steps = append(steps, perceive[builtin.Item]{name: p.Name(), logic: d})
 		} else {
 			logger.Error("Core perceptor has no decorator, skipped", l.String("plugin", p.Name()))
 		}

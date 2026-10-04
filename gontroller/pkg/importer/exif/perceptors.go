@@ -4,20 +4,21 @@ import (
 	"fmt"
 
 	"perceptrail/gontroller/pkg/model"
-	"perceptrail/gontroller/pkg/plugins"
+	"perceptrail/gontroller/pkg/perceptor"
+	"perceptrail/gontroller/pkg/perceptor/builtin"
 
 	"github.com/eggs-gd/perceplib/api"
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
 // The perceptors as the import sees them: the ones that run in the chain (EXIF
-// data), what they read, their rows. The registry (pkg/plugins) only knows what is
+// data), what they read, their rows. The registry (pkg/plugin) only knows what is
 // loaded and where each one keeps its data.
 
 // importPerceptors: the perceptors the import chain runs (EXIF data), in order
 func importPerceptors() []api.Perceptor {
 	var out []api.Perceptor
-	for _, p := range plugins.All() {
+	for _, p := range perceptor.All() {
 		if p.DataProvider() == api.ExifDataProvider {
 			out = append(out, p)
 		}
@@ -26,10 +27,10 @@ func importPerceptors() []api.Perceptor {
 }
 
 // corePerceptors: the built-in ones (they write into the item)
-func corePerceptors() []plugins.ExifCorePerceptor {
-	var out []plugins.ExifCorePerceptor
+func corePerceptors() []builtin.Perceptor {
+	var out []builtin.Perceptor
 	for _, p := range importPerceptors() {
-		if c, ok := p.(plugins.ExifCorePerceptor); ok {
+		if c, ok := p.(builtin.Perceptor); ok {
 			out = append(out, c)
 		}
 	}
@@ -41,7 +42,7 @@ func corePerceptors() []plugins.ExifCorePerceptor {
 func externalPerceptors() []api.ExifPerceptor {
 	var out []api.ExifPerceptor
 	for _, p := range importPerceptors() {
-		if _, core := p.(plugins.ExifCorePerceptor); core {
+		if _, core := p.(builtin.Perceptor); core {
 			continue
 		}
 		if e, ok := p.(api.ExifPerceptor); ok {
@@ -56,7 +57,7 @@ func externalPerceptors() []api.ExifPerceptor {
 func importStores() []*model.PerceptorStore {
 	var out []*model.PerceptorStore
 	for _, p := range importPerceptors() {
-		if st, ok := plugins.Store(p.Name()); ok {
+		if st, ok := perceptor.Store(p.Name()); ok {
 			out = append(out, st)
 		}
 	}
