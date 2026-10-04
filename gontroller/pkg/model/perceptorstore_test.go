@@ -1,6 +1,7 @@
 package model
 
 import (
+	"perceptrail/gontroller/pkg/config"
 	"slices"
 	"testing"
 	"time"
@@ -20,7 +21,7 @@ type storedSample struct {
 func TestPerceptorStore(t *testing.T) {
 	dir := t.TempDir()
 	schema := api.NewStore[storedSample]("sample", 1).Schema()
-	st, err := OpenPerceptorStore(DriverSQLite, dir, schema)
+	st, err := OpenPerceptorStore(config.DriverSQLite, dir, schema)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,13 +56,13 @@ func TestPerceptorStore(t *testing.T) {
 	st.Close()
 
 	// The same schema keeps the values; a new version drops them
-	st, _ = OpenPerceptorStore(DriverSQLite, dir, schema)
+	st, _ = OpenPerceptorStore(config.DriverSQLite, dir, schema)
 	if guids, _ := st.Guids(); !slices.Equal(guids, []string{"a"}) {
 		t.Errorf("reopened: %v, want a", guids)
 	}
 	st.Close()
 	schema.Version = 2
-	st, err = OpenPerceptorStore(DriverSQLite, dir, schema)
+	st, err = OpenPerceptorStore(config.DriverSQLite, dir, schema)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +71,7 @@ func TestPerceptorStore(t *testing.T) {
 	}
 	st.Close()
 
-	if _, err := OpenPerceptorStore(DriverPostgres, dir, schema); err == nil {
+	if _, err := OpenPerceptorStore(config.DriverPostgres, dir, schema); err == nil {
 		t.Error("postgres: want not implemented")
 	}
 }

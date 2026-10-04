@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"perceptrail/gontroller/pkg/config"
 	"strconv"
 	"testing"
 
@@ -17,14 +18,23 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
+// testDB: the model the routes read in these tests
+var testDB *model.Proxy
+
 func TestMain(m *testing.M) {
 	dir, _ := os.MkdirTemp("", "routes-test")
-	if err := model.Configure(model.DBConfig{Driver: model.DriverSQLite, Name: filepath.Join(dir, "t.db")}); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "config.yml"), nil, 0o644); err != nil {
 		panic(err)
 	}
-	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
-	itemsProxy = model.NewProxy(logger)
-	filesProxy = model.NewProxy(logger)
+	cfg, err := config.Read(filepath.Join(dir, "config.yml")) // the database in dir
+	if err != nil {
+		panic(err)
+	}
+	db, err := model.Open(cfg, l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	if err != nil {
+		panic(err)
+	}
+	testDB = db
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
@@ -86,12 +96,12 @@ func TestAssetFileOnlyOfItsAsset(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.jpg")
 	os.WriteFile(path, []byte("jpeg"), 0o644)
-	f, err := filesProxy.CreateFile(dto.ItemEntry{Path: path, Name: "a.jpg"})
+	f, err := testDB.CreateFile(dto.ItemEntry{Path: path, Name: "a.jpg"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	f.LinkToItem("MINE")
-	if _, err := filesProxy.UpdateFile(f); err != nil {
+	if _, err := testDB.UpdateFile(f); err != nil {
 		t.Fatal(err)
 	}
 
@@ -101,7 +111,7 @@ func TestAssetFileOnlyOfItsAsset(t *testing.T) {
 		c := e.NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
 		c.SetParamNames("item", "file")
 		c.SetParamValues(guid, name)
-		if err := getAssetFile(c); err != nil {
+		if err := (&routes{db: testDB}).getAssetFile(c); err != nil {
 			if he, ok := err.(*echo.HTTPError); ok {
 				return he.Code
 			}

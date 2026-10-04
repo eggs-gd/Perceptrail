@@ -89,15 +89,25 @@ Item states (`dto.ItemState`): `New → Dirty → Processing → Ready`, `Delete
 
 ## Layout
 
+`main` ([`gontroller.go`](gontroller.go)) reads as the server's modules in the
+order they start: the config, the logger, the model, the perceptors, the
+libraries, then the services (the libraries' background work, the import, HTTP).
+Each module is set up the same way: `New(cfg, deps…, logger)` / `Load` / `Enable`,
+reading its own `Config` interface of the whole config.
+
+`test/` holds the integration tests, by the path of what they test
+(`test/importer`, `test/perceptor`); a package's own unit tests stay next to it.
+
 | Package | What |
 |---|---|
-| `pkg/app` | app context, config, logger categories, services |
+| `pkg/app` | the server as a whole: its services run together (`Services`), the version |
+| `pkg/config` | the config file, read once (`Load`, `Read`); a leaf — a module declares the getters it reads as its own `Config` interface |
 | `pkg/importer` | the import chain: linear stages, each a sub-chain of its own — `walk`, `group`, `gate`, `identify` (exiftool, kinds, the item, sizes, the cheap preview), `exif` (the EXIF perceptors, built in and external, their values kept), `commit` (the item published); see its README |
 | `pkg/transcode` | the transcoders' switch and stubs (a chain of its own later) |
-| `pkg/perceptor` | the perceptors' registry (built in + `.so`, their storages); `perceptor/builtin`: the built-ins' contract (`builtin.Item`, `builtin.Perceptor`, `OrderByValue`); the built-in EXIF perceptors `perceptor/date`, `size`, `duration`; `builtintest`: test helpers |
-| `pkg/model` | SQLite via GORM, `ItemsApi`/`FilesApi`, DTOs |
+| `pkg/perceptor` | the perceptors' registry (built in + `.so`, their storages); `perceptor/builtin`: the built-ins' contract (`builtin.Item`, `builtin.Perceptor`, `OrderByValue`); the built-in EXIF perceptors `perceptor/date`, `size`, `duration` |
+| `pkg/model` | the model over GORM (`Open`: SQLite), `ItemsApi`/`FilesApi`/`MetaApi` and the import's rules, DTOs |
 | `pkg/web` | the HTTP service (Echo); `web/route`: `/items`, `/assets`, `/perceptors`, `/p/:view/order`, renditions |
-| `pkg/library` | the libraries of this run (`Enable`, `Enabled`, `Of`): one switch sends a file to the grouper of the first that claims it, and on-demand renditions come from the item's library; `library/provider`: the contract they implement; `library/folder`: the plain folder (last, takes the rest); `library/apple`: Apple Photos (its DB, the grouper, on demand), `library/apple/photokit`: PhotoKit (cgo, macOS only; a stub elsewhere; the main thread serves its main queue) |
+| `pkg/library` | the libraries of this run (`Enable`, `Enabled`, `Of`, `Service`): one switch sends a file to the grouper of the first that claims it, and on-demand renditions come from the item's library; `library/provider`: the contract they implement; `library/folder`: the plain folder (last, takes the rest); `library/apple`: Apple Photos (its DB, the grouper, on demand), `library/apple/photokit`: PhotoKit (cgo, macOS only; a stub elsewhere; the main thread serves its main queue) |
 | `pkg/transcoder` | thumbnail stub (needs libvips) |
 
 ## Worth knowing

@@ -23,11 +23,11 @@ import (
 // as removed; the epoch stays the same
 func TestItemsDelta(t *testing.T) {
 	e := echo.New()
-	RegisterItemsRoutes("/items", e, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	Register(e, testDB, AppInfo{}, nil, nil, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
 
 	put := func(it *dto.ItemDto) *dto.ItemDto {
 		t.Helper()
-		out, err := itemsProxy.UpdateItem(it)
+		out, err := testDB.UpdateItem(it)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -63,7 +63,7 @@ func TestItemsDelta(t *testing.T) {
 				t.Fatal(err)
 			}
 			if line.Cursor != "" {
-				n, _ := itemsProxy.CountItemsInStates(shownStates...)
+				n, _ := testDB.CountItemsInStates(shownStates...)
 				if line.Total == nil || *line.Total != n {
 					t.Errorf("%s: total %v, want %d (the shown items)", query, line.Total, n)
 				}
@@ -88,7 +88,7 @@ func TestItemsDelta(t *testing.T) {
 
 	change.MimeType = "image/jpeg"
 	put(change)
-	if err := itemsProxy.DeleteItem(gone); err != nil {
+	if err := testDB.DeleteItem(gone); err != nil {
 		t.Fatal(err)
 	}
 	hide.State = dto.Waiting

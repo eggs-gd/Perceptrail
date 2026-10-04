@@ -1,6 +1,6 @@
-# providers
+# library
 
-Libraries read through their own means — Apple Photos now, Immich and others later
+The libraries of this run, read through their own means — Apple Photos now, Immich and others later
 (roadmap "Providers"). A library that keeps renditions of its own is asked for them:
 we render and store nothing it keeps.
 
@@ -23,16 +23,20 @@ we render and store nothing it keeps.
 - **On demand**: the web service asks the item's provider (`Of`, `Owns`) for a
   level (`Levels`: medium, hover, original) and serves what it gets — a file, or
   bytes it drew (`Rendition`). After its library made a file local, the provider
-  marks the item for the next pass (`Refresh`: `MarkRework`); it does not wait —
+  marks the item for the next pass (`MarkRework`); it does not wait —
   the client guesses meanwhile.
-- **Background**: `Start` — access to the library, assets nothing shows yet.
+- **Background**: `Start` — access to the library, assets nothing shows yet; run
+  with the server's services (`library.Service()`).
 
-Enabled in `main` by the config (`providers: {apple: {enabled: …}}`, enabled when
-not listed); the plain folder always, last.
+`library.Enable(cfg, db, logger)` (in `main`) builds them from the config
+(`providers: {apple: {enabled: …}}`, enabled when not listed); the plain folder
+always, last. `Enabled` gives them in order, `Of` the item's; `Use` sets them as
+given (a test's own).
 
 | package | what |
 |---|---|
-| `providers` | the interface, the enabled list |
+| `library` | the libraries of this run: `Enable`, `Use`, `Enabled`, `Of`, `Service` |
+| `library/provider` | the contract a library implements (`Provider`, `Grouper`, `Rendition`, `Options`) |
 | `library/apple` | Apple Photos: the grouper (the library's DB, the naming layout), on demand (`ondemand.go`) |
 | `library/apple/photokit` | PhotoKit through cgo (macOS; a stub elsewhere) |
 | `library/folder` | the plain folder: sidecars by name; nothing on demand (the transcode renders for it) |

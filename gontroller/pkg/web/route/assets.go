@@ -5,27 +5,14 @@ import (
 	"net/http"
 	"strconv"
 
-	"perceptrail/gontroller/pkg/model"
-
-	l "github.com/eggs-gd/perceplib/logger"
-
 	"github.com/labstack/echo/v4"
 )
 
-var filesProxy model.FilesApi
-
-func RegisterAssetsRoutes(segment string, e *echo.Echo, logger *l.Logger) {
-	if itemsProxy == nil {
-		itemsProxy = model.NewProxy(logger)
-	}
-	if filesProxy == nil {
-		filesProxy = model.NewProxy(logger)
-	}
-
+func (r *routes) registerAssets(segment string, e *echo.Echo) {
 	userGroup := e.Group(segment)
-	userGroup.GET("/:item", getFile)            // the default preview
-	userGroup.GET("/:item/:file", getAssetFile) // any file of the asset (the asset contract)
-	e.GET("/items/:guid/files", getItemFiles)
+	userGroup.GET("/:item", r.getFile)            // the default preview
+	userGroup.GET("/:item/:file", r.getAssetFile) // any file of the asset (the asset contract)
+	e.GET("/items/:guid/files", r.getItemFiles)
 }
 
 // itemFile: one file of the item's group, for the info panel (sidecars too)
@@ -39,11 +26,11 @@ type itemFile struct {
 	URL  string `json:"url"` // relative to the API: a download
 }
 
-// getItemFiles: every file of the item's group — the original, its edits,
+// r.getItemFiles: every file of the item's group — the original, its edits,
 // derivatives, sidecars, frames — each with a URL to download it
-func getItemFiles(c echo.Context) error {
+func (r *routes) getItemFiles(c echo.Context) error {
 	guid := c.Param("guid")
-	files, err := filesProxy.GetLinkedFiles(guid)
+	files, err := r.db.GetLinkedFiles(guid)
 	if err != nil {
 		return err
 	}
@@ -55,10 +42,10 @@ func getItemFiles(c echo.Context) error {
 	return c.JSON(http.StatusOK, out)
 }
 
-func getFile(c echo.Context) error {
+func (r *routes) getFile(c echo.Context) error {
 	guid := c.Param("item")
 
-	item, err := itemsProxy.GetItemByGuid(guid)
+	item, err := r.db.GetItemByGuid(guid)
 	if err != nil {
 		return err
 	}
@@ -71,13 +58,13 @@ func getFile(c echo.Context) error {
 	return c.File(item.Path)
 }
 
-// getAssetFile serves a file of the asset by its id (or the extracted embedded
+// r.getAssetFile serves a file of the asset by its id (or the extracted embedded
 // preview) — only a file linked to this asset, never an arbitrary path
-func getAssetFile(c echo.Context) error {
+func (r *routes) getAssetFile(c echo.Context) error {
 	guid, name := c.Param("item"), c.Param("file")
 
 	if name == embeddedName {
-		item, err := itemsProxy.GetItemByGuid(guid)
+		item, err := r.db.GetItemByGuid(guid)
 		if err != nil || item.PreviewPath == "" {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}
@@ -88,7 +75,7 @@ func getAssetFile(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
-	f, err := filesProxy.GetFileByID(uint(id))
+	f, err := r.db.GetFileByID(uint(id))
 	if err != nil || f.LinkedTo != guid {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}

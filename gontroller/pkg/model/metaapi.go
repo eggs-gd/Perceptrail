@@ -14,7 +14,7 @@ type MetaApi interface {
 	SetMeta(key, value string) error
 }
 
-func (p *proxy) GetMeta(key string) (string, error) {
+func (p *Proxy) GetMeta(key string) (string, error) {
 	var m dto.MetaDto
 	err := p.db.Where("key = ?", key).First(&m).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -23,6 +23,6 @@ func (p *proxy) GetMeta(key string) (string, error) {
 	return m.Value, err
 }
 
-func (p *proxy) SetMeta(key, value string) error {
+func (p *Proxy) SetMeta(key, value string) error {
 	return p.db.Save(&dto.MetaDto{Key: key, Value: value}).Error
 }

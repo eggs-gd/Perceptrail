@@ -5,10 +5,7 @@ import (
 
 	"perceptrail/gontroller/pkg/library"
 	"perceptrail/gontroller/pkg/library/provider"
-	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
-
-	l "github.com/eggs-gd/perceplib/logger"
 
 	"github.com/labstack/echo/v4"
 )
@@ -24,38 +21,35 @@ import (
 // Nothing to serve (not a provider's item, nothing there, no access): 404, the
 // client keeps what it shows.
 
-func RegisterRenditionRoutes(e *echo.Echo, logger *l.Logger) {
-	if itemsProxy == nil {
-		itemsProxy = model.NewProxy(logger)
-	}
-	e.GET("/items/:guid/rendition/:level", getRendition)
+func (r *routes) registerRenditions(e *echo.Echo) {
+	e.GET("/items/:guid/rendition/:level", r.getRendition)
 }
 
-func getRendition(c echo.Context) error {
-	item, err := itemsProxy.GetItemByGuid(c.Param("guid"))
+func (r *routes) getRendition(c echo.Context) error {
+	item, err := r.db.GetItemByGuid(c.Param("guid"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
-	p := library.Of(item)
-	if p == nil {
+	lib := library.Of(item)
+	if lib == nil {
 		return echo.NewHTTPError(http.StatusNotFound) // a plain folder's: nothing to ask for
 	}
-	r, err := p.Rendition(item, c.Param("level"), provider.Options{HEVC: c.QueryParam("hevc") != "0"})
+	rendition, err := lib.Rendition(item, c.Param("level"), provider.Options{HEVC: c.QueryParam("hevc") != "0"})
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
 	c.Response().Header().Set("Cache-Control", "private, max-age=86400")
-	if r.Data != nil {
-		return c.Blob(http.StatusOK, r.Mime, r.Data)
+	if rendition.Data != nil {
+		return c.Blob(http.StatusOK, rendition.Mime, rendition.Data)
 	}
-	return c.File(r.Path)
+	return c.File(rendition.Path)
 }
 
 // onDemandOf: the client's on-demand renditions of a provider's item (nil for a
 // plain folder's) — the levels its provider offers, as URLs
 func onDemandOf(item *dto.ItemDto) *onDemand {
-	p := library.Of(item)
-	if p == nil {
+	lib := library.Of(item)
+	if lib == nil {
 		return nil
 	}
 	base := "/items/" + item.Guid + "/rendition/"
@@ -64,7 +58,7 @@ func onDemandOf(item *dto.ItemDto) *onDemand {
 	// original before 4) — a new contract is a new URL
 	v := "?v=" + contractVersion
 	od := &onDemand{}
-	for _, level := range p.Levels(item) {
+	for _, level := range lib.Levels(item) {
 		switch level {
 		case "medium":
 			od.Medium = base + level + v

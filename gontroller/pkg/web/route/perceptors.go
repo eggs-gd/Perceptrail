@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 
 	"github.com/eggs-gd/perceplib/api"
@@ -34,54 +33,44 @@ type clientSection struct {
 	Label string `json:"label"`
 }
 
-// perceptors: the ones the client is given, core first (the first is the default
-// view)
-var perceptors []api.Perceptor
-
 // ValuesLoader: a perceptor's stored values for these items (store name, by guid)
 type ValuesLoader func(perceptor string, guids []string) (string, map[string]api.Values, error)
 
-var loadValues ValuesLoader
-
-// RegisterPerceptorsRoutes: list is what the client is given (the plugin manager
-// passes it in — config `client`; routes cannot import it, app imports client)
-func RegisterPerceptorsRoutes(e *echo.Echo, list []api.Perceptor, values ValuesLoader, logger *l.Logger) {
-	if itemsProxy == nil {
-		itemsProxy = model.NewProxy(logger)
-	}
+// registerPerceptors: list is what the client is given, core first (the first is
+// the default view)
+func (r *routes) registerPerceptors(e *echo.Echo, list []api.Perceptor) {
 	// A view is reached by its slug: an empty or a taken one is not reachable
-	perceptors = nil
+	r.perceptors = nil
 	taken := map[string]string{}
 	for _, p := range list {
 		slug := p.View().Slug
 		if other, dup := taken[slug]; slug == "" || dup {
-			logger.Error("Perceptor view not given to the client: no slug, or taken",
+			r.logger.Error("Perceptor view not given to the client: no slug, or taken",
 				l.String("perceptor", p.Name()), l.String("slug", slug), l.String("taken by", other))
 			continue
 		}
 		taken[slug] = p.Name()
-		perceptors = append(perceptors, p)
+		r.perceptors = append(r.perceptors, p)
 	}
-	loadValues = values
-	e.GET("/perceptors", getPerceptors)
-	e.GET("/p/:view/order", getOrder)
-	e.GET("/items/:guid/info", getInfo)
+	e.GET("/perceptors", r.getPerceptors)
+	e.GET("/p/:view/order", r.getOrder)
+	e.GET("/items/:guid/info", r.getInfo)
 }
 
-func getPerceptors(c echo.Context) error {
+func (r *routes) getPerceptors(c echo.Context) error {
 	out := []clientPerceptor{}
-	for _, n := range perceptors {
+	for _, n := range r.perceptors {
 		v := n.View()
 		out = append(out, clientPerceptor{Slug: v.Slug, Title: v.Title, Icon: v.Icon, Help: v.Help, Relative: v.Relative})
 	}
 	return c.JSON(http.StatusOK, out)
 }
 
-// getOrder streams the sheet in the perceptor's order, one entry per line (ndjson),
+// r.getOrder streams the sheet in the perceptor's order, one entry per line (ndjson),
 // over the items the client is shown
-func getOrder(c echo.Context) error {
+func (r *routes) getOrder(c echo.Context) error {
 	var nav api.Perceptor
-	for _, n := range perceptors {
+	for _, n := range r.perceptors {
 		if n.View().Slug == c.Param("view") {
 			nav = n
 		}
@@ -90,7 +79,7 @@ func getOrder(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
 
-	items, err := itemsProxy.GetItemsInStates(shownStates...)
+	items, err := r.db.GetItemsInStates(shownStates...)
 	if err != nil {
 		return err
 	}
@@ -103,8 +92,8 @@ func getOrder(c echo.Context) error {
 		guids[i] = it.Guid
 	}
 	// The perceptor's own values ride on the items it orders
-	if loadValues != nil {
-		store, values, err := loadValues(nav.Name(), guids)
+	if r.values != nil {
+		store, values, err := r.values(nav.Name(), guids)
 		if err != nil {
 			return err
 		}
@@ -148,18 +137,18 @@ type clientFact struct {
 	Value string `json:"value"`
 }
 
-// getInfo: what every perceptor knows about one item (the viewer's info panel), each
+// r.getInfo: what every perceptor knows about one item (the viewer's info panel), each
 // with its own values loaded; a perceptor that says nothing is left out
-func getInfo(c echo.Context) error {
-	item, err := itemsProxy.GetItemByGuid(c.Param("guid"))
+func (r *routes) getInfo(c echo.Context) error {
+	item, err := r.db.GetItemByGuid(c.Param("guid"))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
 	out := []clientInfo{}
 	pi := &perceived{ItemDto: item}
-	for _, p := range perceptors {
-		if loadValues != nil {
-			store, values, err := loadValues(p.Name(), []string{item.Guid})
+	for _, p := range r.perceptors {
+		if r.values != nil {
+			store, values, err := r.values(p.Name(), []string{item.Guid})
 			if err != nil {
 				return err
 			}
@@ -185,7 +174,7 @@ func getInfo(c echo.Context) error {
 var shownStates = []dto.ItemState{dto.Visible, dto.Ready}
 
 // perceived: a stored item as a perceptor reads it (api.ItemDataProvider) — the
-// item, and the perceptors' values loaded for it (each perceptor's storage keeps
+// item, and the r.perceptors' values loaded for it (each perceptor's storage keeps
 // them, not the items table)
 type perceived struct {
 	*dto.ItemDto

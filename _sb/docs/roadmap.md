@@ -46,9 +46,9 @@ Target architecture — the diagrams in [`../puml`](../puml).
 - Runtime paths: build artifacts in `gontroller/.build/`, runtime data (config,
   database, caches) in `gontroller/.var/`; config paths are relative to the config
   file; `--config` flag instead of `.env`; HTTP address, CORS origins and exiftool
-  path from config. Config sections are owned by their modules
-  (`client.ServerConfig`, `model.DBConfig` with a driver switch: sqlite; postgres is
-  a stub).
+  path from config. The database behind a driver switch (sqlite; postgres is a
+  stub). Since the top-level work the config is package `config` (a leaf), each
+  module reading its own `Config` interface of it.
 - Import chain as small steps (C1–C7, PR #14): fswalker only walks; groupers by
   source; a files gate (new/changed/never linked, deletions after every branch's
   marker); exif in parallel; mime ranks the main file (the source: RAW > video >
@@ -497,7 +497,9 @@ files kept; see its README):
 **Before the transcodes** — the rest of the PR #24 review ([review-pr24.md](review-pr24.md)),
 each a PR of its own, so that the next chains do not touch everything:
 
-- [ ] **The top level, declarative** (decided 2026-10-04; replaces 1.1): `main`
+- [x] **The top level, declarative** (decided 2026-10-04; replaces 1.1; done in
+      `feature/top-level-wiring`, with 1.4, 1.6 and the contract half of 1.3):
+      `main`
       reads as the list of the server's modules, in the order they start, each set
       up the same way.
       - `config` — a leaf package (imports no module): reads the file, defaults,
@@ -547,11 +549,14 @@ each a PR of its own, so that the next chains do not touch everything:
       services.Run(mainCtx)
       ```
 - [ ] `provider.Provider` split: `Grouping` for the import, `Renditions` for the
-      routes (1.3);
-- [ ] the core perceptors' contract out of the registry package (1.4);
+      routes (1.3; the contract already apart from the registry: `library/provider`
+      and `library`);
+- [x] the core perceptors' contract out of the registry package (1.4):
+      `perceptor/builtin`; the registry knows its built-in perceptors;
 - [ ] steps without `model` imports (`ErrNotFound`, `Outcome` to `dto`; a storage
-      interface for exif) (1.5); the routes' DB proxies passed in, `model.db` opened
-      in `Configure` (1.6); identify's tags passed in by the service (1.7);
+      interface for exif) (1.5); identify's tags passed in by the service (1.7);
+- [x] the routes get the model passed in, the DB opened once in `main`
+      (`model.Open`), no package-level proxies (1.6);
 - [ ] the walk in batches: one read of the rows under the root, `CheckTime` stamped
       per page, rows created in batches (3.1); Photos' own files not written as rows,
       or measured and accepted (3.2);

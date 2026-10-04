@@ -77,9 +77,9 @@ func (f *fakePhotos) Authorize() bool        { return true }
 // withApple: the Apple provider over photos, enabled for the test
 func withApple(t *testing.T, root string, photos *fakePhotos) *apple.Provider {
 	t.Helper()
-	p := apple.New(filepath.Dir(root), photos, itemsProxy, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
-	library.Enable(p)
-	t.Cleanup(func() { library.Enable() })
+	p := apple.New(filepath.Dir(root), photos, testDB, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	library.Use(p)
+	t.Cleanup(func() { library.Use() })
 	return p
 }
 
@@ -90,11 +90,11 @@ func TestRenditionOnDemand(t *testing.T) {
 	photos := &fakePhotos{root: root}
 	withApple(t, root, photos)
 	e := echo.New()
-	RegisterRenditionRoutes(e, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	Register(e, testDB, AppInfo{}, nil, nil, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
 
 	put := func(guid, kind, path string) {
 		t.Helper()
-		if _, err := itemsProxy.UpdateItem(&dto.ItemDto{Guid: guid, State: dto.Visible, Kind: kind, Path: path}); err != nil {
+		if _, err := testDB.UpdateItem(&dto.ItemDto{Guid: guid, State: dto.Visible, Kind: kind, Path: path}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -197,7 +197,7 @@ func TestHydrateWaiting(t *testing.T) {
 		{Guid: "H2222222-SHOWN", State: dto.Visible, Kind: dto.KindPhoto, Path: filepath.Join(root, "originals/H/H2222222-SHOWN.heic")},
 		{Guid: "H3333333-FOLDER", State: dto.Waiting, Kind: dto.KindPhoto, Path: "/photos/h3.heic"},
 	} {
-		if _, err := itemsProxy.UpdateItem(it); err != nil {
+		if _, err := testDB.UpdateItem(it); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -205,7 +205,7 @@ func TestHydrateWaiting(t *testing.T) {
 	defer cancel()
 	p.Start(ctx)
 	marked := func(guid string) bool {
-		it, err := itemsProxy.GetItemByGuid(guid)
+		it, err := testDB.GetItemByGuid(guid)
 		return err == nil && it.Rework
 	}
 	for deadline := time.Now().Add(5 * time.Second); !marked("H1111111-WAITING"); time.Sleep(20 * time.Millisecond) {
@@ -226,17 +226,17 @@ func TestHydrateWaiting(t *testing.T) {
 // the asset carries the full size of what is seen
 func TestItemFilesAndFull(t *testing.T) {
 	e := echo.New()
-	RegisterAssetsRoutes("/assets", e, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
-	if _, err := itemsProxy.UpdateItem(&dto.ItemDto{Guid: "FILES-1", State: dto.Visible}); err != nil {
+	Register(e, testDB, AppInfo{}, nil, nil, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	if _, err := testDB.UpdateItem(&dto.ItemDto{Guid: "FILES-1", State: dto.Visible}); err != nil {
 		t.Fatal(err)
 	}
 	for _, f := range []struct{ name, role string }{{"a.heic", dto.RoleOriginal}, {"a.xmp", dto.RoleMeta}} {
-		file, err := filesProxy.CreateFile(dto.ItemEntry{Path: "/lib/" + f.name, Name: f.name, Size: 10})
+		file, err := testDB.CreateFile(dto.ItemEntry{Path: "/lib/" + f.name, Name: f.name, Size: 10})
 		if err != nil {
 			t.Fatal(err)
 		}
 		file.LinkedTo, file.Role = "FILES-1", f.role
-		if _, err := filesProxy.UpdateFile(file); err != nil {
+		if _, err := testDB.UpdateFile(file); err != nil {
 			t.Fatal(err)
 		}
 	}

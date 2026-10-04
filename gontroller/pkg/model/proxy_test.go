@@ -6,6 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"perceptrail/gontroller/pkg/config"
+
+	l "github.com/eggs-gd/perceplib/logger"
+	"github.com/eggs-gd/perceplib/logger/decorators"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -30,14 +34,23 @@ func TestSqliteDSNEscapesPath(t *testing.T) {
 	}
 }
 
-func TestConfigureDrivers(t *testing.T) {
-	if err := Configure(DBConfig{Driver: DriverSQLite, Name: "x.db"}); err != nil {
-		t.Errorf("sqlite: %v", err)
+// The driver: sqlite opens; postgres is not implemented yet; an unknown one fails
+func TestOpenDrivers(t *testing.T) {
+	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
+	db, err := Open(database{config.Database{Driver: config.DriverSQLite, Name: filepath.Join(t.TempDir(), "x.db")}}, logger)
+	if err != nil {
+		t.Fatalf("sqlite: %v", err)
 	}
-	if err := Configure(DBConfig{Driver: DriverPostgres}); err == nil {
+	db.Close()
+	if _, err := Open(database{config.Database{Driver: config.DriverPostgres}}, logger); err == nil {
 		t.Error("postgres: want a not-implemented error")
 	}
-	if err := Configure(DBConfig{Driver: "mysql"}); err == nil {
+	if _, err := Open(database{config.Database{Driver: "mysql"}}, logger); err == nil {
 		t.Error("mysql: want an unknown-driver error")
 	}
 }
+
+// database: a Config of one database
+type database struct{ db config.Database }
+
+func (d database) Database() config.Database { return d.db }

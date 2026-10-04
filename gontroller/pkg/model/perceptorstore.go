@@ -12,6 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"perceptrail/gontroller/pkg/config"
+
 	"github.com/eggs-gd/perceplib/api"
 
 	"gorm.io/driver/sqlite"
@@ -34,7 +36,7 @@ type PerceptorStore struct {
 const valuesTable = "item_values"
 
 func OpenPerceptorStore(driver, dir string, s api.Schema) (*PerceptorStore, error) {
-	if driver != DriverSQLite {
+	if driver != config.DriverSQLite {
 		return nil, fmt.Errorf("perceptor storage on %s: not implemented yet", driver)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {

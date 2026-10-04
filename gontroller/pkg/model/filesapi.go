@@ -27,7 +27,7 @@ type FilesApi interface {
 	GetFileByID(id uint) (*dto.FileDto, error)
 }
 
-func (p *proxy) CreateFile(entry dto.ItemEntry) (*dto.FileDto, error) {
+func (p *Proxy) CreateFile(entry dto.ItemEntry) (*dto.FileDto, error) {
 	var file *dto.FileDto = &dto.FileDto{
 		GUID:      uuid.New().String(),
 		ItemEntry: entry,
@@ -36,22 +36,22 @@ func (p *proxy) CreateFile(entry dto.ItemEntry) (*dto.FileDto, error) {
 	return p.UpdateFile(file)
 }
 
-func (p *proxy) UpdateFile(file *dto.FileDto) (*dto.FileDto, error) {
+func (p *Proxy) UpdateFile(file *dto.FileDto) (*dto.FileDto, error) {
 	return file, p.db.Save(&file).Error
 }
 
-func (p *proxy) UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error) {
+func (p *Proxy) UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error) {
 	return files, p.db.Save(&files).Error
 }
 
-func (p *proxy) GetFileByPath(path string) (*dto.FileDto, error) {
+func (p *Proxy) GetFileByPath(path string) (*dto.FileDto, error) {
 	var file dto.FileDto
 
 	err := p.db.Where("path = ?", path).First(&file).Error
 	return &file, err
 }
 
-func (p *proxy) GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error) {
+func (p *Proxy) GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error) {
 	var files []*dto.FileDto
 	if err := p.db.Find(&files).Error; err != nil {
 		return nil, err
@@ -67,30 +67,30 @@ func (p *proxy) GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error) {
 	return gone, nil
 }
 
-func (p *proxy) DeleteFiles(files []*dto.FileDto) error {
+func (p *Proxy) DeleteFiles(files []*dto.FileDto) error {
 	if len(files) == 0 {
 		return nil
 	}
 	return p.db.Delete(&files).Error
 }
 
-func (p *proxy) UnignoreFiles() (int64, error) {
+func (p *Proxy) UnignoreFiles() (int64, error) {
 	res := p.db.Model(&dto.FileDto{}).Where("linked_to = ?", "-").Update("linked_to", "")
 	return res.RowsAffected, res.Error
 }
 
-func (p *proxy) GetLinkedFiles(guid string) ([]*dto.FileDto, error) {
+func (p *Proxy) GetLinkedFiles(guid string) ([]*dto.FileDto, error) {
 	var files []*dto.FileDto
 	return files, p.db.Where("linked_to = ?", guid).Order("id").Find(&files).Error
 }
 
-func (p *proxy) CountLinkedFiles(guid string) (int64, error) {
+func (p *Proxy) CountLinkedFiles(guid string) (int64, error) {
 	var n int64
 	err := p.db.Model(&dto.FileDto{}).Where("linked_to = ?", guid).Count(&n).Error
 	return n, err
 }
 
-func (p *proxy) GetFileByID(id uint) (*dto.FileDto, error) {
+func (p *Proxy) GetFileByID(id uint) (*dto.FileDto, error) {
 	var f dto.FileDto
 	return &f, p.db.First(&f, id).Error
 }

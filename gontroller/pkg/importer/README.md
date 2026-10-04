@@ -19,20 +19,22 @@ one order: the model, the step's own dependencies, the logger, `in`, `out`.
 reads it asks the plugin registry: `perceptor.ExifTags`), `exif` the model (rework, pruning; it reads the plugin
 registry itself), `commit` the model. No callbacks between the steps.
 
-[`entry.go`](entry.go) is the service: `importChain` wires one pass — the channels
-between the steps (typed: a step's in/out types are checked at compile time), one
-error channel; `Start` first does what changed since the last run
-(`identify.Migrate`: the kinds' table, the fingerprint; `exif.MarkUnprocessed`: new
-perceptors), then pass after pass: a new chain, `Process` to its end (`walk`, the
-chain's one input, returns and its output closes; each step ends after its input;
-`commit` last), the pause (`rescan`). `Refresh` (one asset again) only marks its
-item (`MarkRework`): the next pass processes it. `walk` writes the rows of what it
+[`entry.go`](entry.go) is the service, `importer.New(cfg, db, logger)`: it reads
+its own `Config` (the root, the cache directory, the rescan pause, the exiftool)
+and gets the model (`Store`: what its steps ask). `Pass` is one pass — a new chain
+(the channels between the steps, typed: checked at compile time), `Process` to its
+end (`walk`, the chain's one input, returns and its output closes; each step ends
+after its input; `commit` last); its steps' errors are logged and returned. `Start`
+first does what changed since the last run (`identify.Migrate`: the kinds' table,
+the fingerprint; `exif.MarkUnprocessed`: new perceptors), then pass after pass with
+the pause (`rescan`). On demand a library marks the item for rework itself: the
+next pass processes it. `walk` writes the rows of what it
 sees and, after the walk, sends the rows it says are gone; the gate has the model
 delete those; `exif` prunes the perceptors' rows of gone items at the end of a
 pass.
 
 ```
-importer/                  the top: the steps wired, the passes, Refresh
+importer/                  the service: the steps wired, the passes
 importer/walk/             the chain's entry: the library's files as rows, then what the walk says is gone (Gone)
 importer/group/            whole assets: the providers' switch and their groupers (a sub-chain)
 importer/gate/             only the groups that need work pass; gone files deleted (the model's Gone)
@@ -43,12 +45,14 @@ importer/commit/           the item published
 
 A step's `New` is its declaration: the chain of its steps, once. A step's own tests
 live in its package (and may give it a fake exiftool there). The tests of the whole
-import are integration tests: the service's own chain (`importChain`), one pass,
-with a real exiftool (identify's pool, started by the first read, closed when its
-steps stop) over real files what a pass processed is read from the DB (the items
-it published) (`fixtures_test.go`: a JPEG, a TIFF as a RAW,
-QuickTime, HEIF, XMP — each with its content inside; a broken JPEG, a cut one). No
-test hook in the code; CI installs exiftool.
+import are integration tests in [`gontroller/test/importer`](../../test/importer):
+the server's own start (a config file, `model.Open`, `perceptor.Load`, the
+libraries) and the service's `Pass`, with a real exiftool (identify's pool, started
+by the first read, closed when its steps stop) over real files
+(`fixtures_test.go`: a JPEG, a TIFF as a RAW, QuickTime, HEIF, XMP — each with its
+content inside; a broken JPEG, a cut one); what a pass processed is read from the DB
+(the items it published). Only the public API; no test hook in the code; CI
+installs exiftool.
 **A type belongs to the package that produces it** (there is no shared package of
 messages): see [Types](#types-who-owns-what). Every step declares the DB methods it calls as its own small
 interface (`walk.Store`, `gate.Store`, `ValidatorStore`, `SizesStore`, `KindsStore`,
@@ -120,7 +124,7 @@ detail).
   perceplib's `exif.Coordinates`); the registry's `perceptor.ExifTags` is their union (identify asks it). identify adds its own
   (`read.go` `ownTags`: MIME type, errors, sizes, codec, whether embedded previews
   are there). A perceptor that reads an undeclared tag gets "" — each core
-  perceptor's test checks it reads only what it declares (`builtintest`).
+  perceptor reads only what it declares (`test/perceptor/builtin_test.go`).
 - **One call per group**: `exiftool -j -n -<tag>… file1 file2 …` — every file of
   the group, the sidecars too (a keyed group: the main file). **`-n`**: no print
   conversion, numbers as numbers — the composite `GPSLatitude` / `GPSLongitude`
@@ -232,15 +236,16 @@ it calls (its own small interface).
   pick (an embedded preview last), an embedded preview's orientation and the group read
   (real exiftool), merge's priority, the fingerprint, the kinds' and the
   fingerprint's versions.
-- `pkg/perceptor/exif_{date,size,duration}/tags_test.go` — every core perceptor reads
-  only the tags it declares.
-- `apple_test.go` — a fixture library through the whole import: keys, previews,
+- `gontroller/test/perceptor/builtin_test.go` — every built-in perceptor reads only
+  the tags it declares.
+- `gontroller/test/importer/apple_test.go` — a fixture library through the whole import: keys, previews,
   nothing to do on the next walk, a downloaded original, an asset moved to the trash,
-  one asset asked again on demand (Refresh: processed though nothing changed).
-- `steps_test.go` — a source that appears later, moved -> no reprocessing, not media
+  one asset marked on demand (processed though nothing changed), a change kept over
+  a failed pass.
+- `gontroller/test/importer/steps_test.go` — a source that appears later, moved -> no reprocessing, not media
   remembered, a former main file gone, a new fingerprint re-identifies every group
   once.
-- `validator_test.go` — whole walks through the stages' real steps on a temp library
-  and a temp sqlite, exiftool replaced by `fakeTool` (the file content is its
-  metadata): new / same / changed / moved / duplicate / deleted main and sidecar /
-  unreadable / missing root / deleted then back / broken files.
+- `gontroller/test/importer/validator_test.go` — whole passes on a temp library and
+  a temp sqlite, a real exiftool over real fixture files: new / same / changed /
+  moved / duplicate / deleted main and sidecar / unreadable / missing root / deleted
+  then back / broken files.

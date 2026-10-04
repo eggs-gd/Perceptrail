@@ -4,12 +4,14 @@ import (
 	"net/url"
 	"path/filepath"
 
+	"perceptrail/gontroller/pkg/config"
+
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
 var sqliteDriver = driver{
-	dialector: func(cfg DBConfig) (gorm.Dialector, error) {
+	dialector: func(cfg config.Database) (gorm.Dialector, error) {
 		return sqlite.Open(sqliteDSN(cfg.Name)), nil
 	},
 	tune: func(db *gorm.DB) error {

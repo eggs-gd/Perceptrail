@@ -1,76 +1,70 @@
-package importer
+package importer_test
 
 import (
 	"os"
 	"path/filepath"
+	"slices"
+	"testing"
+	"time"
+
+	"perceptrail/gontroller/pkg/config"
+	"perceptrail/gontroller/pkg/importer"
 	"perceptrail/gontroller/pkg/library"
 	"perceptrail/gontroller/pkg/library/apple"
 	"perceptrail/gontroller/pkg/library/folder"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/perceptor"
-	"perceptrail/gontroller/pkg/perceptor/date"
-	"perceptrail/gontroller/pkg/perceptor/size"
-	"slices"
-	"testing"
-	"time"
 
 	l "github.com/eggs-gd/perceplib/logger"
 	"github.com/eggs-gd/perceplib/logger/decorators"
 )
 
 // One sqlite database for the package (model keeps a single connection); every test
-// uses its own library root, and deletions are scoped to the root.
-// The DB the tests read and write (the stages get it in their constructors)
-var (
-	testDB interface {
-		model.ItemsApi
-		model.FilesApi
-		model.MetaApi
-	} // the whole DB: the tests set up what the steps only see a part of
-	filesProxy model.FilesApi
-	itemsProxy model.ItemsApi
-)
+// uses its own library root, and deletions are scoped to the root. The tests read
+// and write it through the whole model; the import's steps see their own part.
+var testDB *model.Proxy
 
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "gontroller-scan-test")
+	dir, err := os.MkdirTemp("", "gontroller-import-test")
 	if err != nil {
 		panic(err)
 	}
-	if err := model.Configure(model.DBConfig{Driver: model.DriverSQLite, Name: filepath.Join(dir, "test.db")}); err != nil {
+	// The server's own start: a config file (the database in dir), the model, the
+	// perceptors, the libraries (Apple, the plain folder last)
+	if err := os.WriteFile(filepath.Join(dir, "config.yml"), nil, 0o644); err != nil {
+		panic(err)
+	}
+	cfg, err := config.Read(filepath.Join(dir, "config.yml"))
+	if err != nil {
 		panic(err)
 	}
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
-	testDB = model.NewProxy(logger)
-	filesProxy, itemsProxy = testDB, testDB
-	// The registry and the providers as the server loads them: the built-in
-	// perceptors (their tags are what identify reads); Apple, the plain folder last
-	if err := perceptor.Load(perceptor.Config{DataDir: dir, Logger: logger}, date.Perceptor, size.Perceptor); err != nil {
+	if testDB, err = model.Open(cfg, logger); err != nil {
 		panic(err)
 	}
-	library.Enable(apple.New("", nil, itemsProxy, logger), folder.New())
+	if err := perceptor.Load(cfg, logger); err != nil {
+		panic(err)
+	}
+	library.Use(apple.New("", nil, testDB, logger), folder.New())
 
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
 }
 
-// scan runs one pass of the import as the service builds it (importChain) over
-// root, with a real exiftool; the main files of the items published in it. A new
-// chain each time: the groupers start empty, as on a restart.
+// scan runs one pass of the import (the service's Pass) over root, with a real
+// exiftool; the main files of the items published in it. A new chain each pass:
+// the groupers start empty, as on a restart.
 func scan(t *testing.T, root string) []string {
 	t.Helper()
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
-	s := &importerService{db: testDB, logger: logger, errch: make(chan error, 10), root: root, cacheDir: t.TempDir()}
 	start := time.Now()
-	s.importChain().Process(t.Context())
-	select {
-	case err := <-s.errch:
+	if err := importer.New(pass{root: root, cache: t.TempDir()}, testDB, logger).Pass(t.Context()); err != nil {
 		t.Fatal(err)
-	default:
 	}
 	var published []string
-	err := itemsProxy.StreamItemsSince(start.Add(-time.Second), func(it *dto.ItemDto, _ []*dto.FileDto) error {
+	err := testDB.StreamItemsSince(start.Add(-time.Second), func(it *dto.ItemDto, _ []*dto.FileDto) error {
 		if !it.DeletedAt.Valid && !it.UpdatedAt.Before(start) {
 			published = append(published, it.Path)
 		}
@@ -83,9 +77,17 @@ func scan(t *testing.T, root string) []string {
 	return published
 }
 
+// pass: what the import reads of the config, for one test's library
+type pass struct{ root, cache string }
+
+func (p pass) LibraryRoot() string   { return p.root }
+func (p pass) CacheDir() string      { return p.cache }
+func (p pass) Rescan() time.Duration { return time.Minute }
+func (p pass) Exiftool() string      { return "exiftool" }
+
 func itemAt(t *testing.T, path string) *dto.ItemDto {
 	t.Helper()
-	item, err := itemsProxy.GetItemByPath(path)
+	item, err := testDB.GetItemByPath(path)
 	if err != nil {
 		t.Fatalf("no item at %s: %v", path, err)
 	}
@@ -94,7 +96,7 @@ func itemAt(t *testing.T, path string) *dto.ItemDto {
 
 func assertNoItem(t *testing.T, guid string) {
 	t.Helper()
-	if _, err := itemsProxy.GetItemByGuid(guid); err == nil {
+	if _, err := testDB.GetItemByGuid(guid); err == nil {
 		t.Errorf("item %s still visible", guid)
 	}
 }
@@ -138,10 +140,10 @@ func TestValidatorLifecycle(t *testing.T) {
 	if item := itemAt(t, moved); item.Guid != guidB {
 		t.Errorf("moved: GUID %s, want %s", item.Guid, guidB)
 	}
-	if f, err := filesProxy.GetFileByPath(moved); err != nil || f.GUID != guidB || f.LinkedTo != guidB {
+	if f, err := testDB.GetFileByPath(moved); err != nil || f.GUID != guidB || f.LinkedTo != guidB {
 		t.Errorf("moved: file row %+v, %v", f, err)
 	}
-	if _, err := filesProxy.GetFileByPath(b); err == nil {
+	if _, err := testDB.GetFileByPath(b); err == nil {
 		t.Error("moved: the old file row is still there")
 	}
 
@@ -163,7 +165,7 @@ func TestValidatorLifecycle(t *testing.T) {
 	}
 	scan(t, root)
 	assertNoItem(t, dupGuid)
-	if _, err := filesProxy.GetFileByPath(dup); err == nil {
+	if _, err := testDB.GetFileByPath(dup); err == nil {
 		t.Error("deleted: the file row is still there")
 	}
 }
@@ -224,7 +226,7 @@ func TestValidatorMissingRootDeletesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	scan(t, root)
-	if _, err := itemsProxy.GetItemByGuid(guid); err != nil {
+	if _, err := testDB.GetItemByGuid(guid); err != nil {
 		t.Error("a missing root deleted the library")
 	}
 }
@@ -276,7 +278,7 @@ func TestValidatorBrokenFiles(t *testing.T) {
 		t.Fatalf("first walk processed %v, want only the good one", processed)
 	}
 	for _, p := range []string{corrupt, cut} {
-		if f, err := filesProxy.GetFileByPath(p); err != nil || !f.IsIgnored() {
+		if f, err := testDB.GetFileByPath(p); err != nil || !f.IsIgnored() {
 			t.Errorf("%s: not ignored (%v)", filepath.Base(p), err)
 		}
 	}

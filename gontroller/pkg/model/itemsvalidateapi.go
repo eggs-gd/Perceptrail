@@ -22,7 +22,7 @@ const (
 
 // validateFile: the item of a plain folder's main file, by its path and its
 // fingerprint (hashShort: the file's bytes, see identify's fingerprint)
-func (p *proxy) validateFile(item *dto.FileDto, hashShort string) (*dto.ItemDto, Outcome, error) {
+func (p *Proxy) validateFile(item *dto.FileDto, hashShort string) (*dto.ItemDto, Outcome, error) {
 	itemByGUID, itemByPath, itemByHash := p.getItemsForValidation(item, hashShort)
 
 	if itemByGUID.Guid != itemByPath.Guid {
@@ -68,7 +68,7 @@ func (p *proxy) validateFile(item *dto.FileDto, hashShort string) (*dto.ItemDto,
 	return itemByGUID, OutcomeChanged, err
 }
 
-func (p *proxy) getItemsForValidation(file *dto.FileDto, hashShort string) (byGuid *dto.ItemDto, byPath *dto.ItemDto, byHash *dto.ItemDto) {
+func (p *Proxy) getItemsForValidation(file *dto.FileDto, hashShort string) (byGuid *dto.ItemDto, byPath *dto.ItemDto, byHash *dto.ItemDto) {
 	var itemByGUID, itemByPath *dto.ItemDto
 	var itemsByHash []*dto.ItemDto
 	var err error
@@ -107,7 +107,7 @@ func (p *proxy) getItemsForValidation(file *dto.FileDto, hashShort string) (byGu
 // finalize (delete the item of the vanished path) before the moved file reaches the
 // validator — the import chain is asynchronous — or the file may come back later.
 // Live items are preferred, then the most recently deleted.
-func (p *proxy) findMovedItem(file *dto.FileDto, hashShort string) *dto.ItemDto {
+func (p *Proxy) findMovedItem(file *dto.FileDto, hashShort string) *dto.ItemDto {
 	var candidates []*dto.ItemDto
 	err := p.db.Unscoped().Where("hash_short = ?", hashShort).
 		Order("deleted_at IS NOT NULL, deleted_at DESC").Find(&candidates).Error
@@ -128,7 +128,7 @@ func (p *proxy) findMovedItem(file *dto.FileDto, hashShort string) *dto.ItemDto 
 // moveItem gives the item the new main file: the item keeps its GUID (thumbnails
 // and client links are keyed by it), the new file rows take that GUID over. A
 // deleted item is restored.
-func (p *proxy) moveItem(item *dto.ItemDto, file *dto.FileDto) error {
+func (p *Proxy) moveItem(item *dto.ItemDto, file *dto.FileDto) error {
 	oldGuid, newGuid := item.Guid, file.GUID
 
 	err := p.db.Transaction(func(tx *gorm.DB) error {
@@ -175,7 +175,7 @@ func (p *proxy) moveItem(item *dto.ItemDto, file *dto.FileDto) error {
 // validateKeyed: the key is the item's identity (it never changes, whatever the
 // main file is): same hash -> as is; another hash -> Dirty (the main file changed,
 // e.g. a derivative replaced by the downloaded original); deleted -> restored.
-func (p *proxy) validateKeyed(key string, main *dto.FileDto, hash string) (*dto.ItemDto, error) {
+func (p *Proxy) validateKeyed(key string, main *dto.FileDto, hash string) (*dto.ItemDto, error) {
 	var item dto.ItemDto
 	err := p.db.Unscoped().Where("guid = ?", key).First(&item).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {

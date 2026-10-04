@@ -537,6 +537,40 @@ Design: roadmap "Expensive stage".
 
 ## Backend: gontroller, plugins, exiftool
 
+### The top level: modules set up alike (2026-10-04, decided)
+
+`main` assembled the server by hand from an `AppContext` — not a context, a
+singleton of globals (the parsed config, a logger whose level `main` changed
+afterwards) — and `app` imported `client`, `model` and the perceptors' settings
+for their config types: the import depended on the HTTP layer through it, and every
+module needing a config created a cycle. Now:
+
+- **`config` is a leaf** (imports no module): it reads the file (`Load`; `Read` for
+  a given path — the tests write a real config), fills the defaults, checks the
+  values; its getters are named across the whole config (`LibraryRoot`, `DataDir`,
+  `CacheDir`, `Rescan`, `Exiftool`, `Server`, `Database`, `Perceptors`,
+  `Providers`, `LogLevel`).
+- **A module declares the getters it reads** as its own `Config` interface and gets
+  the whole `*config.Config` (Go's structural typing: no DTO per module, no
+  wrapper); the logger is an argument, named by `main`, its level set once before
+  any logger is made. `app` keeps only `Services` and `Version`.
+- **One form for every module**: registries `perceptor.Load(cfg, logger)`,
+  `library.Enable(cfg, db, logger)` (they know their built-in members; their
+  contracts live apart — `perceptor/builtin`, `library/provider` — or the members'
+  imports would cycle); services `importer.New(cfg, db, logger)`,
+  `web.New(cfg, db, logger)`, `library.Service()`. The DB is opened once
+  (`model.Open`) and passed in — the routes no longer make proxies of their own.
+  Errors in `main`: an explicit `if err != nil`, the step named.
+- **Names**: packages singular (`perceptor`, `library`, `web`, `route`), never a
+  standard library package's name (`plugin` was), no underscores (`exif_date` is
+  `perceptor/date`); an abstraction and its instance named apart (`provider` /
+  `library`). The rules are in AGENTS.md ("Go — write it like Go").
+- **Integration tests in `gontroller/test/`** by the path of what they test, through
+  the public API only: the import's (`importer.New(…).Pass`), the built-in
+  perceptors' declared tags (one test for all), loading the `.so` plugins through
+  the config. `Pass` is the service's unit of work, not a hook (a "scan now" would
+  call it).
+
 ### The import chain, PR #24 (2026-10-04, decided)
 
 `pkg/scan` did everything in one constructor that knew every tool; its data rode
@@ -548,7 +582,7 @@ strict review before closing it, with what is left for later:
 `New` per stage; the top knows no tool. A step gets the DB methods it calls (a small
 `Store` next to it; the top's `store` embeds them). Constructors: the model, the
 step's own dependencies, the logger, `in`, `out`. The service builds a new chain
-for every pass (`importChain`) and runs it to its end, then the rescan pause; what
+for every pass (`Pass`) and runs it to its end, then the rescan pause; what
 runs once at start is in `Start` (`identify.Migrate`, `exif.MarkUnprocessed`), not
 in the constructors.
 

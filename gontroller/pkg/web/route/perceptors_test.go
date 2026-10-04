@@ -24,7 +24,7 @@ import (
 // shown items: newest first with its sections
 func TestPerceptorsRoutes(t *testing.T) {
 	e := echo.New()
-	RegisterPerceptorsRoutes(e, []api.Perceptor{date.Perceptor, size.Perceptor}, nil,
+	Register(e, testDB, AppInfo{}, []api.Perceptor{date.Perceptor, size.Perceptor}, nil,
 		l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
 
 	at := func(s string) time.Time { v, _ := time.Parse(time.RFC3339, s); return v }
@@ -33,7 +33,7 @@ func TestPerceptorsRoutes(t *testing.T) {
 		{Guid: "nav-new", State: dto.Visible, Date: at("2026-09-01T10:00:00Z"), DateSource: "tag"},
 		{Guid: "nav-hidden", State: dto.Waiting, Date: at("2026-09-02T10:00:00Z"), DateSource: "tag"},
 	} {
-		if _, err := itemsProxy.UpdateItem(it); err != nil {
+		if _, err := testDB.UpdateItem(it); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -84,7 +84,7 @@ func TestPerceptorsRoutes(t *testing.T) {
 // A view is reached by its slug: a taken one is not given to the client
 func TestPerceptorsSlugTaken(t *testing.T) {
 	e := echo.New()
-	RegisterPerceptorsRoutes(e, []api.Perceptor{date.Perceptor, date.Perceptor, size.Perceptor}, nil,
+	Register(e, testDB, AppInfo{}, []api.Perceptor{date.Perceptor, date.Perceptor, size.Perceptor}, nil,
 		l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/perceptors", nil))
@@ -101,10 +101,10 @@ func TestPerceptorsSlugTaken(t *testing.T) {
 // left out (Size: an item without a size)
 func TestPerceptorsInfo(t *testing.T) {
 	e := echo.New()
-	RegisterPerceptorsRoutes(e, []api.Perceptor{date.Perceptor, size.Perceptor}, nil,
+	Register(e, testDB, AppInfo{}, []api.Perceptor{date.Perceptor, size.Perceptor}, nil,
 		l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
 	at, _ := time.Parse(time.RFC3339, "2025-09-14T05:00:00Z")
-	if _, err := itemsProxy.UpdateItem(&dto.ItemDto{Guid: "info-1", State: dto.Visible, Date: at, DateSource: "tag", DateOffset: 180}); err != nil {
+	if _, err := testDB.UpdateItem(&dto.ItemDto{Guid: "info-1", State: dto.Visible, Date: at, DateSource: "tag", DateOffset: 180}); err != nil {
 		t.Fatal(err)
 	}
 	rec := httptest.NewRecorder()

@@ -58,12 +58,12 @@ type ItemsApi interface {
 	DeleteItem(item *dto.ItemDto) error
 }
 
-func (p *proxy) GetAllGuids() ([]string, error) {
+func (p *Proxy) GetAllGuids() ([]string, error) {
 	var guids []string
 	return guids, p.db.Model(&dto.ItemDto{}).Pluck("guid", &guids).Error
 }
 
-func (p *proxy) StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) error {
+func (p *Proxy) StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) error {
 	// The ids in sheet order first (cheap), then the items page by page: a stable
 	// order while the import writes, without paging by a date
 	var ids []uint
@@ -77,7 +77,7 @@ func (p *proxy) StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) erro
 // zone (written as local time); a tombstone too many is harmless
 const deletionMargin = 24 * time.Hour
 
-func (p *proxy) StreamItemsSince(since time.Time, fn func(*dto.ItemDto, []*dto.FileDto) error) error {
+func (p *Proxy) StreamItemsSince(since time.Time, fn func(*dto.ItemDto, []*dto.FileDto) error) error {
 	// SQLite keeps times as text with the writer's offset ("…+03:00", across DST
 	// changes too): compared as julian days, not as text
 	var ids []uint
@@ -92,7 +92,7 @@ func (p *proxy) StreamItemsSince(since time.Time, fn func(*dto.ItemDto, []*dto.F
 }
 
 // streamIDs: the items of ids in that order, each with its files (one query per page)
-func (p *proxy) streamIDs(db *gorm.DB, ids []uint, fn func(*dto.ItemDto, []*dto.FileDto) error) error {
+func (p *Proxy) streamIDs(db *gorm.DB, ids []uint, fn func(*dto.ItemDto, []*dto.FileDto) error) error {
 	const pageSize = 32
 	for start := 0; start < len(ids); start += pageSize {
 		page := ids[start:min(start+pageSize, len(ids))]
@@ -128,38 +128,38 @@ func (p *proxy) streamIDs(db *gorm.DB, ids []uint, fn func(*dto.ItemDto, []*dto.
 	return nil
 }
 
-func (p *proxy) GetItemsInStates(states ...dto.ItemState) ([]*dto.ItemDto, error) {
+func (p *Proxy) GetItemsInStates(states ...dto.ItemState) ([]*dto.ItemDto, error) {
 	var items []*dto.ItemDto
 	return items, p.db.Select("id", "guid", "date", "date_offset", "date_source", "size_w", "size_h", "ratio_w", "ratio_h", "duration", "path", "kind").
 		Where("state IN ?", states).Order("date DESC, id DESC").Find(&items).Error
 }
 
-func (p *proxy) CountItemsInStates(states ...dto.ItemState) (int64, error) {
+func (p *Proxy) CountItemsInStates(states ...dto.ItemState) (int64, error) {
 	var n int64
 	return n, p.db.Model(&dto.ItemDto{}).Where("state IN ?", states).Count(&n).Error
 }
 
-func (p *proxy) GetItemByGuid(guid string) (*dto.ItemDto, error) {
+func (p *Proxy) GetItemByGuid(guid string) (*dto.ItemDto, error) {
 	var item dto.ItemDto
 	return &item, p.db.Where("guid = ?", guid).First(&item).Error
 }
 
-func (p *proxy) GetItemByPath(path string) (*dto.ItemDto, error) {
+func (p *Proxy) GetItemByPath(path string) (*dto.ItemDto, error) {
 	var item dto.ItemDto
 	return &item, p.db.Where("path = ?", path).First(&item).Error
 }
 
-func (p *proxy) ClearHashes() (int64, error) {
+func (p *Proxy) ClearHashes() (int64, error) {
 	res := p.db.Unscoped().Model(&dto.ItemDto{}).Where("hash_short <> ''").UpdateColumn("hash_short", "")
 	return res.RowsAffected, res.Error
 }
 
-func (p *proxy) GetItemsByHash(hash string) ([]*dto.ItemDto, error) {
+func (p *Proxy) GetItemsByHash(hash string) ([]*dto.ItemDto, error) {
 	var items []*dto.ItemDto
 	return items, p.db.Where("hash_short = ?", hash).Find(&items).Error
 }
 
-func (p *proxy) CreateItem(file *dto.FileDto) (*dto.ItemDto, error) {
+func (p *Proxy) CreateItem(file *dto.FileDto) (*dto.ItemDto, error) {
 	item := dto.ItemDto{
 		State:    dto.New,
 		Path:     file.Path,
@@ -170,11 +170,11 @@ func (p *proxy) CreateItem(file *dto.FileDto) (*dto.ItemDto, error) {
 	return p.UpdateItem(&item)
 }
 
-func (p *proxy) UpdateItem(item *dto.ItemDto) (*dto.ItemDto, error) {
+func (p *Proxy) UpdateItem(item *dto.ItemDto) (*dto.ItemDto, error) {
 	return item, p.db.Save(&item).Error
 }
 
-func (p *proxy) DeleteItem(item *dto.ItemDto) error {
+func (p *Proxy) DeleteItem(item *dto.ItemDto) error {
 	item.State = dto.Deleted
 	if err := p.db.Save(item).Error; err != nil {
 		return err

@@ -50,7 +50,7 @@ func TestReadGroup(t *testing.T) {
 	gone := filepath.Join(dir, "gone.jpg")
 
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
-	pool := newPool(1, logger)
+	pool := newPool(1, "", logger)
 	defer pool.Close()
 	r := newReader(pool, []string{"DateTimeOriginal", "GPSLatitude", "GPSLongitude", "Orientation"}, logger)
 

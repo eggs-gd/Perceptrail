@@ -37,6 +37,7 @@ const exiftoolTimeout = 2 * time.Minute
 // pass with nothing to read starts none.
 type pool struct {
 	count     int
+	exec      string // the executable
 	workers   []*exiftool.Server
 	free      chan *exiftool.Server
 	logger    *l.Logger
@@ -44,11 +45,14 @@ type pool struct {
 	closeOnce sync.Once
 }
 
-func newPool(count int, logger *l.Logger) *pool {
-	return &pool{count: count, free: make(chan *exiftool.Server, count), logger: logger}
+func newPool(count int, exec string, logger *l.Logger) *pool {
+	return &pool{count: count, exec: exec, free: make(chan *exiftool.Server, count), logger: logger}
 }
 
 func (p *pool) start() {
+	if p.exec != "" {
+		exiftool.Exec = p.exec // the library takes its executable from a package variable
+	}
 	for range p.count {
 		et, err := exiftool.NewServer()
 		if err != nil {

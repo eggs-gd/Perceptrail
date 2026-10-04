@@ -1,4 +1,4 @@
-package date
+package perceptor_test
 
 import (
 	"context"
@@ -6,12 +6,12 @@ import (
 	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/perceptor/builtintest"
+	"perceptrail/gontroller/pkg/perceptor/date"
 
 	"github.com/eggs-gd/perceplib/api"
 )
 
-func TestOrder(t *testing.T) {
+func TestDateOrder(t *testing.T) {
 	kyiv := 120 // +02:00 in winter, minutes
 	item := func(guid, utc string, offset int) api.ItemDataProvider {
 		i := &dto.ItemDto{Guid: guid, DateOffset: offset}
@@ -19,7 +19,7 @@ func TestOrder(t *testing.T) {
 			i.Date, _ = time.Parse(time.RFC3339, utc)
 			i.DateSource = "DateTimeOriginal"
 		}
-		return builtintest.Stored(i)
+		return storedItem(i)
 	}
 	items := []api.ItemDataProvider{
 		item("old", "2024-05-01T10:00:00Z", 0),
@@ -31,7 +31,7 @@ func TestOrder(t *testing.T) {
 		item("sep", "2026-09-15T08:00:00Z", 0),
 		item("sep2", "2026-09-20T08:00:00Z", 0),
 	}
-	got, err := Perceptor.Order(context.Background(), "", items)
+	got, err := date.Perceptor.Order(context.Background(), "", items)
 	if err != nil {
 		t.Fatal(err)
 	}

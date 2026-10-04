@@ -3,6 +3,8 @@ package model
 import (
 	"errors"
 
+	"perceptrail/gontroller/pkg/config"
+
 	"gorm.io/gorm"
 )
 
@@ -10,7 +12,7 @@ import (
 // accept it. Implementing it = gorm.io/driver/postgres with a DSN from
 // Host/Port/Username/Password (or Token)/Name, and the default pool.
 var postgresDriver = driver{
-	dialector: func(cfg DBConfig) (gorm.Dialector, error) {
+	dialector: func(cfg config.Database) (gorm.Dialector, error) {
 		return nil, errors.New("database driver postgres: not implemented yet")
 	},
 	tune: func(db *gorm.DB) error { return nil },

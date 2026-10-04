@@ -38,9 +38,9 @@ package importer
 
 import (
 	"context"
+	"errors"
 	"time"
 
-	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/importer/commit"
 	"perceptrail/gontroller/pkg/importer/exif"
 	"perceptrail/gontroller/pkg/importer/gate"
@@ -48,7 +48,6 @@ import (
 	"perceptrail/gontroller/pkg/importer/identify"
 	"perceptrail/gontroller/pkg/importer/walk"
 	"perceptrail/gontroller/pkg/library"
-	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -56,11 +55,17 @@ import (
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
-// Pause between the end of one pass and the next (config: rescan)
-const defaultRescan = time.Minute
+// Config: what the import reads of the config — the root walked, where the
+// previews go, the pause between passes, the exiftool to run
+type Config interface {
+	LibraryRoot() string
+	CacheDir() string
+	Rescan() time.Duration
+	Exiftool() string
+}
 
-// store: the model as the import's steps ask it
-type store interface {
+// Store: the model as the import's steps ask it
+type Store interface {
 	walk.Store
 	gate.Store
 	identify.Store
@@ -68,26 +73,19 @@ type store interface {
 	commit.Store
 }
 
-type importerService struct {
-	db       store
-	logger   *l.Logger
-	errch    chan error
-	root     string
-	cacheDir string
-	rescan   time.Duration // the pause between the end of one pass and the next
+// Service: the import, pass after pass
+type Service struct {
+	cfg    Config
+	db     Store
+	logger *l.Logger
 }
 
-func NewImporterService(ctx app.AppContext) *importerService {
-	rescan := ctx.Config().Rescan
-	if rescan <= 0 {
-		rescan = defaultRescan
-	}
-	return &importerService{db: model.NewProxy(ctx.Logger(app.LogDB)), logger: ctx.Logger(app.LogImporter),
-		errch: make(chan error), root: ctx.Config().Path, cacheDir: ctx.Config().CacheDir(), rescan: rescan}
+func New(cfg Config, db Store, logger *l.Logger) *Service {
+	return &Service{cfg: cfg, db: db, logger: logger}
 }
 
 // importChain: one pass of the import, its channels new (a pass closes them)
-func (s *importerService) importChain() chain.ChainProcessor {
+func (s *Service) importChain(errs chan<- error) chain.ChainProcessor {
 	// walk → group: a file's row (seen: Changed; or Gone)
 	found := make(chan *dto.FileDto)
 	// group → gate: a whole asset (a gone file: its own); at the end, what each
@@ -100,36 +98,49 @@ func (s *importerService) importChain() chain.ChainProcessor {
 	// exif → commit: + what the perceptors found, their values kept
 	perceived := make(chan *identify.Item)
 
-	c := chain.NewChainProcessor(s.errch)
-	c.AddStep(walk.New(s.db, s.root, s.logger, found))
+	c := chain.NewChainProcessor(errs)
+	c.AddStep(walk.New(s.db, s.cfg.LibraryRoot(), s.logger, found))
 	c.AddStep(group.New(library.Enabled(), found, grouped))
 	c.AddStep(gate.New(s.db, s.logger, grouped, stored))
-	c.AddStep(identify.New(s.db, s.cacheDir, s.logger, stored, identified))
+	c.AddStep(identify.New(s.db, s.cfg.CacheDir(), s.cfg.Exiftool(), s.logger, stored, identified))
 	c.AddStep(exif.New(s.db, s.logger, identified, perceived))
 	c.AddStep(commit.New(s.db, perceived))
 	return c
 }
 
 // Start: what changed since the last run first (identify's detection, the
-// perceptors), then pass after pass — a new chain each time, run to its end, then
-// the rescan pause — until ctx ends
-func (s *importerService) Start(ctx context.Context) {
-	// Every step's errors (skips never get here: they are on purpose)
-	go func() {
-		for err := range s.errch {
-			s.logger.Error("Import Error", l.Error(err))
-		}
-	}()
+// perceptors), then pass after pass, with the rescan pause between, until ctx ends
+func (s *Service) Start(ctx context.Context) {
 	identify.Migrate(s.db, s.logger)
 	// A perceptor new or changed since the last run: its items are processed again
 	if err := exif.MarkUnprocessed(s.db, s.logger); err != nil {
 		s.logger.Error("Perceptors' rows not checked", l.Error(err))
 	}
 	for ctx.Err() == nil {
-		s.importChain().Process(ctx)
+		_ = s.Pass(ctx) // its errors are logged
 		select {
-		case <-time.After(s.rescan):
+		case <-time.After(s.cfg.Rescan()):
 		case <-ctx.Done():
 		}
 	}
+}
+
+// Pass: one pass of the import — a new chain, run to its end (the walk, every
+// group of it through every step). Its steps' errors are logged and returned
+// together (skips never are: they are on purpose).
+func (s *Service) Pass(ctx context.Context) error {
+	errs := make(chan error)
+	var all []error
+	collected := make(chan struct{})
+	go func() {
+		for err := range errs {
+			s.logger.Error("Import Error", l.Error(err))
+			all = append(all, err)
+		}
+		close(collected)
+	}()
+	s.importChain(errs).Process(ctx)
+	close(errs)
+	<-collected
+	return errors.Join(all...)
 }

@@ -5,108 +5,77 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"perceptrail/gontroller/pkg/app"
-	"perceptrail/gontroller/pkg/importer"
-	"perceptrail/gontroller/pkg/library"
-	"perceptrail/gontroller/pkg/library/apple"
-	"perceptrail/gontroller/pkg/library/apple/photokit"
-	"perceptrail/gontroller/pkg/library/folder"
-	"perceptrail/gontroller/pkg/library/provider"
-	"perceptrail/gontroller/pkg/model"
-	"perceptrail/gontroller/pkg/perceptor"
-	"perceptrail/gontroller/pkg/perceptor/date"
-	"perceptrail/gontroller/pkg/perceptor/duration"
-	"perceptrail/gontroller/pkg/perceptor/size"
-	"perceptrail/gontroller/pkg/web"
-	"perceptrail/gontroller/pkg/web/route"
 	"syscall"
 	"time"
 
-	"github.com/eggs-gd/go-exiftool"
+	"perceptrail/gontroller/pkg/app"
+	"perceptrail/gontroller/pkg/config"
+	"perceptrail/gontroller/pkg/importer"
+	"perceptrail/gontroller/pkg/library"
+	"perceptrail/gontroller/pkg/library/apple/photokit"
+	"perceptrail/gontroller/pkg/model"
+	"perceptrail/gontroller/pkg/perceptor"
+	"perceptrail/gontroller/pkg/web"
+
 	l "github.com/eggs-gd/perceplib/logger"
+	"github.com/eggs-gd/perceplib/logger/decorators"
 )
 
+// The server: its modules, in the order they start. Each reads what it needs of
+// the config (its own Config interface) and gets its logger by name.
 func main() {
-
-	mainCtx, cancel := context.WithCancelCause(context.Background())
-	defer cancel(nil)
-
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, os.Interrupt, syscall.SIGTERM, syscall.SIGINT)
-
 	log.Printf("gontroller %s", app.Version)
 
-	ctx := app.NewAppContext()
-	if err := model.Configure(ctx.Config().Database); err != nil {
-		log.Fatalf("Database: %v", err)
-	}
-	if ctx.Config().Exiftool != "" {
-		exiftool.Exec = ctx.Config().Exiftool
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("config: %v", err)
 	}
 	// Release: Info and up — no SQL (logged at Debug), no per-request lines
-	if !ctx.Config().Debug() {
-		ctx.SetLogLevel(l.InfoLevel)
-	}
-	log.Printf("mode: %s", ctx.Config().Mode)
-	svc := app.NewSvcContext()
+	logs := l.NewLogger(cfg.LogLevel(), &decorators.GontrollerDecorator{})
+	logs.Info("Configuration loaded", l.String("config", cfg.File()), l.String("mode", cfg.Mode()), l.String("data_dir", cfg.DataDir()))
 
-	err := perceptor.Load(perceptor.Config{
-		Plugins:    ctx.Config().Plugins,
-		Perceptors: ctx.Config().Perceptors,
-		Driver:     ctx.Config().Database.Driver,
-		DataDir:    ctx.Config().DataDir,
-		Logger:     ctx.Logger(app.LogPlugins),
-	}, date.Perceptor, size.Perceptor, duration.Perceptor)
+	db, err := model.Open(cfg, logs.Named("db"))
 	if err != nil {
-		log.Fatalf("Failed to load plugins: %v", err)
+		log.Fatalf("database: %v", err)
+	}
+	if err := perceptor.Load(cfg, logs.Named("perceptors")); err != nil {
+		log.Fatalf("perceptors: %v", err)
+	}
+	if err := library.Enable(cfg, db, logs.Named("libraries")); err != nil {
+		log.Fatalf("libraries: %v", err)
 	}
 
-	// The providers, in the order the switch asks them; the plain folder last (it
-	// takes what nobody claimed). Apple Photos: its library's DB and files; PhotoKit
-	// on demand (macOS).
-	var ps []provider.Provider
-	if ctx.Config().Providers.Enabled("apple") {
-		ps = append(ps, apple.New(ctx.Config().Path, photokit.Library{},
-			model.NewProxy(ctx.Logger(app.LogDB)), ctx.Logger(app.LogImporter)))
-	}
-	ps = append(ps, folder.New())
-	library.Enable(ps...)
+	services := app.NewServices()
+	services.Add(library.Service())
+	services.Add(importer.New(cfg, db, logs.Named("importer")))
+	services.Add(web.New(cfg, db, logs.Named("http")))
 
-	importer := importer.NewImporterService(ctx)
-	svc.AddService(importer)
-	for _, p := range ps {
-		p.Start(mainCtx)
-	}
-	server, err := web.NewWebService(ctx.Config().Server, route.AppInfo{Version: app.Version, Mode: ctx.Config().Mode}, perceptor.Client(), perceptor.LoadValues, ctx.Logger(app.LogHTTP))
-	if err != nil {
-		log.Fatalf("Server: %v", err)
-	}
-	svc.AddService(server)
-	//svc.AddService(importer.NewMaintenanceService(ctx)) // later
-
+	ctx, cancel := context.WithCancel(context.Background())
 	stopped := make(chan struct{})
 	go func() {
-		svc.RunApp(mainCtx)
+		services.Run(ctx)
 		close(stopped)
 	}()
 
 	// The main thread serves PhotoKit's main queue until a stop (macOS; elsewhere: waits)
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
 	done := make(chan struct{})
 	go func() { <-stop; close(done) }()
 	photokit.RunMain(done)
 
 	// The services stop and clean up (the importer closes its exiftool processes, or
 	// they outlive us) — at most a while: a step may be inside a long exiftool call
-	cancel(nil)
+	cancel()
 	select {
 	case <-stopped:
 		// Nothing writes any more: the databases closed (their journals merged)
 		perceptor.Close()
-		if err := model.Close(); err != nil {
-			log.Printf("Database not closed: %v", err)
+		if err := db.Close(); err != nil {
+			log.Printf("database not closed: %v", err)
 		}
 	case <-time.After(10 * time.Second):
-		log.Printf("Services did not stop in time")
+		log.Printf("services did not stop in time")
 	}
-	log.Printf("Chain Sys stop")
+	log.Printf("stopped")
 }

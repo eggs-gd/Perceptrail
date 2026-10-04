@@ -1,4 +1,4 @@
-package importer
+package importer_test
 
 import (
 	"database/sql"
@@ -69,7 +69,7 @@ func TestApplePhotosLibrary(t *testing.T) {
 	scan(t, root)
 	check := func(guid, preview string) *dto.ItemDto {
 		t.Helper()
-		item, err := itemsProxy.GetItemByGuid(guid)
+		item, err := testDB.GetItemByGuid(guid)
 		if err != nil {
 			t.Fatalf("no item %s: %v", guid, err)
 		}
@@ -81,7 +81,7 @@ func TestApplePhotosLibrary(t *testing.T) {
 	check(appleEdited, appleEdited+"_1_201_a.jpeg") // the edit
 	check(appleCloud, appleCloud+"_1_105_c.jpeg")   // cloud-only: the biggest derivative
 	check(appleLive, appleLive+"_1_102_o.jpeg")     // HEIC not viewable: Apple's JPEG
-	if f, _ := filesProxy.GetFileByPath(filepath.Join(bundle, "originals/C/"+appleLive+"_3.mov")); f.LinkedTo != appleLive {
+	if f, _ := testDB.GetFileByPath(filepath.Join(bundle, "originals/C/"+appleLive+"_3.mov")); f.LinkedTo != appleLive {
 		t.Errorf("a file of the asset is not linked to its key: %+v", f)
 	}
 
@@ -109,7 +109,7 @@ func TestAppleMetadataFromDB(t *testing.T) {
 	_, exec := photosLibrary(t, root)
 	scan(t, root)
 
-	item, err := itemsProxy.GetItemByGuid(appleCloud)
+	item, err := testDB.GetItemByGuid(appleCloud)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestAppleMetadataFromDB(t *testing.T) {
 	if got := scan(t, root); len(got) != 1 {
 		t.Fatalf("processed %v, want the one asset whose DB metadata changed", got)
 	}
-	item, _ = itemsProxy.GetItemByGuid(appleCloud)
+	item, _ = testDB.GetItemByGuid(appleCloud)
 	if got := item.Date.In(time.FixedZone("", item.DateOffset*60)).Format(time.RFC3339); got != "2025-01-18T17:16:09+02:00" {
 		t.Errorf("corrected date %s", got)
 	}
@@ -138,17 +138,17 @@ func TestRefreshMarksForNextWalk(t *testing.T) {
 	if got := scan(t, root); len(got) != 0 {
 		t.Fatalf("nothing changed, processed %v", got)
 	}
-	before, _ := itemsProxy.GetItemByGuid(appleEdited)
+	before, _ := testDB.GetItemByGuid(appleEdited)
 	if _, err := testDB.MarkRework([]string{appleEdited, "no-such-asset"}); err != nil { // as the provider does
 		t.Fatal(err)
 	}
-	if marked, _ := itemsProxy.GetItemByGuid(appleEdited); !marked.UpdatedAt.Equal(before.UpdatedAt) {
+	if marked, _ := testDB.GetItemByGuid(appleEdited); !marked.UpdatedAt.Equal(before.UpdatedAt) {
 		t.Errorf("the mark moved updated_at: %v -> %v (the client's delta would bring it)", before.UpdatedAt, marked.UpdatedAt)
 	}
 	if got := scan(t, root); len(got) != 1 {
 		t.Fatalf("the next walk processed %v, want the asset", got)
 	}
-	if item, err := itemsProxy.GetItemByGuid(appleEdited); err != nil || item.State != dto.Visible || item.Rework {
+	if item, err := testDB.GetItemByGuid(appleEdited); err != nil || item.State != dto.Visible || item.Rework {
 		t.Errorf("after refresh: %+v", item)
 	}
 }

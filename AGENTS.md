@@ -119,6 +119,11 @@ short "not obvious" list where there is something non-obvious.
 - **A registry (one per process) is package functions** (`perceptor.Load`,
   `library.Enable`); instances where they hold logic (steps, providers,
   groupers).
+- **Tests**: a package's unit tests stay next to it (they may reach unexported
+  code). Integration tests — a module through its public API, the server's own
+  start, real files and tools — live in `gontroller/test/`, by the path of what
+  they test (`test/importer`, `test/perceptor`). No test hooks in the code: a test
+  that needs one is either a unit test or uses the public API.
 
 ---
 

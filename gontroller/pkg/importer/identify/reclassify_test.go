@@ -3,6 +3,7 @@ package identify
 import (
 	"os"
 	"path/filepath"
+	"perceptrail/gontroller/pkg/config"
 	"testing"
 
 	"perceptrail/gontroller/pkg/model"
@@ -20,10 +21,18 @@ var testDB interface {
 
 func TestMain(m *testing.M) {
 	dir, _ := os.MkdirTemp("", "identify-test")
-	if err := model.Configure(model.DBConfig{Driver: model.DriverSQLite, Name: filepath.Join(dir, "t.db")}); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "config.yml"), nil, 0o644); err != nil {
 		panic(err)
 	}
-	testDB = model.NewProxy(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	cfg, err := config.Read(filepath.Join(dir, "config.yml")) // the database in dir
+	if err != nil {
+		panic(err)
+	}
+	db, err := model.Open(cfg, l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	if err != nil {
+		panic(err)
+	}
+	testDB = db
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)

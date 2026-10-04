@@ -50,8 +50,8 @@ func Migrate(db Store, logger *l.Logger) {
 // (a pool of processes, closed when its steps stop); what is read besides
 // identify's own tags is what the loaded perceptors declare (perceptor.ExifTags). Its
 // errors go to the chain it runs in.
-func New(db Store, cacheDir string, logger *l.Logger, in <-chan dto.Asset, out chan<- *Item) chain.Processor {
-	tool := newPool(workers, logger)
+func New(db Store, cacheDir, exiftool string, logger *l.Logger, in <-chan dto.Asset, out chan<- *Item) chain.Processor {
+	tool := newPool(workers, exiftool, logger)
 
 	// read → validate: + metadata, kinds and the main file, the package, the
 	// fingerprint

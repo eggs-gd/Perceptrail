@@ -1,6 +1,9 @@
 package model
 
 import (
+	"fmt"
+
+	"perceptrail/gontroller/pkg/config"
 	"perceptrail/gontroller/pkg/model/dto"
 
 	l "github.com/eggs-gd/perceplib/logger"
@@ -8,72 +11,47 @@ import (
 	"gorm.io/gorm"
 )
 
-//var config gorm.Config = gorm.Config{}
-
-var db *gorm.DB
-
 // ErrNotFound: a lookup found no row (GetFileByPath, GetItemByGuid, …)
 var ErrNotFound = gorm.ErrRecordNotFound
 
-type proxy struct {
+// Config: what the model reads of the config — where its data is
+type Config interface {
+	Database() config.Database
+}
+
+// Proxy: the model — the library's data and its rules (ItemsApi, FilesApi, MetaApi
+// and the import's rules); one per run, opened in main and passed to who uses it
+type Proxy struct {
 	logger *l.Logger
 	db     *gorm.DB
 }
 
-// Close: the database's connection closed (the end of the run: its journal merged
-// into the file)
-func Close() error {
-	if db == nil {
-		return nil
+// Open connects to the database of the config and migrates its schema
+func Open(cfg Config, logger *l.Logger) (*Proxy, error) {
+	d, dialector, err := dialectorOf(cfg.Database())
+	if err != nil {
+		return nil, err
 	}
-	sqlDB, err := db.DB()
+	logger.Info("Database opening", l.String("driver", cfg.Database().Driver), l.String("name", cfg.Database().Name))
+	db, err := gorm.Open(dialector, &gorm.Config{Logger: newLogger(logger)})
+	if err != nil {
+		return nil, fmt.Errorf("connect: %w", err)
+	}
+	if err := d.tune(db); err != nil {
+		return nil, fmt.Errorf("configure: %w", err)
+	}
+	if err := db.AutoMigrate(&dto.ItemDto{}, &dto.FileDto{}, &dto.MetaDto{}); err != nil {
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+	return &Proxy{logger, db}, nil
+}
+
+// Close: the connection closed (the end of the run: its journal merged into the
+// file)
+func (p *Proxy) Close() error {
+	sqlDB, err := p.db.DB()
 	if err != nil {
 		return err
 	}
 	return sqlDB.Close()
-}
-
-func NewProxy(logger *l.Logger) *proxy {
-	if db == nil {
-		db = initDB(logger)
-	}
-
-	return &proxy{logger, db}
-}
-
-func initDB(logger *l.Logger) *gorm.DB {
-	if dbConfig == nil {
-		panic("model: Configure must be called before NewProxy")
-	}
-	cfg := *dbConfig
-	d := drivers[cfg.Driver]
-	logger.Info("Database Initiating...", l.String("driver", cfg.Driver), l.String("name", cfg.Name))
-
-	dialector, err := d.dialector(cfg)
-	if err != nil {
-		logger.Fatal("Can't open database", l.Error(err))
-	}
-	db, err := gorm.Open(dialector, &gorm.Config{
-		Logger: newLogger(logger),
-	})
-	if err != nil {
-		logger.Fatal("Can't connect to database", l.Error(err))
-	}
-	if err := d.tune(db); err != nil {
-		logger.Fatal("Can't configure database", l.Error(err))
-	}
-
-	err = db.AutoMigrate(
-		&dto.ItemDto{},
-		&dto.FileDto{},
-		&dto.MetaDto{},
-		// &Tag{},
-		// &Album{},
-	)
-	if err != nil {
-		logger.Fatal("Can't do migration", l.Error(err))
-	}
-
-	logger.Info("Database migration done!")
-	return db
 }

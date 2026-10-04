@@ -1,9 +1,7 @@
-// Package settings: the config section of perceptors (`perceptors:` in config.yml),
-// per perceptor by its name. Its own package: the plugin manager reads it, and app
-// (which the manager imports) holds the config.
-package settings
+package config
 
-// Perceptors: by perceptor name; a perceptor not listed runs and is shown
+// Perceptors: the `perceptors` section, by perceptor name; a perceptor not listed
+// runs and is shown
 //
 //	perceptors:
 //	  exif_size:
@@ -28,4 +26,18 @@ func (s Perceptors) Enabled(name string) bool {
 func (s Perceptors) Client(name string) bool {
 	p, ok := s[name]
 	return s.Enabled(name) && (!ok || p.Client == nil || *p.Client)
+}
+
+// Providers: the `providers` section, by name; a provider not listed is enabled
+//
+//	providers:
+//	  apple:
+//	    enabled: false   # not in the chain: a Photos library is a plain folder then
+type Providers map[string]struct {
+	Enabled *bool `yaml:"enabled"`
+}
+
+func (p Providers) Enabled(name string) bool {
+	c, ok := p[name]
+	return !ok || c.Enabled == nil || *c.Enabled
 }

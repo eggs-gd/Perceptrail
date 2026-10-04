@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"slices"
 	"time"
@@ -15,8 +14,6 @@ import (
 
 	"github.com/labstack/echo/v4"
 )
-
-var itemsProxy model.ItemsApi
 
 type clientItem struct {
 	Id       uint      `json:"id"`
@@ -49,8 +46,6 @@ type endLine struct {
 	Total  int64  `json:"total"`
 }
 
-var syncEpoch string
-
 // contractVersion: bumped when what an item carries changes (a new field of the
 // asset): it is part of the epoch, so every client syncs from nothing once — a
 // delta brings only changed items, the kept ones would never get the field.
@@ -59,29 +54,25 @@ var syncEpoch string
 // URLs carry the version (?v=); 6: asset.full (the full size of what is seen).
 const contractVersion = "6"
 
-func RegisterItemsRoutes(segment string, e *echo.Echo, logger *l.Logger) {
-	if itemsProxy == nil {
-		itemsProxy = model.NewProxy(logger)
-	}
-	meta := model.MetaApi(model.NewProxy(logger))
-	syncEpoch, _ = meta.GetMeta(epochKey)
-	if syncEpoch == "" {
+func (r *routes) registerItems(segment string, e *echo.Echo) {
+	r.epoch, _ = r.db.GetMeta(epochKey)
+	if r.epoch == "" {
 		b := make([]byte, 8)
 		_, _ = rand.Read(b)
-		syncEpoch = hex.EncodeToString(b)
-		if err := meta.SetMeta(epochKey, syncEpoch); err != nil {
-			logger.Error("Sync epoch not kept", l.Error(err))
+		r.epoch = hex.EncodeToString(b)
+		if err := r.db.SetMeta(epochKey, r.epoch); err != nil {
+			r.logger.Error("Sync epoch not kept", l.Error(err))
 		}
 	}
 
 	userGroup := e.Group(segment)
-	userGroup.GET("/", getItems) // all items
-	userGroup.GET("", getItems)  // all items
+	userGroup.GET("/", r.getItems) // all items
+	userGroup.GET("", r.getItems)  // all items
 }
 
-// getItems: every shown item, newest first; ?since=<cursor>: only what changed since
+// r.getItems: every shown item, newest first; ?since=<cursor>: only what changed since
 // — changed shown items as usual, and {guid, removed} for the deleted or hidden ones
-func getItems(c echo.Context) error {
+func (r *routes) getItems(c echo.Context) error {
 	var since *time.Time
 	if s := c.QueryParam("since"); s != "" {
 		t, err := time.Parse(time.RFC3339Nano, s)
@@ -90,15 +81,15 @@ func getItems(c echo.Context) error {
 		}
 		since = &t
 	}
-	c.Response().Header().Set(headerEpoch, syncEpoch+"."+contractVersion)
+	c.Response().Header().Set(headerEpoch, r.epoch+"."+contractVersion)
 	// The count and the cursor at the same moment, just before the stream picks its
 	// items: what the client holds after it matches the count
 	cursor := time.Now().UTC().Format(time.RFC3339Nano)
-	total, err := itemsProxy.CountItemsInStates(shownStates...)
+	total, err := r.db.CountItemsInStates(shownStates...)
 	if err != nil {
 		return err
 	}
-	return streamClientItems(c.Response().Writer, since, endLine{Cursor: cursor, Total: total})
+	return r.streamClientItems(c.Response().Writer, since, endLine{Cursor: cursor, Total: total})
 }
 
 // removedItem: a tombstone in a delta
@@ -131,7 +122,7 @@ func toClientItem(dbItem *dto.ItemDto, files []*dto.FileDto) clientItem {
 	return item
 }
 
-func streamClientItems(w http.ResponseWriter, since *time.Time, end endLine) error {
+func (r *routes) streamClientItems(w http.ResponseWriter, since *time.Time, end endLine) error {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		return fmt.Errorf("streaming not supported")
@@ -145,7 +136,7 @@ func streamClientItems(w http.ResponseWriter, since *time.Time, end endLine) err
 	encoder := json.NewEncoder(w)
 	var err error
 	if since == nil {
-		err = itemsProxy.StreamAllItems(func(dbItem *dto.ItemDto, files []*dto.FileDto) error {
+		err = r.db.StreamAllItems(func(dbItem *dto.ItemDto, files []*dto.FileDto) error {
 			if !shown(dbItem) {
 				return nil
 			}
@@ -156,7 +147,7 @@ func streamClientItems(w http.ResponseWriter, since *time.Time, end endLine) err
 			return nil
 		})
 	} else {
-		err = itemsProxy.StreamItemsSince(*since, func(dbItem *dto.ItemDto, files []*dto.FileDto) error {
+		err = r.db.StreamItemsSince(*since, func(dbItem *dto.ItemDto, files []*dto.FileDto) error {
 			var out any = toClientItem(dbItem, files)
 			if dbItem.DeletedAt.Valid || !shown(dbItem) {
 				out = removedItem{Guid: dbItem.Guid, Removed: true}

@@ -1,4 +1,4 @@
-package importer
+package importer_test
 
 import (
 	"os"
@@ -21,7 +21,7 @@ func TestSourceBecomesMain(t *testing.T) {
 	scan(t, root)
 	assertNoItem(t, oldGuid)
 	item := itemAt(t, raw)
-	if f, _ := filesProxy.GetFileByPath(jpeg); f.LinkedTo != item.Guid {
+	if f, _ := testDB.GetFileByPath(jpeg); f.LinkedTo != item.Guid {
 		t.Errorf("the JPEG is not linked to the RAW: %s vs %s", f.LinkedTo, item.Guid)
 	}
 }
@@ -105,10 +105,10 @@ func TestNotMediaIgnored(t *testing.T) {
 	notes := filepath.Join(root, "notes.txt")
 	write(t, notes, "hello")
 	scan(t, root)
-	if f, err := filesProxy.GetFileByPath(notes); err != nil || !f.IsIgnored() {
+	if f, err := testDB.GetFileByPath(notes); err != nil || !f.IsIgnored() {
 		t.Fatalf("not ignored: %+v %v", f, err)
 	}
-	row, _ := filesProxy.GetFileByPath(notes) // as the walk gives it: unchanged
+	row, _ := testDB.GetFileByPath(notes) // as the walk gives it: unchanged
 	if needs, _, err := testDB.NeedsWork([]*dto.FileDto{row}, "", ""); err != nil || needs {
 		t.Errorf("an unchanged ignored group needs work: %v %v", needs, err)
 	}
