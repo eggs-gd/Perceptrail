@@ -13,7 +13,8 @@ func TestMimeRanking(t *testing.T) {
 		return &dto.FileDto{ItemEntry: dto.ItemEntry{Path: "/lib/" + name, Name: name, Size: size}}
 	}
 	rank := func(files ...*dto.FileDto) *draft {
-		g, _ := Classifier{}.Decorate(&draft{Files: files, Exif: make([]api.RawExif, len(files))})
+		g := &draft{Asset: dto.Asset{Files: files}, Exif: make([]api.RawExif, len(files))}
+		classify(g)
 		return g
 	}
 	cases := []struct {
@@ -48,20 +49,22 @@ func TestGenericRoles(t *testing.T) {
 	file := func(name string, size int64) *dto.FileDto {
 		return &dto.FileDto{ItemEntry: dto.ItemEntry{Path: "/lib/" + name, Name: name, Size: size}}
 	}
-	g, _ := Classifier{}.Decorate(&draft{
-		Files: []*dto.FileDto{file("D.JPG", 5000), file("D.xmp", 10), file("D.NEF", 30000), file("D.MOV", 900)},
+	g := &draft{
+		Asset: dto.Asset{Files: []*dto.FileDto{file("D.JPG", 5000), file("D.xmp", 10), file("D.NEF", 30000), file("D.MOV", 900)}},
 		Exif:  make([]api.RawExif, 4),
-	})
+	}
+	classify(g)
 	want := map[string]string{"D.NEF": dto.RoleOriginal, "D.JPG": dto.RoleStill, "D.xmp": dto.RoleMeta}
 	for _, f := range g.Files {
 		if w, ok := want[f.Name]; ok && f.Role != w {
 			t.Errorf("%s: role %q, want %q", f.Name, f.Role, w)
 		}
 	}
-	lp, _ := Classifier{}.Decorate(&draft{
-		Files: []*dto.FileDto{file("L.HEIC", 2000), file("L.MOV", 3000)},
+	lp := &draft{
+		Asset: dto.Asset{Files: []*dto.FileDto{file("L.HEIC", 2000), file("L.MOV", 3000)}},
 		Exif:  make([]api.RawExif, 2),
-	})
+	}
+	classify(lp)
 	if lp.Files[0].Name != "L.MOV" || lp.Files[0].Role != dto.RoleOriginal || lp.Files[1].Role != dto.RoleStill {
 		t.Errorf("Live Photo: %s %s / %s %s", lp.Files[0].Name, lp.Files[0].Role, lp.Files[1].Name, lp.Files[1].Role)
 	}
@@ -70,7 +73,7 @@ func TestGenericRoles(t *testing.T) {
 // A broken original (not an image) with good derivatives: still an item (a keyed
 // asset); a plain folder's group is judged by its main file
 func TestIsMedia(t *testing.T) {
-	if !(&draft{Key: "uuid", Kinds: []mediaKind{kindOther, kindImage}}).isMedia() {
+	if !(&draft{Asset: dto.Asset{Key: "uuid"}, Kinds: []mediaKind{kindOther, kindImage}}).isMedia() {
 		t.Error("a keyed asset with a viewable derivative is media")
 	}
 	if (&draft{Kinds: []mediaKind{kindOther, kindImage}}).isMedia() {

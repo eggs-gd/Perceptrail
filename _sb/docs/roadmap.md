@@ -428,9 +428,9 @@ transcoders, plugins belong to the stage that uses them. One step does one thing
       | commit | the item published | the state (Visible / Waiting) |
 
       The passes (`Chain.Run`, the pause), Refresh (a rework mark): the service's.
-      identify inside: read (one exiftool call per group, the declared tags) →
-      classify → merge (the metadata package: source > .xmp > main > derivatives) →
-      fingerprint (the file's bytes) → validate → embedded → sizes → pick → yield.
+      identify inside: read (one exiftool call per group, the declared tags;
+      classify; merge — the metadata package: source > .xmp > main > derivatives;
+      fingerprint — the file's bytes) → validate → show (sizes, pick).
       Every type belongs to its producer: the provider contract in `providers`,
       `discover.Group`, `identify.Item`, `transcode.Item` — `importer/flow` is gone.
       The perceptors declare their exif tags (`api.ExifTagger`); a step gets only
@@ -448,6 +448,8 @@ transcoders, plugins belong to the stage that uses them. One step does one thing
             typed log categories;
       - [x] the chain on plain channels, a `WaitGroup` per output; a pass is a new
             chain (the service builds it); start-time work in the service's `Start`;
+      - [x] identify in three steps: read (exiftool, classify, merge, fingerprint;
+            parallel) → validate → show (sizes, pick with the embedded preview);
       - [ ] Apple: files Photos offloads (Optimize Mac Storage) must not hide or
             delete the item — the grouper gets them as gone now and may keep the
             asset (a separate task);

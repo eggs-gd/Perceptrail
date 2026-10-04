@@ -21,25 +21,9 @@ const hashVersionKey = "hash_version"
 // fingerprintSample: the bytes read from each end of the main file
 const fingerprintSample = 64 << 10
 
-// Fingerprint: the fingerprint step's logic — the main file's identity across
-// paths (moved, duplicate, changed), from its bytes: the size and the first and
-// last 64 KB. No exiftool: it does not depend on which tags are read.
-type Fingerprint struct{}
-
-func (Fingerprint) Decorate(d *draft) (*draft, error) {
-	if !d.isMedia() {
-		return d, nil // validate drops it: nothing to identify
-	}
-	h, err := fingerprint(d.Files[0].Path)
-	if err != nil {
-		return nil, err
-	}
-	d.Hash = h
-	return d, nil
-}
-
-func (Fingerprint) Stop() {}
-
+// fingerprint: the main file's identity across paths (moved, duplicate, changed),
+// from its bytes: the size and the first and last 64 KB. No exiftool: it does not
+// depend on which tags are read.
 func fingerprint(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {

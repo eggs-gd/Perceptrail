@@ -12,27 +12,33 @@ import (
 )
 
 // ownTags: what identify itself reads of every file — the kind (classify), a broken
-// file (validate), the sizes and the codec (sizes, pick), the embedded previews
-// (only whether they are there: their bytes are extracted by embedded)
+// file (validate), the sizes and the codec, the embedded previews (only whether
+// they are there: show extracts their bytes when it needs one)
 var ownTags = []string{
 	"MIMEType", "Error",
 	"ImageWidth", "ImageHeight", "ImageSize", "ExifImageWidth", "CompressorID",
 	"JpgFromRaw", "PreviewImage", "ThumbnailImage",
 }
 
-// Reader: the read step's logic — one exiftool call for the whole group, only the
-// declared tags
-type Reader struct {
-	logger *l.Logger
-	tool   Exiftool
-	tags   []string // identify's own and the perceptors'
+// reader: the read step's logic — everything known of the group without the DB, so
+// groups go in parallel: its metadata (one exiftool call, only the declared tags),
+// the kinds and the main file (classify), the metadata package (merge), the main
+// file's fingerprint
+type reader struct {
+	logger   *l.Logger
+	tool     Exiftool
+	tags     []string        // identify's own and the perceptors'
+	declared map[string]bool // the perceptors': what makes the package
 }
 
-// NewReader: tags are what the perceptors read; identify's own are added
-func NewReader(tool Exiftool, tags []string, logger *l.Logger) *Reader {
-	r := &Reader{logger: logger, tool: tool}
+// newReader: declared are the tags the perceptors read; identify's own are added
+func newReader(tool Exiftool, declared []string, logger *l.Logger) *reader {
+	r := &reader{logger: logger, tool: tool, declared: map[string]bool{}}
+	for _, t := range declared {
+		r.declared[t] = true
+	}
 	seen := map[string]bool{}
-	for _, t := range slices.Concat(ownTags, tags) {
+	for _, t := range slices.Concat(ownTags, declared) {
 		if !seen[t] {
 			seen[t] = true
 			r.tags = append(r.tags, t)
@@ -41,12 +47,27 @@ func NewReader(tool Exiftool, tags []string, logger *l.Logger) *Reader {
 	return r
 }
 
-// Decorate starts the item of the group: its files and their metadata, every file
-// of it at once (a keyed group: only the main file — the source knows the rest).
-// A nil Exif: exiftool could not read the file. The item itself comes from validate.
-func (e *Reader) Decorate(g dto.Asset) (*draft, error) {
+func (r *reader) Decorate(g dto.Asset) (*draft, error) {
+	d, err := r.read(g)
+	if err != nil {
+		return nil, err
+	}
+	classify(d)
+	merge(d, r.declared)
+	if d.isMedia() { // else validate ignores it: nothing to identify
+		if d.Hash, err = fingerprint(d.Files[0].Path); err != nil {
+			return nil, err
+		}
+	}
+	return d, nil
+}
+
+// read: the group's files and their metadata, every file of it at once (a keyed
+// group: only the main file — the source knows the rest). A nil Exif: exiftool
+// could not read the file.
+func (e *reader) read(g dto.Asset) (*draft, error) {
 	files := g.Files
-	out := &draft{Files: files, Exif: make([]api.RawExif, len(files)), Key: g.Key, Show: g.Show, Meta: g.Meta, MetaHash: g.MetaHash, Kind: g.Kind}
+	out := &draft{Asset: g, Exif: make([]api.RawExif, len(files))}
 	read := files
 	if g.Key != "" {
 		read = files[:1]
@@ -77,9 +98,7 @@ func (e *Reader) Decorate(g dto.Asset) (*draft, error) {
 	return out, nil
 }
 
-func (e *Reader) Stop() { closeTool(e.tool) }
-
-// closeTool: the stage's own exiftool ends when a step using it stops (a test's fake
+// closeTool: the stage's own exiftool ends when its last step stops (a test's fake
 // has nothing to close)
 func closeTool(tool Exiftool) {
 	if c, ok := tool.(interface{ Close() }); ok {

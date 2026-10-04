@@ -19,27 +19,19 @@ const (
 	kindOther   mediaKind = "other"
 )
 
-// draft: the item while identify works on it — private to the stage; only Item
+// draft: the asset while identify works on it — private to the stage; only Item
 // leaves it. Files, Exif and Kinds are aligned (a nil Exif: exiftool returned
-// nothing). read fills Files and Exif, classify Kinds (the main file first), merge
-// Merged, fingerprint Hash, validate Item, embedded Embedded.
+// nothing). read fills Exif, Kinds (the main file first), Merged and Hash; validate
+// Item; show the item's sizes and preview.
 type draft struct {
-	Item     *dto.ItemDto
-	Exif     []api.RawExif
-	Files    []*dto.FileDto
-	Kinds    []mediaKind
-	Key      string         // dto.Asset.Key
-	Show     []*dto.FileDto // dto.Asset.Show
-	Meta     api.RawExif    // dto.Asset.Meta: the source's metadata
-	MetaHash string
-	Kind     string // dto.Asset.Kind
+	dto.Asset
+	Item  *dto.ItemDto
+	Exif  []api.RawExif
+	Kinds []mediaKind
 	// Merged: the asset's metadata package (merge) — what the perceptors read
 	Merged api.RawExif
-	// Hash: the main file's fingerprint (fingerprint), its identity across paths
+	// Hash: the main file's fingerprint, its identity across paths
 	Hash string
-	// Embedded: a preview extracted from the main file, when the group has nothing
-	// the browser shows — the cheap preview's last resort
-	Embedded string
 }
 
 // isMedia: there is something to show — the main file; in a keyed group any file
@@ -110,8 +102,6 @@ func (it *Item) SetDateInfo(date time.Time, source, zone string) {
 	it.Item.DateZone = zone
 }
 
-// Yield: the yield step's logic — the draft's result, the rest stays here
-type Yield struct{}
-
-func (Yield) Decorate(d *draft) (*Item, error) { return &Item{Item: d.Item, meta: d.Merged}, nil }
-func (Yield) Stop()                            {}
+// yield: what leaves the stage — the item and its metadata package; the rest of
+// the draft stays here
+func yield(d *draft) *Item { return &Item{Item: d.Item, meta: d.Merged} }

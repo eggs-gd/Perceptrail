@@ -52,10 +52,10 @@ func TestReadGroup(t *testing.T) {
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
 	pool := newPool(1, logger)
 	defer pool.Close()
-	r := NewReader(pool, []string{"DateTimeOriginal", "GPSLatitude", "GPSLongitude", "Orientation"}, logger)
+	r := newReader(pool, []string{"DateTimeOriginal", "GPSLatitude", "GPSLongitude", "Orientation"}, logger)
 
 	file := func(p string) *dto.FileDto { return &dto.FileDto{ItemEntry: dto.ItemEntry{Path: p}} }
-	d, err := r.Decorate(dto.Asset{Files: []*dto.FileDto{file(photo), file(xmp), file(gone)}})
+	d, err := r.read(dto.Asset{Files: []*dto.FileDto{file(photo), file(xmp), file(gone)}})
 	if err != nil {
 		t.Fatal(err)
 	}

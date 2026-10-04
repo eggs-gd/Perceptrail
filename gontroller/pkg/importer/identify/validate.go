@@ -19,20 +19,16 @@ type ValidatorStore interface {
 	Ignore(files []*dto.FileDto) error
 }
 
-// validator: the group's identity in the DB (Walker.puml). Links the files to the
-// main file, then same / changed / moved / duplicate -> the item.
-type Validator struct {
+// validate: the validate step's logic — the group's identity in the DB
+// (Walker.puml): not media or broken, the model ignores it; else the model says
+// which item it is (links, same / changed / moved / duplicate). One at a time: two
+// groups never decide one identity at once.
+type validate struct {
 	db     ValidatorStore
 	logger *l.Logger
 }
 
-func NewValidator(db ValidatorStore, logger *l.Logger) *Validator {
-	return &Validator{db: db, logger: logger}
-}
-
-// Decorate sets the item of the group (ranked by classify: the main file first);
-// the model decides which item it is
-func (v *Validator) Decorate(g *draft) (*draft, error) {
+func (v *validate) Decorate(g *draft) (*draft, error) {
 	main := g.Files[0]
 	if !g.isMedia() { // nothing to show: remembered, so the gate skips it from now on
 		if err := v.db.Ignore(g.Files); err != nil {
@@ -72,8 +68,6 @@ func (v *Validator) Decorate(g *draft) (*draft, error) {
 	g.Item = item
 	return g, nil
 }
-
-func (v *Validator) Stop() {}
 
 // broken: why the main file of a group cannot be a photo, "" if it can. exiftool
 // read it and says so (Error: "File format error", "File is empty"), or it is an

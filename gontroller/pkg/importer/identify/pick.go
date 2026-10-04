@@ -1,31 +1,45 @@
 package identify
 
 import (
+	"path/filepath"
 	"strconv"
 
 	"perceptrail/gontroller/pkg/model/dto"
+
+	l "github.com/eggs-gd/perceplib/logger"
 )
 
-// Pick: the pick step's logic — what the asset shows right now, without a transcode.
-// Any size counts — the expensive stage brings the quality later. In order:
+// Embedded previews, the biggest kind first
+var embeddedPreviews = []string{"JpgFromRaw", "PreviewImage", "ThumbnailImage"}
+
+// preview: what the asset shows right now, without a transcode. Any size counts —
+// the expensive stage brings the quality later. In order:
 //  1. what the source said to show first (an Apple asset: the edit, the original,
 //     then its derivatives);
 //  2. the main file itself, if the browser shows it (JPEG, PNG, …; H.264 video);
 //  3. the biggest browser-viewable derivative of the group (the JPEG of a RAW);
-//  4. the preview the embedded step extracted from the main file.
+//  4. the preview embedded in the main file (JpgFromRaw, PreviewImage,
+//     ThumbnailImage — the biggest first), extracted by exiftool into
+//     <dir>/<guid>/embedded.jpg.
 //
 // Nothing found: the item waits for the expensive stage (Waiting).
-type Pick struct{}
-
-func (Pick) Decorate(it *draft) (*draft, error) {
-	it.Item.PreviewPath, it.Item.PreviewMime = viewableFile(it)
-	if it.Item.PreviewPath == "" && it.Embedded != "" {
-		it.Item.PreviewPath, it.Item.PreviewMime = it.Embedded, "image/jpeg"
+func preview(it *draft, tool Exiftool, dir string, logger *l.Logger) (path, mime string) {
+	if path, mime = viewableFile(it); path != "" {
+		return path, mime
 	}
-	return it, nil
+	for _, tag := range embeddedPreviews {
+		if it.Exif[0] == nil || len(it.Exif[0][tag]) == 0 {
+			continue
+		}
+		dst := filepath.Join(dir, it.Item.Guid, "embedded.jpg")
+		err := tool.Extract(tag, it.Files[0].Path, dst)
+		if err == nil {
+			return dst, "image/jpeg"
+		}
+		logger.Warn("Embedded preview not extracted", l.String("file", it.Files[0].Path), l.String("tag", tag), l.Error(err))
+	}
+	return "", ""
 }
-
-func (Pick) Stop() {}
 
 // Browser-viewable images; HEIC/HEIF (Safari only) and RAW are not
 var viewableImage = map[string]bool{

@@ -537,6 +537,24 @@ Design: roadmap "Expensive stage".
 
 ## Backend: gontroller, plugins, exiftool
 
+### identify in three steps, at the real boundaries (2026-10-04, decided)
+
+identify had nine steps — nine goroutines and eight channels for one draft passed
+from function to function; only the read gained from running apart. Seven of them
+had an empty `Stop`, the draft repeated the asset's fields, the embedded step ran
+pick's choice to know whether to extract (picked twice), `isMedia` was decided in
+fingerprint and again in validate, and two steps closed the shared exiftool pool.
+Now three steps where the work really differs:
+
+- **read** — in parallel, no DB: exiftool, classify, merge, fingerprint (plain
+  functions, each tested alone).
+- **validate** — one at a time, the DB: two groups never decide one identity at once.
+- **show** — sizes (stored), the preview: pick, with the main file's embedded preview
+  as its last resort (extracted only then); the Item out. It is the last step to use
+  exiftool and closes the pool.
+
+The draft embeds `dto.Asset`. 1037 lines (was 1103).
+
 ### chain: channels and a WaitGroup per output; a pass is a new chain (2026-10-04, decided)
 
 The `Pipe` (a channel carrying values and a flush message, a writers counter as the

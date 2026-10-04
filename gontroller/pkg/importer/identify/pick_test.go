@@ -27,16 +27,14 @@ type pf struct {
 func pick(t *testing.T, files ...pf) (string, string, []string) {
 	t.Helper()
 	tool := &fakeTool{}
-	e := NewEmbedded(tool, "/cache", l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
 	it := &draft{Item: &dto.ItemDto{Guid: "g"}}
 	for _, f := range files {
 		it.Files = append(it.Files, &dto.FileDto{ItemEntry: dto.ItemEntry{Path: "/lib/" + f.name, Name: f.name, MimeType: f.mime}})
 		it.Kinds = append(it.Kinds, f.kind)
 		it.Exif = append(it.Exif, f.exif)
 	}
-	it, _ = e.Decorate(it)
-	it, _ = Pick{}.Decorate(it)
-	return it.Item.PreviewPath, it.Item.PreviewMime, tool.extracted
+	path, mime := preview(it, tool, "/cache/previews", l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	return path, mime, tool.extracted
 }
 
 // fakeTool: an Exiftool that writes nothing — JpgFromRaw fails (the next tag is

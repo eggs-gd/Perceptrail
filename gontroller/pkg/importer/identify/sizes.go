@@ -18,24 +18,6 @@ type SizesStore interface {
 	UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error)
 }
 
-// Sizes: the sizes step's logic — the pixel size and codec of every file the client
-// may show, written to the files table (the asset contract sends them)
-type Sizes struct {
-	db SizesStore
-}
-
-func NewSizes(db SizesStore) *Sizes { return &Sizes{db: db} }
-
-func (s *Sizes) Decorate(it *draft) (*draft, error) {
-	setSizes(it)
-	if _, err := s.db.UpdateFiles(it.Files); err != nil {
-		return nil, err
-	}
-	return it, nil
-}
-
-func (s *Sizes) Stop() {}
-
 // setSizes: the original's size comes from its metadata (the source's first: the
 // Photos DB size is oriented); images from their header — no decoding
 func setSizes(it *draft) {

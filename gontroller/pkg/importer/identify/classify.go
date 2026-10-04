@@ -47,11 +47,8 @@ var extTable = map[string]extInfo{
 	".xmp": {kindSidecar, "application/rdf+xml"}, ".aae": {kindSidecar, "application/xml"},
 }
 
-// Classifier: the classify step's logic
-type Classifier struct{}
-
-// Decorate fills Kinds (and every file's MimeType) and puts the main file first
-func (Classifier) Decorate(g *draft) (*draft, error) {
+// classify fills Kinds (and every file's MimeType) and puts the main file first
+func classify(g *draft) {
 	g.Kinds = make([]mediaKind, len(g.Files))
 	for i, f := range g.Files {
 		var exifMime string
@@ -62,7 +59,7 @@ func (Classifier) Decorate(g *draft) (*draft, error) {
 	}
 
 	if g.Key != "" {
-		return g, nil // the grouper decided the main file
+		return // the grouper decided the main file
 	}
 
 	// Rank: the main file first. Ties: the bigger file, then the name — deterministic
@@ -88,10 +85,7 @@ func (Classifier) Decorate(g *draft) (*draft, error) {
 	}
 	g.Files, g.Exif, g.Kinds = files, exifs, kinds
 	setRoles(g)
-	return g, nil
 }
-
-func (Classifier) Stop() {}
 
 // setRoles: the main file is the original, what else the group has is by kind — a
 // photo is a still (the JPEG of a RAW, the photo of a Live Photo), a video is

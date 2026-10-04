@@ -19,15 +19,9 @@ control "gate" as Gate
 end box
 
 box "identify: the item known (exiftool lives here)" #Lavender
-control "read\n(exiftool, N)" as Exif
-control "classify" as Mime
-control "merge" as Merge
-control "fingerprint" as Fingerprint
-control "validate" as Validator #LightGreen
-control "embedded\n(exiftool)" as Embedded
-control "sizes" as Sizes
-control "pick\n(cheap preview)" as Preview #LightYellow
-control "yield" as Yield
+control "read\n(N in parallel, no DB)" as Exif
+control "validate\n(one at a time)" as Validator #LightGreen
+control "show\n(cheap preview)" as Preview #LightYellow
 end box
 
 box "exif: the EXIF perceptors, their values kept" #Honeydew
@@ -78,25 +72,15 @@ else changed (stat, a role the grouper gave) / needs work (Rework, ...)
     Gate -> Exif: dto.Asset
 end
 
-Exif -> Exif: ONE exiftool -j call for the group,\nonly the declared tags (the perceptors'\nExifTags + identify's own); a map per file
-Exif -> Mime: draft (private to identify)
-Mime -> Mime: kind of every file\n(exif MIMEType, own extension table,\ncontent sniff), rank: main file, roles
-Mime -> Merge: ranked draft
-Merge -> Merge: the metadata package: a tag from\nthe source (Photos DB) > .xmp > main > derivatives;\nonly the perceptors' tags
-Merge -> Fingerprint: + package
-Fingerprint -> Fingerprint: the main file's bytes:\nsize + sha256(first, last 64 KB)
-Fingerprint -> Validator: + fingerprint
+Exif -> Exif: ONE exiftool -j call for the group (only the declared tags);\nkind of every file (exif MIMEType, own extension table, sniff),\nthe main file first, roles; the metadata package (the source >\n.xmp > main > derivatives; only the perceptors' tags);\nthe main file's fingerprint: size + sha256(first, last 64 KB)
+Exif -> Validator: draft (private to identify)
 
-Validator -> DB: by path and fingerprint:\nsame / changed / moved / duplicate
-Validator -> Embedded: item (GUID) + draft
+Validator -> DB: not media / broken: ignored; else by path and\nfingerprint: same / changed / moved / duplicate
+Validator -> Preview: item (GUID) + draft
 
-Embedded -> Embedded: nothing in the group shows:\nthe main file's embedded preview\n(exiftool -b into the cache)
-Embedded -> Sizes: + embedded ("" = none)
-Sizes -> DB: pixels, codec of every file
-Sizes -> Preview: + sizes
-Preview -> Preview: what the browser shows now, no transcode:\nShow / the main file (JPEG, PNG, ...; H.264 video) /\nthe biggest viewable derivative / the embedded one;\nany size counts
-Preview -> Yield: + preview ("" = nothing yet)
-Yield -> Core: identify.Item (the item + its metadata package;\nthe draft stays in identify)
+Preview -> DB: pixels, codec of every file
+Preview -> Preview: what the browser shows now, no transcode:\nShow / the main file (JPEG, PNG, ...; H.264 video) /\nthe biggest viewable derivative / the main file's embedded\npreview (exiftool -b into the cache); any size counts
+Preview -> Core: identify.Item (the item + its metadata package;\nthe draft stays in identify)
 Core -> Plugins: + date, size, length (written into the item)
 Plugins -> Keep: + the external perceptors' values (read-only)
 Keep -> DB: a row in every import perceptor's storage

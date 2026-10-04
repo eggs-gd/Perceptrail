@@ -36,7 +36,7 @@ importer/                  the top: the steps wired, the passes, Refresh
 importer/walk/             the chain's entry: the library's files as rows, then what the walk says is gone (Gone)
 importer/group/            whole assets: the providers' switch and their groupers (a sub-chain)
 importer/gate/             only the groups that need work pass; gone files deleted (the model's Gone)
-importer/identify/         read → classify → merge → fingerprint → validate → embedded → sizes → pick → yield: the item known
+importer/identify/         read (exiftool, classify, merge, fingerprint) → validate → show (sizes, pick): the item known
 importer/exif/             the EXIF perceptors (built in, then .so), their values kept; their tags, rework, pruning
 importer/commit/           the item published
 ```
@@ -72,8 +72,8 @@ detail).
 
 ```
 [walk] → [group: switch → a grouper per provider] → [gate]
-  → [identify: read (one exiftool call per group, N) → classify → merge → fingerprint
-             → validate → embedded → sizes → pick → yield]
+  → [identify: read (N: one exiftool call per group, classify, merge, fingerprint)
+             → validate → show (sizes, pick, an embedded preview)]
   → [exif: exif_date → exif_size → exif_duration → each .so (read-only) → keep]
   → [commit: close (Visible | Waiting)]
 ```
@@ -88,15 +88,9 @@ detail).
 | (Apple Photos grouper) | `pkg/providers/apple` | `*dto.FileDto` -> `dto.Asset` | The first file of a library loads the assets from a copy of `Photos.sqlite` and forms the groups (files that exist, per the naming layout); a group goes out when its last file arrives. Key = asset UUID; the main file = the source; `Show` = the edit, the original, then Apple's derivatives. Trashed / hidden assets: their files are sent as gone (their items go); a gone file passes through; a group that did not complete waits for the next walk. Video renditions Photos downloads on request (`_2_3_o.mp4`, `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`; `_a` instead of `_o` for an edit, preferred) are `motion`, after the stills; `apple.Local` finds the best file for an on-demand want. |
 | **gate** | `gate/gate.go` | `dto.Asset` -> `dto.Asset` | Gone files: the model's `Gone` (a main file's item deleted, a sidecar's item `Dirty`). A group passes if a file changed (new, its stat or the role its grouper gave: stored here) or the model says it needs work (`NeedsWork`: links, state, fingerprint, `MetaHash`, `Rework`). |
 | **identify** | `identify/entry.go` | `dto.Asset` -> `*identify.Item` | The item known: identity, metadata, kinds and roles, what to show now. exiftool lives here; its working item (`draft`: every file, its exif and kind) never leaves it. |
-| read | `identify/read.go` | `dto.Asset` -> draft | One `exiftool -j -n` call for the whole group (a keyed group: the main file only), only the declared tags (see [exif](#exif-what-is-read-and-who-gets-it)), a map per file; N steps in parallel on the same channels, one pool. |
-| classify | `identify/classify.go` | draft -> draft | The kind of every file; the main file (the source) first; roles. |
-| merge | `identify/merge.go` | draft -> draft | The asset's metadata package: a tag from the source's metadata, else the metadata sidecars (.xmp), the main file, the derivatives; only the perceptors' tags. |
-| fingerprint | `identify/fingerprint.go` | draft -> draft | The main file's identity across paths: its size and sha256 of its first and last 64 KB (no exiftool). |
-| validate | `identify/validate.go` | draft -> draft | Not media or broken: the model ignores the group (`Ignore`); else the model says which item it is (`ValidateGroup` / `ValidateAsset`: links, superseded items, same / changed / moved / duplicate); the kind saved with it (`dto.AssetKind`). |
-| embedded | `identify/embedded.go` | draft -> draft | Only when no file of the group shows (see pick): the main file's embedded preview (JpgFromRaw, PreviewImage, ThumbnailImage — the biggest first) extracted by exiftool into `cache/previews/<guid>/`, the RAW's Orientation copied onto it. After validate: needs the main file and the GUID. |
-| sizes | `identify/sizes.go` | draft -> draft | Pixels and codec of every file the client may show (the original's from the metadata, images from their header), written to the files table. |
-| pick | `identify/pick.go` | draft -> draft | What the browser shows now, no transcode: the source's `Show`, the main file (JPEG, PNG, …; H.264 video), the biggest viewable derivative, else the embedded one. Any size counts. |
-| yield | `identify/item.go` | draft -> `*identify.Item` | What leaves the stage: the item and its metadata package. |
+| read | `identify/read.go` | `dto.Asset` -> draft | Everything known without the DB, groups in parallel (N workers, one exiftool pool): one `exiftool -j -n` call for the whole group (a keyed group: the main file only), only the declared tags (see [exif](#exif-what-is-read-and-who-gets-it)); the kind of every file, the main file (the source) first, roles (`classify.go`); the metadata package — a tag from the source's metadata, else the .xmp sidecars, the main file, the derivatives; only the perceptors' tags (`merge.go`); the main file's fingerprint — its size and sha256 of its first and last 64 KB (`fingerprint.go`). |
+| validate | `identify/validate.go` | draft -> draft | One at a time: not media or broken, the model ignores the group (`Ignore`); else the model says which item it is (`ValidateGroup` / `ValidateAsset`: links, superseded items, same / changed / moved / duplicate); the kind saved with it (`dto.AssetKind`). |
+| show | `identify/show.go` | draft -> `*identify.Item` | Pixels and codec of every file the client may show (the original's from the metadata, images from their header), written to the files table (`sizes.go`); what the browser shows now, no transcode: the source's `Show`, the main file (JPEG, PNG, …; H.264 video), the biggest viewable derivative, else the main file's embedded preview (JpgFromRaw, PreviewImage, ThumbnailImage — the biggest first) extracted by exiftool into `cache/previews/<guid>/`, the RAW's Orientation copied onto it (`pick.go`); then the item leaves the stage. It closes the exiftool pool when it stops. |
 | **exif** | `exif/entry.go` | `*identify.Item` -> `*identify.Item` | The EXIF perceptors, a step each: the built-in ones (date + zone, size, length; read-write `plugins.RawItemRW`), then the external `.so` ones (read-only `api.RawItemR`); then keep — a row in every import perceptor's storage (its value, or "processed, nothing found"), before the item is published; at start the items a perceptor has not processed are marked for rework (`MarkUnprocessed`, at the service's start), at the end of every pass the rows of gone items pruned. |
 | **commit** | `commit/commit.go` | `*identify.Item` -> (the chain's end) | The model publishes the item (`Publish`: `Visible` with a preview, else `Waiting`). |
 
@@ -143,8 +137,8 @@ detail).
   file without changing it), the main file, then the derivatives (a fallback: a
   JPEG's size or orientation never overrides its RAW's). Only the perceptors' tags;
   nothing is stored — it travels with the item.
-- **Plugins never run exiftool.** Only identify does: `read`, and `embedded` (the
-  bytes of an embedded preview, only for a group with nothing to show).
+- **Plugins never run exiftool.** Only identify does: `read`, and `show` (the bytes
+  of an embedded preview, only for a group with nothing else to show).
 
 ## The model decides, the steps gather facts
 
@@ -235,7 +229,7 @@ it calls (its own small interface).
   Photo, trashed (sent as gone), Photos' own files, a file vanishing mid-walk (its
   asset complete next walk).
 - `identify/…_test.go` — kinds and the main file, roles, sizes, the cheap preview's
-  pick (embedded → pick), an embedded preview's orientation and the group read
+  pick (an embedded preview last), an embedded preview's orientation and the group read
   (real exiftool), merge's priority, the fingerprint, the kinds' and the
   fingerprint's versions.
 - `pkg/plugins/exif_{date,size,duration}/tags_test.go` — every core perceptor reads
