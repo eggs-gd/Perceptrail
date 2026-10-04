@@ -286,8 +286,10 @@ Layout, the DB's facts and PhotoKit's behaviour: the
 - **Go plugins**: host and `.so` need the same toolchain and identical versions of
   every shared package (`perceplib`, zap, multierr, `x/sync`, testify…) — bump all
   modules together, then `make build-plugins`. `TestLoadExternalPlugins` builds and
-  loads them; it must use `$(GOROOT)/bin/go`, and run with `-count=1` (the test
-  cache ignores files in other modules).
+  loads them; it must use the test binary's own Go (`GOTOOLCHAIN=` its `runtime.Version()`; `runtime.GOROOT` is deprecated), and run with `-count=1` (the test
+  cache ignores files in other modules). Under `-race` the plugin must be built
+  with `-race` too ("plugin was built with a different version of package
+  internal/runtime/sys"): `test/pluginbuild` reads the test binary's own setting.
 - External EXIF plugins once stalled the import: a channel was allocated for each
   but a step added only for the built-in ones — nobody read it. Allocate outputs
   only for real steps.
@@ -323,8 +325,21 @@ Layout, the DB's facts and PhotoKit's behaviour: the
   `dist-<version>` tag builds, tests and publishes it (`dist-*` is not semver: no
   clash with module tags); the Docker image pulls exactly that.
 - v0.5.1: a per-command timeout with restart, `Wait` after `Kill` (no zombies),
-  stdout kept with a stderr error. A stop must close the pool, or every exiftool
-  process outlives the server.
+  stdout kept with a stderr error.
+- **An orphaned ExifTool runs forever** (2026-10-04, ~200 perl processes on the dev
+  box): with `-stay_open` it never exits at the end of its argfile — `ReadStayOpen`
+  polls stdin (`sysread`, then `select 0.01`) forever, so every server process that
+  died without `Close` (SIGKILL from an IDE, a crash, the 10 s shutdown limit, a
+  killed `go test`) left its whole pool. Fixed in the fork: next to every ExifTool a
+  watchdog shell blocks on a pipe only the Go process writes; when the process dies
+  the pipe closes and the watchdog kills ExifTool at once. Both are the Go
+  process's children, reaped by it; the watchdog is stopped as soon as ExifTool is
+  reaped. Rejected on the way (Codex review): ExifTool under the shell (start
+  errors turn asynchronous; the watchdog, ExifTool's child, became a zombie under a
+  PID-1 Go process and could signal a reused pid after polling); `Pdeathsig` (Linux
+  only, and it fires when the spawning *thread* exits — Go's threads come and go).
+- The pool never panics: an exiftool that cannot start fails the pass's commands
+  with its reason; the next pass tries again.
 
 ## Repository
 

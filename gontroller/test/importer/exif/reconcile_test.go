@@ -2,9 +2,7 @@ package exif_test
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"perceptrail/gontroller/internal/config"
@@ -12,6 +10,7 @@ import (
 	"perceptrail/gontroller/internal/model"
 	"perceptrail/gontroller/internal/model/dto"
 	"perceptrail/gontroller/internal/perceptor"
+	"perceptrail/gontroller/test/pluginbuild"
 
 	l "github.com/eggs-gd/perceplib/logger"
 	"github.com/eggs-gd/perceplib/logger/decorators"
@@ -22,19 +21,9 @@ import (
 // perceptors keep nothing, so a real plugin that keeps data (exif_geo) is built and
 // loaded, as the server does.
 func TestReconcile(t *testing.T) {
-	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
-		t.Skip("Go plugins: Linux and macOS only")
-	}
-	if testing.Short() {
-		t.Skip("builds a perceptor")
-	}
+	pluginbuild.Supported(t)
 	dir := t.TempDir()
-	so := filepath.Join(dir, "exif_geo.so")
-	build := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "build", "-buildmode=plugin", "-o", so)
-	build.Dir = "../../../../perceptors/exif_geo"
-	if b, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build: %v\n%s", err, b)
-	}
+	so := pluginbuild.Perceptor(t, "../../../../perceptors", "exif_geo", dir)
 	if err := os.WriteFile(filepath.Join(dir, "config.yml"), []byte("plugins:\n  - "+so+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

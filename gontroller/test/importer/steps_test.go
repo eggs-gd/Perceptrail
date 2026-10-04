@@ -3,9 +3,15 @@ package importer_test
 import (
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
+	"perceptrail/gontroller/internal/importer"
 	"perceptrail/gontroller/internal/model/dto"
+
+	l "github.com/eggs-gd/perceplib/logger"
+	"github.com/eggs-gd/perceplib/logger/decorators"
 )
 
 // A JPEG imported alone is an item; when its RAW appears, the RAW is the source:
@@ -131,5 +137,25 @@ func TestFormerMainGone(t *testing.T) {
 	assertNoItem(t, rawGuid)
 	if item := itemAt(t, jpeg); item.State != dto.Visible {
 		t.Errorf("the JPEG is not an item after one walk: %+v", item)
+	}
+}
+
+// An exiftool that cannot start fails the pass with its reason — the server goes
+// on (the next pass tries again), nothing is published, no process is left
+func TestExiftoolThatCannotStart(t *testing.T) {
+	root := t.TempDir()
+	a := filepath.Join(root, "a.jpg")
+	write(t, a, "never read")
+	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
+	err := importer.New(pass{root: root, cache: t.TempDir(), exiftool: filepath.Join(root, "no-exiftool")}, testDB, logger).Pass(t.Context())
+	if err == nil || !strings.Contains(err.Error(), "can't start") {
+		t.Fatalf("pass error %v, want exiftool's start failure", err)
+	}
+	if _, err := testDB.GetItemByPath(a); err == nil {
+		t.Errorf("an item published without its metadata")
+	}
+	// The next pass, with exiftool there, does the work
+	if got := scan(t, root); !slices.Equal(got, []string{a}) {
+		t.Errorf("next pass published %v", got)
 	}
 }
