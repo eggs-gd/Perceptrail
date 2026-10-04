@@ -7,10 +7,12 @@ we render and store nothing it keeps.
 - **The contract** ([`provider.go`](provider/provider.go)): `Provider` is what a
   library implements; each consumer declares the part it uses — the import's
   grouping `group.Library` (`Claims`, `Grouper`), the routes' `route.Library`
-  (`Levels`, `Rendition`); the registry uses the rest (`Owns`, `Start`, `Skips`).
-- **What is walked**: a library names the directories that hold none of its media
-  (`Skips`: its database, caches); the walk does not enter them (`library.Skips`,
-  any enabled library's say). Rows an older walk wrote there are missing, and go.
+  (`Levels`, `Rendition`); the registry uses the rest (`Owns`, `Start`, `Skipped`).
+- **What is walked**: a library lists the directories under the walked root that
+  hold none of its media (`Skipped(root)`: its database, caches); every pass the
+  import collects every enabled library's (`library.Skipped`) and hands the list to
+  the walk, which does not enter them — as it hands identify the perceptors' tags.
+  Rows an older walk wrote there are missing, and go.
 - **Grouping**: the import's switch asks the enabled libraries in order and a file
   goes to the grouper of the first that claims it; the plain folder
   (`library/folder`) is last and claims the rest. A library not enabled is not

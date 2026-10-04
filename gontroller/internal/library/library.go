@@ -43,14 +43,14 @@ func Enable(cfg Config, db apple.Items, logger *l.Logger) error {
 // Enabled: the libraries in the chain, in order
 func Enabled() []provider.Provider { return enabled }
 
-// Skips: a directory no enabled library wants walked (it holds none of their media)
-func Skips(dir string) bool {
+// Skipped: the directories under root no enabled library wants walked (they hold
+// none of their media), every library's
+func Skipped(root string) []string {
+	var skipped []string
 	for _, lib := range enabled {
-		if lib.Skips(dir) {
-			return true
-		}
+		skipped = append(skipped, lib.Skipped(root)...)
 	}
-	return false
+	return skipped
 }
 
 // Of: the library an item belongs to, nil for a plain folder's

@@ -50,12 +50,18 @@ const page = 256
 type Walker struct {
 	logger *l.Logger
 	root   string
-	skip   func(dir string) bool
+	skip   map[string]bool // the directories not entered
 	db     Store
 }
 
 // New: the chain's entry — out gets every file of a walk, then the gone ones
-func New(db Store, root string, skip func(dir string) bool, logger *l.Logger, out chan<- dto.WalkedFile) chain.Processor {
+// skipped: directories not entered (the libraries' own, without their media); the
+// rows under them are missing
+func New(db Store, root string, skipped []string, logger *l.Logger, out chan<- dto.WalkedFile) chain.Processor {
+	skip := make(map[string]bool, len(skipped))
+	for _, dir := range skipped {
+		skip[filepath.Clean(dir)] = true
+	}
 	return chain.NewEntryPoint(out, &Walker{logger: logger, root: root, skip: skip, db: db})
 }
 
@@ -181,7 +187,7 @@ func (m *Walker) walk(ctx context.Context, emit func(dto.ItemEntry) bool) Result
 			return nil
 		}
 		if entry.IsDir() {
-			if path != m.root && m.skip != nil && m.skip(path) {
+			if m.skip[path] {
 				return fs.SkipDir // a library's directory without its media
 			}
 			return nil

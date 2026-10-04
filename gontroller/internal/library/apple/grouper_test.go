@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -391,29 +392,26 @@ func TestHasLibrary(t *testing.T) {
 }
 
 // Inside a library only the originals and Photos' renders and derivatives are
-// walked
-func TestSkips(t *testing.T) {
-	p := &Provider{}
-	lib := "/u/Pictures/Photos Library.photoslibrary"
-	for dir, skip := range map[string]bool{
-		"/u/Pictures":                          false,
-		"/u/Pictures/trip":                     false,
-		lib:                                    false,
-		lib + "/originals":                     false,
-		lib + "/originals/A":                   false,
-		lib + "/resources":                     false,
-		lib + "/resources/renders/A":           false,
-		lib + "/resources/derivatives/masters": false,
-		lib + "/resources/caches":              true,
-		lib + "/resources/journals":            true,
-		lib + "/database":                      true,
-		lib + "/database/search":               true,
-		lib + "/internal":                      true,
-		lib + "/private":                       true,
-		lib + "/scopes":                        true,
-	} {
-		if got := p.Skips(dir); got != skip {
-			t.Errorf("Skips(%q) = %v, want %v", dir, got, skip)
+// walked: the rest of the bundle is skipped, as it is on disk
+func TestSkipped(t *testing.T) {
+	root := t.TempDir()
+	bundle := filepath.Join(root, "Photos Library.photoslibrary")
+	for _, dir := range []string{"originals/A", "resources/renders/A", "resources/derivatives/masters",
+		"resources/caches/compute", "resources/journals", "database/search", "internal", "private", "scopes"} {
+		if err := os.MkdirAll(filepath.Join(bundle, dir), 0o755); err != nil {
+			t.Fatal(err)
 		}
+	}
+	os.MkdirAll(filepath.Join(root, "trip"), 0o755) // a plain folder next to it: not Photos'
+	got := (&Provider{}).Skipped(root)
+	var rel []string
+	for _, dir := range got {
+		r, _ := filepath.Rel(bundle, dir)
+		rel = append(rel, r)
+	}
+	slices.Sort(rel)
+	want := []string{"database", "internal", "private", "resources/caches", "resources/journals", "scopes"}
+	if !slices.Equal(rel, want) {
+		t.Errorf("skipped %v, want %v", rel, want)
 	}
 }

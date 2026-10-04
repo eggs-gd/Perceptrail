@@ -216,9 +216,13 @@ content is for when a second provider exists).
 - **Photos' own files were 60 % of the files table** (2026-10-04, the owner's
   library: 28 253 of 47 609 rows — `database/search` 18 k, `resources/caches` 9 k),
   churning every pass for nothing: the Apple grouper dropped them. A library now
-  names the directories it holds no media in (`Skips`) and the walk does not enter
-  them — the walk itself knows no library. Rejected: the walk filtering by names
-  of its own (a library's layout is its own business, as its claim is).
+  lists the directories under the root it holds no media in (`Skipped(root)`), the
+  import collects them every pass and gives the walk the list — data, as the
+  perceptors' tags go to identify; the walk knows no library. Rejected: the walk
+  filtering by names of its own (a library's layout is its business, as its claim
+  is); a predicate passed into the walk (a lambda across modules). The root is an
+  argument: the library's own root (its config at `Enable`) need not be the one
+  walked.
 - **Deletions are dangerous**: a cancel, a missing root, an empty mount point or an
   unreadable directory (no Full Disk Access to the Photos library) would delete the
   library. Only after a complete walk that found files, never under an unreadable

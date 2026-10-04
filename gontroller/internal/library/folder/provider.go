@@ -20,7 +20,7 @@ func New() *Provider { return &Provider{grouper: &Grouper{}} }
 
 func (p *Provider) Claims(string) bool           { return true }
 func (p *Provider) Grouper() provider.Grouper    { return p.grouper }
-func (p *Provider) Skips(string) bool            { return false }
+func (p *Provider) Skipped(string) []string      { return nil }
 func (p *Provider) Owns(*dto.ItemDto) bool       { return false }
 func (p *Provider) Levels(*dto.ItemDto) []string { return nil }
 func (p *Provider) Start(context.Context)        {}

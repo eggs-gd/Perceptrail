@@ -190,6 +190,25 @@ func TestWalkPass(t *testing.T) {
 	}
 }
 
+// A skipped directory is not entered: its files are not sent, rows under it are
+// missing
+func TestWalkSkipped(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "a.jpg"))
+	writeFile(t, filepath.Join(root, "own", "cache.db"))
+	db := &rows{byPath: map[string]*dto.FileDto{}}
+	db.CreateFiles([]dto.ItemEntry{{Path: filepath.Join(root, "own", "old.db"), Name: "old.db"}}) // an older walk's
+	found := make(chan dto.WalkedFile)
+	got := &files{}
+	c := chain.NewChainProcessor(nil)
+	c.AddStep(New(db, root, []string{filepath.Join(root, "own")}, testLogger, found))
+	c.AddStep(chain.NewEnd(found, got))
+	c.Process(t.Context())
+	if !slices.Equal(got.got, []string{"a.jpg changed", "old.db gone"}) {
+		t.Errorf("got %v", got.got)
+	}
+}
+
 // More files than a page: every file once, in the walk's (name) order — the plain
 // folder's grouper relies on it
 func TestWalkPages(t *testing.T) {
