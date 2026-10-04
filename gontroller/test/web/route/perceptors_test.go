@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/perceptor/date"
-	"perceptrail/gontroller/pkg/perceptor/size"
+	"perceptrail/gontroller/internal/model/dto"
+	"perceptrail/gontroller/internal/perceptor/date"
+	"perceptrail/gontroller/internal/perceptor/size"
 )
 
 // The perceptors the client is given, each with its view; the date's order over the

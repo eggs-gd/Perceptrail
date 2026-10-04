@@ -143,10 +143,10 @@ library").
 - A cloud-only original is not described (its name, format, weight): for local
   files the original is what is on disk; a provider's own description waits for a
   second provider — the abstraction comes from two or more, not from one.
-- [x] **The mechanism** (PR #23): `pkg/library` — one switch sends a found file to
+- [x] **The mechanism** (PR #23): `internal/library` — one switch sends a found file to
       the grouper of the first provider that claims it (the plain folder,
       `library/folder`, last), and the item's provider gives on-demand renditions;
-      Apple Photos is the first library (`pkg/library/apple`), enabled by the
+      Apple Photos is the first library (`internal/library/apple`), enabled by the
       config. A provider that comes later
       takes its files over through the usual deletions (findings "Providers as steps
       of the chain").
@@ -412,7 +412,7 @@ branches on the top; the top knows nothing of the tools — exiftool, providers,
 transcoders, plugins belong to the stage that uses them. One step does one thing.
 
 - [x] **The import chain — stages** (PR #24; `pkg/scan` did everything, the cheap
-      preview was a monster step). `pkg/importer` with five stages, each a
+      preview was a monster step). `internal/importer` with five stages, each a
       sub-chain in its own package; the DB passed to the steps, their logic
       exported for the tests:
 
@@ -562,7 +562,7 @@ each a PR of its own, so that the next chains do not touch everything:
       or measured and accepted (3.2);
 - [ ] a message type for walk → group (`dto.SeenFile`) instead of pass state on
       `dto.FileDto` (3.3); `Prune` only when the pass deleted something (3.4);
-- [ ] exiftool's pool returns an error instead of panicking (3.7); `pkg/perceptor`
+- [ ] exiftool's pool returns an error instead of panicking (3.7); `internal/perceptor`
       under `-race` (3.8).
 
 ## Core — service (gontroller)

@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"perceptrail/gontroller/pkg/config"
-	"perceptrail/gontroller/pkg/importer/identify"
-	"perceptrail/gontroller/pkg/model"
-	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/perceptor"
+	"perceptrail/gontroller/internal/config"
+	"perceptrail/gontroller/internal/importer/identify"
+	"perceptrail/gontroller/internal/model"
+	"perceptrail/gontroller/internal/model/dto"
+	"perceptrail/gontroller/internal/perceptor"
 
 	"github.com/eggs-gd/perceplib/chain"
 	l "github.com/eggs-gd/perceplib/logger"

@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"perceptrail/gontroller/pkg/config"
-	"perceptrail/gontroller/pkg/library/provider"
-	"perceptrail/gontroller/pkg/model"
-	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/web/route"
+	"perceptrail/gontroller/internal/config"
+	"perceptrail/gontroller/internal/library/provider"
+	"perceptrail/gontroller/internal/model"
+	"perceptrail/gontroller/internal/model/dto"
+	"perceptrail/gontroller/internal/web/route"
 
 	"github.com/eggs-gd/perceplib/api"
 	l "github.com/eggs-gd/perceplib/logger"

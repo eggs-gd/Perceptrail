@@ -49,7 +49,7 @@ server:
   # allowed_origins:
   #   - http://localhost:5173
 
-# Behind GORM (pkg/model: sqlite.go, postgres.go)
+# Behind GORM (internal/model: sqlite.go, postgres.go)
 database:
   driver: sqlite            # sqlite | postgres (not implemented yet)
   name: media_library.db    # sqlite: file, relative to data_dir; others: database name

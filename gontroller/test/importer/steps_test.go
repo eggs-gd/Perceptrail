@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/internal/model/dto"
 )
 
 // A JPEG imported alone is an item; when its RAW appears, the RAW is the source:

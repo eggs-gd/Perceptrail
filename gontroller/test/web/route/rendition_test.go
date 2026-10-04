@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"perceptrail/gontroller/pkg/library/apple"
-	"perceptrail/gontroller/pkg/library/provider"
-	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/internal/library/apple"
+	"perceptrail/gontroller/internal/library/provider"
+	"perceptrail/gontroller/internal/model/dto"
 	"perceptrail/gontroller/test/fake"
 
 	l "github.com/eggs-gd/perceplib/logger"

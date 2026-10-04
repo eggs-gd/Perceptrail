@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"perceptrail/gontroller/pkg/config"
-	"perceptrail/gontroller/pkg/library/apple"
-	"perceptrail/gontroller/pkg/model"
-	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/internal/config"
+	"perceptrail/gontroller/internal/library/apple"
+	"perceptrail/gontroller/internal/model"
+	"perceptrail/gontroller/internal/model/dto"
 	"perceptrail/gontroller/test/fake"
 
 	l "github.com/eggs-gd/perceplib/logger"

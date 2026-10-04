@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"testing"
 
-	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/internal/model/dto"
 )
 
 // A file is served only as a file of its own asset: never another asset's, never a

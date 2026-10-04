@@ -36,7 +36,7 @@ jobs:
     - name: exiftool
       run: sudo apt-get update -qq && sudo apt-get install -y -qq libimage-exiftool-perl
 
-    # pkg/transcoder/images needs libvips (cgo) and is not used by the server yet
+    # internal/transcoder/images needs libvips (cgo) and is not used by the server yet
     - name: gontroller
       working-directory: gontroller
       run: |

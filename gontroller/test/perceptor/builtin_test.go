@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/perceptor/builtin"
-	"perceptrail/gontroller/pkg/perceptor/date"
-	"perceptrail/gontroller/pkg/perceptor/duration"
-	"perceptrail/gontroller/pkg/perceptor/size"
+	"perceptrail/gontroller/internal/model/dto"
+	"perceptrail/gontroller/internal/perceptor/builtin"
+	"perceptrail/gontroller/internal/perceptor/date"
+	"perceptrail/gontroller/internal/perceptor/duration"
+	"perceptrail/gontroller/internal/perceptor/size"
 
 	"github.com/eggs-gd/perceplib/api"
 	l "github.com/eggs-gd/perceplib/logger"

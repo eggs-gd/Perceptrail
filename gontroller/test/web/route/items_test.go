@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/internal/model/dto"
 )
 
 // The delta: after a full fetch, ?since=<its cursor> (the stream's last line) gives

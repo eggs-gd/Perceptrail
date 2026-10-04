@@ -7,9 +7,9 @@ import (
 	"runtime"
 	"testing"
 
-	"perceptrail/gontroller/pkg/config"
-	"perceptrail/gontroller/pkg/perceptor"
-	"perceptrail/gontroller/pkg/perceptor/builtin"
+	"perceptrail/gontroller/internal/config"
+	"perceptrail/gontroller/internal/perceptor"
+	"perceptrail/gontroller/internal/perceptor/builtin"
 
 	l "github.com/eggs-gd/perceplib/logger"
 	"github.com/eggs-gd/perceplib/logger/decorators"

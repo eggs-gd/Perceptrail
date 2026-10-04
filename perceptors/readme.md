@@ -7,7 +7,7 @@ also its own UI to the client (a map, face management) — see the
 [ML Flow](../_sb/puml/ML%20Flow.puml).
 
 The basics (date, size) are not here but in the core:
-`gontroller/pkg/perceptor/date`, `exif_size`, `exif_duration` (their contract: `builtin.Perceptor`). What lives here can be implemented differently
+`gontroller/internal/perceptor/date`, `exif_size`, `exif_duration` (their contract: `builtin.Perceptor`). What lives here can be implemented differently
 (e.g. someone may write another geo plugin).
 
 ## Contract

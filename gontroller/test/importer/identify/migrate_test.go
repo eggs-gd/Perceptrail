@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"perceptrail/gontroller/pkg/importer/identify"
-	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/internal/importer/identify"
+	"perceptrail/gontroller/internal/model/dto"
 
 	l "github.com/eggs-gd/perceplib/logger"
 	"github.com/eggs-gd/perceplib/logger/decorators"

@@ -565,6 +565,11 @@ module needing a config created a cycle. Now:
   standard library package's name (`plugin` was), no underscores (`exif_date` is
   `perceptor/date`); an abstraction and its instance named apart (`provider` /
   `library`). The rules are in AGENTS.md ("Go — write it like Go").
+- **Layout by Go's own conventions**: the packages in `internal/` (`pkg/` came from
+  `golang-standards/project-layout`, which the Go team does not endorse; `internal/`
+  is the one directory the toolchain enforces — nothing outside the module imports
+  gontroller); `main` stays at the root until a second binary needs `cmd/`;
+  `test/` is never linked into the binary (only `main`'s imports are).
 - **Integration tests in `gontroller/test/`** by the path of what they test, through
   the public API only: the import's (`importer.New(…).Pass`), the built-in
   perceptors' declared tags (one test for all), loading the `.so` plugins through
@@ -579,7 +584,7 @@ module needing a config created a cycle. Now:
 ### The import chain, PR #24 (2026-10-04, decided)
 
 `pkg/scan` did everything in one constructor that knew every tool; its data rode
-in one bag (`importer/flow`). Now `pkg/importer`, cut by what each part yields. The
+in one bag (`importer/flow`). Now `internal/importer`, cut by what each part yields. The
 strict review before closing it, with what is left for later:
 [review-pr24.md](review-pr24.md).
 
@@ -818,8 +823,8 @@ outside identify; nine one-function steps in identify.
   gone items goes with them (a cleanup on delete — to add with the renders). The
   GUIDs change (a link to the old item breaks); carrying them over by content hash
   is for when a second provider exists.
-- `pkg/library`: `Claims`, `Grouper`, `Owns`, `Levels`, `Rendition`, `Start`. Apple is the first: its grouper, PhotoKit and the on-demand logic moved
-  into `pkg/library/apple`; the plain folder's grouper into `library/folder`;
+- `internal/library`: `Claims`, `Grouper`, `Owns`, `Levels`, `Rendition`, `Start`. Apple is the first: its grouper, PhotoKit and the on-demand logic moved
+  into `internal/library/apple`; the plain folder's grouper into `library/folder`;
   outside them nothing names a source (the switch, `routes/rendition.go`, the
   importer and `main` only see providers).
 

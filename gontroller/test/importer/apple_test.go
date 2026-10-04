@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"perceptrail/gontroller/pkg/model/dto"
+	"perceptrail/gontroller/internal/model/dto"
 )
 
 const (

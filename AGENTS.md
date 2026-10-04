@@ -119,6 +119,11 @@ short "not obvious" list where there is something non-obvious.
 - **A registry (one per process) is package functions** (`perceptor.Load`,
   `library.Enable`); instances where they hold logic (steps, providers,
   groupers).
+- **Module layout** (Go's conventions, not `golang-standards/project-layout`'s):
+  an application's packages in `internal/` (the toolchain enforces it); `main` at
+  the module's root while there is one binary, `cmd/<name>/` from the second one;
+  integration tests in `test/`; fixture files in `testdata/` next to their test.
+  No `pkg/`, no `lib/`.
 - **Tests**: a package's unit tests stay next to it (they may reach unexported
   code). Integration tests — a module through its public API, the server's own
   start, real files and tools — live in `gontroller/test/`, by the path of what

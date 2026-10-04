@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/perceptor/date"
+	"perceptrail/gontroller/internal/model/dto"
+	"perceptrail/gontroller/internal/perceptor/date"
 
 	"github.com/eggs-gd/perceplib/api"
 )
