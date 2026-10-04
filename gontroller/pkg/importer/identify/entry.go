@@ -59,9 +59,9 @@ func New(db Store, cacheDir string, logger *l.Logger, in <-chan dto.Asset, out c
 	// validate → show: + the item (its GUID); not media does not get here
 	validated := make(chan *draft)
 
-	stage := chain.New(nil)
-	stage.AddStep(chain.Parallel(workers, in, read, newReader(tool, plugins.ExifTags(), logger))) // groups are independent
-	stage.AddStep(chain.Decorate(read, validated, &validate{db: db, logger: logger}))
-	stage.AddStep(chain.Decorate(validated, out, newShow(db, tool, cacheDir, logger)))
+	stage := chain.NewChainProcessor(nil)
+	stage.AddStep(chain.NewParallel(workers, in, read, newReader(tool, plugins.ExifTags(), logger))) // groups are independent
+	stage.AddStep(chain.NewDecorator(read, validated, &validate{db: db, logger: logger}))
+	stage.AddStep(chain.NewDecorator(validated, out, newShow(db, tool, cacheDir, logger)))
 	return stage
 }

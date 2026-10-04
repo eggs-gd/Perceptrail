@@ -45,7 +45,7 @@ type Store interface {
 	GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error)
 }
 
-// Walker: the walk step's logic (a chain.Source)
+// Walker: the walk step's logic (a chain.EntryPoint)
 type Walker struct {
 	logger *l.Logger
 	root   string
@@ -54,7 +54,7 @@ type Walker struct {
 
 // New: the chain's entry — out gets every file of a walk, then the gone ones
 func New(db Store, root string, logger *l.Logger, out chan<- *dto.FileDto) chain.Processor {
-	return chain.Entry(out, &Walker{logger: logger, root: root, db: db})
+	return chain.NewEntryPoint(out, &Walker{logger: logger, root: root, db: db})
 }
 
 // Start: one walk — the files seen, then the gone ones

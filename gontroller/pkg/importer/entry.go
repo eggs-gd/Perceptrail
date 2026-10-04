@@ -87,7 +87,7 @@ func NewImporterService(ctx app.AppContext) *importerService {
 }
 
 // importChain: one pass of the import, its channels new (a pass closes them)
-func (s *importerService) importChain() *chain.Chain {
+func (s *importerService) importChain() chain.ChainProcessor {
 	// walk → group: a file's row (seen: Changed; or Gone)
 	found := make(chan *dto.FileDto)
 	// group → gate: a whole asset (a gone file: its own); at the end, what each
@@ -100,7 +100,7 @@ func (s *importerService) importChain() *chain.Chain {
 	// exif → commit: + what the perceptors found, their values kept
 	perceived := make(chan *identify.Item)
 
-	c := chain.New(s.errch)
+	c := chain.NewChainProcessor(s.errch)
 	c.AddStep(walk.New(s.db, s.root, s.logger, found))
 	c.AddStep(group.New(providers.Enabled(), found, grouped))
 	c.AddStep(gate.New(s.db, s.logger, grouped, stored))

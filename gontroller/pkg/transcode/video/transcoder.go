@@ -11,7 +11,7 @@ import (
 type Transcoder struct{}
 
 func NewTranscoder(in <-chan *transcode.Item, out chan<- *transcode.Item) chain.Processor {
-	return chain.Decorate(in, out, Transcoder{})
+	return chain.NewDecorator(in, out, Transcoder{})
 }
 
 func (Transcoder) Decorate(it *transcode.Item) (*transcode.Item, error) { return it, nil }

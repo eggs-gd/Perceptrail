@@ -2,22 +2,22 @@ package chain
 
 import "sync"
 
-type parallel[Ti, To any] struct {
+type parallelRunner[Ti, To any] struct {
 	n     int
 	in    <-chan Ti
 	out   chan<- To
 	logic Decorator[Ti, To]
 }
 
-// Parallel: the same logic on n workers (safe for concurrent use; the order may
+// NewParallel: the same logic on n workers (safe for concurrent use; the order may
 // change); when the input ends, after the last of them, what the logic holds
-func Parallel[Ti, To any](n int, in <-chan Ti, out chan<- To, logic Decorator[Ti, To]) Processor {
-	return &parallel[Ti, To]{max(n, 1), in, out, logic}
+func NewParallel[Ti, To any](n int, in <-chan Ti, out chan<- To, logic Decorator[Ti, To]) Processor {
+	return &parallelRunner[Ti, To]{max(n, 1), in, out, logic}
 }
 
-func (s *parallel[Ti, To]) outputs() []output { return []output{outputOf(s.out)} }
+func (s *parallelRunner[Ti, To]) outputs() []output { return []output{outputOf(s.out)} }
 
-func (s *parallel[Ti, To]) run(r runtime) {
+func (s *parallelRunner[Ti, To]) run(r runtime) {
 	defer stop(s.logic)
 	var workers sync.WaitGroup
 	for range s.n {

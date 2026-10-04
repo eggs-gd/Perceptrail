@@ -1,23 +1,23 @@
 # chain
 
 Steps that run concurrently, connected by channels. A step's logic is plain Go (a
-`Source`, a `Decorator`, a `Router`, a `Consumer`); the package runs it: a goroutine
+`EntryPoint`, a `Decorator`, a `Switcher`, a `Consumer`); the package runs it: a goroutine
 per step, reading one channel and writing another.
 
 ```go
 in, parsed, out := make(chan Raw), make(chan Parsed), make(chan Item, 100)
 
-c := chain.New(errch)                           // errors of every step (skips never get here)
-c.AddStep(chain.Entry(in, walker))              // the one input: its values, then it is done
-c.AddStep(chain.Parallel(4, in, parsed, parse)) // the same Decorator on 4 workers
-c.AddStep(chain.Decorate(parsed, out, enrich))
-c.AddStep(chain.End(out, publish))              // the end: every value consumed
+c := chain.NewChainProcessor(errch)                           // errors of every step (skips never get here)
+c.AddStep(chain.NewEntryPoint(in, walker))              // the one input: its values, then it is done
+c.AddStep(chain.NewParallel(4, in, parsed, parse)) // the same Decorator on 4 workers
+c.AddStep(chain.NewDecorator(parsed, out, enrich))
+c.AddStep(chain.NewEnd(out, publish))              // the end: every value consumed
 c.Process(ctx)                                  // one pass: returns when every step has
 ```
 
 ## A pass
 
-A chain has **one input, its `Entry`** (an output only). A pass is `Process`: the
+A chain has **one input, its entry point** (an output only). A pass is `Process`: the
 entry emits its values and returns, and its output closes. A step reads its input
 until it closes, gives what it holds (a `Flusher`: `Flush() ([]To, error)` — a group
 not complete yet) and returns. **An output closes once every step that writes to it
@@ -27,20 +27,20 @@ last of them. `Process` returns when every step has, so every value of the pass 
 through every step by then. Channels close once: the next pass is a new chain, with
 new channels.
 
-- **`Route`** sends a value to one output; its outputs close when it returns.
-- **`Parallel`** returns after its last worker: every value done.
+- **`NewSwitch`** sends a value to one output; its outputs close when it returns.
+- **`NewParallel`** returns after its last worker: every value done.
 - **A sub-chain** closes its own outputs; a channel is written by steps of one chain.
 
 ## Steps
 
 | Constructor | Logic | What it does |
 |---|---|---|
-| `Entry(out, s)` | `Source[T]`: `Start(ctx, emit) error` | the chain's one input |
-| `Decorate(in, out, d)` | `Decorator[Ti, To]`: `Decorate(Ti) (To, error)` | one value in, one out |
-| `Parallel(n, in, out, d)` | the same `Decorator`, safe for concurrent use | n workers; the order may change |
-| `Route(in, outs, r)` | `Router[T]`: `Route(T) (int, error)` | a value to one output (an index) |
-| `End(in, c)` | `Consumer[T]`: `Consume(T) error` | a chain's end: every value consumed |
-| `New(errch)` + `AddStep` | — | a chain; it is a step too (a sub-chain); `Process` is a pass |
+| `NewEntryPoint(out, s)` | `EntryPoint[T]`: `Start(ctx, emit) error` | the chain's one input |
+| `NewDecorator(in, out, d)` | `Decorator[Ti, To]`: `Decorate(Ti) (To, error)` | one value in, one out |
+| `NewParallel(n, in, out, d)` | the same `Decorator`, safe for concurrent use | n workers; the order may change |
+| `NewSwitch(in, outs, s)` | `Switcher[T]`: `Switch(T) (int, error)` | a value to one output (an index) |
+| `NewEnd(in, c)` | `Consumer[T]`: `Consume(T) error` | a chain's end: every value consumed |
+| `NewChainProcessor(errch)` + `AddStep` | — | a chain; it is a step too (a sub-chain); `Process` is a pass |
 
 Optional on any logic:
 
@@ -60,6 +60,6 @@ Optional on any logic:
 ## Tests
 
 `chain_test.go`, run with `-race`: a pass, a `Flusher`'s values before its output
-closes, `Route` and a join that closes after its slow branch, `Parallel` finishes its
+closes, a switch and a join that closes after its slow branch, `NewParallel` finishes its
 values, errors and skips, a sub-chain inherits the error channel, cancel unblocks a
 blocked send and `Stop` is called once.

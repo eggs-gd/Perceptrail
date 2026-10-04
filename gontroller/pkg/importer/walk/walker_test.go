@@ -160,9 +160,9 @@ func TestWalkPass(t *testing.T) {
 	pass := func() []string {
 		found := make(chan *dto.FileDto)
 		got := &files{}
-		c := chain.New(nil)
+		c := chain.NewChainProcessor(nil)
 		c.AddStep(New(db, root, testLogger, found))
-		c.AddStep(chain.End(found, got))
+		c.AddStep(chain.NewEnd(found, got))
 		c.Process(t.Context())
 		return got.got
 	}

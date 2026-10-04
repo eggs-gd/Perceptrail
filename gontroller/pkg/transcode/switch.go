@@ -20,11 +20,11 @@ type Switch struct{}
 
 // NewSwitch: every asset to the transcoder of its kind
 func NewSwitch(in <-chan *Item, toPhoto, toVideo, toLivePhoto chan<- *Item) chain.Processor {
-	return chain.Route(in, []chan<- *Item{BranchPhoto: toPhoto, BranchVideo: toVideo, BranchLivePhoto: toLivePhoto}, Switch{})
+	return chain.NewSwitch(in, []chan<- *Item{BranchPhoto: toPhoto, BranchVideo: toVideo, BranchLivePhoto: toLivePhoto}, Switch{})
 }
 
-// Route: the branch of the asset's kind
-func (Switch) Route(it *Item) (int, error) {
+// Switch: the branch of the asset's kind
+func (Switch) Switch(it *Item) (int, error) {
 	switch it.kind() {
 	case dto.KindLive: // the video with its photo
 		return BranchLivePhoto, nil

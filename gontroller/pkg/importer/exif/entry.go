@@ -47,14 +47,14 @@ func New(db Items, logger *l.Logger, in <-chan *identify.Item, out chan<- *ident
 		}
 	}
 	// One after another, a step each
-	c := chain.New(nil)
+	c := chain.NewChainProcessor(nil)
 	from := in
 	for _, d := range steps {
 		to := make(chan *identify.Item)
-		c.AddStep(chain.Decorate(from, to, d))
+		c.AddStep(chain.NewDecorator(from, to, d))
 		from = to
 	}
-	c.AddStep(chain.Decorate(from, out, keep{db: db, logger: logger}))
+	c.AddStep(chain.NewDecorator(from, out, keep{db: db, logger: logger}))
 	return c
 }
 

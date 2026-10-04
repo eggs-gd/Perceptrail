@@ -17,14 +17,14 @@ import (
 // New: the sub-chain from in (the walk's files) to out (whole assets: every
 // grouper writes to it, so a flush passes on once every grouper has flushed)
 func New(ps []providers.Provider, in <-chan *dto.FileDto, out chan<- dto.Asset) chain.Processor {
-	grouping := chain.New(nil)
+	grouping := chain.NewChainProcessor(nil)
 	toGroupers := make([]chan<- *dto.FileDto, len(ps))
 	for i, p := range ps {
 		ch := make(chan *dto.FileDto)
 		toGroupers[i] = ch
-		grouping.AddStep(chain.Decorate(ch, out, p.Grouper()))
+		grouping.AddStep(chain.NewDecorator(ch, out, p.Grouper()))
 	}
-	grouping.AddStep(chain.Route(in, toGroupers, Switch{Providers: ps}))
+	grouping.AddStep(chain.NewSwitch(in, toGroupers, Switch{Providers: ps}))
 	return grouping
 }
 
@@ -34,7 +34,7 @@ type Switch struct {
 	Providers []providers.Provider
 }
 
-func (s Switch) Route(f *dto.FileDto) (int, error) {
+func (s Switch) Switch(f *dto.FileDto) (int, error) {
 	for i, p := range s.Providers {
 		if p.Claims(f.Path) {
 			return i, nil

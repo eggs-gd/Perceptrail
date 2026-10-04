@@ -17,7 +17,7 @@ type Store interface {
 
 // New: in — the perceived items (their values kept)
 func New(db Store, in <-chan *identify.Item) chain.Processor {
-	return chain.End(in, publish{db})
+	return chain.NewEnd(in, publish{db})
 }
 
 type publish struct{ db Store }

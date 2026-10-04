@@ -44,30 +44,37 @@ type Flusher[To any] interface {
 	Flush() ([]To, error)
 }
 
-// Chain: steps that run together, one pass
-type Chain struct {
+// ChainProcessor: steps that run together, one pass (Process); a chain is a step
+// too (a sub-chain)
+type ChainProcessor interface {
+	Processor
+	AddStep(p Processor)
+	Process(ctx context.Context)
+}
+
+type chain struct {
 	errch chan<- error
 	steps []Processor
 }
 
-// New: errch gets the steps' errors (nil: the errors of the chain this one runs in)
-func New(errch chan<- error) *Chain {
-	return &Chain{errch: errch}
+// NewChainProcessor: errch gets the steps' errors (nil: the errors of the chain this one runs in)
+func NewChainProcessor(errch chan<- error) ChainProcessor {
+	return &chain{errch: errch}
 }
 
-func (c *Chain) AddStep(p Processor) {
+func (c *chain) AddStep(p Processor) {
 	c.steps = append(c.steps, p)
 }
 
 // Process: one pass — every step runs until its input ends (or ctx does); returns
 // when every step has
-func (c *Chain) Process(ctx context.Context) {
+func (c *chain) Process(ctx context.Context) {
 	c.run(runtime{ctx: ctx})
 }
 
-func (c *Chain) outputs() []output { return nil }
+func (c *chain) outputs() []output { return nil }
 
-func (c *Chain) run(r runtime) {
+func (c *chain) run(r runtime) {
 	if c.errch != nil {
 		r.errch = c.errch
 	}

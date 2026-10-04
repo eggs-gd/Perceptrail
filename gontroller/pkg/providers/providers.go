@@ -22,7 +22,7 @@ import (
 
 // Grouper: the logic of a provider's step — the walk's files in, whole assets out
 // (chain.Decorator is a step's logic, not the step: no pipes, no goroutine). The
-// importer runs it between its pipes (chain.Decorate); on the walk's flush it gives
+// importer runs it between its pipes (chain.NewDecorator); on the walk's flush it gives
 // what it holds (chain.Flusher: the last group).
 type Grouper = chain.Decorator[*dto.FileDto, dto.Asset]
 

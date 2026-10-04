@@ -38,7 +38,7 @@ func (vs values) Start(_ context.Context, emit func(int) bool) error {
 }
 
 // pass: one pass of c, bounded
-func pass(t *testing.T, c *Chain) {
+func pass(t *testing.T, c ChainProcessor) {
 	t.Helper()
 	done := make(chan struct{})
 	go func() { c.Process(t.Context()); close(done) }()
@@ -56,10 +56,10 @@ var same = fn[int, int](func(v int) (int, error) { return v, nil })
 func TestPass(t *testing.T) {
 	in, out := make(chan int), make(chan int)
 	got := &collect[int]{}
-	c := New(nil)
-	c.AddStep(Entry(in, values{1, 2, 3}))
-	c.AddStep(Decorate(in, out, fn[int, int](func(v int) (int, error) { return v * 10, nil })))
-	c.AddStep(End(out, got))
+	c := NewChainProcessor(nil)
+	c.AddStep(NewEntryPoint(in, values{1, 2, 3}))
+	c.AddStep(NewDecorator(in, out, fn[int, int](func(v int) (int, error) { return v * 10, nil })))
+	c.AddStep(NewEnd(out, got))
 	pass(t, c)
 	if !slices.Equal(got.got, []int{10, 20, 30}) {
 		t.Errorf("got %v", got.got)
@@ -76,10 +76,10 @@ func (h *holder) Flush() ([]int, error)       { return h.held, nil }
 func TestFlusher(t *testing.T) {
 	in, out := make(chan int), make(chan int)
 	got := &collect[int]{}
-	c := New(nil)
-	c.AddStep(Entry(in, values{1, 2}))
-	c.AddStep(Decorate[int, int](in, out, &holder{}))
-	c.AddStep(End(out, got))
+	c := NewChainProcessor(nil)
+	c.AddStep(NewEntryPoint(in, values{1, 2}))
+	c.AddStep(NewDecorator[int, int](in, out, &holder{}))
+	c.AddStep(NewEnd(out, got))
 	pass(t, c)
 	if !slices.Equal(got.got, []int{1, 2}) {
 		t.Errorf("got %v", got.got)
@@ -88,9 +88,9 @@ func TestFlusher(t *testing.T) {
 
 type parity struct{}
 
-func (parity) Route(v int) (int, error) { return v % 2, nil }
+func (parity) Switch(v int) (int, error) { return v % 2, nil }
 
-// Route: a value to one output; the branches join: the joint closes only after its
+// NewSwitch: a value to one output; the branches join: the joint closes only after its
 // last writer returned (a slow branch's values are not lost); a Flusher after the
 // join gets everything
 func TestRouteAndJoin(t *testing.T) {
@@ -98,13 +98,13 @@ func TestRouteAndJoin(t *testing.T) {
 	joined, tail := make(chan int), make(chan int)
 	slow := fn[int, int](func(v int) (int, error) { time.Sleep(10 * time.Millisecond); return v, nil })
 	got := &collect[int]{}
-	c := New(nil)
-	c.AddStep(Entry(in, values{1, 2, 3, 4}))
-	c.AddStep(Route(in, []chan<- int{even, odd}, parity{}))
-	c.AddStep(Decorate(even, joined, slow))
-	c.AddStep(Decorate(odd, joined, same))
-	c.AddStep(Decorate[int, int](joined, tail, &holder{}))
-	c.AddStep(End(tail, got))
+	c := NewChainProcessor(nil)
+	c.AddStep(NewEntryPoint(in, values{1, 2, 3, 4}))
+	c.AddStep(NewSwitch(in, []chan<- int{even, odd}, parity{}))
+	c.AddStep(NewDecorator(even, joined, slow))
+	c.AddStep(NewDecorator(odd, joined, same))
+	c.AddStep(NewDecorator[int, int](joined, tail, &holder{}))
+	c.AddStep(NewEnd(tail, got))
 	pass(t, c)
 	if slices.Sort(got.got); !slices.Equal(got.got, []int{1, 2, 3, 4}) {
 		t.Errorf("got %v", got.got)
@@ -116,15 +116,15 @@ func TestParallel(t *testing.T) {
 	in, out := make(chan int), make(chan int)
 	got := &collect[int]{}
 	var busy atomic.Int32
-	c := New(nil)
-	c.AddStep(Entry(in, values{1, 2, 3, 4, 5, 6}))
-	c.AddStep(Parallel(3, in, out, fn[int, int](func(v int) (int, error) {
+	c := NewChainProcessor(nil)
+	c.AddStep(NewEntryPoint(in, values{1, 2, 3, 4, 5, 6}))
+	c.AddStep(NewParallel(3, in, out, fn[int, int](func(v int) (int, error) {
 		busy.Add(1)
 		defer busy.Add(-1)
 		time.Sleep(time.Duration(7-v) * 3 * time.Millisecond)
 		return v, nil
 	})))
-	c.AddStep(End(out, got))
+	c.AddStep(NewEnd(out, got))
 	pass(t, c)
 	if len(got.got) != 6 || busy.Load() != 0 {
 		t.Errorf("got %v, busy %d", got.got, busy.Load())
@@ -136,9 +136,9 @@ func TestErrors(t *testing.T) {
 	errch := make(chan error, 10)
 	in, out := make(chan int), make(chan int)
 	boom := errors.New("boom")
-	sub := New(nil)
-	sub.AddStep(Entry(in, values{1, 2, 3}))
-	sub.AddStep(Decorate(in, out, fn[int, int](func(v int) (int, error) {
+	sub := NewChainProcessor(nil)
+	sub.AddStep(NewEntryPoint(in, values{1, 2, 3}))
+	sub.AddStep(NewDecorator(in, out, fn[int, int](func(v int) (int, error) {
 		switch v {
 		case 1:
 			return 0, ErrSkippedItem
@@ -148,9 +148,9 @@ func TestErrors(t *testing.T) {
 		return v, nil
 	})))
 	got := &collect[int]{}
-	c := New(errch)
+	c := NewChainProcessor(errch)
 	c.AddStep(sub)
-	c.AddStep(End(out, got))
+	c.AddStep(NewEnd(out, got))
 	pass(t, c)
 	if len(errch) != 1 || !errors.Is(<-errch, boom) || !slices.Equal(got.got, []int{3}) {
 		t.Errorf("errors %d, got %v", len(errch), got.got)
@@ -166,9 +166,9 @@ func (s stopCount) Stop()                       { s.n.Add(1) }
 func TestCancel(t *testing.T) {
 	in, out := make(chan int), make(chan int) // nobody reads out
 	var stops atomic.Int32
-	c := New(nil)
-	c.AddStep(Entry(in, values{1}))
-	c.AddStep(Decorate[int, int](in, out, stopCount{&stops}))
+	c := NewChainProcessor(nil)
+	c.AddStep(NewEntryPoint(in, values{1}))
+	c.AddStep(NewDecorator[int, int](in, out, stopCount{&stops}))
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
 	go func() { c.Process(ctx); close(done) }()

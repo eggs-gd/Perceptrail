@@ -5,19 +5,19 @@ type Consumer[T any] interface {
 	Consume(T) error
 }
 
-type end[T any] struct {
+type endRunner[T any] struct {
 	in    <-chan T
 	logic Consumer[T]
 }
 
-// End: a chain's end
-func End[T any](in <-chan T, logic Consumer[T]) Processor {
-	return &end[T]{in, logic}
+// NewEnd: a chain's end
+func NewEnd[T any](in <-chan T, logic Consumer[T]) Processor {
+	return &endRunner[T]{in, logic}
 }
 
-func (*end[T]) outputs() []output { return nil }
+func (*endRunner[T]) outputs() []output { return nil }
 
-func (s *end[T]) run(r runtime) {
+func (s *endRunner[T]) run(r runtime) {
 	defer stop(s.logic)
 	receive(r.ctx, s.in, func(v T) { r.report(s.logic.Consume(v)) })
 }
