@@ -44,7 +44,8 @@ type ItemsApi interface {
 	StreamItemsSince(since time.Time, fn func(*dto.ItemDto, []*dto.FileDto) error) error
 	GetItemByGuid(guid string) (*dto.ItemDto, error)
 	// ClearHashes: every item forgets its fingerprint (the fingerprint changed): the
-	// gate sends each group once more to get the new one
+	// gate sends each group once more to get the new one. Not a change the client
+	// sees: updated_at stays (a delta would stream the whole library)
 	ClearHashes() (int64, error)
 	GetItemByPath(path string) (*dto.ItemDto, error)
 	GetItemsByHash(path string) ([]*dto.ItemDto, error)
@@ -149,7 +150,7 @@ func (p *proxy) GetItemByPath(path string) (*dto.ItemDto, error) {
 }
 
 func (p *proxy) ClearHashes() (int64, error) {
-	res := p.db.Unscoped().Model(&dto.ItemDto{}).Where("hash_short <> ''").Update("hash_short", "")
+	res := p.db.Unscoped().Model(&dto.ItemDto{}).Where("hash_short <> ''").UpdateColumn("hash_short", "")
 	return res.RowsAffected, res.Error
 }
 

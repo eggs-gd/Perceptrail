@@ -37,10 +37,13 @@ type FileDto struct {
 
 	ItemEntry
 
-	// What the walk found this pass (not stored): Changed — new, its stat or its role
-	// changed; Gone — the walk did not see it, it is deleted
-	Changed bool `gorm:"-" json:"-"`
-	Gone    bool `gorm:"-" json:"-"`
+	// Changed: new, its stat or its role changed, and its group not decided since
+	// (stored: a pass that fails before identify decides — a library's DB not
+	// loaded, an asset not complete, an error — leaves it set for the next one);
+	// set by the walk and a grouper, cleared by identify's validate
+	Changed bool `json:"-"`
+	// Gone: the walk did not see it, it is deleted (this pass only, not stored)
+	Gone bool `gorm:"-" json:"-"`
 }
 
 // SetRole: the source's grouper says what the file is to its asset; a new role is

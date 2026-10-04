@@ -29,6 +29,13 @@ type validate struct {
 }
 
 func (v *validate) Decorate(g *draft) (*draft, error) {
+	if g.Exif[0] == nil {
+		return nil, fmt.Errorf("no metadata for the main file %s", g.Files[0].Path)
+	}
+	// Decided now (the model saves the rows): a change is no longer pending
+	for _, f := range g.Files {
+		f.Changed = false
+	}
 	main := g.Files[0]
 	if !g.isMedia() { // nothing to show: remembered, so the gate skips it from now on
 		if err := v.db.Ignore(g.Files); err != nil {
@@ -36,10 +43,6 @@ func (v *validate) Decorate(g *draft) (*draft, error) {
 		}
 		return nil, chain.ErrSkippedItem
 	}
-	if g.Exif[0] == nil {
-		return nil, fmt.Errorf("no metadata for the main file %s", main.Path)
-	}
-
 	if g.Key != "" {
 		item, err := v.db.ValidateAsset(g.Key, g.Files, g.Hash)
 		if err != nil {

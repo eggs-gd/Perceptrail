@@ -58,8 +58,12 @@ func TestFingerprintChangeReidentifies(t *testing.T) {
 	scan(t, root)
 	guid := itemAt(t, a).Guid
 
+	before := itemAt(t, a)
 	if _, err := testDB.ClearHashes(); err != nil {
 		t.Fatal(err)
+	}
+	if item := itemAt(t, a); !item.UpdatedAt.Equal(before.UpdatedAt) {
+		t.Errorf("clearing the hashes moved updated_at (a client's delta would stream the library)")
 	}
 	if got := scan(t, root); len(got) != 2 {
 		t.Fatalf("re-identified %v, want both", got)

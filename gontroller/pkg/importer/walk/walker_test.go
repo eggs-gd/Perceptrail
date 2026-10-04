@@ -100,13 +100,13 @@ func TestWalkCancelled(t *testing.T) {
 	}
 }
 
-// rows: the files table in memory (Changed, Gone are not stored)
+// rows: the files table in memory (Gone is not stored)
 type rows struct{ byPath map[string]*dto.FileDto }
 
 func (r *rows) GetFileByPath(path string) (*dto.FileDto, error) {
 	if f, ok := r.byPath[path]; ok {
 		c := *f
-		c.Changed, c.Gone = false, false
+		c.Gone = false
 		return &c, nil
 	}
 	return nil, model.ErrNotFound
@@ -128,7 +128,7 @@ func (r *rows) GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error) {
 	for _, f := range r.byPath {
 		if f.CheckTime.Before(t) {
 			c := *f
-			c.Changed, c.Gone = false, false
+			c.Gone = false
 			out = append(out, &c)
 		}
 	}
@@ -170,7 +170,8 @@ func TestWalkPass(t *testing.T) {
 		t.Errorf("first pass %v", g)
 	}
 	os.Remove(filepath.Join(root, "b.jpg"))
-	if g := pass(); !slices.Equal(g, []string{"a.jpg", "b.jpg gone"}) {
+	// a.jpg's change stays pending (nothing decided its group): still changed
+	if g := pass(); !slices.Equal(g, []string{"a.jpg changed", "b.jpg gone"}) {
 		t.Errorf("second pass %v", g)
 	}
 }

@@ -572,7 +572,13 @@ gone — they are on disk, so the walk stamped them); the gate has the model app
 `Gone`. A moved file's old path may go before the new one is validated: validate
 restores the deleted item by fingerprint, the GUID stays. A gone sidecar makes its
 item `Dirty` before the grouper gives the main file's group: processed in the same
-pass. No end-of-walk value in the data: the walk's output closes.
+pass. No end-of-walk value in the data: the walk's output closes. **`Changed` is
+stored** and cleared only by validate (Codex review): the walk writes the new stat
+at once, so a pass that fails before identify decides the group (a library's DB not
+loaded, an asset not complete, an error) would otherwise lose the change — the next
+pass would compare an unchanged stat. Internal marks on items (`MarkRework`,
+`ClearHashes`) use `UpdateColumn`: `updated_at` stays, or the client's delta would
+stream them.
 
 **exif.** The perceptors declare their tags (`api.ExifTagger`); identify reads the
 union plus its own, one `exiftool -j -n` call per group (`-j`, not `-s2`: `-s2`

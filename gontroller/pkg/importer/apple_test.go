@@ -152,3 +152,30 @@ func TestRefreshMarksForNextWalk(t *testing.T) {
 		t.Errorf("after refresh: %+v", item)
 	}
 }
+
+// A change seen in a pass whose grouping failed (the library's DB unreadable) is not
+// lost: the next pass still takes the file as changed and processes its asset
+func TestChangeSurvivesAFailedPass(t *testing.T) {
+	root := t.TempDir()
+	bundle, _ := photosLibrary(t, root)
+	scan(t, root)
+	dbPath := filepath.Join(bundle, "database", "Photos.sqlite")
+	good, err := os.ReadFile(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The edit changes while Photos.sqlite cannot be read: nothing groups this pass
+	write(t, filepath.Join(bundle, "resources/renders/A/"+appleEdited+"_1_201_a.jpeg"), "edited again, longer")
+	if err := os.WriteFile(dbPath, []byte("not a database"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := scan(t, root); len(got) != 0 {
+		t.Fatalf("a pass with the DB unreadable processed %v", got)
+	}
+	if err := os.WriteFile(dbPath, good, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := scan(t, root); len(got) != 1 {
+		t.Errorf("the change was lost: the next pass processed %v, want the edited asset", got)
+	}
+}
