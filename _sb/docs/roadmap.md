@@ -517,18 +517,28 @@ each a PR of its own, so that the next chains do not touch everything:
         `web.New(cfg, db, logger)` (`client` renamed `web`). The DB is opened once
         in `main` (`model.Open`) and passed in (no proxies made inside the
         modules, the routes included).
-      - Errors in `main`: `must` / `check` (leaning; the modules wrap their errors
-        with their name), or explicit `if err != nil` — to settle.
+      - Errors in `main`: an explicit `if err != nil` after every step, the step
+        named in the message (decided: what failed is plain to read).
       - `plugins.Load` and `providers.Enable` knowing their built-in members need
         the contracts out of the registries (1.3, 1.4, below).
 
       ```go
-      cfg := must(config.Load())
-      logs := must(logger.New(cfg.LogLevel()))
+      cfg, err := config.Load()
+      if err != nil {
+          log.Fatalf("config: %v", err)
+      }
+      logs := logger.New(cfg.LogLevel())
 
-      db := must(model.Open(cfg, logs.Named("db")))
-      check(plugins.Load(cfg, logs.Named("plugins")))
-      check(providers.Enable(cfg, db, logs.Named("providers")))
+      db, err := model.Open(cfg, logs.Named("db"))
+      if err != nil {
+          log.Fatalf("database: %v", err)
+      }
+      if err := plugins.Load(cfg, logs.Named("plugins")); err != nil {
+          log.Fatalf("plugins: %v", err)
+      }
+      if err := providers.Enable(cfg, db, logs.Named("providers")); err != nil {
+          log.Fatalf("providers: %v", err)
+      }
 
       services := app.NewServices()
       services.Add(providers.Service())
