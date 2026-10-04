@@ -5,6 +5,7 @@
 package plugin
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -33,7 +34,9 @@ func Build(t *testing.T, perceptors, name, dir string) string {
 	if race() {
 		args = append(args, "-race")
 	}
-	cmd := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), args...)
+	// The Go of this test binary, exactly: the go on PATH switches to it
+	cmd := exec.Command("go", args...)
+	cmd.Env = append(os.Environ(), "GOTOOLCHAIN="+runtime.Version())
 	cmd.Dir = filepath.Join(perceptors, name)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("%s: build: %v\n%s", name, err, out)

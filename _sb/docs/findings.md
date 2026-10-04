@@ -286,7 +286,7 @@ Layout, the DB's facts and PhotoKit's behaviour: the
 - **Go plugins**: host and `.so` need the same toolchain and identical versions of
   every shared package (`perceplib`, zap, multierr, `x/sync`, testify…) — bump all
   modules together, then `make build-plugins`. `TestLoadExternalPlugins` builds and
-  loads them; it must use `$(GOROOT)/bin/go`, and run with `-count=1` (the test
+  loads them; it must use the test binary's own Go (`GOTOOLCHAIN=` its `runtime.Version()`; `runtime.GOROOT` is deprecated), and run with `-count=1` (the test
   cache ignores files in other modules). Under `-race` the plugin must be built
   with `-race` too ("plugin was built with a different version of package
   internal/runtime/sys"): `test/plugin` reads the test binary's own setting.
