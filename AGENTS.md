@@ -14,19 +14,24 @@ No symlinks (Windows).
 
 ## Project knowledge — read before changing things
 
-- [`_sb/docs/findings.md`](_sb/docs/findings.md) — what was already tried, what
-  broke and why, decisions taken. Read the relevant section BEFORE working on the
-  gallery layout / resize / streaming, Go plugins, exiftool, or the import
-  pipeline. Do not re-propose approaches it lists as rejected without new reasons.
-- [`_sb/docs/roadmap.md`](_sb/docs/roadmap.md) — status, next steps, and what
-  belongs in the core vs. in perceptors.
+- [`_sb/docs/findings.md`](_sb/docs/findings.md) — the why: decisions not obvious
+  from the code, approaches rejected, traps. Read the relevant section BEFORE
+  working on the gallery, sync, perceptors, the import, Apple Photos, Go plugins or
+  exiftool. Do not re-propose approaches it lists as rejected without new reasons.
+- [`_sb/docs/roadmap.md`](_sb/docs/roadmap.md) — what is open and the designs not
+  built yet (done work is one line per PR), what belongs in the core vs. in
+  perceptors.
 - [`_sb/puml`](_sb/puml) — design diagrams (target architecture: import chain,
   file validation, client/ML event flow, workers, protocol). Check them before
   redesigning a flow; if the code deviates from a diagram, say so in findings.
-- Module READMEs: `gontroller/readme.md`, `perceplib/README.md`,
-  `perceptors/readme.md`, `svebapp/README.md`.
-- When you learn something non-obvious (a root cause, a dead end, a decision),
-  add a dated entry to `findings.md` and update the roadmap.
+- Module READMEs — how things work now: `gontroller/readme.md`,
+  `gontroller/internal/importer/README.md`, `gontroller/internal/library/README.md`,
+  `perceplib/README.md`, `perceptors/readme.md`, `svebapp/README.md`.
+- Where knowledge goes: how it works → the module's README; why, what was rejected,
+  a trap → `findings.md` (short, dated); what is still to do → the roadmap. Once a
+  design is built, its description moves to the README and leaves the roadmap; a
+  finding that became plain architecture moves to the README too. Keep both files
+  short.
 
 ## Git workflow (git flow)
 
@@ -50,9 +55,9 @@ No symlinks (Windows).
   is visible, CI runs on every push); mark it **ready for review** only when the
   feature is done.
 - Docs go in the same PR as the feature, never in a follow-up: before the PR is
-  ready, `_sb/docs/roadmap.md` reflects what the branch did (steps checked, finished
-  sections moved to Done, what is still open), `_sb/docs/findings.md` has what was
-  learned, and the diagrams / module READMEs match the code.
+  ready, the module READMEs and the diagrams match the code, `_sb/docs/roadmap.md`
+  has the PR as one line in Done and only what is still open, and
+  `_sb/docs/findings.md` has what was learned (the why, not the how).
 - Version: one for the whole monorepo, **derived from git history** — nothing to bump
   or commit per PR, so parallel PRs never race. The root [`VERSION`](VERSION) holds
   only `MAJOR.MINOR`; `PATCH` = first-parent commits since `VERSION` last changed

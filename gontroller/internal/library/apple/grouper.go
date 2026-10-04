@@ -8,7 +8,7 @@
 // is the source (the original; its Live Photo video before it), the rest is
 // linked to it. We only read the library, never write it.
 //
-// File layout (see findings "Apple Photos library: spike"): only the original's
+// File layout (see the library README, "Apple Photos"): only the original's
 // path is in the DB; renders and derivatives follow a naming layout by UUID.
 package apple
 

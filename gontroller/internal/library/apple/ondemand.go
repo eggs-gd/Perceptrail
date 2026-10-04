@@ -14,8 +14,8 @@ import (
 
 // On demand: the renditions Photos keeps only in iCloud are asked for when the
 // client needs them — never in bulk. Photos downloads them into its own library;
-// the web service serves the file, and the asset's item is processed again (the
-// delta brings it to the client). Findings "PhotoKit spike".
+// the web service serves the file, and the asset's item is marked for the next
+// pass (the delta brings it to the client). See the library README, "Apple Photos".
 //
 //	medium    the viewer: the image (~2048 px, or the edit); a video's 720p (H.264
 //	          only when the browser plays no HEVC)

@@ -3,7 +3,7 @@
 `importer` turns a library directory into items in the DB. It is a chain built on
 [`perceplib/chain`](../../../perceplib/chain/README.md) (every step its own
 goroutine, steps connected by channels; a pass ends from its input) with one rule for its shape (roadmap
-"Chains"): **the top has only linear stages**, each named by what it yields; every
+"The next chains"): **the top has only linear stages**, each named by what it yields; every
 stage is a sub-chain in its own package with one constructor (`New`) listing all
 its steps; the top knows none of the tools — the file system, the providers,
 exiftool, the plugins belong to the stage that uses them. One step does one thing.
@@ -78,7 +78,7 @@ detail).
 [walk] → [group: switch → a grouper per provider] → [gate]
   → [identify: read (N: one exiftool call per group, classify, merge, fingerprint)
              → validate → show (sizes, pick, an embedded preview)]
-  → [exif: exif_date → exif_size → exif_duration → each .so (read-only) → keep]
+  → [exif: date → size → duration → each .so (read-only) → keep]
   → [commit: close (Visible | Waiting)]
 ```
 

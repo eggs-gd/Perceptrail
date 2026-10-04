@@ -167,7 +167,7 @@ Checked against the Svelte docs (Svelte MCP `get-documentation`: best practices)
 
 ## Rules learned the hard way
 
-Details and reasons — [findings](../_sb/docs/findings.md#frontend-gallery-layout-resize-streaming).
+Details and reasons — [findings](../_sb/docs/findings.md#gallery-svebapp).
 
 - Compute the layout **synchronously, in memory** in the worker. No async tasks with
   cancellation and no per-task hook subscriptions — that caused races and "vanished"

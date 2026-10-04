@@ -4,7 +4,7 @@
 // copy of what Photos keeps. Elsewhere (Linux, Docker) every request fails with
 // ErrUnavailable and only what is on disk is served.
 //
-// Findings "PhotoKit spike": what each request makes local and how long it takes.
+// library README, "Apple Photos": what each request makes local and how long it takes.
 package photokit
 
 import "errors"

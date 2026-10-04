@@ -8,4 +8,4 @@ Standalone page, own database `spike-livequery`; not part of the SvelteKit app.
 cd svebapp && npx vite --config spikes/livequery/vite.config.ts   # http://localhost:5175
 ```
 
-Result (Dexie 4.4.6, Chromium): see `_sb/docs/findings.md` → "liveQuery across threads".
+Result (Dexie 4.4.6, Chromium): see `_sb/docs/findings.md` → "Gallery", traps.

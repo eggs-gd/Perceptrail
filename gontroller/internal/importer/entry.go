@@ -1,7 +1,7 @@
 // Package importer: the import service — it builds the import chain and runs it,
 // pass after pass. The chain's top has only linear steps, each in its own package (a
 // sub-chain when it has several), each knowing its tools; the top knows none of them
-// (roadmap "Chains").
+// (roadmap "The next chains").
 //
 //	walk → group → gate → identify → exif → commit
 //

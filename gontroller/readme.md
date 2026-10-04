@@ -45,7 +45,7 @@ same config gives the same database and caches from any working directory. See
 `data_dir`, `exiftool`, `server` with CORS `allowed_origins`, `database`).
 
 Host and plugins must be built with the same Go and the same versions of shared
-packages — see [findings](../_sb/docs/findings.md#go-plugins-2026-09-28).
+packages — see [findings](../_sb/docs/findings.md#go-and-the-toolchain).
 
 ## HTTP API
 
