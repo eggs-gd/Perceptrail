@@ -322,11 +322,14 @@ Layout, the DB's facts and PhotoKit's behaviour: the
   box): with `-stay_open` it never exits at the end of its argfile — `ReadStayOpen`
   polls stdin (`sysread`, then `select 0.01`) forever, so every server process that
   died without `Close` (SIGKILL from an IDE, a crash, the 10 s shutdown limit, a
-  killed `go test`) left its whole pool. Fixed in the fork: ExifTool starts under an
-  `sh` watchdog that kills it once the parent is gone. Rejected: `Pdeathsig`
-  (Linux only, and it fires when the spawning *thread* exits — Go's threads come
-  and go). With the watchdog `sh` always starts, so a missing executable is checked
-  with `LookPath` first.
+  killed `go test`) left its whole pool. Fixed in the fork: next to every ExifTool a
+  watchdog shell blocks on a pipe only the Go process writes; when the process dies
+  the pipe closes and the watchdog kills ExifTool at once. Both are the Go
+  process's children, reaped by it; the watchdog is stopped as soon as ExifTool is
+  reaped. Rejected on the way (Codex review): ExifTool under the shell (start
+  errors turn asynchronous; the watchdog, ExifTool's child, became a zombie under a
+  PID-1 Go process and could signal a reused pid after polling); `Pdeathsig` (Linux
+  only, and it fires when the spawning *thread* exits — Go's threads come and go).
 - The pool never panics: an exiftool that cannot start fails the pass's commands
   with its reason; the next pass tries again.
 
