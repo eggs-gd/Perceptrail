@@ -8,7 +8,7 @@ import (
 	"perceptrail/gontroller/internal/config"
 	"perceptrail/gontroller/internal/perceptor"
 	"perceptrail/gontroller/internal/perceptor/builtin"
-	"perceptrail/gontroller/test/plugin"
+	"perceptrail/gontroller/test/pluginbuild"
 
 	l "github.com/eggs-gd/perceplib/logger"
 	"github.com/eggs-gd/perceplib/logger/decorators"
@@ -25,7 +25,7 @@ var stubPerceptors = map[string]bool{"ml_faces": true, "ml_objects": true}
 // go test caches the result and does not see the plugins change (they are outside
 // this module): after changing one, run it with -count=1 — CI does.
 func TestLoadExternalPlugins(t *testing.T) {
-	plugin.Supported(t)
+	pluginbuild.Supported(t)
 	const perceptors = "../../../perceptors"
 	dirs, err := os.ReadDir(perceptors)
 	if err != nil {
@@ -38,7 +38,7 @@ func TestLoadExternalPlugins(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(perceptors, name, "go.mod")); err != nil || stubPerceptors[name] {
 			continue
 		}
-		files = append(files, plugin.Build(t, perceptors, name, out))
+		files = append(files, pluginbuild.Perceptor(t, perceptors, name, out))
 	}
 	if len(files) == 0 {
 		t.Fatal("no perceptors found in " + perceptors)
