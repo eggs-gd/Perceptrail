@@ -235,7 +235,8 @@ content is for when a second provider exists).
 
 ## The write bus and the queue (SQLite, 2026-10-04, design)
 
-Design: roadmap "The write bus", "The work queue". SQLite for life (the owner).
+Design: roadmap "The write bus", "The work queue". SQLite first (the owner): tuned
+to it, Postgres the way up — what works here gets better there.
 
 **Measured** (SQLite 3.51, WAL, this Mac; 200 k items, 1.08 M queue rows — six slugs
 an item):

@@ -253,8 +253,12 @@ findings "The write bus".
 
 ## Design: the work queue
 
-SQLite for life (decided): the design stays within what one file does well —
-short transactions, indexed queries, one writer.
+SQLite first (decided): the design is tuned to what one file does well — short
+transactions, indexed queries, one writer. Postgres stays the way up, not a
+rewrite: what works on SQLite only gets better there (proper concurrent writers,
+richer indexes, real transactions across connections); the bus does not know
+there is one writer — that is the SQLite executor's business, a Postgres one may
+write over several connections.
 
 - **In the main database: the queue and the renditions** (the core's facts); a
   perceptor's results stay in its own file.
