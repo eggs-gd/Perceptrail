@@ -62,11 +62,11 @@ end
 alt Apple claims it (inside *.photoslibrary)
     Groups -> Photos: file
     Photos -> Photos: first file: asset links from Photos.sqlite\n(original, render, Live Photo video); buffer of open\ngroups, a group goes out when all its files arrived
-    Photos -> Gate: providers.Asset (asset UUID; a file of an asset\ntrashed / hidden in Photos: sent as gone)
+    Photos -> Gate: dto.Asset (asset UUID; a file of an asset\ntrashed / hidden in Photos: sent as gone)
 else nobody else claims it (other providers: Immich, ... later)
     Groups -> Generic: file
     Generic -> Generic: sidecars by name, next to each other\n(buffer: one open group; a complete group goes out)
-    Generic -> Gate: providers.Asset
+    Generic -> Gate: dto.Asset
 end
 note over Groups: a provider not enabled is not asked:\nits files are a plain folder's
 
@@ -75,7 +75,7 @@ alt a gone file
 else unchanged, the model says no work (NeedsWork)
     Gate ->x Gate: drop
 else changed (stat, a role the grouper gave) / needs work (Rework, ...)
-    Gate -> Exif: gate.Group (no provider type past here)
+    Gate -> Exif: dto.Asset
 end
 
 Exif -> Exif: ONE exiftool -j call for the group,\nonly the declared tags (the perceptors'\nExifTags + identify's own); a map per file

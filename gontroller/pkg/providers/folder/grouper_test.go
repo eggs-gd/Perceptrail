@@ -6,14 +6,13 @@ import (
 	"testing"
 
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/providers"
 )
 
 func entry(path string) *dto.FileDto {
 	return &dto.FileDto{ItemEntry: dto.ItemEntry{Path: path, Name: filepath.Base(path)}}
 }
 
-func names(groups []providers.Asset) [][]string {
+func names(groups []dto.Asset) [][]string {
 	var out [][]string
 	for _, g := range groups {
 		var n []string
@@ -28,7 +27,7 @@ func names(groups []providers.Asset) [][]string {
 // Files come in name order; one group is open, the next name closes it
 func TestGenericGrouper(t *testing.T) {
 	g := &Grouper{}
-	var out []providers.Asset
+	var out []dto.Asset
 	for _, n := range []string{"IMG_1.HEIC", "IMG_1.MOV", "IMG_1.aae", "a.edited.jpg", "a.jpg", "a.jpg.xmp", "a.xmp", "b", "b.png"} {
 		if group, err := g.Decorate(entry("/lib/" + n)); err == nil {
 			out = append(out, group)

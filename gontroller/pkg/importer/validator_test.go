@@ -1,9 +1,7 @@
 package importer
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"perceptrail/gontroller/pkg/importer/commit"
@@ -63,24 +61,6 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// fakeExif stands in for exiftool: the file content is its "metadata", so the
-// short hash follows the content; no MIMEType, so mime uses the extension table.
-// A size, like a real image's. "BROKEN…": exiftool's Error (a corrupt file);
-// "NOSIZE…": a file with no image size (a JPEG cut after its header).
-func fakeExif(path string) (api.RawExif, error) {
-	content, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	switch {
-	case bytes.HasPrefix(content, []byte("BROKEN")):
-		return api.RawExif{"Content": content, "Error": []byte("File format error")}, nil
-	case bytes.HasPrefix(content, []byte("NOSIZE")):
-		return api.RawExif{"Content": content}, nil
-	}
-	return api.RawExif{"Content": content, "ImageSize": []byte("4x3")}, nil
-}
-
 // harness: the end of the test chain — the core perceptors, close, and the main
 // files that got there
 type harness struct {
@@ -98,22 +78,22 @@ func (h *harness) Consume(it *identify.Item) error {
 }
 
 // scan runs one pass of the import chain over root, as the server builds it — the
-// providers (Apple, the plain folder last), the gate, identify (a fake exiftool) —
+// providers (Apple, the plain folder last), the gate, identify (a real exiftool) —
 // up to the core perceptors and close; the main files processed in it. A new chain
 // each time: the groupers start empty, as on a restart.
 func scan(t *testing.T, root string) []string {
 	t.Helper()
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
 	ps := []providers.Provider{apple.New("", nil, itemsProxy, logger), folder.New()}
-	found, grouped := chain.NewPipe[*dto.FileDto](0), chain.NewPipe[providers.Asset](0)
-	stored, identified := chain.NewPipe[gate.Group](0), chain.NewPipe[*identify.Item](0)
+	found, grouped := chain.NewPipe[*dto.FileDto](0), chain.NewPipe[dto.Asset](0)
+	stored, identified := chain.NewPipe[dto.Asset](0), chain.NewPipe[*identify.Item](0)
 	h := &harness{t: t}
 	errs := make(chan error, 10)
 	c := chain.New(errs)
 	c.AddStep(walk.New(testDB, root, logger, found))
 	c.AddStep(group.New(ps, found, grouped))
 	c.AddStep(gate.New(testDB, logger, grouped, stored))
-	c.AddStep(identify.New(testDB, t.TempDir(), logger, stored, identified, identify.WithExiftool(fakeTool{})))
+	c.AddStep(identify.New(testDB, t.TempDir(), logger, stored, identified))
 	c.AddStep(chain.End[*identify.Item](identified, h))
 
 	ctx, cancel := context.WithCancel(t.Context())
@@ -130,32 +110,6 @@ func scan(t *testing.T, root string) []string {
 	}
 	slices.Sort(h.processed) // the steps run concurrently
 	return h.processed
-}
-
-// fakeTool stands in for exiftool: a file's content is its metadata (fakeExif); no
-// embedded previews
-type fakeTool struct{}
-
-func (fakeTool) Read(paths, _ []string) ([]api.RawExif, error) {
-	out := make([]api.RawExif, len(paths))
-	for i, p := range paths {
-		if m, err := fakeExif(p); err == nil {
-			out[i] = m
-		}
-	}
-	return out, nil
-}
-
-func (fakeTool) Extract(string, string, string) error { return errors.New("no exiftool in tests") }
-
-func write(t *testing.T, path, content string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func itemAt(t *testing.T, path string) *dto.ItemDto {

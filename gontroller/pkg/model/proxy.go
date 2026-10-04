@@ -20,6 +20,19 @@ type proxy struct {
 	db     *gorm.DB
 }
 
+// Close: the database's connection closed (the end of the run: its journal merged
+// into the file)
+func Close() error {
+	if db == nil {
+		return nil
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.Close()
+}
+
 func NewProxy(logger *l.Logger) *proxy {
 	if db == nil {
 		db = initDB(logger)

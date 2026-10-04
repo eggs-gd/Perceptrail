@@ -67,8 +67,8 @@ type importerService struct {
 }
 
 func NewImporterService(ctx app.AppContext) *importerService {
-	logger := ctx.Logger(string(app.LogImporter))
-	db := model.NewProxy(ctx.Logger(string(app.LogDB)))
+	logger := ctx.Logger(app.LogImporter)
+	db := model.NewProxy(ctx.Logger(app.LogDB))
 
 	// Every step's errors (skips never get here: they are on purpose)
 	errch := make(chan error)
@@ -87,9 +87,9 @@ func NewImporterService(ctx app.AppContext) *importerService {
 	found := chain.NewPipe[*dto.FileDto](0)
 	// group → gate: a whole asset (a gone file: its own); on the flush, what each
 	// grouper held
-	grouped := chain.NewPipe[providers.Asset](0)
+	grouped := chain.NewPipe[dto.Asset](0)
 	// gate → identify: the groups that need work
-	stored := chain.NewPipe[gate.Group](0)
+	stored := chain.NewPipe[dto.Asset](0)
 	// identify → exif: the identified items
 	identified := chain.NewPipe[*identify.Item](0)
 	// exif → commit: + what the perceptors found, their values kept

@@ -13,7 +13,7 @@
 package identify
 
 import (
-	"perceptrail/gontroller/pkg/importer/gate"
+	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/plugins"
 
 	"github.com/eggs-gd/perceplib/chain"
@@ -31,28 +31,12 @@ type Store interface {
 // Parallel readers, and the stage's exiftool processes (groups are independent)
 const workers = 5
 
-// Option: a test's change to the stage
-type Option func(*options)
-
-type options struct{ tool Exiftool }
-
-// WithExiftool: a test's exiftool instead of the stage's own processes
-func WithExiftool(tool Exiftool) Option { return func(o *options) { o.tool = tool } }
-
-// New: in — the groups that need work (stored: rows of the files table); out — the
-// identified items; embedded previews go under cacheDir. It runs its own exiftool
+// New: in — the assets that need work; out — the identified items; embedded previews go under cacheDir. It runs its own exiftool
 // (a pool of processes, closed when its steps stop); what is read besides
 // identify's own tags is what the loaded perceptors declare (plugins.ExifTags). Its
 // errors go to the chain it runs in.
-func New(db Store, cacheDir string, logger *l.Logger, in *chain.Pipe[gate.Group], out *chain.Pipe[*Item], opts ...Option) chain.Processor {
-	var o options
-	for _, opt := range opts {
-		opt(&o)
-	}
-	tool := o.tool
-	if tool == nil {
-		tool = newPool(workers, logger)
-	}
+func New(db Store, cacheDir string, logger *l.Logger, in *chain.Pipe[dto.Asset], out *chain.Pipe[*Item]) chain.Processor {
+	tool := newPool(workers, logger)
 	// The kinds' table changed since the files were judged "not media": judged again
 	if err := reclassifyIgnored(db, logger); err != nil {
 		logger.Error("MIME version check failed", l.Error(err))

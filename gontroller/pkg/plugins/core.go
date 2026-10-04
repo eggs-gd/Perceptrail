@@ -8,9 +8,13 @@ import (
 	l "github.com/eggs-gd/perceplib/logger"
 )
 
+// RawItemRW: the item as the core perceptors see it — they write into it; external
+// plugins only read (api.RawItemR)
 type RawItemRW interface {
 	api.RawItemR
-	api.ItemDataEditor
+	// SetSize / SetRatio: the oriented pixel size and its ratio. Core only.
+	SetSize(size api.Size)
+	SetRatio(ratio api.Size)
 	// SetDateInfo stores the date with its offset (date's zone), the tag it came
 	// from and how the zone was found. Core only: external plugins read GetDate(),
 	// which returns the date in that zone.

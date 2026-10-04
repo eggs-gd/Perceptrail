@@ -24,7 +24,6 @@ import (
 	"perceptrail/gontroller/pkg/model/dto"
 
 	"github.com/eggs-gd/perceplib/api"
-	"perceptrail/gontroller/pkg/providers"
 
 	"github.com/eggs-gd/perceplib/chain"
 
@@ -46,18 +45,18 @@ func newGrouper(logger *l.Logger) *Grouper {
 
 // Flush: the walk ended — the next one loads the libraries again. Groups that did
 // not complete (a file vanished during the walk) wait for the next walk.
-func (g *Grouper) Flush() ([]providers.Asset, error) {
+func (g *Grouper) Flush() ([]dto.Asset, error) {
 	g.libs = map[string]*library{}
 	return nil, nil
 }
 
-func (g *Grouper) Decorate(f *dto.FileDto) (providers.Asset, error) {
+func (g *Grouper) Decorate(f *dto.FileDto) (dto.Asset, error) {
 	if f.Gone {
-		return providers.Asset{Files: []*dto.FileDto{f}}, nil
+		return dto.Asset{Files: []*dto.FileDto{f}}, nil
 	}
 	root := BundleRoot(f.Path)
 	if root == "" {
-		return providers.Asset{}, fmt.Errorf("apple grouper: %s is not in a Photos library", f.Path)
+		return dto.Asset{}, fmt.Errorf("apple grouper: %s is not in a Photos library", f.Path)
 	}
 	lib, ok := g.libs[root]
 	if !ok {
@@ -74,15 +73,15 @@ func (g *Grouper) Decorate(f *dto.FileDto) (providers.Asset, error) {
 
 	if lib.dropped[f.Path] {
 		f.Gone = true // the asset is in Photos' trash (or hidden): its item goes
-		return providers.Asset{Files: []*dto.FileDto{f}}, nil
+		return dto.Asset{Files: []*dto.FileDto{f}}, nil
 	}
 	a, ok := lib.byPath[f.Path]
 	if !ok || a.sent {
-		return providers.Asset{}, chain.ErrSkippedItem // not an asset file (caches, DB, …)
+		return dto.Asset{}, chain.ErrSkippedItem // not an asset file (caches, DB, …)
 	}
 	a.arrived[f.Path] = f
 	if len(a.arrived) < len(a.files) {
-		return providers.Asset{}, chain.ErrSkippedItem // not complete yet
+		return dto.Asset{}, chain.ErrSkippedItem // not complete yet
 	}
 	a.sent = true
 	return a.group(), nil
@@ -134,8 +133,8 @@ type candidate struct {
 	role role
 }
 
-func (a *asset) group() providers.Asset {
-	g := providers.Asset{Key: a.uuid, Meta: a.meta, MetaHash: a.metaHash, Kind: a.kind}
+func (a *asset) group() dto.Asset {
+	g := dto.Asset{Key: a.uuid, Meta: a.meta, MetaHash: a.metaHash, Kind: a.kind}
 	for _, c := range a.files {
 		f := a.arrived[c.path]
 		if c.role == roleOriginal && a.files[0].role == roleLiveVideo {

@@ -13,7 +13,7 @@ walk → group → gate → identify → exif → commit
 ```
 
 A step's constructor takes what it really depends on, then its pipes — always in
-one order: the model, the step's own dependencies, the logger, `in`, `out`, options.
+one order: the model, the step's own dependencies, the logger, `in`, `out`.
 `walk` the model (the files table) and the root,
 `group` the providers, `gate` the model, `identify` the model and the cache directory (its exiftool is its own; the tags it
 reads it asks the plugin registry: `plugins.ExifTags`), `exif` the model (rework, pruning; it reads the plugin
@@ -40,11 +40,13 @@ importer/commit/           the item published
 ```
 
 A step's `New` is its declaration: the chain of its steps, once. Step packages export
-their logic (`gate.NewGate`, `identify.NewReader`, …) for unit tests; the tests of the
-whole import run the real chain, one pass (`walk` → `group` → `gate` → `identify`,
-a test end), with exiftool replaced: identify runs its own (a pool
-of processes, closed when its steps stop), a test gives a fake
-(`identify.WithExiftool`).
+their logic (`gate.NewGate`, `identify.NewReader`, …) for unit tests (a step's own
+tests may give it a fake exiftool, inside its package). The tests of the whole
+import are integration tests: the real chain, one pass (`walk` → `group` → `gate` →
+`identify`, a test end), with a real exiftool (identify runs its own pool, closed
+when its steps stop) over real files (`fixtures_test.go`: a JPEG, a TIFF as a RAW,
+QuickTime, HEIF, XMP — each with its content inside; a broken JPEG, a cut one). No
+test hook in the code; CI installs exiftool.
 **A type belongs to the package that produces it** (there is no shared package of
 messages): see [Types](#types-who-owns-what). Every step declares the DB methods it calls as its own small
 interface (`gate.Store`, `ValidatorStore`, `SizesStore`, `KindsStore`, `CloserStore`,
@@ -79,12 +81,12 @@ detail).
 | Stage / step | File | In -> out | What it does |
 |---|---|---|---|
 | **walk** | `walk/walker.go` | the root -> `*dto.FileDto` | The chain's `Entry`, a walk per pass: every file's row written as it goes (created, or its stat refreshed; `CheckTime`; `Changed`: new or its stat changed) and sent; after a complete walk the rows it did not stamp that it says are gone (`walk.Gone`: under the root, not under an unreadable directory) sent with `Gone`; then the flush. Unreadable subdirectories are skipped and recorded. |
-| **group** | `group/switch.go` | `*dto.FileDto` -> `providers.Asset` | A sub-chain: a switch sends a file (a gone one too) to the grouper of the first enabled provider that claims it (the plain folder last: everything else), the walk's flush to every grouper (a `chain.Route`); each grouper is a step of it. |
-| (plain folder grouper) | `pkg/providers/folder` | `*dto.FileDto` -> `providers.Asset` | Sidecars by name, next to each other: one open group; a complete group goes out, the last one on the walk's flush. A gone file passes through (an asset of its own). |
-| (Apple Photos grouper) | `pkg/providers/apple` | `*dto.FileDto` -> `providers.Asset` | The first file of a library loads the assets from a copy of `Photos.sqlite` and forms the groups (files that exist, per the naming layout); a group goes out when its last file arrives. Key = asset UUID; the main file = the source; `Show` = the edit, the original, then Apple's derivatives. Trashed / hidden assets: their files are sent as gone (their items go); a gone file passes through; a group that did not complete waits for the next walk. Video renditions Photos downloads on request (`_2_3_o.mp4`, `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`; `_a` instead of `_o` for an edit, preferred) are `motion`, after the stills; `apple.Local` finds the best file for an on-demand want. |
-| **gate** | `gate/gate.go` | `providers.Asset` -> `gate.Group` | Gone files: the model's `Gone` (a main file's item deleted, a sidecar's item `Dirty`). A group passes if a file changed (new, its stat or the role its grouper gave: stored here) or the model says it needs work (`NeedsWork`: links, state, fingerprint, `MetaHash`, `Rework`). |
-| **identify** | `identify/entry.go` | `gate.Group` -> `*identify.Item` | The item known: identity, metadata, kinds and roles, what to show now. exiftool lives here; its working item (`draft`: every file, its exif and kind) never leaves it. |
-| read | `identify/read.go` | `gate.Group` -> draft | One `exiftool -j -n` call for the whole group (a keyed group: the main file only), only the declared tags (see [exif](#exif-what-is-read-and-who-gets-it)), a map per file; N steps in parallel on the same channels, one pool. |
+| **group** | `group/switch.go` | `*dto.FileDto` -> `dto.Asset` | A sub-chain: a switch sends a file (a gone one too) to the grouper of the first enabled provider that claims it (the plain folder last: everything else), the walk's flush to every grouper (a `chain.Route`); each grouper is a step of it. |
+| (plain folder grouper) | `pkg/providers/folder` | `*dto.FileDto` -> `dto.Asset` | Sidecars by name, next to each other: one open group; a complete group goes out, the last one on the walk's flush. A gone file passes through (an asset of its own). |
+| (Apple Photos grouper) | `pkg/providers/apple` | `*dto.FileDto` -> `dto.Asset` | The first file of a library loads the assets from a copy of `Photos.sqlite` and forms the groups (files that exist, per the naming layout); a group goes out when its last file arrives. Key = asset UUID; the main file = the source; `Show` = the edit, the original, then Apple's derivatives. Trashed / hidden assets: their files are sent as gone (their items go); a gone file passes through; a group that did not complete waits for the next walk. Video renditions Photos downloads on request (`_2_3_o.mp4`, `_2_4_o.mp4`, `_2_201_o.mov`, `_2_101_o.mov`; `_a` instead of `_o` for an edit, preferred) are `motion`, after the stills; `apple.Local` finds the best file for an on-demand want. |
+| **gate** | `gate/gate.go` | `dto.Asset` -> `dto.Asset` | Gone files: the model's `Gone` (a main file's item deleted, a sidecar's item `Dirty`). A group passes if a file changed (new, its stat or the role its grouper gave: stored here) or the model says it needs work (`NeedsWork`: links, state, fingerprint, `MetaHash`, `Rework`). |
+| **identify** | `identify/entry.go` | `dto.Asset` -> `*identify.Item` | The item known: identity, metadata, kinds and roles, what to show now. exiftool lives here; its working item (`draft`: every file, its exif and kind) never leaves it. |
+| read | `identify/read.go` | `dto.Asset` -> draft | One `exiftool -j -n` call for the whole group (a keyed group: the main file only), only the declared tags (see [exif](#exif-what-is-read-and-who-gets-it)), a map per file; N steps in parallel on the same channels, one pool. |
 | classify | `identify/classify.go` | draft -> draft | The kind of every file; the main file (the source) first; roles. |
 | merge | `identify/merge.go` | draft -> draft | The asset's metadata package: a tag from the source's metadata, else the metadata sidecars (.xmp), the main file, the derivatives; only the perceptors' tags. |
 | fingerprint | `identify/fingerprint.go` | draft -> draft | The main file's identity across paths: its size and sha256 of its first and last 64 KB (no exiftool). |
@@ -101,15 +103,13 @@ detail).
 - **walk** yields `*dto.FileDto` — a row of the files table, with what this walk
   found (not stored: `Changed`, `Gone`). `walk.Result` (root, start, complete or not,
   files, unreadable directories) stays inside it: what it says is gone.
-- **The provider contract** ([`pkg/providers/asset.go`](../providers/asset.go)),
-  between group and gate: a grouper takes the walk's rows, gives an `Asset` (one
-  whole asset as its source describes it: its files' rows, `Key`, `Show`, `Meta`,
-  `MetaHash`, `Kind`); a gone file it passes through, or makes something of it (an
-  Apple asset trashed in Photos: its files sent as gone). The end of a walk is not a
-  value: the chain flushes.
-- **`gate.Group`** — what the gate yields: the asset's rows, what the source said
-  about it. identify reads it and
-  never sees a provider type.
+- **`dto.Asset`** ([`pkg/model/dto/asset.go`](../model/dto/asset.go)) — one whole
+  asset before it is identified, the system's unit next to the item it becomes
+  (`ItemDto`: item == asset): its files' rows, `Key`, `Show`, the source's `Meta` /
+  `MetaHash`, `Kind`. A provider's grouper makes it from the walk's rows (a gone
+  file it passes through, or makes something of it: an Apple asset trashed in Photos
+  — its files sent as gone); the gate passes the ones that need work; identify reads
+  it. The end of a walk is not a value: the chain flushes.
 - **`identify.Item`** — what identify yields: the item and its metadata package. The
   perceptors read it (`api.RawItemR`), the core ones write into it
   (`plugins.RawItemRW`), commit publishes `Item.Item`. identify's working `draft`

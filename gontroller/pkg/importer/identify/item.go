@@ -28,11 +28,11 @@ type draft struct {
 	Exif     []api.RawExif
 	Files    []*dto.FileDto
 	Kinds    []mediaKind
-	Key      string         // gate.Group.Key
-	Show     []*dto.FileDto // gate.Group.Show
-	Meta     api.RawExif    // gate.Group.Meta: the source's metadata
+	Key      string         // dto.Asset.Key
+	Show     []*dto.FileDto // dto.Asset.Show
+	Meta     api.RawExif    // dto.Asset.Meta: the source's metadata
 	MetaHash string
-	Kind     string // gate.Group.Kind
+	Kind     string // dto.Asset.Kind
 	// Merged: the asset's metadata package (merge) — what the perceptors read
 	Merged api.RawExif
 	// Hash: the main file's fingerprint (fingerprint), its identity across paths
@@ -101,8 +101,6 @@ func (it *Item) SetStoreValues(store string, v api.Values) {
 	}
 	it.values[store] = v
 }
-
-func (it *Item) SetDate(date time.Time) { it.SetDateInfo(date, "plugin", "tag") }
 
 func (it *Item) SetDateInfo(date time.Time, source, zone string) {
 	_, offset := date.Zone()

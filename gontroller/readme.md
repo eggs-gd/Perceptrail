@@ -70,7 +70,7 @@ Services (`pkg/app/services.go`) start in parallel: `ImporterService` and
 walk       the chain's entry: the library's files as rows (stat, seen), then the
            ones it says are gone
 group      whole assets: the providers' groupers (the plain folder last)
-gate       only the groups that need work pass (gate.Group); gone files deleted
+gate       only the assets that need work pass (dto.Asset); gone files deleted
 identify   one exiftool call per group (the declared tags only) → kinds → the
            metadata package → fingerprint → the item → the cheap preview
            (identify.Item)

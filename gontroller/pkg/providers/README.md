@@ -10,16 +10,16 @@ we render and store nothing it keeps.
   grouper is a step of its own. The plain folder (`providers/folder`) is a provider too, the
   last: it claims what nobody else did. A provider not enabled is not asked: its
   files are a plain folder's.
-- **The contract** ([`asset.go`](asset.go)): a grouper takes the walk's rows
-  (`*dto.FileDto`: path, stat; `Changed`, `Gone`) and gives a whole `Asset` (its
+- **The contract** ([`providers.go`](providers.go) `Grouper`): a grouper takes the
+  walk's rows (`*dto.FileDto`: path, stat; `Changed`, `Gone`) and gives a whole
+  `dto.Asset` (its
   files' rows, `Key`, `Show`, the source's `Meta` / `MetaHash`, `Kind`); on the
   walk's flush (`chain.Flusher`) it gives what it holds (its last group). A file the
   walk says is gone comes too: the grouper passes it through (an asset of its own)
   or makes something of it (Apple: the files of an asset trashed or hidden in Photos
   are sent as gone). A grouper that gives a file a role uses `SetRole` (a new role
   is new work). The source's `Meta` uses exiftool's tag names and `-n` values
-  (numbers as numbers). Only the importer's group and gate see these: the gate turns
-  an `Asset` into its own `gate.Group`.
+  (numbers as numbers).
 - **On demand**: the web service asks the item's provider (`Of`, `Owns`) for a
   level (`Levels`: medium, hover, original) and serves what it gets — a file, or
   bytes it drew (`Rendition`). After its library made a file local, the provider

@@ -39,7 +39,6 @@ func (r *Recorder) StoreValues(store string) (api.Values, bool) {
 	return v, ok
 }
 func (r *Recorder) SetStoreValues(store string, v api.Values)       { r.values[store] = v }
-func (r *Recorder) SetDate(date time.Time)                          { r.date = date }
 func (r *Recorder) SetDateInfo(date time.Time, source, zone string) { r.date = date }
 func (r *Recorder) SetDuration(seconds float64)                     { r.duration = seconds }
 func (r *Recorder) SetSize(size api.Size)                           { r.size = size }

@@ -10,7 +10,3 @@ const (
 	LogHTTP     LogCategory = "http"
 	LogImporter LogCategory = "importer"
 )
-
-func (c LogCategory) String() string {
-	return string(c)
-}

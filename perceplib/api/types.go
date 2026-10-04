@@ -26,12 +26,6 @@ type ItemDataProvider interface {
 	ValueCarrier
 }
 
-type ItemDataEditor interface {
-	SetDate(date time.Time)
-	SetSize(size Size)
-	SetRatio(ratio Size)
-}
-
 type RawItemR interface {
 	ItemDataProvider
 	ExifProvider

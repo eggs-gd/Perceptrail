@@ -54,7 +54,7 @@ func main() {
 		Perceptors: ctx.Config().Perceptors,
 		Driver:     ctx.Config().Database.Driver,
 		DataDir:    ctx.Config().DataDir,
-		Logger:     ctx.Logger(string(app.LogPlugins)),
+		Logger:     ctx.Logger(app.LogPlugins),
 	}, exif_date.Perceptor, exif_size.Perceptor, exif_duration.Perceptor)
 	if err != nil {
 		log.Fatalf("Failed to load plugins: %v", err)
@@ -66,7 +66,7 @@ func main() {
 	var ps []providers.Provider
 	if ctx.Config().Providers.Enabled("apple") {
 		ps = append(ps, apple.New(ctx.Config().Path, photokit.Library{},
-			model.NewProxy(ctx.Logger(string(app.LogDB))), ctx.Logger(string(app.LogImporter))))
+			model.NewProxy(ctx.Logger(app.LogDB)), ctx.Logger(app.LogImporter)))
 	}
 	ps = append(ps, folder.New())
 	providers.Enable(ps...)
@@ -76,7 +76,7 @@ func main() {
 	for _, p := range ps {
 		p.Start(mainCtx, importer.Refresh)
 	}
-	web, err := client.NewWebService(ctx.Config().Server, routes.AppInfo{Version: app.Version, Mode: ctx.Config().Mode}, plugins.Client(), plugins.LoadValues, ctx.Logger(string(app.LogHTTP)))
+	web, err := client.NewWebService(ctx.Config().Server, routes.AppInfo{Version: app.Version, Mode: ctx.Config().Mode}, plugins.Client(), plugins.LoadValues, ctx.Logger(app.LogHTTP))
 	if err != nil {
 		log.Fatalf("Server: %v", err)
 	}
@@ -99,6 +99,11 @@ func main() {
 	cancel(nil)
 	select {
 	case <-stopped:
+		// Nothing writes any more: the databases closed (their journals merged)
+		plugins.Close()
+		if err := model.Close(); err != nil {
+			log.Printf("Database not closed: %v", err)
+		}
 	case <-time.After(10 * time.Second):
 		log.Printf("Services did not stop in time")
 	}

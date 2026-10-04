@@ -75,6 +75,18 @@ func All() []api.Perceptor {
 	return append([]api.Perceptor(nil), perceptors...)
 }
 
+// Close: every perceptor's storage closed (the end of the run)
+func Close() {
+	mu.Lock()
+	defer mu.Unlock()
+	for name, st := range stores {
+		if err := st.Close(); err != nil {
+			logger.Error("Perceptor storage not closed", l.String("perceptor", name), l.Error(err))
+		}
+	}
+	stores = nil
+}
+
 // openStores: a storage per perceptor that declares data — data_dir/perceptors/
 // (SQLite: a file each). One that cannot be opened is logged: its perceptor runs,
 // its values are not kept.

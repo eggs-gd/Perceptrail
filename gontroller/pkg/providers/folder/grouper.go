@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/providers"
 
 	"github.com/eggs-gd/perceplib/chain"
 )
@@ -21,29 +20,29 @@ type Grouper struct {
 	open []*dto.FileDto
 }
 
-func (g *Grouper) Decorate(file *dto.FileDto) (providers.Asset, error) {
+func (g *Grouper) Decorate(file *dto.FileDto) (dto.Asset, error) {
 	switch {
 	case file.Gone:
-		return providers.Asset{Files: []*dto.FileDto{file}}, nil
+		return dto.Asset{Files: []*dto.FileDto{file}}, nil
 	case shouldSkipPath(file.Path):
-		return providers.Asset{}, chain.ErrSkippedItem
+		return dto.Asset{}, chain.ErrSkippedItem
 	case len(g.open) == 0 || sameGroup(g.open, file):
 		g.open = append(g.open, file)
-		return providers.Asset{}, chain.ErrSkippedItem // not complete yet
+		return dto.Asset{}, chain.ErrSkippedItem // not complete yet
 	}
 	closed := g.open
 	g.open = []*dto.FileDto{file}
-	return providers.Asset{Files: closed}, nil
+	return dto.Asset{Files: closed}, nil
 }
 
 // Flush: the walk ended — the last open group goes out
-func (g *Grouper) Flush() ([]providers.Asset, error) {
+func (g *Grouper) Flush() ([]dto.Asset, error) {
 	last := g.open
 	g.open = nil
 	if len(last) == 0 {
 		return nil, nil
 	}
-	return []providers.Asset{{Files: last}}, nil
+	return []dto.Asset{{Files: last}}, nil
 }
 
 // sameGroup: the file sits in the group's directory and its name without the last

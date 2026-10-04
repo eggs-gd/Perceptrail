@@ -16,7 +16,7 @@ import (
 
 // New: the sub-chain from in (the walk's files) to out (whole assets: every
 // grouper writes to it, so a flush passes on once every grouper has flushed)
-func New(ps []providers.Provider, in *chain.Pipe[*dto.FileDto], out *chain.Pipe[providers.Asset]) chain.Processor {
+func New(ps []providers.Provider, in *chain.Pipe[*dto.FileDto], out *chain.Pipe[dto.Asset]) chain.Processor {
 	grouping := chain.New(nil)
 	toGroupers := make([]*chain.Pipe[*dto.FileDto], len(ps))
 	for i, p := range ps {

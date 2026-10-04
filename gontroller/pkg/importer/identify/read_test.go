@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"perceptrail/gontroller/pkg/importer/gate"
 	"perceptrail/gontroller/pkg/model/dto"
 
 	l "github.com/eggs-gd/perceplib/logger"
@@ -56,7 +55,7 @@ func TestReadGroup(t *testing.T) {
 	r := NewReader(pool, []string{"DateTimeOriginal", "GPSLatitude", "GPSLongitude", "Orientation"}, logger)
 
 	file := func(p string) *dto.FileDto { return &dto.FileDto{ItemEntry: dto.ItemEntry{Path: p}} }
-	d, err := r.Decorate(gate.Group{Files: []*dto.FileDto{file(photo), file(xmp), file(gone)}})
+	d, err := r.Decorate(dto.Asset{Files: []*dto.FileDto{file(photo), file(xmp), file(gone)}})
 	if err != nil {
 		t.Fatal(err)
 	}

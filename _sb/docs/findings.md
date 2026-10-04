@@ -537,6 +537,33 @@ Design: roadmap "Expensive stage".
 
 ## Backend: gontroller, plugins, exiftool
 
+### Cleanup: dead code, the asset in dto, integration tests on a real exiftool (2026-10-04, decided)
+
+A review with `deadcode` / `staticcheck` and the model's methods without callers:
+
+- Removed: `Item.SetDate` and `api.ItemDataEditor` (only the core writes into an
+  item: `plugins.RawItemRW` has its setters now; the first plugin API's `SetDate`
+  had no caller), `GetAllItems`, `GetItemByHash`, `UpdateItems`,
+  `PerceptorStore.Has` (`MarkUnprocessed` reads every GUID of a storage at once).
+- Used as meant: `AppContext.Logger` takes an `app.LogCategory`; the perceptors'
+  storages and the main DB are closed after the services stopped (`plugins.Close`,
+  `model.Close`) — before, nothing closed them: SQLite kept its `-wal` / `-shm`
+  files next to every DB (data safe, journal never merged on exit).
+- `dto.Asset` (was `providers.Asset`, and `gate.Group` a field-by-field copy of it):
+  the asset before identification is the system's unit next to the item; the gate
+  passes it on as it is.
+- The import tests are integration tests: the real chain over real files
+  (`fixtures_test.go`: JPEG, a TIFF named .NEF — exiftool takes a TIFF RAW's type
+  from the extension —, QuickTime, HEIF and XMP boxes, each with its content
+  inside) with a real exiftool; no test hook in the code (`identify.WithExiftool`
+  gone). Found while writing them: a text file named .jpg is `text/plain` to
+  exiftool (not media), not an Error; `FF D8` + garbage gives `Error: File format
+  error`, a JPEG cut after its header only a Warning and no size. CI installs
+  exiftool.
+- Kept on purpose: `pkg/transcode` and `pkg/transcoder` (the next chains),
+  `api.ProcessingMode` (until journeys / memories show whether it is needed),
+  `DataProvider` (it chooses the perceptors the exif step runs).
+
 ### The walk writes the rows, gone files flow; Refresh is a mark (2026-10-04, decided)
 
 Two tries came first and were rejected. (1) The walker cycled itself: a `Source`

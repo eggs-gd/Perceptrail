@@ -19,7 +19,7 @@ import (
 )
 
 // Exiftool: what identify asks of exiftool. The stage starts its own (a pool of
-// processes); tests give a fake (WithExiftool)
+// processes); the steps' own tests give a fake
 type Exiftool interface {
 	// Read: the tags of every path at once, as exiftool -n gives them (numbers as
 	// numbers); one map per path, nil when the file could not be read

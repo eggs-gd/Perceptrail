@@ -24,7 +24,7 @@ import (
 // (chain.Decorator is a step's logic, not the step: no pipes, no goroutine). The
 // importer runs it between its pipes (chain.Decorate); on the walk's flush it gives
 // what it holds (chain.Flusher: the last group).
-type Grouper = chain.Decorator[*dto.FileDto, Asset]
+type Grouper = chain.Decorator[*dto.FileDto, dto.Asset]
 
 type Provider interface {
 	Name() string

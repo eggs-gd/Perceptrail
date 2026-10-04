@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/providers"
 
 	"github.com/eggs-gd/perceplib/chain"
 	l "github.com/eggs-gd/perceplib/logger"
@@ -118,7 +117,7 @@ func fixture() []fixtureAsset {
 
 // walk feeds every file under root in the walker's order (sorted paths), then the
 // walk's flush: the groups by key (the files sent as gone under "")
-func walk(t *testing.T, g *Grouper, root string, before func(path string)) map[string]providers.Asset {
+func walk(t *testing.T, g *Grouper, root string, before func(path string)) map[string]dto.Asset {
 	t.Helper()
 	var paths []string
 	filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
@@ -128,7 +127,7 @@ func walk(t *testing.T, g *Grouper, root string, before func(path string)) map[s
 		return nil
 	})
 	sort.Strings(paths)
-	groups := map[string]providers.Asset{}
+	groups := map[string]dto.Asset{}
 	for _, p := range paths {
 		if before != nil {
 			before(p)

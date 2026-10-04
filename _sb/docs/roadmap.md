@@ -442,7 +442,10 @@ transcoders, plugins belong to the stage that uses them. One step does one thing
       Deferred:
       - [x] the end-of-walk marker out of band — the library's flush;
       - [x] the import tests run the real chain, one pass (`walk` to identify, a
-            test end);
+            test end), with a real exiftool over real fixture files (CI installs
+            it); no test hook in the code;
+      - [x] cleanup: dead code out, `dto.Asset`, the databases closed on stop,
+            typed log categories;
       - [ ] Apple: files Photos offloads (Optimize Mac Storage) must not hide or
             delete the item — the grouper gets them as gone now and may keep the
             asset (a separate task);

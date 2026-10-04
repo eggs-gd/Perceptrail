@@ -1,6 +1,5 @@
-// Package gate: the third step of the import — lets through only the groups that
-// need work (the model says which), in our format: so unchanged files never reach
-// exiftool. A file the walk says is gone (and its provider let through) is the
+// Package gate: the third step of the import — lets through only the assets that
+// need work (the model says which): so unchanged files never reach exiftool. A file the walk says is gone (and its provider let through) is the
 // model's to delete here.
 package gate
 
@@ -8,9 +7,7 @@ import (
 	"slices"
 
 	"perceptrail/gontroller/pkg/model/dto"
-	"perceptrail/gontroller/pkg/providers"
 
-	"github.com/eggs-gd/perceplib/api"
 	"github.com/eggs-gd/perceplib/chain"
 
 	l "github.com/eggs-gd/perceplib/logger"
@@ -24,24 +21,6 @@ type Store interface {
 	Gone(files []*dto.FileDto) (deleted, dirty int, err error)
 }
 
-// Group: what the gate yields — one whole asset that needs work, in our format: its
-// files are rows of the files table (GUIDs, links), the main file first when its
-// source knows it. What the source said about it rides along.
-type Group struct {
-	Files []*dto.FileDto
-	// The item's GUID when the source knows the asset (Apple Photos: its UUID; then
-	// Files[0] is the main file and is not re-ranked); "": a plain folder's group
-	Key string
-	// What to show first, best first (stored rows); nil: identify decides
-	Show []*dto.FileDto
-	// The source's own metadata (exiftool's tag names): wins over the files' EXIF;
-	// MetaHash is saved with the item (the gate compares it)
-	Meta     api.RawExif
-	MetaHash string
-	// What the asset is (dto.Kind*), when the source says it
-	Kind string
-}
-
 // Gate: the gate step's logic
 type Gate struct {
 	db     Store
@@ -53,26 +32,27 @@ func NewGate(db Store, logger *l.Logger) *Gate {
 }
 
 // New: in — whole assets (the groupers'); out — the ones that need work
-func New(db Store, logger *l.Logger, in *chain.Pipe[providers.Asset], out *chain.Pipe[Group]) chain.Processor {
+func New(db Store, logger *l.Logger, in *chain.Pipe[dto.Asset], out *chain.Pipe[dto.Asset]) chain.Processor {
 	return chain.Decorate(in, out, NewGate(db, logger))
 }
 
-func (g *Gate) Decorate(in providers.Asset) (Group, error) {
+func (g *Gate) Decorate(in dto.Asset) (dto.Asset, error) {
 	files, err := g.gone(in.Files)
 	if err != nil || len(files) == 0 {
-		return Group{}, skipOr(err)
+		return dto.Asset{}, skipOr(err)
 	}
 	changed := slices.ContainsFunc(files, func(f *dto.FileDto) bool { return f.Changed })
 	if changed {
 		// The walk stored the stat; a role the grouper gave is stored here
 		if _, err := g.db.UpdateFiles(files); err != nil {
-			return Group{}, err
+			return dto.Asset{}, err
 		}
 	}
 	if !changed && !g.needsWork(files, in.Key, in.MetaHash) {
-		return Group{}, chain.ErrSkippedItem
+		return dto.Asset{}, chain.ErrSkippedItem
 	}
-	return Group{Files: files, Key: in.Key, Show: in.Show, Meta: in.Meta, MetaHash: in.MetaHash, Kind: in.Kind}, nil
+	in.Files = files
+	return in, nil
 }
 
 // gone: the files the walk says are gone go by the model's rules (a main file's item

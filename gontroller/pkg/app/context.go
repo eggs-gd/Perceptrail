@@ -15,7 +15,7 @@ type appContext struct {
 
 type AppContext interface {
 	Config() *Config
-	Logger(category string) *l.Logger
+	Logger(category LogCategory) *l.Logger
 	SetLogLevel(level l.LogLevel)
 }
 
@@ -34,8 +34,8 @@ func (a *appContext) Config() *Config {
 	return a.config
 }
 
-func (a *appContext) Logger(category string) *l.Logger {
-	return a.logger.Named(category)
+func (a *appContext) Logger(category LogCategory) *l.Logger {
+	return a.logger.Named(string(category))
 }
 
 func (a *appContext) SetLogLevel(level l.LogLevel) {
