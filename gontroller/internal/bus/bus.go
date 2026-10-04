@@ -1,19 +1,19 @@
 // Package bus: write operations as topics. A write rule is an Op: a caller submits
-// an argument and gets an ID at once; the host's Executor runs the rule (for a
+// an argument and gets an ID at once; the model's Executor runs the rule (for a
 // database: in its one writer's transaction, batched by class) and, after the
 // commit, the result goes to every subscriber of the rule — each picks its own by
 // ID. Do submits and waits for its own result, for callers that may block.
 //
-// The bus does not know what runs it: T is the host's transaction type, seen only
-// by the host and its Executor; a step sees a Topic. Stdlib only — every
-// dependency of perceplib is one each plugin must match.
+// The bus does not know what runs it: T is the executor's transaction type, seen
+// only by the model and its Executor; a step sees a Topic. Perceptors never see the
+// bus: the core methods they may call are interfaces in perceplib/api.
 //
 // Who may write what is decided by who holds what: an Op is made with the
-// executor, and its host keeps the executor to itself, so the rules are only the
-// host's; others get Topics — an argument for a given rule, no transaction, no code
-// of their own (Job is sealed). In one process this is discipline, not security:
-// code in the process can open the database itself; isolation (WebAssembly, a
-// process) is what makes a plugin unable to.
+// executor, and the model keeps the executor to itself, so the rules are only the
+// model's; others get Topics — an argument for a given rule, no transaction, no
+// code of their own (Job is sealed). In one process this is discipline, not
+// security: code in the process can open the database itself; isolation
+// (WebAssembly, a process) is what makes a plugin unable to.
 //
 // Not obvious:
 //   - Delivery never blocks the executor: a subscriber whose buffer is full misses

@@ -267,8 +267,8 @@ an item):
   is the model's; steps and perceptors get `Topic`s — an argument for a given rule,
   no transaction, no code. In one process that is discipline, not security: any
   code in it can open the database file; today's `.so` plugins could delete it.
-  Only isolation (WebAssembly, a process) makes a plugin unable to — the bus's
-  `Topic`s are what such a plugin would be given.
+  Only isolation (WebAssembly, a process) makes a plugin unable to — and what it
+  is given is the core's methods as `perceplib/api` declares them.
 
 **Rejected on the way:**
 
@@ -290,9 +290,12 @@ an item):
   writer with job IDs — but its batches are not one transaction, it takes SQL
   strings, a default driver not ours, 25 dependencies, pre-1.0);
   [go-relay](https://pkg.go.dev/github.com/binozo/go-relay), kelindar/event and the
-  like (broadcast only: no submit → result by ID, no batching). And any dependency
-  in perceplib is one every `.so` must match exactly (`x/sync`, testify bit us) —
-  the bus is stdlib, a few dozen lines on channels.
+  like (broadcast only: no submit → result by ID, no batching) — the bus is a few
+  dozen lines on channels.
+- The bus in perceplib (first written there): it is the core's mechanism and its
+  restrictions; a perceptor needs only the list of core methods it may call —
+  interfaces in `perceplib/api`, synchronous or asynchronous, whatever implements
+  them. `internal/bus`.
 - The queue as a column per perceptor (a schema that changes with the loaded `.so`
   files, a dead column per removed one, an index per column, five columns of state
   each); the queue in each perceptor's database (every poll a join with `items` in
