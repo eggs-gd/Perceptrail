@@ -60,7 +60,7 @@ func New(db Store, cacheDir string, logger *l.Logger, in <-chan dto.Asset, out c
 	validated := make(chan *draft)
 
 	stage := chain.NewChainProcessor(nil)
-	stage.AddStep(chain.NewParallel(workers, in, read, newReader(tool, plugins.ExifTags(), logger))) // groups are independent
+	stage.AddStep(chain.NewDecoratorN(in, read, newReader(tool, plugins.ExifTags(), logger), workers)) // groups are independent
 	stage.AddStep(chain.NewDecorator(read, validated, &validate{db: db, logger: logger}))
 	stage.AddStep(chain.NewDecorator(validated, out, newShow(db, tool, cacheDir, logger)))
 	return stage

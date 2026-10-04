@@ -6,28 +6,14 @@ type Decorator[Ti, To any] interface {
 	Decorate(Ti) (To, error)
 }
 
-type decoratorRunner[Ti, To any] struct {
-	in    <-chan Ti
-	out   chan<- To
-	logic Decorator[Ti, To]
-}
-
+// NewDecorator: every value of in through the logic, to out
 func NewDecorator[Ti, To any](in <-chan Ti, out chan<- To, logic Decorator[Ti, To]) Processor {
-	return &decoratorRunner[Ti, To]{in, out, logic}
+	return NewDecoratorN(in, out, logic, 1)
 }
 
-func (s *decoratorRunner[Ti, To]) outputs() []output { return []output{outputOf(s.out)} }
-
-func (s *decoratorRunner[Ti, To]) run(r runtime) {
-	defer stop(s.logic)
-	ended := receive(r.ctx, s.in, func(v Ti) {
-		if o, err := s.logic.Decorate(v); err != nil {
-			r.report(err)
-		} else {
-			send(r.ctx, s.out, o)
-		}
-	})
-	if ended {
-		flushOut(r, s.logic, s.out)
-	}
+// NewDecoratorN: the same on n workers (the logic safe for concurrent use; the order
+// may change)
+func NewDecoratorN[Ti, To any](in <-chan Ti, out chan<- To, logic Decorator[Ti, To], n int) Processor {
+	return &runner[Ti, To]{n: n, in: in, outs: []chan<- To{out}, logic: logic,
+		each: func(v Ti) (int, To, error) { o, err := logic.Decorate(v); return 0, o, err }}
 }

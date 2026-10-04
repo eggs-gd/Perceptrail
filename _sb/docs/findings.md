@@ -576,6 +576,14 @@ that reason went. Now the standard Go pipeline:
   the gate passes nothing, starts no process.
 - The perceptors' rows of gone items are pruned when the exif step's input ends —
   after the gate did this walk's deletions (before, they went a walk late).
+- The API keeps develop's names and files (`cor_chain`, `cor_deco`, `cor_entry`,
+  `cor_switch`; `NewChainProcessor`, `NewDecorator`, `NewEntryPoint`, `NewSwitch`):
+  the diff is only what is new. Every step but the entry point is one runner (values
+  from the input, each through the logic, to the output it picks, on n workers);
+  the constructors pick the combination — `NewSwitch` only routes, `NewSwitchDecorator`
+  also turns the value into another, `…N` runs on n workers (as `strings.SplitN`,
+  `io.CopyN`: the variant with a count, `n` last). Go has no overloads, so these are
+  names, sharing a prefix for the autocomplete. 292 lines.
 - The import tests run the service's own `importChain` (the real exif and commit
   steps); what a pass processed is read from the DB (the items it published). Test
   hooks gone with it: `commit.NewCloser`, `gate.NewGate`, `runCorePlugins`. commit

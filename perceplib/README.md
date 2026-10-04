@@ -10,7 +10,7 @@ as a **git subtree** under `perceplib/`.
 | Package | What |
 |---|---|
 | `api` | perceptor contract (`Perceptor`, `ExifPerceptor` (+ `ExifTagger`: the tags it reads — only declared tags are read, `GetExif` of another is ""; + `Decorator(logger)`: its logic over one item, the host runs it as a step), every perceptor also navigates: `View` (its button) + `Order` (the gallery's sheet in its order, with sections); what it knows about an item: `Info` (facts for the info panel); its data: `Schema` + a typed `Store[T]` (`NewStore`, `Put`, `Get` — the host keeps the storage)), data types (`RawExif`, `Size`), item access interfaces (`RawItemR`, `ItemDataProvider/Editor`), `GetRatio` |
-| `chain` | steps connected by channels: `NewEntryPoint` (the one input), `NewDecorator`, `NewParallel`, `NewSwitch`, `NewEnd`, `NewChainProcessor`; `Process` is a pass — an output closes once every step writing to it has returned (a `WaitGroup` per output); `ErrSkippedItem` (a skip, not an error) — [README](chain/README.md) |
+| `chain` | steps connected by channels: `NewEntryPoint` (the one input), `NewDecorator`, `NewSwitch`, `NewSwitchDecorator` (each with an `…N` variant: n workers), `NewEnd`, `NewChainProcessor`; `Process` is a pass — an output closes once every step writing to it has returned (a `WaitGroup` per output); `ErrSkippedItem` (a skip, not an error) — [README](chain/README.md) |
 | `exif` | helpers for the values the host reads with exiftool `-n` (numbers as numbers): `Coordinates` (signed decimal degrees) + `CoordinateTags` to declare |
 | `logger` | zap wrapper with a custom console encoder |
 | `logger/decorators` | `GontrollerDecorator` — tree-style fields, SQL highlighting |

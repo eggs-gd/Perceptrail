@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -111,19 +112,19 @@ func TestRouteAndJoin(t *testing.T) {
 	}
 }
 
-// Parallel: every value done before its output closes
-func TestParallel(t *testing.T) {
+// NewDecoratorN: every value done before its output closes
+func TestDecoratorN(t *testing.T) {
 	in, out := make(chan int), make(chan int)
 	got := &collect[int]{}
 	var busy atomic.Int32
 	c := NewChainProcessor(nil)
 	c.AddStep(NewEntryPoint(in, values{1, 2, 3, 4, 5, 6}))
-	c.AddStep(NewParallel(3, in, out, fn[int, int](func(v int) (int, error) {
+	c.AddStep(NewDecoratorN(in, out, fn[int, int](func(v int) (int, error) {
 		busy.Add(1)
 		defer busy.Add(-1)
 		time.Sleep(time.Duration(7-v) * 3 * time.Millisecond)
 		return v, nil
-	})))
+	}), 3))
 	c.AddStep(NewEnd(out, got))
 	pass(t, c)
 	if len(got.got) != 6 || busy.Load() != 0 {
@@ -181,5 +182,27 @@ func TestCancel(t *testing.T) {
 	}
 	if stops.Load() != 1 {
 		t.Errorf("Stop called %d times", stops.Load())
+	}
+}
+
+// label: a switch that turns an int into its text, odd and even apart
+type label struct{}
+
+func (label) Switch(v int) (int, string, error) { return v % 2, strconv.Itoa(v), nil }
+
+// NewSwitchDecoratorN: a value turned into another, to one output, on n workers
+func TestSwitchDecoratorN(t *testing.T) {
+	in, even, odd := make(chan int), make(chan string), make(chan string)
+	evens, odds := &collect[string]{}, &collect[string]{}
+	c := NewChainProcessor(nil)
+	c.AddStep(NewEntryPoint(in, values{1, 2, 3, 4, 5}))
+	c.AddStep(NewSwitchDecoratorN(in, []chan<- string{even, odd}, label{}, 3))
+	c.AddStep(NewEnd(even, evens))
+	c.AddStep(NewEnd(odd, odds))
+	pass(t, c)
+	slices.Sort(evens.got)
+	slices.Sort(odds.got)
+	if !slices.Equal(evens.got, []string{"2", "4"}) || !slices.Equal(odds.got, []string{"1", "3", "5"}) {
+		t.Errorf("even %v, odd %v", evens.got, odds.got)
 	}
 }

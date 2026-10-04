@@ -1,5 +1,5 @@
 // Package chain: steps that run concurrently, connected by channels. A chain has
-// one input, its Entry; a pass (Process) runs every step until its input closes:
+// one input, its entry point; a pass (Process) runs every step until its input closes:
 // the entry closes its output when it is done, a step that read its input to the
 // end gives what it holds (Flusher) and returns, and an output closes once every
 // step that writes to it has returned (a WaitGroup per output: where branches join,
@@ -123,6 +123,45 @@ func stop(logic any) {
 	}
 }
 
+// runner: what every step but the entry point runs — values from in, each through
+// the logic (each: the output's index and the value; -1: none), on n workers; when
+// the input ends, after the last worker, what a single-output logic holds (Flusher)
+type runner[Ti, To any] struct {
+	n     int
+	in    <-chan Ti
+	outs  []chan<- To
+	each  func(Ti) (int, To, error)
+	logic any // Stopper, Flusher
+}
+
+func (s *runner[Ti, To]) outputs() []output {
+	out := make([]output, len(s.outs))
+	for i, o := range s.outs {
+		out[i] = outputOf(o)
+	}
+	return out
+}
+
+func (s *runner[Ti, To]) run(r runtime) {
+	defer stop(s.logic)
+	var workers sync.WaitGroup
+	for range max(s.n, 1) {
+		workers.Go(func() {
+			receive(r.ctx, s.in, func(v Ti) {
+				if i, o, err := s.each(v); err != nil {
+					r.report(err)
+				} else if i >= 0 && i < len(s.outs) {
+					send(r.ctx, s.outs[i], o)
+				}
+			})
+		})
+	}
+	workers.Wait()
+	if r.ctx.Err() == nil && len(s.outs) == 1 { // the input ended (not the pass)
+		flushOut(r, s.logic, s.outs[0])
+	}
+}
+
 // send: false if ctx ended first
 func send[T any](ctx context.Context, ch chan<- T, v T) bool {
 	select {
@@ -133,15 +172,15 @@ func send[T any](ctx context.Context, ch chan<- T, v T) bool {
 	}
 }
 
-// receive reads in until it closes (true) or ctx ends (false)
-func receive[T any](ctx context.Context, in <-chan T, each func(T)) bool {
+// receive reads in until it closes or ctx ends
+func receive[T any](ctx context.Context, in <-chan T, each func(T)) {
 	for {
 		select {
 		case <-ctx.Done():
-			return false
+			return
 		case v, ok := <-in:
 			if !ok {
-				return true
+				return
 			}
 			each(v)
 		}
