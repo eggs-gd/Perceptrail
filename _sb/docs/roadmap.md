@@ -179,6 +179,35 @@ A stable core first.
   [`Client flow.puml`](../puml/Client%20flow.puml): a push would carry the same delta
   the client asks for now (`/items?since=`).
 - ML as a separate service (goMLer) per [`ML Flow.puml`](../puml/ML%20Flow.puml).
+- [ ] **Plugins anyone can build: WebAssembly instead of Go plugins** (idea,
+      2026-10-05). A Go `.so` is a piece of the same binary — the same toolchain,
+      the very same versions of every shared package, cgo, Linux / macOS, no
+      unloading: someone else's build does not load. The contract moves from Go
+      types in shared memory to a **protocol** (serialised data, a protocol
+      version — not package versions):
+      - **a perceptor is a `.wasm` file**, one for every OS and CPU, built from any
+        language that targets wasm (Go `go:wasmexport` / TinyGo, Rust,
+        AssemblyScript, C); the host runs it **in its own process** with
+        [wazero](https://wazero.io) (pure Go, no cgo), maybe
+        [Extism](https://extism.org) for the plugin side. A call is a function
+        call plus copying bytes in and out of the module's own memory
+        (microseconds), not a request; a sandbox — files, network, the database
+        only through functions the host gives; a crash is an error, not the server
+        down; a pool of instances for parallel work;
+      - **perceplib becomes an SDK and the protocol's description**, no longer
+        linked into the host: no version matching;
+      - **most perceptors declarative**: they declare their value, order and
+        sections (as `OrderByValue`), the host orders; only one cheap call per
+        item crosses the boundary (tags → value); code for `Order` only where it
+        is special (the Hilbert curve, the trail), streamed in pages;
+      - **goMLer** hosts the pixel perceptors the same way: the plugin
+        pre/post-processes, inference (ONNX Runtime / GPU) is a host function
+        (`load_model`, `infer` — as WASI-NN, which wazero lacks); Python ML, if
+        ever, as an external worker over gRPC or the bus. gontroller ↔ goMLer
+        talk as services (gRPC / MQTT), not per plugin;
+      - steps: a spike (`exif_geo` as wasm under wazero, the cost of a call per
+        item, the size), protocol v1 (`Describe` → `Process` → `Order` where
+        declared), then the `.so` loader goes; built-in perceptors stay built in.
 - [ ] Geo sections by country / city names (an offline geocoder: Natural Earth /
       GeoNames) instead of the time zone's.
 - [ ] **Colour — deterministic, no ML** (`ml_color` → `color`). Pixels: the cheap
