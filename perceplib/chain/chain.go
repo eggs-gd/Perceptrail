@@ -1,9 +1,9 @@
-// Package chain: steps that run concurrently, connected by typed pipes. A pipe
-// carries values and a flush: a pass is complete. A chain has one input, its Entry;
-// a pass (Run) starts it, and after its values it flushes. Every step passes the
-// flush on after the values before it; where several steps write one pipe, it
-// passes once every one of them has flushed. The pass ends when the flush has
-// reached every End of the chain.
+// Package chain: steps that run concurrently, connected by channels. A chain has
+// one input, its Entry; a pass (Process) runs every step until its input closes:
+// the entry closes its output when it is done, a step that read its input to the
+// end gives what it holds (Flusher) and returns, and an output closes once every
+// step that writes to it has returned (a WaitGroup per output: where branches join,
+// the joint closes after the last of them). Process returns when every step has.
 package chain
 
 import (
@@ -18,102 +18,87 @@ var ErrSkippedItem = errors.New("skipped item")
 // Processor: a step, or a chain of steps
 type Processor interface {
 	run(r runtime)
+	// outputs: the channels the step writes to (a sub-chain closes its own)
+	outputs() []output
 }
+
+// output: a channel a step writes to, and how to close it
+type output struct {
+	ch    any
+	close func()
+}
+
+func outputOf[T any](ch chan<- T) output { return output{ch, func() { close(ch) }} }
 
 // runtime: what a running step gets from its chain
 type runtime struct {
-	ctx    context.Context
-	errch  chan<- error
-	passes <-chan struct{} // a pass starts: the entry runs
-	ended  func()          // an end got the flush
+	ctx   context.Context
+	errch chan<- error
 }
 
 // Stopper: a step's logic may have one; it is called once, when the step ends
 type Stopper interface{ Stop() }
 
-// Flusher: a step's logic may hold values; on a flush they go out first
+// Flusher: a step's logic may hold values; when its input ends they go out
 type Flusher[To any] interface {
 	Flush() ([]To, error)
 }
 
-// Chain: steps that run together until the context ends
+// Chain: steps that run together, one pass
 type Chain struct {
-	errch  chan<- error
-	steps  []Processor
-	ends   int
-	passes chan struct{}
-	done   chan struct{}
+	errch chan<- error
+	steps []Processor
 }
 
 // New: errch gets the steps' errors (nil: the errors of the chain this one runs in)
 func New(errch chan<- error) *Chain {
-	return &Chain{errch: errch, passes: make(chan struct{}), done: make(chan struct{}, 1)}
+	return &Chain{errch: errch}
 }
 
 func (c *Chain) AddStep(p Processor) {
 	c.steps = append(c.steps, p)
-	c.ends += endsOf(p)
 }
 
-// Process runs every step until ctx ends; between passes they wait
+// Process: one pass — every step runs until its input ends (or ctx does); returns
+// when every step has
 func (c *Chain) Process(ctx context.Context) {
 	c.run(runtime{ctx: ctx})
 }
 
-// Run: one pass — the entry starts, the pass ends when its flush has reached every
-// end (every value of it went through every step); false if ctx ended first
-func (c *Chain) Run(ctx context.Context) bool {
-	select {
-	case c.passes <- struct{}{}:
-	case <-ctx.Done():
-		return false
-	}
-	select {
-	case <-c.done:
-		return true
-	case <-ctx.Done():
-		return false
-	}
-}
+func (c *Chain) outputs() []output { return nil }
 
 func (c *Chain) run(r runtime) {
 	if c.errch != nil {
 		r.errch = c.errch
 	}
-	if r.ended == nil { // the top chain starts the passes and counts its ends
-		r.passes = c.passes
-		var mu sync.Mutex
-		ended := 0
-		r.ended = func() {
-			mu.Lock()
-			defer mu.Unlock()
-			if ended++; ended == c.ends {
-				ended = 0
-				select {
-				case c.done <- struct{}{}:
-				default:
-				}
+	// Every output closes once all its writers have returned
+	writers := map[any]*sync.WaitGroup{}
+	var outputs []output
+	for _, s := range c.steps {
+		for _, o := range s.outputs() {
+			if writers[o.ch] == nil {
+				writers[o.ch] = &sync.WaitGroup{}
+				outputs = append(outputs, o)
 			}
+			writers[o.ch].Add(1)
 		}
 	}
-	var wg sync.WaitGroup
+	var all sync.WaitGroup
+	for _, o := range outputs {
+		all.Go(func() { writers[o.ch].Wait(); o.close() })
+	}
 	for _, s := range c.steps {
-		wg.Go(func() { s.run(r) })
+		all.Go(func() {
+			defer func() {
+				for _, o := range s.outputs() {
+					writers[o.ch].Done()
+				}
+			}()
+			s.run(r)
+		})
 	}
-	wg.Wait()
+	all.Wait()
 }
-
-func endsOf(p Processor) int {
-	switch s := p.(type) {
-	case *Chain:
-		return s.ends
-	case ender:
-		return 1
-	}
-	return 0
-}
-
-type ender interface{ isEnd() }
 
 func (r runtime) report(err error) {
 	if err == nil || errors.Is(err, ErrSkippedItem) || r.errch == nil {
@@ -128,5 +113,43 @@ func (r runtime) report(err error) {
 func stop(logic any) {
 	if s, ok := logic.(Stopper); ok {
 		s.Stop()
+	}
+}
+
+// send: false if ctx ended first
+func send[T any](ctx context.Context, ch chan<- T, v T) bool {
+	select {
+	case ch <- v:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// receive reads in until it closes (true) or ctx ends (false)
+func receive[T any](ctx context.Context, in <-chan T, each func(T)) bool {
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case v, ok := <-in:
+			if !ok {
+				return true
+			}
+			each(v)
+		}
+	}
+}
+
+// flushOut: what a Flusher holds, out before its output closes
+func flushOut[To any](r runtime, logic any, out chan<- To) {
+	f, ok := logic.(Flusher[To])
+	if !ok {
+		return
+	}
+	held, err := f.Flush()
+	r.report(err)
+	for _, v := range held {
+		send(r.ctx, out, v)
 	}
 }

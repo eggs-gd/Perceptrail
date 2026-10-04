@@ -9,27 +9,18 @@ type Source[T any] interface {
 }
 
 type entry[T any] struct {
-	out   *Pipe[T]
+	out   chan<- T
 	logic Source[T]
 }
 
-// Entry: the chain's one input, an output only; the chain starts it on every pass
-// (Run), and after its values it flushes
-func Entry[T any](out *Pipe[T], logic Source[T]) Processor {
-	out.writers++
+// Entry: the chain's one input, an output only; when it is done, its output closes
+func Entry[T any](out chan<- T, logic Source[T]) Processor {
 	return &entry[T]{out, logic}
 }
 
+func (e *entry[T]) outputs() []output { return []output{outputOf(e.out)} }
+
 func (e *entry[T]) run(r runtime) {
 	defer stop(e.logic)
-	emit := func(v T) bool { return e.out.send(r.ctx, msg[T]{v: v}) }
-	for {
-		select {
-		case <-r.ctx.Done():
-			return
-		case <-r.passes:
-			r.report(e.logic.Start(r.ctx, emit))
-			e.out.send(r.ctx, msg[T]{flush: true})
-		}
-	}
+	r.report(e.logic.Start(r.ctx, func(v T) bool { return send(r.ctx, e.out, v) }))
 }

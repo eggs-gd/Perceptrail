@@ -31,38 +31,42 @@ type Store interface {
 // Parallel readers, and the stage's exiftool processes (groups are independent)
 const workers = 5
 
+// Migrate: at start, what changed in identify since the last run — the kinds'
+// table (files judged "not media" are judged again), the fingerprint (every item
+// gets the new one)
+func Migrate(db Store, logger *l.Logger) {
+	if err := reclassifyIgnored(db, logger); err != nil {
+		logger.Error("MIME version check failed", l.Error(err))
+	}
+	if err := forgetOldHashes(db, logger); err != nil {
+		logger.Error("Fingerprint version check failed", l.Error(err))
+	}
+}
+
 // New: in — the assets that need work; out — the identified items; embedded previews go under cacheDir. It runs its own exiftool
 // (a pool of processes, closed when its steps stop); what is read besides
 // identify's own tags is what the loaded perceptors declare (plugins.ExifTags). Its
 // errors go to the chain it runs in.
-func New(db Store, cacheDir string, logger *l.Logger, in *chain.Pipe[dto.Asset], out *chain.Pipe[*Item]) chain.Processor {
+func New(db Store, cacheDir string, logger *l.Logger, in <-chan dto.Asset, out chan<- *Item) chain.Processor {
 	tool := newPool(workers, logger)
-	// The kinds' table changed since the files were judged "not media": judged again
-	if err := reclassifyIgnored(db, logger); err != nil {
-		logger.Error("MIME version check failed", l.Error(err))
-	}
-	// The fingerprint changed: every item gets the new one
-	if err := forgetOldHashes(db, logger); err != nil {
-		logger.Error("Fingerprint version check failed", l.Error(err))
-	}
 	tags := plugins.ExifTags()
 
 	// read → classify: the files and their metadata
-	read := chain.NewPipe[*draft](0)
+	read := make(chan *draft)
 	// classify → merge: + kinds and roles, the main file first
-	classified := chain.NewPipe[*draft](0)
+	classified := make(chan *draft)
 	// merge → fingerprint: + the asset's metadata package
-	merged := chain.NewPipe[*draft](0)
+	merged := make(chan *draft)
 	// fingerprint → validate: + the main file's fingerprint
-	fingerprinted := chain.NewPipe[*draft](0)
+	fingerprinted := make(chan *draft)
 	// validate → embedded: + the item (its GUID); not media does not get here
-	validated := chain.NewPipe[*draft](0)
+	validated := make(chan *draft)
 	// embedded → sizes: + the extracted preview, if one was needed
-	extracted := chain.NewPipe[*draft](0)
+	extracted := make(chan *draft)
 	// sizes → pick: + every file's pixels and codec (stored)
-	sized := chain.NewPipe[*draft](0)
+	sized := make(chan *draft)
 	// pick → yield: + what to show now
-	picked := chain.NewPipe[*draft](0)
+	picked := make(chan *draft)
 
 	stage := chain.New(nil)
 	stage.AddStep(chain.Parallel(workers, in, read, NewReader(tool, tags, logger))) // groups are independent

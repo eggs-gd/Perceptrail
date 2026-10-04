@@ -14,7 +14,7 @@ we render and store nothing it keeps.
   walk's rows (`*dto.FileDto`: path, stat; `Changed`, `Gone`) and gives a whole
   `dto.Asset` (its
   files' rows, `Key`, `Show`, the source's `Meta` / `MetaHash`, `Kind`); on the
-  walk's flush (`chain.Flusher`) it gives what it holds (its last group). A file the
+  walk's end — its input closes — (`chain.Flusher`) it gives what it holds (its last group). A file the
   walk says is gone comes too: the grouper passes it through (an asset of its own)
   or makes something of it (Apple: the files of an asset trashed or hidden in Photos
   are sent as gone). A grouper that gives a file a role uses `SetRole` (a new role

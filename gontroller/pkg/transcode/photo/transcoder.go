@@ -10,7 +10,7 @@ import (
 
 type Transcoder struct{}
 
-func NewTranscoder(in, out *chain.Pipe[*transcode.Item]) chain.Processor {
+func NewTranscoder(in <-chan *transcode.Item, out chan<- *transcode.Item) chain.Processor {
 	return chain.Decorate(in, out, Transcoder{})
 }
 

@@ -2,7 +2,7 @@
 
 !pragma teoz true
 
-title Import chain (gontroller): walk -> group -> gate -> identify -> exif -> commit;\nevery participant is a step (own goroutine), every arrow is a typed pipe (values + the walk's flush)
+title Import chain (gontroller): walk -> group -> gate -> identify -> exif -> commit;\nevery participant is a step (own goroutine), every arrow is a channel (closed when its writers are done)
 
 box "walk: the files" #LightCyan
 control "walk\n(the entry)" as Walker
@@ -48,7 +48,7 @@ database "DB" as DB
 
 == files flow in; groups flow out one by one, steps run concurrently ==
 
-Top -> Walker: Chain.Run: a pass starts the entry
+Top -> Walker: a new chain, Process: a pass starts the entry
 
 loop every file under the root
     Walker -> DB: its row: created / stat refreshed,\nCheckTime (Changed: new or stat changed)
@@ -114,15 +114,14 @@ end note
 loop every row the walk did not stamp that it says is gone (V2: a complete walk,\nunder the root, not under unreadable directories)
     Walker -> Groups: *dto.FileDto (Gone): to its provider's grouper,\nwhich passes it through (or makes something of it)
 end
-Walker -> Groups: FLUSH
-Groups -> Photos: flush
-& Groups -> Generic: flush
-note right of Groups: to every grouper (Route)
-Generic -> Gate: what it holds (last group), flush
-Photos -> Gate: flush (an incomplete group waits for the next walk)
-note over Gate: once every grouper has flushed (the chain's barrier)\nthe flush goes on, through every step, to the end
-note over Core, Keep: keep: on the flush, the perceptors' rows\nof gone items pruned (the previous walk's)
-Closer --> Top: Chain.Run returns: the flush reached the chain's end (commit):\nevery group of the walk went through every step
+Walker -> Groups: the walk returns: its channel CLOSES
+Groups -> Photos: the switch returns: every grouper's input closes
+& Groups -> Generic: closed
+Generic -> Gate: what it holds (last group); returns
+Photos -> Gate: returns (an incomplete group waits for the next walk)
+note over Gate: the gate's input closes once every grouper has returned\n(a WaitGroup per channel); so on, step by step, to the end
+note over Core, Keep: keep: its input ended - the perceptors' rows\nof gone items pruned (this walk's deletions are done)
+Closer --> Top: Process returns: every step has;\nevery group of the walk went through every step
 Top -> Top: rescan pause (1 min), then the next pass
 
 == One asset again (Apple Photos on demand) ==

@@ -27,13 +27,9 @@ type Gate struct {
 	logger *l.Logger
 }
 
-func NewGate(db Store, logger *l.Logger) *Gate {
-	return &Gate{db: db, logger: logger}
-}
-
 // New: in — whole assets (the groupers'); out — the ones that need work
-func New(db Store, logger *l.Logger, in *chain.Pipe[dto.Asset], out *chain.Pipe[dto.Asset]) chain.Processor {
-	return chain.Decorate(in, out, NewGate(db, logger))
+func New(db Store, logger *l.Logger, in <-chan dto.Asset, out chan<- dto.Asset) chain.Processor {
+	return chain.Decorate(in, out, &Gate{db: db, logger: logger})
 }
 
 func (g *Gate) Decorate(in dto.Asset) (dto.Asset, error) {

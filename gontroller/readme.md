@@ -79,8 +79,8 @@ exif       the EXIF perceptors: built in (date, size, length), then the .so ones
 commit     the item published (Visible / Waiting)
 ```
 
-A pass (`Chain.Run`) ends when the walk's flush has reached the end; the importer
-service pauses (`rescan`) and runs the next. Details, the types
+A pass is a new chain run to its end (`Process`: the walk returns, each step ends
+after its input); the importer service pauses (`rescan`) and runs the next. Details, the types
 and the rules: [`pkg/importer/README.md`](pkg/importer/README.md).
 The transcoders (`pkg/transcode`) are not wired yet: a chain of their own, fed from
 the DB.

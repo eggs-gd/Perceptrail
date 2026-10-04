@@ -6,18 +6,18 @@ type Consumer[T any] interface {
 }
 
 type end[T any] struct {
-	in    *Pipe[T]
+	in    <-chan T
 	logic Consumer[T]
 }
 
-// End: a chain's end; when a flush has reached every end, the chain is Done
-func End[T any](in *Pipe[T], logic Consumer[T]) Processor {
+// End: a chain's end
+func End[T any](in <-chan T, logic Consumer[T]) Processor {
 	return &end[T]{in, logic}
 }
 
-func (*end[T]) isEnd() {}
+func (*end[T]) outputs() []output { return nil }
 
 func (s *end[T]) run(r runtime) {
 	defer stop(s.logic)
-	s.in.receive(r.ctx, func(v T) { r.report(s.logic.Consume(v)) }, r.ended)
+	receive(r.ctx, s.in, func(v T) { r.report(s.logic.Consume(v)) })
 }

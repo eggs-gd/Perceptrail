@@ -16,18 +16,18 @@
 //	           size, length), the external Go plugins only read it; their values kept
 //	commit     the chain's end: the item published, Visible (a preview) or Waiting
 //
-// The service runs the passes: a pass (Chain.Run: the walk, every group of it
-// through every step, its flush at the end), the rescan pause, the next pass.
+// The service runs the passes: a pass is a new chain run to its end (the walk ends,
+// its output closes, each step ends after its input), then the rescan pause.
 // Refresh marks one asset's item for the next pass.
 //
 // Diagrams: _sb/puml/Import chain.puml, _sb/puml/Walker.puml (gate, validator).
 //
 // Not obvious:
-//   - The walk flushes the chain: every step passes the flush on after the values
-//     before it, a grouper first gives what it holds; where branches join (the
-//     groupers into the gate) it passes once every branch has flushed; the exif step
-//     prunes the perceptors' rows of gone items on it. Once it reached commit the pass
-//     is over. Passes never overlap.
+//   - A pass ends from its input: the walk returns, its output closes; a step reads
+//     its input to the end, gives what it holds (a grouper its last group; the exif
+//     step prunes the rows of gone items) and returns; an output closes once every
+//     step writing to it has returned (the groupers into the gate). Process returns
+//     when commit has. Passes never overlap.
 //   - The gone files come after every file the walk saw, but a moved file's old path
 //     may be deleted before its new one is identified: validate restores a deleted
 //     item by fingerprint, the GUID stays.
@@ -59,51 +59,55 @@ import (
 // Pause between the end of one pass and the next (config: rescan)
 const defaultRescan = time.Minute
 
+// store: the model as the import's steps ask it
+type store interface {
+	walk.Store
+	gate.Store
+	identify.Store
+	exif.Items
+	commit.Store
+}
+
 type importerService struct {
-	importChain *chain.Chain
-	rescan      time.Duration // the pause between the end of one pass and the next
-	db          model.ItemsApi
-	logger      *l.Logger
+	db       store
+	logger   *l.Logger
+	errch    chan error
+	root     string
+	cacheDir string
+	rescan   time.Duration // the pause between the end of one pass and the next
 }
 
 func NewImporterService(ctx app.AppContext) *importerService {
-	logger := ctx.Logger(app.LogImporter)
-	db := model.NewProxy(ctx.Logger(app.LogDB))
-
-	// Every step's errors (skips never get here: they are on purpose)
-	errch := make(chan error)
-	go func() {
-		for err := range errch {
-			logger.Error("Import Error", l.Error(err))
-		}
-	}()
 	rescan := ctx.Config().Rescan
 	if rescan <= 0 {
 		rescan = defaultRescan
 	}
+	return &importerService{db: model.NewProxy(ctx.Logger(app.LogDB)), logger: ctx.Logger(app.LogImporter),
+		errch: make(chan error), root: ctx.Config().Path, cacheDir: ctx.Config().CacheDir(), rescan: rescan}
+}
 
-	// Between the steps (each message type belongs to the step that yields it)
-	// walk → group: a file's row (seen: Changed; or Gone); the walk's flush
-	found := chain.NewPipe[*dto.FileDto](0)
-	// group → gate: a whole asset (a gone file: its own); on the flush, what each
+// importChain: one pass of the import, its channels new (a pass closes them)
+func (s *importerService) importChain() *chain.Chain {
+	// walk → group: a file's row (seen: Changed; or Gone)
+	found := make(chan *dto.FileDto)
+	// group → gate: a whole asset (a gone file: its own); at the end, what each
 	// grouper held
-	grouped := chain.NewPipe[dto.Asset](0)
-	// gate → identify: the groups that need work
-	stored := chain.NewPipe[dto.Asset](0)
+	grouped := make(chan dto.Asset)
+	// gate → identify: the assets that need work
+	stored := make(chan dto.Asset)
 	// identify → exif: the identified items
-	identified := chain.NewPipe[*identify.Item](0)
+	identified := make(chan *identify.Item)
 	// exif → commit: + what the perceptors found, their values kept
-	perceived := chain.NewPipe[*identify.Item](0)
+	perceived := make(chan *identify.Item)
 
-	importChain := chain.New(errch)
-	importChain.AddStep(walk.New(db, ctx.Config().Path, logger, found))
-	importChain.AddStep(group.New(providers.Enabled(), found, grouped))
-	importChain.AddStep(gate.New(db, logger, grouped, stored))
-	importChain.AddStep(identify.New(db, ctx.Config().CacheDir(), logger, stored, identified))
-	importChain.AddStep(exif.New(db, logger, identified, perceived))
-	importChain.AddStep(commit.New(db, perceived))
-
-	return &importerService{importChain: importChain, rescan: rescan, db: db, logger: logger}
+	c := chain.New(s.errch)
+	c.AddStep(walk.New(s.db, s.root, s.logger, found))
+	c.AddStep(group.New(providers.Enabled(), found, grouped))
+	c.AddStep(gate.New(s.db, s.logger, grouped, stored))
+	c.AddStep(identify.New(s.db, s.cacheDir, s.logger, stored, identified))
+	c.AddStep(exif.New(s.db, s.logger, identified, perceived))
+	c.AddStep(commit.New(s.db, perceived))
+	return c
 }
 
 // Refresh marks one asset's item to be processed again on the next pass — the
@@ -115,19 +119,26 @@ func (s *importerService) Refresh(key string) {
 	}
 }
 
-// Start: the chain runs; pass after pass — the walk through the whole chain, then
+// Start: what changed since the last run first (identify's detection, the
+// perceptors), then pass after pass — a new chain each time, run to its end, then
 // the rescan pause — until ctx ends
 func (s *importerService) Start(ctx context.Context) {
-	stopped := make(chan struct{})
+	// Every step's errors (skips never get here: they are on purpose)
 	go func() {
-		s.importChain.Process(ctx)
-		close(stopped)
+		for err := range s.errch {
+			s.logger.Error("Import Error", l.Error(err))
+		}
 	}()
-	for s.importChain.Run(ctx) {
+	identify.Migrate(s.db, s.logger)
+	// A perceptor new or changed since the last run: its items are processed again
+	if err := exif.MarkUnprocessed(s.db, s.logger); err != nil {
+		s.logger.Error("Perceptors' rows not checked", l.Error(err))
+	}
+	for ctx.Err() == nil {
+		s.importChain().Process(ctx)
 		select {
 		case <-time.After(s.rescan):
 		case <-ctx.Done():
 		}
 	}
-	<-stopped
 }

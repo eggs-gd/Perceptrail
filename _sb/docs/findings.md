@@ -537,6 +537,32 @@ Design: roadmap "Expensive stage".
 
 ## Backend: gontroller, plugins, exiftool
 
+### chain: channels and a WaitGroup per output; a pass is a new chain (2026-10-04, decided)
+
+The `Pipe` (a channel carrying values and a flush message, a writers counter as the
+barrier) was a hand-made `close` + `WaitGroup`: it existed only to keep the chain
+alive between passes, for Refresh to inject into. Refresh became a rework mark, so
+that reason went. Now the standard Go pipeline:
+
+- Steps take plain channels. A step reads its input until it closes, gives what it
+  holds (`Flusher`) and returns; the chain keeps a `WaitGroup` per output (one count
+  per writer) and closes it after the last writer — the join of the groupers into
+  the gate. `Process` is one pass: it returns when every step has. `Run`, the
+  passes channel, the ends counter, `msg{flush}` are gone (313 lines; develop 302).
+- Channels close once, so a pass is a new chain: the service builds it
+  (`importChain`) and runs it, then the pause. What ran once at start sat in the
+  steps' constructors (`exif` MarkUnprocessed, identify's kinds / fingerprint
+  versions); it moved to the service's `Start` (`identify.Migrate`,
+  `exif.MarkUnprocessed`), or it would run every pass.
+- exiftool starts with the first read of a pass (a lazy pool): an idle pass, where
+  the gate passes nothing, starts no process.
+- The perceptors' rows of gone items are pruned when the exif step's input ends —
+  after the gate did this walk's deletions (before, they went a walk late).
+- The import tests run the service's own `importChain` (the real exif and commit
+  steps); what a pass processed is read from the DB (the items it published). Test
+  hooks gone with it: `commit.NewCloser`, `gate.NewGate`, `runCorePlugins`. commit
+  is one file; its store is `commit.Store`.
+
 ### Cleanup: dead code, the asset in dto, integration tests on a real exiftool (2026-10-04, decided)
 
 A review with `deadcode` / `staticcheck` and the model's methods without callers:

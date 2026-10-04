@@ -151,22 +151,19 @@ func (f *files) Consume(r *dto.FileDto) error {
 }
 
 // A pass: every file as a row (new or changed: Changed), then the rows it did not
-// see (Gone), then the flush (the pass ends)
+// see (Gone); then its output closes (the pass ends)
 func TestWalkPass(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "a.jpg"))
 	writeFile(t, filepath.Join(root, "b.jpg"))
-	found := chain.NewPipe[*dto.FileDto](0)
-	got := &files{}
-	c := chain.New(nil)
-	c.AddStep(New(&rows{byPath: map[string]*dto.FileDto{}}, root, testLogger, found))
-	c.AddStep(chain.End[*dto.FileDto](found, got))
-	go c.Process(t.Context())
+	db := &rows{byPath: map[string]*dto.FileDto{}}
 	pass := func() []string {
-		got.got = nil
-		if !c.Run(t.Context()) {
-			t.Fatal("the pass did not end")
-		}
+		found := make(chan *dto.FileDto)
+		got := &files{}
+		c := chain.New(nil)
+		c.AddStep(New(db, root, testLogger, found))
+		c.AddStep(chain.End(found, got))
+		c.Process(t.Context())
 		return got.got
 	}
 	if g := pass(); !slices.Equal(g, []string{"a.jpg changed", "b.jpg changed"}) {

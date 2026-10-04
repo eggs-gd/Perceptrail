@@ -142,7 +142,7 @@ func TestRefreshMarksForNextWalk(t *testing.T) {
 		t.Fatalf("nothing changed, processed %v", got)
 	}
 	before, _ := itemsProxy.GetItemByGuid(appleEdited)
-	s := &importerService{db: itemsProxy, logger: l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})}
+	s := &importerService{db: testDB, logger: l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})}
 	s.Refresh(appleEdited)
 	s.Refresh("no-such-asset")
 	if marked, _ := itemsProxy.GetItemByGuid(appleEdited); !marked.UpdatedAt.Equal(before.UpdatedAt) {

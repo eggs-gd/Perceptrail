@@ -7,23 +7,27 @@ type Decorator[Ti, To any] interface {
 }
 
 type decorate[Ti, To any] struct {
-	in    *Pipe[Ti]
-	out   *Pipe[To]
+	in    <-chan Ti
+	out   chan<- To
 	logic Decorator[Ti, To]
 }
 
-func Decorate[Ti, To any](in *Pipe[Ti], out *Pipe[To], logic Decorator[Ti, To]) Processor {
-	out.writers++
+func Decorate[Ti, To any](in <-chan Ti, out chan<- To, logic Decorator[Ti, To]) Processor {
 	return &decorate[Ti, To]{in, out, logic}
 }
 
+func (s *decorate[Ti, To]) outputs() []output { return []output{outputOf(s.out)} }
+
 func (s *decorate[Ti, To]) run(r runtime) {
 	defer stop(s.logic)
-	s.in.receive(r.ctx, func(v Ti) {
+	ended := receive(r.ctx, s.in, func(v Ti) {
 		if o, err := s.logic.Decorate(v); err != nil {
 			r.report(err)
 		} else {
-			s.out.send(r.ctx, msg[To]{v: o})
+			send(r.ctx, s.out, o)
 		}
-	}, func() { flushOut(r, s.logic, s.out) })
+	})
+	if ended {
+		flushOut(r, s.logic, s.out)
+	}
 }

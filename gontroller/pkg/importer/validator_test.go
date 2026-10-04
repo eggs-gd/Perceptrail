@@ -1,14 +1,8 @@
 package importer
 
 import (
-	"context"
 	"os"
 	"path/filepath"
-	"perceptrail/gontroller/pkg/importer/commit"
-	"perceptrail/gontroller/pkg/importer/gate"
-	"perceptrail/gontroller/pkg/importer/group"
-	"perceptrail/gontroller/pkg/importer/identify"
-	"perceptrail/gontroller/pkg/importer/walk"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/plugins"
@@ -19,9 +13,8 @@ import (
 	"perceptrail/gontroller/pkg/providers/folder"
 	"slices"
 	"testing"
+	"time"
 
-	"github.com/eggs-gd/perceplib/api"
-	"github.com/eggs-gd/perceplib/chain"
 	l "github.com/eggs-gd/perceplib/logger"
 	"github.com/eggs-gd/perceplib/logger/decorators"
 )
@@ -50,66 +43,44 @@ func TestMain(m *testing.M) {
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
 	testDB = model.NewProxy(logger)
 	filesProxy, itemsProxy = testDB, testDB
-	// The registry as the server loads it: the built-in perceptors (their tags are what
-	// identify reads)
+	// The registry and the providers as the server loads them: the built-in
+	// perceptors (their tags are what identify reads); Apple, the plain folder last
 	if err := plugins.Load(plugins.Config{DataDir: dir, Logger: logger}, exif_date.Perceptor, exif_size.Perceptor); err != nil {
 		panic(err)
 	}
+	providers.Enable(apple.New("", nil, itemsProxy, logger), folder.New())
 
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
 }
 
-// harness: the end of the test chain — the core perceptors, close, and the main
-// files that got there
-type harness struct {
-	t         *testing.T
-	processed []string
-}
-
-func (h *harness) Consume(it *identify.Item) error {
-	runCorePlugins(h.t, it)
-	if err := commit.NewCloser(itemsProxy).Consume(it); err != nil {
-		return err
-	}
-	h.processed = append(h.processed, it.Item.Path)
-	return nil
-}
-
-// scan runs one pass of the import chain over root, as the server builds it — the
-// providers (Apple, the plain folder last), the gate, identify (a real exiftool) —
-// up to the core perceptors and close; the main files processed in it. A new chain
-// each time: the groupers start empty, as on a restart.
+// scan runs one pass of the import as the service builds it (importChain) over
+// root, with a real exiftool; the main files of the items published in it. A new
+// chain each time: the groupers start empty, as on a restart.
 func scan(t *testing.T, root string) []string {
 	t.Helper()
 	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
-	ps := []providers.Provider{apple.New("", nil, itemsProxy, logger), folder.New()}
-	found, grouped := chain.NewPipe[*dto.FileDto](0), chain.NewPipe[dto.Asset](0)
-	stored, identified := chain.NewPipe[dto.Asset](0), chain.NewPipe[*identify.Item](0)
-	h := &harness{t: t}
-	errs := make(chan error, 10)
-	c := chain.New(errs)
-	c.AddStep(walk.New(testDB, root, logger, found))
-	c.AddStep(group.New(ps, found, grouped))
-	c.AddStep(gate.New(testDB, logger, grouped, stored))
-	c.AddStep(identify.New(testDB, t.TempDir(), logger, stored, identified))
-	c.AddStep(chain.End[*identify.Item](identified, h))
-
-	ctx, cancel := context.WithCancel(t.Context())
-	stopped := make(chan struct{})
-	go func() { c.Process(ctx); close(stopped) }()
-	defer func() { cancel(); <-stopped }()
-	if !c.Run(ctx) {
-		t.Fatal("the pass did not end")
-	}
+	s := &importerService{db: testDB, logger: logger, errch: make(chan error, 10), root: root, cacheDir: t.TempDir()}
+	start := time.Now()
+	s.importChain().Process(t.Context())
 	select {
-	case err := <-errs:
+	case err := <-s.errch:
 		t.Fatal(err)
 	default:
 	}
-	slices.Sort(h.processed) // the steps run concurrently
-	return h.processed
+	var published []string
+	err := itemsProxy.StreamItemsSince(start.Add(-time.Second), func(it *dto.ItemDto, _ []*dto.FileDto) error {
+		if !it.DeletedAt.Valid && !it.UpdatedAt.Before(start) {
+			published = append(published, it.Path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	slices.Sort(published)
+	return published
 }
 
 func itemAt(t *testing.T, path string) *dto.ItemDto {
@@ -285,18 +256,6 @@ func TestValidatorDeletedThenBack(t *testing.T) {
 	scan(t, root)
 	if item := itemAt(t, back); item.Guid != guid || item.State != dto.Visible {
 		t.Errorf("back: %+v, want GUID %s, Visible", item, guid)
-	}
-}
-
-// runCorePlugins passes the item through the core EXIF plugins (date, size) the
-// way the plugin chain does
-func runCorePlugins(t *testing.T, it *identify.Item) {
-	t.Helper()
-	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
-	for _, p := range []api.Perceptor{exif_date.Perceptor, exif_size.Perceptor} {
-		if _, err := p.(plugins.ExifCorePerceptor).Decorator(logger).Decorate(it); err != nil {
-			t.Fatal(err)
-		}
 	}
 }
 

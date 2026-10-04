@@ -91,7 +91,7 @@ note over Transcode #LightGreen: then plugins; the closer sets <b>Visible</b> or
 
 note over Groups, DB #LightGreen
 The walk sends gone files only after a <b>complete</b> walk with files found
-(not on cancel, missing root, empty root), before its flush.
+(not on cancel, missing root, empty root), after the files it saw.
 Files with CheckTime older than this walk, under the root,
 not under an unreadable directory, are gone (their provider sees them first;
 Apple also sends the files of assets trashed or hidden in Photos as gone).

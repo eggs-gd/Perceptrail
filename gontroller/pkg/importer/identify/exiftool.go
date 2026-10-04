@@ -32,30 +32,36 @@ type Exiftool interface {
 // One file must not block an exiftool worker forever (broken or huge files)
 const exiftoolTimeout = 2 * time.Minute
 
-// pool: long-lived exiftool processes (-stay_open), as many as identify's parallel
-// readers; a command takes a free process
+// pool: exiftool processes (-stay_open) for a pass, as many as identify's parallel
+// readers; a command takes a free process. They start with the first command: a
+// pass with nothing to read starts none.
 type pool struct {
+	count     int
 	workers   []*exiftool.Server
 	free      chan *exiftool.Server
 	logger    *l.Logger
+	startOnce sync.Once
 	closeOnce sync.Once
 }
 
 func newPool(count int, logger *l.Logger) *pool {
-	p := &pool{free: make(chan *exiftool.Server, count), logger: logger}
-	for range count {
+	return &pool{count: count, free: make(chan *exiftool.Server, count), logger: logger}
+}
+
+func (p *pool) start() {
+	for range p.count {
 		et, err := exiftool.NewServer()
 		if err != nil {
-			logger.Panic("exiftool: can't start", l.Error(err))
+			p.logger.Panic("exiftool: can't start", l.Error(err))
 		}
 		et.SetTimeout(exiftoolTimeout)
 		p.workers = append(p.workers, et)
 		p.free <- et
 	}
-	return p
 }
 
 func (p *pool) command(args ...string) ([]byte, error) {
+	p.startOnce.Do(p.start)
 	et := <-p.free
 	defer func() { p.free <- et }()
 	return et.Command(args...)
@@ -106,6 +112,7 @@ func (p *pool) Extract(tag, src, dst string) error {
 // Close: the processes end — the stage's steps that use them stop (once)
 func (p *pool) Close() {
 	p.closeOnce.Do(func() {
+		p.startOnce.Do(func() {}) // none starts after this
 		for _, et := range p.workers {
 			et.Close()
 		}

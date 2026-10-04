@@ -446,6 +446,8 @@ transcoders, plugins belong to the stage that uses them. One step does one thing
             it); no test hook in the code;
       - [x] cleanup: dead code out, `dto.Asset`, the databases closed on stop,
             typed log categories;
+      - [x] the chain on plain channels, a `WaitGroup` per output; a pass is a new
+            chain (the service builds it); start-time work in the service's `Start`;
       - [ ] Apple: files Photos offloads (Optimize Mac Storage) must not hide or
             delete the item — the grouper gets them as gone now and may keep the
             asset (a separate task);

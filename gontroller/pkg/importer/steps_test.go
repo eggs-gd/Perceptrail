@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"perceptrail/gontroller/pkg/importer/gate"
 	"perceptrail/gontroller/pkg/model/dto"
 )
 
@@ -106,8 +105,8 @@ func TestNotMediaIgnored(t *testing.T) {
 		t.Fatalf("not ignored: %+v %v", f, err)
 	}
 	row, _ := filesProxy.GetFileByPath(notes) // as the walk gives it: unchanged
-	if _, err := gate.NewGate(testDB, nil).Decorate(dto.Asset{Files: []*dto.FileDto{row}}); err == nil {
-		t.Error("the gate let an unchanged ignored group through")
+	if needs, _, err := testDB.NeedsWork([]*dto.FileDto{row}, "", ""); err != nil || needs {
+		t.Errorf("an unchanged ignored group needs work: %v %v", needs, err)
 	}
 }
 
