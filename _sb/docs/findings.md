@@ -261,6 +261,15 @@ an item):
   the bus is for one writer whatever writes, parallel reads, and steps that never
   stall on a write.
 
+- **Who may write what is decided by who holds what** (the owner asked: a `Job`
+  can run anything — "remove all tables"): `Job` is sealed (only an `Op` makes
+  one), an `Op` needs the executor and the model keeps it to itself, so every rule
+  is the model's; steps and perceptors get `Topic`s — an argument for a given rule,
+  no transaction, no code. In one process that is discipline, not security: any
+  code in it can open the database file; today's `.so` plugins could delete it.
+  Only isolation (WebAssembly, a process) makes a plugin unable to — the bus's
+  `Topic`s are what such a plugin would be given.
+
 **Rejected on the way:**
 
 - One batching for everyone: a writer that does not care (the walk) and one whose

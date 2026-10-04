@@ -8,6 +8,13 @@
 // by the host and its Executor; a step sees a Topic. Stdlib only — every
 // dependency of perceplib is one each plugin must match.
 //
+// Who may write what is decided by who holds what: an Op is made with the
+// executor, and its host keeps the executor to itself, so the rules are only the
+// host's; others get Topics — an argument for a given rule, no transaction, no code
+// of their own (Job is sealed). In one process this is discipline, not security:
+// code in the process can open the database itself; isolation (WebAssembly, a
+// process) is what makes a plugin unable to.
+//
 // Not obvious:
 //   - Delivery never blocks the executor: a subscriber whose buffer is full misses
 //     the result (Dropped counts it). A lost subscription is its owner's loss.
@@ -36,13 +43,16 @@ const (
 )
 
 // Job: one submitted operation as an executor sees it — its class, the rule to run
-// in a transaction, and the end once the transaction is over
+// in a transaction, and the end once the transaction is over. Sealed: only an Op
+// makes jobs, so an executor runs nothing but the rules it was given to (an Op
+// needs the executor, and its host keeps that to itself)
 type Job[T any] interface {
 	Class() Class
 	// Run: the rule, inside the transaction tx (its result stays in the job)
 	Run(tx T)
 	// Done: after the commit, or the rollback (commitErr); delivers the result
 	Done(commitErr error)
+	sealed()
 }
 
 // Executor: who runs the jobs — the host's (the model's writer)
@@ -154,6 +164,8 @@ type job[T, A, R any] struct {
 }
 
 func (j *job[T, A, R]) Class() Class { return j.op.class }
+
+func (*job[T, A, R]) sealed() {}
 
 func (j *job[T, A, R]) Run(tx T) { j.value, j.err = j.op.rule(tx, j.arg) }
 
