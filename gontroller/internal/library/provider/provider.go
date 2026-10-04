@@ -33,6 +33,9 @@ type Provider interface {
 	Claims(path string) bool
 	// Grouper: its files into whole assets; one instance per run
 	Grouper() Grouper
+	// Skips: a directory of this library that holds none of its media (its
+	// database, caches): the walk does not enter it
+	Skips(dir string) bool
 
 	// Owns: the item is this library's (on-demand renditions go to it)
 	Owns(item *dto.ItemDto) bool

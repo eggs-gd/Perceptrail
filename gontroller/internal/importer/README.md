@@ -28,7 +28,7 @@ skip is never an error.
 
 | stage | in → out | what it does |
 |---|---|---|
-| **walk** | the root → `dto.WalkedFile` | The chain's entry: reads the files table once, then sends every file as its row, page by page (a new file's row created, a changed stat saved with `Changed`, one transaction a page; an unchanged file is not written); after a complete walk, the rows it did not see sent as `Missing`. |
+| **walk** | the root → `dto.WalkedFile` | The chain's entry: reads the files table once, skips the directories a library says hold none of its media, then sends every file as its row, page by page (a new file's row created, a changed stat saved with `Changed`, one transaction a page; an unchanged file is not written); after a complete walk, the rows it did not see sent as `Missing`. |
 | **group** | `dto.WalkedFile` → `dto.Asset` | A switch sends each file to the grouper of the first library that claims it (the plain folder last); each grouper is a step. The groupers are the libraries': [library README](../library/README.md). |
 | **gate** | `dto.Asset` → `dto.Asset` | The asset's `Missing` applied by the model (`Gone`); an asset passes if a file changed or the model says it needs work (`NeedsWork`). |
 | **identify** | `dto.Asset` → `*identify.Item` | read (in parallel, no DB: one exiftool call per group, kinds and roles, the metadata package, the fingerprint) → validate (one at a time: which item it is, or ignored) → show (sizes, what the browser shows now, an embedded preview as the last resort). exiftool lives only here. |

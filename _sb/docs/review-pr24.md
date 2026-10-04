@@ -77,11 +77,11 @@ transcodes (also in the roadmap).
 
 ## 3. Missed in the code
 
-- **3.1 [next] N+1 every pass**: the walk does `GetFileByPath` + `UpdateFiles` per
+- **3.1 [PR29] N+1 every pass**: the walk does `GetFileByPath` + `UpdateFiles` per
   file, every minute — ~20k queries for 10k files, a WAL write each. Batch: read
   the rows under the root in one query, stamp `CheckTime` with one `UPDATE … WHERE
   id IN` per page, create in batches.
-- **3.2 [next] Photos' own files become rows** (its database, caches inside the
+- **3.2 [PR29] Photos' own files become rows** (its database, caches inside the
   bundle); before, only grouped files had rows. Not measured (the library is not
   readable from the agent's sandbox). Either the walk skips what a provider says is
   not its media, or measure and accept.

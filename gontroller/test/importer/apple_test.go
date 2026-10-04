@@ -179,3 +179,29 @@ func TestChangeSurvivesAFailedPass(t *testing.T) {
 		t.Errorf("the change was lost: the next pass processed %v, want the edited asset", got)
 	}
 }
+
+// Photos' own files (its database, search index, caches, internal stores) are not
+// walked: no rows for them; rows an older walk wrote for them are dropped as missing
+func TestPhotosOwnFilesNotWalked(t *testing.T) {
+	root := t.TempDir()
+	bundle, _ := photosLibrary(t, root)
+	own := []string{"database/search/psi.sqlite", "resources/caches/compute/x.plist", "internal/photosmessagesbackdrops/a.jpg", "private/com.apple.photoanalysisd/b.plist"}
+	for _, f := range own {
+		write(t, filepath.Join(bundle, f), f)
+	}
+	stale := filepath.Join(bundle, "resources/caches/older.jpg") // written by an older walk
+	write(t, stale, "cache")
+	if _, err := testDB.CreateFile(dto.ItemEntry{Path: stale, Name: filepath.Base(stale)}); err != nil {
+		t.Fatal(err)
+	}
+
+	scan(t, root)
+	for _, f := range append(own, "database/Photos.sqlite", "resources/caches/older.jpg") {
+		if _, err := testDB.GetFileByPath(filepath.Join(bundle, f)); err == nil {
+			t.Errorf("a row for Photos' own %s", f)
+		}
+	}
+	if _, err := testDB.GetItemByGuid(appleEdited); err != nil {
+		t.Errorf("the library's assets: %v", err)
+	}
+}

@@ -135,7 +135,7 @@ func walk(t *testing.T, g *Grouper, root string, before func(path string)) map[s
 		if _, err := os.Stat(p); err != nil {
 			continue // vanished: the walker would not see it
 		}
-		out, err := g.Decorate(dto.WalkedFile{FileDto: &dto.FileDto{ItemEntry: dto.ItemEntry{Path: p, Name: filepath.Base(p)}}})
+		out, err := g.Decorate(dto.WalkedFile{FileDto: &dto.FileDto{Path: p, Name: filepath.Base(p)}})
 		if errors.Is(err, chain.ErrSkippedItem) {
 			continue
 		}
@@ -217,7 +217,7 @@ func TestGrouper(t *testing.T) {
 // A file the walk found missing passes through as it is, an asset of its own
 func TestGrouperMissing(t *testing.T) {
 	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
-	gone := &dto.FileDto{ItemEntry: dto.ItemEntry{Path: "/lib/x.photoslibrary/originals/A/A.heic"}}
+	gone := &dto.FileDto{Path: "/lib/x.photoslibrary/originals/A/A.heic"}
 	out, err := g.Decorate(dto.WalkedFile{FileDto: gone, Missing: true})
 	if err != nil || len(out.Files) != 0 || len(out.Missing) != 1 || out.Missing[0] != gone {
 		t.Errorf("got %+v, %v", out, err)
@@ -387,5 +387,33 @@ func TestHasLibrary(t *testing.T) {
 	makeLibrary(t, root, nil)
 	if !HasLibrary(root) || !HasLibrary(filepath.Join(root, "Photos Library.photoslibrary")) {
 		t.Error("a library at the top, or the library itself")
+	}
+}
+
+// Inside a library only the originals and Photos' renders and derivatives are
+// walked
+func TestSkips(t *testing.T) {
+	p := &Provider{}
+	lib := "/u/Pictures/Photos Library.photoslibrary"
+	for dir, skip := range map[string]bool{
+		"/u/Pictures":                          false,
+		"/u/Pictures/trip":                     false,
+		lib:                                    false,
+		lib + "/originals":                     false,
+		lib + "/originals/A":                   false,
+		lib + "/resources":                     false,
+		lib + "/resources/renders/A":           false,
+		lib + "/resources/derivatives/masters": false,
+		lib + "/resources/caches":              true,
+		lib + "/resources/journals":            true,
+		lib + "/database":                      true,
+		lib + "/database/search":               true,
+		lib + "/internal":                      true,
+		lib + "/private":                       true,
+		lib + "/scopes":                        true,
+	} {
+		if got := p.Skips(dir); got != skip {
+			t.Errorf("Skips(%q) = %v, want %v", dir, got, skip)
+		}
 	}
 }

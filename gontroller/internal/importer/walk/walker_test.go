@@ -159,7 +159,7 @@ func TestWalkPass(t *testing.T) {
 		found := make(chan dto.WalkedFile)
 		got := &files{}
 		c := chain.NewChainProcessor(nil)
-		c.AddStep(New(db, root, testLogger, found))
+		c.AddStep(New(db, root, nil, testLogger, found))
 		c.AddStep(chain.NewEnd(found, got))
 		c.Process(t.Context())
 		return got.got
@@ -204,7 +204,7 @@ func TestWalkPages(t *testing.T) {
 	found := make(chan dto.WalkedFile)
 	got := &files{}
 	c := chain.NewChainProcessor(nil)
-	c.AddStep(New(db, root, testLogger, found))
+	c.AddStep(New(db, root, nil, testLogger, found))
 	c.AddStep(chain.NewEnd(found, got))
 	c.Process(t.Context())
 	if !slices.Equal(got.got, want) {
@@ -215,7 +215,7 @@ func TestWalkPages(t *testing.T) {
 // Missing: only a complete walk that found files speaks; only under its root; never
 // under an unreadable directory
 func TestMissing(t *testing.T) {
-	file := func(p string) *dto.FileDto { return &dto.FileDto{ItemEntry: dto.ItemEntry{Path: p}} }
+	file := func(p string) *dto.FileDto { return &dto.FileDto{Path: p} }
 	stale := []*dto.FileDto{file("/lib/a.jpg"), file("/lib/locked/b.jpg"), file("/other/c.jpg")}
 	r := Result{Root: "/lib", Complete: true, Files: 3, Unreadable: []string{"/lib/locked"}}
 	if g := Missing(r, stale); len(g) != 1 || g[0].Path != "/lib/a.jpg" {

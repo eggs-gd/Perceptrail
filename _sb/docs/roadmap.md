@@ -38,11 +38,8 @@ One line each; the details are in the READMEs and the PRs.
 The rest of the PR #24 review ([review-pr24.md](review-pr24.md), its numbers), each
 a PR of its own, so the next chains do not touch everything:
 
-- [x] The walk in batches (3.1): one read of the files table, no write for an
-      unchanged file, new rows and changed stats one transaction a page.
-- [ ] Photos' own files not walked (3.2): measured on the owner's library — 28 253
-      of 47 609 rows are Photos' internals (`database/search` 18 k,
-      `resources/caches` 9 k); a library says which of its directories hold no media.
+- [x] The walk in batches (3.1) and Photos' own files not walked (3.2) — PR in
+      work, on top of #27.
 
 ## Next: the expensive stage (transcode)
 

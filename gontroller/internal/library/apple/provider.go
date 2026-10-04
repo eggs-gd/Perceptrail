@@ -2,6 +2,8 @@ package apple
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"perceptrail/gontroller/internal/library/provider"
@@ -55,6 +57,28 @@ func New(root string, photos Photos, items Items, logger *l.Logger) *Provider {
 func (p *Provider) Claims(path string) bool { return BundleRoot(path) != "" }
 
 func (p *Provider) Grouper() provider.Grouper { return p.grouper }
+
+// Skips: inside a Photos library, everything but the originals and Photos' renders
+// and derivatives — its database (read from a copy, not walked), search index,
+// caches, journals, the internal and private stores hold no asset's file
+func (p *Provider) Skips(dir string) bool {
+	root := BundleRoot(dir)
+	if root == "" {
+		return false
+	}
+	rel, err := filepath.Rel(root, dir)
+	if err != nil || rel == "." {
+		return false
+	}
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	switch parts[0] {
+	case "originals":
+		return false
+	case "resources":
+		return len(parts) > 1 && parts[1] != "renders" && parts[1] != "derivatives"
+	}
+	return true
+}
 
 // Owns: an item whose main file is in a Photos library (its GUID is the asset UUID)
 func (p *Provider) Owns(item *dto.ItemDto) bool { return BundleRoot(item.Path) != "" }
