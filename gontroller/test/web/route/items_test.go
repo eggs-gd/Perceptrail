@@ -1,4 +1,4 @@
-package route
+package route_test
 
 import (
 	"bufio"
@@ -11,19 +11,13 @@ import (
 	"time"
 
 	"perceptrail/gontroller/pkg/model/dto"
-
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
-
-	"github.com/labstack/echo/v4"
 )
 
 // The delta: after a full fetch, ?since=<its cursor> (the stream's last line) gives
 // only what changed — a changed or new shown item as an item, a deleted or hidden one
 // as removed; the epoch stays the same
 func TestItemsDelta(t *testing.T) {
-	e := echo.New()
-	Register(e, testDB, AppInfo{}, nil, nil, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	e := server(nil)
 
 	put := func(it *dto.ItemDto) *dto.ItemDto {
 		t.Helper()
@@ -63,7 +57,7 @@ func TestItemsDelta(t *testing.T) {
 				t.Fatal(err)
 			}
 			if line.Cursor != "" {
-				n, _ := testDB.CountItemsInStates(shownStates...)
+				n, _ := testDB.CountItemsInStates(dto.Visible, dto.Ready)
 				if line.Total == nil || *line.Total != n {
 					t.Errorf("%s: total %v, want %d (the shown items)", query, line.Total, n)
 				}
@@ -81,7 +75,7 @@ func TestItemsDelta(t *testing.T) {
 	// purpose — >=, nothing missed); the test steps past it
 	time.Sleep(10 * time.Millisecond)
 	full, cursor, h := get("")
-	if len(full) != 4 || h.Get(headerEpoch) == "" || cursor == "" {
+	if len(full) != 4 || h.Get("X-Sync-Epoch") == "" || cursor == "" {
 		t.Fatalf("full: %v, cursor %q, headers %v", full, cursor, h)
 	}
 	time.Sleep(10 * time.Millisecond)
@@ -105,7 +99,7 @@ func TestItemsDelta(t *testing.T) {
 			t.Errorf("%s: in delta %v removed %v, want removed %v", guid, ok, r, removed)
 		}
 	}
-	if h2.Get(headerEpoch) != h.Get(headerEpoch) {
+	if h2.Get("X-Sync-Epoch") != h.Get("X-Sync-Epoch") {
 		t.Error("the epoch changed")
 	}
 }

@@ -10,6 +10,7 @@ import (
 
 	"perceptrail/gontroller/pkg/app"
 	"perceptrail/gontroller/pkg/config"
+	"perceptrail/gontroller/pkg/library"
 	"perceptrail/gontroller/pkg/perceptor"
 	"perceptrail/gontroller/pkg/web/route"
 
@@ -61,7 +62,7 @@ func (s *Service) Start(parentCtx context.Context) {
 		return c.String(http.StatusOK, "Hello, World!")
 	})
 
-	route.Register(e, s.db, route.AppInfo{Version: app.Version, Mode: s.cfg.Mode()}, perceptor.Client(), perceptor.LoadValues, s.logger)
+	route.Register(e, s.db, library.Of, route.AppInfo{Version: app.Version, Mode: s.cfg.Mode()}, perceptor.Client(), perceptor.LoadValues, s.logger)
 
 	go func() {
 		if err := e.Start(s.cfg.Server().Addr()); err != nil && !errors.Is(err, http.ErrServerClosed) {

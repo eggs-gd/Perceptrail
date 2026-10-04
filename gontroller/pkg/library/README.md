@@ -30,12 +30,12 @@ we render and store nothing it keeps.
 
 `library.Enable(cfg, db, logger)` (in `main`) builds them from the config
 (`providers: {apple: {enabled: …}}`, enabled when not listed); the plain folder
-always, last. `Enabled` gives them in order, `Of` the item's; `Use` sets them as
-given (a test's own).
+always, last. `Enabled` gives them in order, `Of` the item's (the web service gets
+`library.Of` passed in: the routes do not reach the registry).
 
 | package | what |
 |---|---|
-| `library` | the libraries of this run: `Enable`, `Use`, `Enabled`, `Of`, `Service` |
+| `library` | the libraries of this run: `Enable`, `Enabled`, `Of`, `Service` |
 | `library/provider` | the contract a library implements (`Provider`, `Grouper`, `Rendition`, `Options`) |
 | `library/apple` | Apple Photos: the grouper (the library's DB, the naming layout), on demand (`ondemand.go`) |
 | `library/apple/photokit` | PhotoKit through cgo (macOS; a stub elsewhere) |

@@ -36,12 +36,9 @@ func Enable(cfg Config, db apple.Items, logger *l.Logger) error {
 		libraries = append(libraries, apple.New(cfg.LibraryRoot(), photokit.Library{}, db, logger.Named("apple")))
 	}
 	libraries = append(libraries, folder.New())
-	Use(libraries...)
+	enabled = libraries
 	return nil
 }
-
-// Use: these libraries for the run, as given (Enable's, or a test's own)
-func Use(libraries ...provider.Provider) { enabled = libraries }
 
 // Enabled: the libraries in the chain, in order
 func Enabled() []provider.Provider { return enabled }

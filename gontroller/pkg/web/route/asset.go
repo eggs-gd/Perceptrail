@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 
+	"perceptrail/gontroller/pkg/library/provider"
 	"perceptrail/gontroller/pkg/model/dto"
 
 	_ "golang.org/x/image/webp"
@@ -54,7 +55,9 @@ type dims struct {
 // embeddedName: the extracted embedded preview (not a file of the asset)
 const embeddedName = "embedded"
 
-func toClientAsset(item *dto.ItemDto, files []*dto.FileDto) clientAsset {
+// toClientAsset: every file of the asset by role, for the client; lib: the item's
+// library (nil: a plain folder's), which says what can be asked for on demand
+func toClientAsset(item *dto.ItemDto, files []*dto.FileDto, lib provider.Provider) clientAsset {
 	a := clientAsset{Edit: []rendition{}, Stills: []rendition{}, Motion: []rendition{}, Frames: []rendition{}}
 	previewIsFile := false
 	for _, f := range files {
@@ -86,7 +89,7 @@ func toClientAsset(item *dto.ItemDto, files []*dto.FileDto) clientAsset {
 	bySize(a.Edit)
 	bySize(a.Stills)
 	a.Kind, a.Duration = dto.AssetKind(item.Kind, files), item.Duration
-	a.OnDemand = onDemandOf(item)
+	a.OnDemand = onDemandOf(item, lib)
 	if item.Size.W > 0 && item.Size.H > 0 {
 		a.Full = &dims{W: int(item.Size.W), H: int(item.Size.H)}
 	}

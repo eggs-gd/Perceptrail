@@ -3,7 +3,6 @@ package route
 import (
 	"net/http"
 
-	"perceptrail/gontroller/pkg/library"
 	"perceptrail/gontroller/pkg/library/provider"
 	"perceptrail/gontroller/pkg/model/dto"
 
@@ -30,7 +29,7 @@ func (r *routes) getRendition(c echo.Context) error {
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
-	lib := library.Of(item)
+	lib := r.of(item)
 	if lib == nil {
 		return echo.NewHTTPError(http.StatusNotFound) // a plain folder's: nothing to ask for
 	}
@@ -45,10 +44,9 @@ func (r *routes) getRendition(c echo.Context) error {
 	return c.File(rendition.Path)
 }
 
-// onDemandOf: the client's on-demand renditions of a provider's item (nil for a
-// plain folder's) — the levels its provider offers, as URLs
-func onDemandOf(item *dto.ItemDto) *onDemand {
-	lib := library.Of(item)
+// onDemandOf: the client's on-demand renditions of a library's item (nil for a
+// plain folder's) — the levels its library offers, as URLs
+func onDemandOf(item *dto.ItemDto, lib provider.Provider) *onDemand {
 	if lib == nil {
 		return nil
 	}

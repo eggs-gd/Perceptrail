@@ -95,8 +95,12 @@ libraries, then the services (the libraries' background work, the import, HTTP).
 Each module is set up the same way: `New(cfg, deps…, logger)` / `Load` / `Enable`,
 reading its own `Config` interface of the whole config.
 
-`test/` holds the integration tests, by the path of what they test
-(`test/importer`, `test/perceptor`); a package's own unit tests stay next to it.
+`test/` holds the integration tests, by the path of what they test, through the
+public API only: `test/importer` (the server's own start, the import's passes),
+`test/perceptor` (the built-ins' declared tags, loading the `.so` plugins),
+`test/web/route` (the HTTP API over a real model, read as the client reads its
+JSON), `test/library` (the Apple library's background work); `test/fake` stands in
+for what CI cannot have (Photos). A package's own unit tests stay next to it.
 
 | Package | What |
 |---|---|

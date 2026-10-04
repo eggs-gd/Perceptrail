@@ -10,8 +10,6 @@ import (
 	"perceptrail/gontroller/pkg/config"
 	"perceptrail/gontroller/pkg/importer"
 	"perceptrail/gontroller/pkg/library"
-	"perceptrail/gontroller/pkg/library/apple"
-	"perceptrail/gontroller/pkg/library/folder"
 	"perceptrail/gontroller/pkg/model"
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/perceptor"
@@ -46,7 +44,9 @@ func TestMain(m *testing.M) {
 	if err := perceptor.Load(cfg, logger); err != nil {
 		panic(err)
 	}
-	library.Use(apple.New("", nil, testDB, logger), folder.New())
+	if err := library.Enable(cfg, testDB, logger); err != nil {
+		panic(err)
+	}
 
 	code := m.Run()
 	os.RemoveAll(dir)

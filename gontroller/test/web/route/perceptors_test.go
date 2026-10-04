@@ -1,4 +1,4 @@
-package route
+package route_test
 
 import (
 	"bufio"
@@ -12,20 +12,12 @@ import (
 	"perceptrail/gontroller/pkg/model/dto"
 	"perceptrail/gontroller/pkg/perceptor/date"
 	"perceptrail/gontroller/pkg/perceptor/size"
-
-	"github.com/eggs-gd/perceplib/api"
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
-
-	"github.com/labstack/echo/v4"
 )
 
 // The perceptors the client is given, each with its view; the date's order over the
 // shown items: newest first with its sections
 func TestPerceptorsRoutes(t *testing.T) {
-	e := echo.New()
-	Register(e, testDB, AppInfo{}, []api.Perceptor{date.Perceptor, size.Perceptor}, nil,
-		l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	e := server(nil, date.Perceptor, size.Perceptor)
 
 	at := func(s string) time.Time { v, _ := time.Parse(time.RFC3339, s); return v }
 	for _, it := range []*dto.ItemDto{
@@ -40,7 +32,7 @@ func TestPerceptorsRoutes(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/perceptors", nil))
-	var views []clientPerceptor
+	var views []struct{ Slug, Title, Icon string }
 	if err := json.Unmarshal(rec.Body.Bytes(), &views); err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +49,10 @@ func TestPerceptorsRoutes(t *testing.T) {
 	var got []string
 	sc := bufio.NewScanner(rec.Body)
 	for sc.Scan() {
-		var en clientEntry
+		var en struct {
+			Guid     string
+			Sections []struct{ Label string }
+		}
 		if err := json.Unmarshal(sc.Bytes(), &en); err != nil {
 			t.Fatal(err)
 		}
@@ -83,12 +78,10 @@ func TestPerceptorsRoutes(t *testing.T) {
 
 // A view is reached by its slug: a taken one is not given to the client
 func TestPerceptorsSlugTaken(t *testing.T) {
-	e := echo.New()
-	Register(e, testDB, AppInfo{}, []api.Perceptor{date.Perceptor, date.Perceptor, size.Perceptor}, nil,
-		l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	e := server(nil, date.Perceptor, date.Perceptor, size.Perceptor)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/perceptors", nil))
-	var views []clientPerceptor
+	var views []struct{ Slug, Title, Icon string }
 	if err := json.Unmarshal(rec.Body.Bytes(), &views); err != nil {
 		t.Fatal(err)
 	}
@@ -100,16 +93,17 @@ func TestPerceptorsSlugTaken(t *testing.T) {
 // The info panel: what each perceptor knows about one item; one that says nothing is
 // left out (Size: an item without a size)
 func TestPerceptorsInfo(t *testing.T) {
-	e := echo.New()
-	Register(e, testDB, AppInfo{}, []api.Perceptor{date.Perceptor, size.Perceptor}, nil,
-		l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	e := server(nil, date.Perceptor, size.Perceptor)
 	at, _ := time.Parse(time.RFC3339, "2025-09-14T05:00:00Z")
 	if _, err := testDB.UpdateItem(&dto.ItemDto{Guid: "info-1", State: dto.Visible, Date: at, DateSource: "tag", DateOffset: 180}); err != nil {
 		t.Fatal(err)
 	}
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/items/info-1/info", nil))
-	var info []clientInfo
+	var info []struct {
+		Slug  string
+		Facts []struct{ Value string }
+	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &info); err != nil {
 		t.Fatal(err)
 	}

@@ -98,7 +98,7 @@ type removedItem struct {
 	Removed bool   `json:"removed"`
 }
 
-func toClientItem(dbItem *dto.ItemDto, files []*dto.FileDto) clientItem {
+func (r *routes) toClientItem(dbItem *dto.ItemDto, files []*dto.FileDto) clientItem {
 	item := clientItem{
 		Id:       dbItem.ID,
 		Guid:     dbItem.Guid,
@@ -106,7 +106,7 @@ func toClientItem(dbItem *dto.ItemDto, files []*dto.FileDto) clientItem {
 		MimeType: dbItem.MimeType,
 		// Items shown before the cheap stage existed have no preview: the original
 		PreviewMime: dbItem.PreviewMime,
-		Asset:       toClientAsset(dbItem, files),
+		Asset:       toClientAsset(dbItem, files, r.of(dbItem)),
 	}
 	if item.PreviewMime == "" {
 		item.PreviewMime = dbItem.MimeType
@@ -140,7 +140,7 @@ func (r *routes) streamClientItems(w http.ResponseWriter, since *time.Time, end 
 			if !shown(dbItem) {
 				return nil
 			}
-			if err := encoder.Encode(toClientItem(dbItem, files)); err != nil {
+			if err := encoder.Encode(r.toClientItem(dbItem, files)); err != nil {
 				return err
 			}
 			flusher.Flush()
@@ -148,7 +148,7 @@ func (r *routes) streamClientItems(w http.ResponseWriter, since *time.Time, end 
 		})
 	} else {
 		err = r.db.StreamItemsSince(*since, func(dbItem *dto.ItemDto, files []*dto.FileDto) error {
-			var out any = toClientItem(dbItem, files)
+			var out any = r.toClientItem(dbItem, files)
 			if dbItem.DeletedAt.Valid || !shown(dbItem) {
 				out = removedItem{Guid: dbItem.Guid, Removed: true}
 			}

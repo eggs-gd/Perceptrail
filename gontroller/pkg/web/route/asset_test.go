@@ -1,44 +1,14 @@
 package route
 
 import (
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"perceptrail/gontroller/pkg/config"
-	"strconv"
 	"testing"
 
-	"perceptrail/gontroller/pkg/model"
+	"perceptrail/gontroller/pkg/library/apple"
 	"perceptrail/gontroller/pkg/model/dto"
 
 	l "github.com/eggs-gd/perceplib/logger"
 	"github.com/eggs-gd/perceplib/logger/decorators"
-
-	"github.com/labstack/echo/v4"
 )
-
-// testDB: the model the routes read in these tests
-var testDB *model.Proxy
-
-func TestMain(m *testing.M) {
-	dir, _ := os.MkdirTemp("", "routes-test")
-	if err := os.WriteFile(filepath.Join(dir, "config.yml"), nil, 0o644); err != nil {
-		panic(err)
-	}
-	cfg, err := config.Read(filepath.Join(dir, "config.yml")) // the database in dir
-	if err != nil {
-		panic(err)
-	}
-	db, err := model.Open(cfg, l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
-	if err != nil {
-		panic(err)
-	}
-	testDB = db
-	code := m.Run()
-	os.RemoveAll(dir)
-	os.Exit(code)
-}
 
 func TestClientAssetByRoles(t *testing.T) {
 	item := &dto.ItemDto{Guid: "G", PreviewPath: "/cache/G/embedded.jpg", PreviewMime: "image/jpeg"}
@@ -54,7 +24,7 @@ func TestClientAssetByRoles(t *testing.T) {
 		file(4, dto.RoleEdit, "image/jpeg", 4032),
 		file(5, dto.RoleMotion, "video/quicktime", 1080),
 		file(6, dto.RoleMeta, "application/rdf+xml", 0),
-	})
+	}, nil)
 	if a.Original == nil || a.Original.URL != "/assets/G/1" || a.Original.Mime != "image/heic" {
 		t.Errorf("original %+v", a.Original)
 	}
@@ -85,52 +55,40 @@ func TestClientAssetKind(t *testing.T) {
 		{"video", "", []*dto.FileDto{file(dto.RoleOriginal, "video/mp4"), file(dto.RoleStill, "image/jpeg")}, dto.KindVideo},
 		{"apple live", dto.KindLive, []*dto.FileDto{file(dto.RoleOriginal, "video/quicktime"), file(dto.RoleStill, "image/heic")}, dto.KindLive},
 	} {
-		if got := toClientAsset(&dto.ItemDto{Guid: "G", Kind: c.stored}, c.files).Kind; got != c.want {
+		if got := toClientAsset(&dto.ItemDto{Guid: "G", Kind: c.stored}, c.files, nil).Kind; got != c.want {
 			t.Errorf("%s: %q, want %q", c.name, got, c.want)
 		}
 	}
 }
 
-// A file is served only for its own asset
-func TestAssetFileOnlyOfItsAsset(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "a.jpg")
-	os.WriteFile(path, []byte("jpeg"), 0o644)
-	f, err := testDB.CreateFile(dto.ItemEntry{Path: path, Name: "a.jpg"})
-	if err != nil {
-		t.Fatal(err)
+// The client learns which items can ask for more: those from Photos, a hover for
+// what moves
+func TestOnDemandInAsset(t *testing.T) {
+	lib := "/p/Photos Library.photoslibrary/originals/A/A1.heic"
+	photos := apple.New("/p", nil, nil, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	if od := toClientAsset(&dto.ItemDto{Guid: "A1", Kind: dto.KindPhoto, Path: lib}, nil, photos).OnDemand; od == nil ||
+		od.Medium != "/items/A1/rendition/medium?v="+contractVersion || od.Hover != "" || od.Original != "/items/A1/rendition/original?v="+contractVersion {
+		t.Errorf("photo, original in iCloud: %+v", od)
 	}
-	f.LinkToItem("MINE")
-	if _, err := testDB.UpdateFile(f); err != nil {
-		t.Fatal(err)
+	here := []*dto.FileDto{{ID: 1, Role: dto.RoleOriginal, LinkedTo: "A2"}}
+	here[0].MimeType = "image/heic"
+	if od := toClientAsset(&dto.ItemDto{Guid: "A2", Kind: dto.KindPhoto, Path: lib}, here, photos).OnDemand; od == nil || od.Original == "" {
+		t.Errorf("photo, original here: %+v, want the original still asked from Photos (it may be edited)", od)
 	}
-
-	e := echo.New()
-	get := func(guid, name string) int {
-		rec := httptest.NewRecorder()
-		c := e.NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
-		c.SetParamNames("item", "file")
-		c.SetParamValues(guid, name)
-		if err := (&routes{db: testDB}).getAssetFile(c); err != nil {
-			if he, ok := err.(*echo.HTTPError); ok {
-				return he.Code
-			}
-			return 500
-		}
-		return rec.Code
+	if od := toClientAsset(&dto.ItemDto{Guid: "V1", Kind: dto.KindVideo, Path: lib}, nil, photos).OnDemand; od == nil ||
+		od.Hover != "/items/V1/rendition/hover?v="+contractVersion {
+		t.Errorf("video: %+v", od)
 	}
-	id := func() string { return itoa(f.ID) }
-	if code := get("MINE", id()); code != http.StatusOK {
-		t.Errorf("own file: %d", code)
-	}
-	if code := get("OTHER", id()); code != http.StatusNotFound {
-		t.Errorf("another asset's file: %d, want 404", code)
-	}
-	if code := get("MINE", "../../etc/passwd"); code != http.StatusNotFound {
-		t.Errorf("a path: %d, want 404", code)
+	if od := toClientAsset(&dto.ItemDto{Guid: "F1", Path: "/photos/f.jpg"}, nil, nil).OnDemand; od != nil {
+		t.Errorf("a folder's photo: %+v, want none", od)
 	}
 }
 
-func itoa(n uint) string {
-	return strconv.FormatUint(uint64(n), 10)
+// The asset carries the full size of what is seen
+func TestClientAssetFull(t *testing.T) {
+	item := &dto.ItemDto{Guid: "FULL-1"}
+	item.Size.W, item.Size.H = 3024, 4032
+	if a := toClientAsset(item, nil, nil); a.Full == nil || a.Full.W != 3024 || a.Full.H != 4032 {
+		t.Errorf("full %+v, want the item's size", a.Full)
+	}
 }

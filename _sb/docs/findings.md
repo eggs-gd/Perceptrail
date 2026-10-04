@@ -568,8 +568,13 @@ module needing a config created a cycle. Now:
 - **Integration tests in `gontroller/test/`** by the path of what they test, through
   the public API only: the import's (`importer.New(…).Pass`), the built-in
   perceptors' declared tags (one test for all), loading the `.so` plugins through
-  the config. `Pass` is the service's unit of work, not a hook (a "scan now" would
-  call it).
+  the config, the HTTP API over a real model (read through its JSON), the Apple
+  library's background work (`test/fake.Photos` for PhotoKit). `Pass` is the
+  service's unit of work, not a hook (a "scan now" would call it). The routes get
+  the item's library as a function (`route.LibraryOf`; the server passes
+  `library.Of`) instead of reaching the registry, so `library.Use` — a setter only
+  tests called — is gone. What stays in a package is a unit test: its own logic
+  (`toClientAsset`, a grouper, classify).
 
 ### The import chain, PR #24 (2026-10-04, decided)
 
