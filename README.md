@@ -46,14 +46,14 @@ Skip in an emergency with `--no-verify`.
 - Modules: [gontroller](gontroller/readme.md) · [perceplib](perceplib/README.md) ·
   [perceptors](perceptors/readme.md) · [svebapp](svebapp/README.md)
 
-## Big Flow
+## Import chain
 
-![Alt text](./_sb/diagrams/Item%20Flow.svg)
+![Import chain](./_sb/diagrams/Import%20chain.svg)
 
-## Items watching and validating process
+## Files gate and validator
 
-![Alt text](./_sb/diagrams/Walker%20and%20validating.svg)
+![Files gate and validator](./_sb/diagrams/Walker%20and%20validating.svg)
 
 ## ML Flow
 
-![Alt text](./_sb/diagrams/ML%20Flow.svg)
+![ML Flow](./_sb/diagrams/ML%20Flow.svg)

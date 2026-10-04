@@ -46,7 +46,7 @@ func (r *routes) getRendition(c echo.Context) error {
 
 // onDemandOf: the client's on-demand renditions of a library's item (nil for a
 // plain folder's) — the levels its library offers, as URLs
-func onDemandOf(item *dto.ItemDto, lib provider.Provider) *onDemand {
+func onDemandOf(item *dto.ItemDto, lib Library) *onDemand {
 	if lib == nil {
 		return nil
 	}

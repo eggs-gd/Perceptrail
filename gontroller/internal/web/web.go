@@ -11,6 +11,7 @@ import (
 	"perceptrail/gontroller/internal/app"
 	"perceptrail/gontroller/internal/config"
 	"perceptrail/gontroller/internal/library"
+	"perceptrail/gontroller/internal/model/dto"
 	"perceptrail/gontroller/internal/perceptor"
 	"perceptrail/gontroller/internal/web/route"
 
@@ -62,7 +63,7 @@ func (s *Service) Start(parentCtx context.Context) {
 		return c.String(http.StatusOK, "Hello, World!")
 	})
 
-	route.Register(e, s.db, library.Of, route.AppInfo{Version: app.Version, Mode: s.cfg.Mode()}, perceptor.Client(), perceptor.LoadValues, s.logger)
+	route.Register(e, s.db, libraryOf, route.AppInfo{Version: app.Version, Mode: s.cfg.Mode()}, perceptor.Client(), perceptor.LoadValues, s.logger)
 
 	go func() {
 		if err := e.Start(s.cfg.Server().Addr()); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -77,4 +78,13 @@ func (s *Service) Start(parentCtx context.Context) {
 	if err := e.Shutdown(shutdown); err != nil {
 		s.logger.Error("Server shutdown", l.Error(err))
 	}
+}
+
+// libraryOf: the item's library as the routes ask it; a plain folder's item has
+// none — nil itself, not a nil provider inside the interface
+func libraryOf(item *dto.ItemDto) route.Library {
+	if lib := library.Of(item); lib != nil {
+		return lib
+	}
+	return nil
 }

@@ -2,8 +2,8 @@
 // the first file of a library loads the assets from Photos.sqlite and forms the
 // groups in memory — the files of every asset that exist on disk now — then the
 // walker's files fill them; a group goes out when its last file has arrived. A file
-// the walk says is gone passes through as it is (its own group); a file of an asset
-// Photos trashed or hid is sent as gone. One
+// the walk found missing passes through as it is (an asset of its own); a file of an
+// asset Photos trashed or hid is missing for us too. One
 // group is one asset: the key is the asset UUID (the item's GUID), the main file
 // is the source (the original; its Live Photo video before it), the rest is
 // linked to it. We only read the library, never write it.
@@ -50,9 +50,10 @@ func (g *Grouper) Flush() ([]dto.Asset, error) {
 	return nil, nil
 }
 
-func (g *Grouper) Decorate(f *dto.FileDto) (dto.Asset, error) {
-	if f.Gone {
-		return dto.Asset{Files: []*dto.FileDto{f}}, nil
+func (g *Grouper) Decorate(walked dto.WalkedFile) (dto.Asset, error) {
+	f := walked.FileDto
+	if walked.Missing {
+		return dto.Asset{Missing: []*dto.FileDto{f}}, nil
 	}
 	root := BundleRoot(f.Path)
 	if root == "" {
@@ -71,9 +72,8 @@ func (g *Grouper) Decorate(f *dto.FileDto) (dto.Asset, error) {
 		g.libs[root] = lib
 	}
 
-	if lib.dropped[f.Path] {
-		f.Gone = true // the asset is in Photos' trash (or hidden): its item goes
-		return dto.Asset{Files: []*dto.FileDto{f}}, nil
+	if lib.dropped[f.Path] { // the asset is in Photos' trash (or hidden): its item goes
+		return dto.Asset{Missing: []*dto.FileDto{f}}, nil
 	}
 	a, ok := lib.byPath[f.Path]
 	if !ok || a.sent {

@@ -8,6 +8,10 @@ import "github.com/eggs-gd/perceplib/api"
 // import identifies it into an item (ItemDto: item == asset).
 type Asset struct {
 	Files []*FileDto
+	// Files gone for the library: the walk found them missing, or the source says
+	// so (Apple Photos: an asset trashed or hidden there). The gate has the model
+	// apply it (Gone: a main file's item deleted, a sidecar's item processed again).
+	Missing []*FileDto
 	// Set by a source that knows the asset (Apple Photos: the asset UUID): the item's
 	// GUID, and Files[0] is the main file as the source decided — it is not re-ranked.
 	// "" (a plain folder): the GUID of the main file, ranked by its kind.

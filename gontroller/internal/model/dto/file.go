@@ -42,8 +42,14 @@ type FileDto struct {
 	// loaded, an asset not complete, an error — leaves it set for the next one);
 	// set by the walk and a grouper, cleared by identify's validate
 	Changed bool `json:"-"`
-	// Gone: the walk did not see it, it is deleted (this pass only, not stored)
-	Gone bool `gorm:"-" json:"-"`
+}
+
+// WalkedFile: a file as the walk gives it to the groupers — its row, and whether
+// the walk found it missing (a complete walk did not see it). A fact of this pass,
+// not stored.
+type WalkedFile struct {
+	*FileDto
+	Missing bool
 }
 
 // SetRole: the source's grouper says what the file is to its asset; a new role is

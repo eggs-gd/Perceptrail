@@ -135,16 +135,16 @@ func walk(t *testing.T, g *Grouper, root string, before func(path string)) map[s
 		if _, err := os.Stat(p); err != nil {
 			continue // vanished: the walker would not see it
 		}
-		out, err := g.Decorate(&dto.FileDto{ItemEntry: dto.ItemEntry{Path: p, Name: filepath.Base(p)}})
+		out, err := g.Decorate(dto.WalkedFile{FileDto: &dto.FileDto{ItemEntry: dto.ItemEntry{Path: p, Name: filepath.Base(p)}}})
 		if errors.Is(err, chain.ErrSkippedItem) {
 			continue
 		}
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(out.Files) == 1 && out.Files[0].Gone {
+		if len(out.Missing) > 0 {
 			gone := groups[""]
-			gone.Files = append(gone.Files, out.Files...)
+			gone.Missing = append(gone.Missing, out.Missing...)
 			groups[""] = gone
 			continue
 		}
@@ -200,8 +200,8 @@ func TestGrouper(t *testing.T) {
 	if _, ok := groups[trashed]; ok {
 		t.Error("a trashed asset was sent")
 	}
-	if len(gone.Files) == 0 || !strings.Contains(gone.Files[0].Path, trashed) {
-		t.Errorf("gone %v, want the trashed asset's files", names(gone.Files))
+	if len(gone.Missing) == 0 || !strings.Contains(gone.Missing[0].Path, trashed) {
+		t.Errorf("missing %v, want the trashed asset's files", names(gone.Missing))
 	}
 	if _, ok := groups[vanishing]; ok {
 		t.Error("an asset whose file vanished during the walk was sent")
@@ -214,12 +214,12 @@ func TestGrouper(t *testing.T) {
 	}
 }
 
-// A file the walk says is gone passes through as it is, an asset of its own
-func TestGrouperGone(t *testing.T) {
+// A file the walk found missing passes through as it is, an asset of its own
+func TestGrouperMissing(t *testing.T) {
 	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
-	gone := &dto.FileDto{ItemEntry: dto.ItemEntry{Path: "/lib/x.photoslibrary/originals/A/A.heic"}, Gone: true}
-	out, err := g.Decorate(gone)
-	if err != nil || len(out.Files) != 1 || out.Files[0] != gone {
+	gone := &dto.FileDto{ItemEntry: dto.ItemEntry{Path: "/lib/x.photoslibrary/originals/A/A.heic"}}
+	out, err := g.Decorate(dto.WalkedFile{FileDto: gone, Missing: true})
+	if err != nil || len(out.Files) != 0 || len(out.Missing) != 1 || out.Missing[0] != gone {
 		t.Errorf("got %+v, %v", out, err)
 	}
 }

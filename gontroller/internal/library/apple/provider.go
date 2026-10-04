@@ -51,8 +51,6 @@ func New(root string, photos Photos, items Items, logger *l.Logger) *Provider {
 	}
 }
 
-func (p *Provider) Name() string { return "apple" }
-
 // Claims: a file inside a Photos library bundle
 func (p *Provider) Claims(path string) bool { return BundleRoot(path) != "" }
 

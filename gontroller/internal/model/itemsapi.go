@@ -18,7 +18,7 @@ type ItemsApi interface {
 	// - full hash gate
 	//GetShortHash(rawExif t.RawExif, fileSizeBytes uint64) string
 	// An item's life (itemslife.go): the rules every chain goes by
-	ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, Outcome, error)
+	ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, error)
 	ValidateAsset(key string, files []*dto.FileDto, hash string) (*dto.ItemDto, error)
 	NeedsWork(files []*dto.FileDto, key, metaHash string) (needs bool, guid string, err error)
 	Gone(files []*dto.FileDto) (deleted, dirty int, err error)

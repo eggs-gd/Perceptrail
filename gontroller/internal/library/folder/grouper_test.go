@@ -8,8 +8,8 @@ import (
 	"perceptrail/gontroller/internal/model/dto"
 )
 
-func entry(path string) *dto.FileDto {
-	return &dto.FileDto{ItemEntry: dto.ItemEntry{Path: path, Name: filepath.Base(path)}}
+func entry(path string) dto.WalkedFile {
+	return dto.WalkedFile{FileDto: &dto.FileDto{ItemEntry: dto.ItemEntry{Path: path, Name: filepath.Base(path)}}}
 }
 
 func names(groups []dto.Asset) [][]string {
@@ -49,16 +49,16 @@ func TestGenericGrouper(t *testing.T) {
 		t.Errorf("a second flush gave %v", names(again))
 	}
 
-	// A file the walk says is gone passes through alone; the open group stays open
+	// A file the walk found missing passes through alone; the open group stays open
 	g = &Grouper{}
 	g.Decorate(entry("/lib/y.jpg"))
 	gone := entry("/lib/y.xmp")
-	gone.Gone = true
-	if group, err := g.Decorate(gone); err != nil || len(group.Files) != 1 || group.Files[0] != gone {
-		t.Errorf("gone: %v %v", group, err)
+	gone.Missing = true
+	if group, err := g.Decorate(gone); err != nil || len(group.Files) != 0 || len(group.Missing) != 1 || group.Missing[0] != gone.FileDto {
+		t.Errorf("missing: %v %v", group, err)
 	}
 	if last, _ := g.Flush(); !reflect.DeepEqual(names(last), [][]string{{"y.jpg"}}) {
-		t.Errorf("the open group after a gone file: %v", names(last))
+		t.Errorf("the open group after a missing file: %v", names(last))
 	}
 
 	// Another directory closes the group, even with the same name

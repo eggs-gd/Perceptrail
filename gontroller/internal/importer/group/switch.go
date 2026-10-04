@@ -4,7 +4,7 @@
 // grouper of the first that claims it — each grouper a step of its own. Every grouper
 // keeps a buffer of open groups and sends a group when it is complete; when its
 // input closes (the walk ended, the switch returned) it sends what it still holds.
-// A file the walk says is gone goes to its provider too.
+// A file the walk found missing goes to its provider too.
 package group
 
 import (
@@ -14,29 +14,36 @@ import (
 	"github.com/eggs-gd/perceplib/chain"
 )
 
+// Library: what grouping asks of a library — whether a found file is its, and its
+// grouper
+type Library interface {
+	Claims(path string) bool
+	Grouper() provider.Grouper
+}
+
 // New: the sub-chain from in (the walk's files) to out (whole assets: every grouper
 // writes to it, so it closes once every grouper has returned)
-func New(ps []provider.Provider, in <-chan *dto.FileDto, out chan<- dto.Asset) chain.Processor {
+func New[L Library](libraries []L, in <-chan dto.WalkedFile, out chan<- dto.Asset) chain.Processor {
 	grouping := chain.NewChainProcessor(nil)
-	toGroupers := make([]chan<- *dto.FileDto, len(ps))
-	for i, p := range ps {
-		ch := make(chan *dto.FileDto)
+	toGroupers := make([]chan<- dto.WalkedFile, len(libraries))
+	for i, library := range libraries {
+		ch := make(chan dto.WalkedFile)
 		toGroupers[i] = ch
-		grouping.AddStep(chain.NewDecorator(ch, out, p.Grouper()))
+		grouping.AddStep(chain.NewDecorator(ch, out, library.Grouper()))
 	}
-	grouping.AddStep(chain.NewSwitch(in, toGroupers, Switch{Providers: ps}))
+	grouping.AddStep(chain.NewSwitch(in, toGroupers, Switch[L]{Libraries: libraries}))
 	return grouping
 }
 
-// Switch: a file to the grouper of the first provider that claims it (its index in
-// Providers)
-type Switch struct {
-	Providers []provider.Provider
+// Switch: a file to the grouper of the first library that claims it (its index in
+// Libraries)
+type Switch[L Library] struct {
+	Libraries []L
 }
 
-func (s Switch) Switch(f *dto.FileDto) (int, error) {
-	for i, p := range s.Providers {
-		if p.Claims(f.Path) {
+func (s Switch[L]) Switch(f dto.WalkedFile) (int, error) {
+	for i, library := range s.Libraries {
+		if library.Claims(f.Path) {
 			return i, nil
 		}
 	}

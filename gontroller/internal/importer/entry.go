@@ -23,8 +23,8 @@
 //
 // Not obvious:
 //   - A pass ends from its input: the walk returns, its output closes; a step reads
-//     its input to the end, gives what it holds (a grouper its last group; the exif
-//     step prunes the rows of gone items) and returns; an output closes once every
+//     its input to the end, gives what it holds (a grouper its last group) and
+//     returns; an output closes once every
 //     step writing to it has returned (the groupers into the gate). Process returns
 //     when commit has. Passes never overlap.
 //   - The gone files come after every file the walk saw, but a moved file's old path
@@ -49,6 +49,7 @@ import (
 	"perceptrail/gontroller/internal/importer/walk"
 	"perceptrail/gontroller/internal/library"
 	"perceptrail/gontroller/internal/model/dto"
+	"perceptrail/gontroller/internal/perceptor"
 
 	"github.com/eggs-gd/perceplib/chain"
 
@@ -86,10 +87,10 @@ func New(cfg Config, db Store, logger *l.Logger) *Service {
 
 // importChain: one pass of the import, its channels new (a pass closes them)
 func (s *Service) importChain(errs chan<- error) chain.ChainProcessor {
-	// walk → group: a file's row (seen: Changed; or Gone)
-	found := make(chan *dto.FileDto)
-	// group → gate: a whole asset (a gone file: its own); at the end, what each
-	// grouper held
+	// walk → group: a file's row (seen: Changed; or Missing)
+	found := make(chan dto.WalkedFile)
+	// group → gate: a whole asset and what is gone of the library (Missing); at the
+	// end, what each grouper held
 	grouped := make(chan dto.Asset)
 	// gate → identify: the assets that need work
 	stored := make(chan dto.Asset)
@@ -102,8 +103,8 @@ func (s *Service) importChain(errs chan<- error) chain.ChainProcessor {
 	c.AddStep(walk.New(s.db, s.cfg.LibraryRoot(), s.logger, found))
 	c.AddStep(group.New(library.Enabled(), found, grouped))
 	c.AddStep(gate.New(s.db, s.logger, grouped, stored))
-	c.AddStep(identify.New(s.db, s.cfg.CacheDir(), s.cfg.Exiftool(), s.logger, stored, identified))
-	c.AddStep(exif.New(s.db, s.logger, identified, perceived))
+	c.AddStep(identify.New(s.db, s.cfg.CacheDir(), s.cfg.Exiftool(), perceptor.ExifTags(), s.logger, stored, identified))
+	c.AddStep(exif.New(s.logger, identified, perceived))
 	c.AddStep(commit.New(s.db, perceived))
 	return c
 }
@@ -112,8 +113,9 @@ func (s *Service) importChain(errs chan<- error) chain.ChainProcessor {
 // perceptors), then pass after pass, with the rescan pause between, until ctx ends
 func (s *Service) Start(ctx context.Context) {
 	identify.Migrate(s.db, s.logger)
-	// A perceptor new or changed since the last run: its items are processed again
-	if err := exif.MarkUnprocessed(s.db, s.logger); err != nil {
+	// A perceptor new or changed since the last run: its items are processed again;
+	// the rows of items gone meanwhile dropped
+	if err := exif.Reconcile(s.db, s.logger); err != nil {
 		s.logger.Error("Perceptors' rows not checked", l.Error(err))
 	}
 	for ctx.Err() == nil {

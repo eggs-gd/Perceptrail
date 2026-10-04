@@ -51,6 +51,15 @@ func (p *Proxy) GetFileByPath(path string) (*dto.FileDto, error) {
 	return &file, err
 }
 
+// FindFile: the file's row, nil when there is none (not an error: a new file)
+func (p *Proxy) FindFile(path string) (*dto.FileDto, error) {
+	var files []*dto.FileDto
+	if err := p.db.Where("path = ?", path).Limit(1).Find(&files).Error; err != nil || len(files) == 0 {
+		return nil, err
+	}
+	return files[0], nil
+}
+
 func (p *Proxy) GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error) {
 	var files []*dto.FileDto
 	if err := p.db.Find(&files).Error; err != nil {

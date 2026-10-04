@@ -1,11 +1,10 @@
 // Package exif: the import's EXIF perceptors over the identified item — the
 // built-in ones (they write into it: date, size, length), the external Go plugins
-// (they only read it), then their values kept, a row in each one's storage. And
-// what follows from them: the items one has not processed are processed again (at
-// start: MarkUnprocessed, the service's), the rows of gone items pruned (at the end
-// of a pass). It reads the plugin registry itself.
+// (they only read it), then their values kept, a row in each one's storage. At the
+// service's start their rows are reconciled with the items (Reconcile). It reads
+// the plugin registry itself.
 //
-//	each built-in perceptor → each external one → keep (at the input's end: prune)
+//	each built-in perceptor → each external one → keep
 package exif
 
 import (
@@ -27,10 +26,8 @@ var (
 )
 
 // New: in — the identified items; out — the same, perceived, their values kept.
-// When the pass's input ends, the rows of gone items are pruned (Prune: the walk's
-// deletions are done by then — the gate had them before its input ended). Its
-// errors go to the chain it runs in.
-func New(db Items, logger *l.Logger, in <-chan *identify.Item, out chan<- *identify.Item) chain.Processor {
+// Its errors go to the chain it runs in.
+func New(logger *l.Logger, in <-chan *identify.Item, out chan<- *identify.Item) chain.Processor {
 	var steps []chain.Decorator[*identify.Item, *identify.Item]
 	for _, p := range corePerceptors() {
 		if d := p.Decorator(logger.Named(p.Name())); d != nil {
@@ -54,7 +51,7 @@ func New(db Items, logger *l.Logger, in <-chan *identify.Item, out chan<- *ident
 		c.AddStep(chain.NewDecorator(from, to, d))
 		from = to
 	}
-	c.AddStep(chain.NewDecorator(from, out, keep{db: db, logger: logger}))
+	c.AddStep(chain.NewDecorator(from, out, keep{}))
 	return c
 }
 
@@ -88,10 +85,7 @@ func (p perceive[T]) Stop() {
 // value, or "processed, nothing found"). Before the item is published: an item
 // published without them would be taken as done; a crash between the two leaves an
 // item that is not, the next walk sends it again.
-type keep struct {
-	db     Items
-	logger *l.Logger
-}
+type keep struct{}
 
 func (keep) Decorate(it *identify.Item) (*identify.Item, error) {
 	if it.Item == nil {
@@ -101,10 +95,4 @@ func (keep) Decorate(it *identify.Item) (*identify.Item, error) {
 		return nil, err
 	}
 	return it, nil
-}
-
-// Flush: the pass's input ended — the perceptors' rows of gone items are pruned
-func (k keep) Flush() ([]*identify.Item, error) {
-	Prune(k.db, k.logger)
-	return nil, nil
 }

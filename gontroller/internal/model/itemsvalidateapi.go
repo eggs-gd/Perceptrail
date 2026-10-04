@@ -10,54 +10,45 @@ import (
 	"gorm.io/gorm"
 )
 
-// Outcome of ValidateGroup, per Walker.puml
-type Outcome int
-
-const (
-	OutcomeSame    Outcome = iota // same path, same hash
-	OutcomeNew                    // not found, or a duplicate (same hash, the original still exists)
-	OutcomeChanged                // same path, new hash
-	OutcomeMoved                  // same hash, the old path is gone: the item keeps its GUID
-)
-
 // validateFile: the item of a plain folder's main file, by its path and its
-// fingerprint (hashShort: the file's bytes, see identify's fingerprint)
-func (p *Proxy) validateFile(item *dto.FileDto, hashShort string) (*dto.ItemDto, Outcome, error) {
+// fingerprint (hashShort: the file's bytes, see identify's fingerprint) — the same,
+// moved, a new one or changed (Walker.puml)
+func (p *Proxy) validateFile(item *dto.FileDto, hashShort string) (*dto.ItemDto, error) {
 	itemByGUID, itemByPath, itemByHash := p.getItemsForValidation(item, hashShort)
 
 	if itemByGUID.Guid != itemByPath.Guid {
 		// probably panic(). Path/Guid should be stable pair on files layer
-		return &dto.ItemDto{}, OutcomeSame, fmt.Errorf("there is path/guid missmatch")
+		return &dto.ItemDto{}, fmt.Errorf("there is path/guid missmatch")
 	}
 
 	if itemByGUID.Guid == "" {
 		// Walker.puml "found moved": same hash, the old path no longer exists
 		if moved := p.findMovedItem(item, hashShort); moved != nil {
-			return moved, OutcomeMoved, p.moveItem(moved, item)
+			return moved, p.moveItem(moved, item)
 		}
 
 		// Not found, or a duplicate (same hash, the old path still exists): a new item.
 		// Reusing a duplicate's thumbnails is a later optimisation.
 		created, err := p.CreateItem(item)
 		if err != nil {
-			return created, OutcomeNew, err
+			return created, err
 		}
 		created.HashShort = hashShort
 		_, err = p.UpdateItem(created)
-		return created, OutcomeNew, err
+		return created, err
 	}
 
 	// The type may be known better now (mime step): keep the item's in sync
 	if item.MimeType != "" && itemByGUID.MimeType != item.MimeType {
 		itemByGUID.MimeType = item.MimeType
 		if _, err := p.UpdateItem(itemByGUID); err != nil {
-			return itemByGUID, OutcomeSame, err
+			return itemByGUID, err
 		}
 	}
 
 	if itemByPath.Guid == itemByHash.Guid {
 		// all three items are the same, known file
-		return itemByGUID, OutcomeSame, nil
+		return itemByGUID, nil
 	}
 
 	// Same path, new hash (a duplicate of another file with that hash or not):
@@ -65,7 +56,7 @@ func (p *Proxy) validateFile(item *dto.FileDto, hashShort string) (*dto.ItemDto,
 	itemByGUID.State = dto.Dirty
 	itemByGUID.HashShort = hashShort
 	_, err := p.UpdateItem(itemByGUID)
-	return itemByGUID, OutcomeChanged, err
+	return itemByGUID, err
 }
 
 func (p *Proxy) getItemsForValidation(file *dto.FileDto, hashShort string) (byGuid *dto.ItemDto, byPath *dto.ItemDto, byHash *dto.ItemDto) {

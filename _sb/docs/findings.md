@@ -170,6 +170,27 @@ chain (a second declaration); exiftool passed in from outside identify; nine
 one-function steps in identify; a 1 → N step for Apple assets (the grouper forms the
 groups up front from the DB and a `stat`: each walked file closes at most one group).
 
+**Deletions, two places** (2026-10-04, PR #26): the walk states a fact (a file
+is missing on disk), the provider says what is gone for the library (`Asset.Missing`:
+Apple's trashed assets are on disk; a file Optimize Storage offloaded may be kept),
+the gate has the model apply it. The walk does not delete rows itself: "not on
+disk" is not "not in the library". Rejected: `Prune` of the perceptors' rows every
+pass (or "only when something was deleted") — they are reconciled once at start
+(`exif.Reconcile`, with the rework of items a perceptor has no row for): a row left
+behind is never read, and a soft-deleted item may come back in the same pass (a
+move).
+
+**Contracts per consumer** (PR #26, Codex review): the library contract
+(`provider.Provider`) stays one; each consumer declares the part it uses
+(`group.Library`, `route.Library`). Go does not convert `[]provider.Provider` to
+`[]group.Library`, so `group.New` takes `[]L` for any `L` that is a `Library` (a
+type parameter, no copying loop); `library.Of` reaches the routes through a
+wrapper in `web` that returns a plain nil for a plain folder's item (a nil provider
+inside the interface is not nil). Rejected first: two more producer-side interfaces
+in `provider`. Likewise a lookup only the walk needs (`FindFile`) stays off the
+model's broad `FilesApi`. An unused `Outcome` and `Name()` went instead of being
+moved.
+
 **Providers** (2026-10-02): rejected — a typed `sources:` list in the config (the user
 would have to know what each folder is), marker files (`.immich`, `@eaDir`) as a
 filter of their own, a claim step per provider. Decided: one switch, the first
@@ -303,6 +324,11 @@ Layout, the DB's facts and PhotoKit's behaviour: the
   on uncommitted perceplib changes, two commits per change. It stays a separate
   public repo with tags for third-party perceptors; publishing is explicit
   (`perceplib/README.md`). A monorepo module later, once Perceptrail is public.
+- **One fact, one place** (2026-10-04, PR #26): a contract change (the walk's message)
+  touched 41 files, ten of them docs telling the same fact five times (two READMEs,
+  the program's README, two diagrams with type names). The rule is in AGENTS.md
+  ("Documentation contract"): the owner writes it, the rest link; diagrams name
+  steps, not types; no lists of test files.
 - Releases are a fast-forward of `master` to a tagged `develop` commit, never the
   GitHub rebase button (it rewrote every commit in PR #2 and the branches diverged).
 - `npm`: a stale lock pinning an old plugin — regenerate the lock, no `--force`.

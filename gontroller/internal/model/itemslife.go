@@ -66,7 +66,8 @@ func cheapStageDone(item *dto.ItemDto) bool {
 	return false
 }
 
-// Gone: these files are known to be deleted (a complete walk did not see them).
+// Gone: these files are gone for the library (the walk found them missing, or
+// their provider says so).
 // A main file gone: its item is deleted; a sidecar gone: its item is Dirty (processed
 // again); an item with no files left is gone too (a keyed asset: every file is
 // "linked", none is "main" by its own GUID). The files' rows go.
@@ -133,7 +134,7 @@ func (p *Proxy) Ignore(files []*dto.FileDto) error {
 // Its files link to the main file; a file that was the main file of its own item
 // before is a sidecar now (a JPEG imported alone, then its RAW appeared): that item
 // goes. Then the main file's item by its path and fingerprint (ValidateFile).
-func (p *Proxy) ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, Outcome, error) {
+func (p *Proxy) ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
 	main := files[0]
 	for _, f := range files {
 		f.LinkTo(main)
@@ -141,13 +142,13 @@ func (p *Proxy) ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, 
 	for _, f := range files[1:] {
 		if old, err := p.GetItemByGuid(f.GUID); err == nil {
 			if err := p.DeleteItem(old); err != nil {
-				return nil, OutcomeSame, err
+				return nil, err
 			}
 			p.logger.Info("Former main file is a sidecar now", l.String("file", f.Path), l.String("main", main.Path))
 		}
 	}
 	if _, err := p.UpdateFiles(files); err != nil {
-		return nil, OutcomeSame, err
+		return nil, err
 	}
 	return p.validateFile(main, hash)
 }
