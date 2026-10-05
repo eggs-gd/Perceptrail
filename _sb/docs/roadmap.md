@@ -29,7 +29,11 @@ One line each; the details are in the READMEs and the PRs.
   library's own directories (Photos' database, caches) not walked. The PR #24
   review is done · #31 the chain and the logger as libraries
   ([go-chain](https://github.com/eggs-gd/go-chain),
-  [go-zap-decor](https://github.com/eggs-gd/go-zap-decor)).
+  [go-zap-decor](https://github.com/eggs-gd/go-zap-decor)) · #30 the write bus:
+  the model's one writer and a read pool on
+  [go-pub-sub](https://github.com/eggs-gd/go-pub-sub), every write rule a topic
+  (sync and asynchronous), `query` / `tx` / `Proxy`; the designs of the bus and the
+  work queue.
 
 ## Releases
 
