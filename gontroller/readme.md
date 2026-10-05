@@ -97,11 +97,12 @@ package's own unit tests stay next to it.
 
 ## Worth knowing
 
-- SQLite: WAL, `synchronous=NORMAL`; **one writer connection** (its goroutine runs
-  every write method's body in its transaction, each under its own savepoint)
-  and a read-only pool. Inside a rule, reads and writes go through the rule's own
-  `Proxy` (bound to the transaction): a public write called there runs right there,
-  not through the writer (it would wait for itself).
+- SQLite: WAL, `synchronous=NORMAL`; **one writer connection** and a read-only
+  pool. Every write is a rule (`internal/model/writes.go`): the unexported method
+  of its name, run in the writer's transaction under its own savepoint; the public
+  method waits for its result, its `…Topic()` gives it asynchronously (submit,
+  subscribe). A rule calls other rules directly — a public write inside a rule
+  would wait for the writer that runs it, so it panics (an error, not a hang).
 - `internal/transcoder/images` does not build without libvips (`pkg-config vips`); it is
   not imported by `main`, so the server is unaffected. Run vet/tests without it:
   `go test $(go list ./... | grep -v transcoder/images)`.

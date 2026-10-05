@@ -296,6 +296,13 @@ an item):
   10 000 files — first pass 4.0 s (4.6 s before), idle passes 0.09 s (0.11–0.13 s);
   the grouping comes from callers writing at once (identify's five readers). No
   deadlines yet: a caller waiting for each result would pay one per call.
+- **A rule and its two faces** (the owner, after two wrong turns): a write rule is
+  the unexported method (its debugged logic, untouched); the public method of its
+  name submits and waits (`Do`), its `…Topic()` submits and goes on. Rejected: the
+  public methods as mere pass-throughs to their twins with nothing to show for it
+  (and a rule calling a public write that came back to the writer); folding the
+  bodies into closures inside the public methods (the working methods taken apart,
+  to be taken apart again for the asynchronous side).
 
 - **Who may write what is decided by who holds what** (the owner asked: a `Job`
   can run anything — "remove all tables"): `Job` is sealed (only an `Op` makes

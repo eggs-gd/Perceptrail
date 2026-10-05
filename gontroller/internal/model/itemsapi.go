@@ -149,11 +149,9 @@ func (p *Proxy) GetItemByPath(path string) (*dto.ItemDto, error) {
 	return &item, p.db.Where("path = ?", path).First(&item).Error
 }
 
-func (p *Proxy) ClearHashes() (int64, error) {
-	return written(p, func(q *Proxy) (int64, error) {
-		res := q.db.Unscoped().Model(&dto.ItemDto{}).Where("hash_short <> ''").UpdateColumn("hash_short", "")
-		return res.RowsAffected, res.Error
-	})
+func (p *Proxy) clearHashes() (int64, error) {
+	res := p.db.Unscoped().Model(&dto.ItemDto{}).Where("hash_short <> ''").UpdateColumn("hash_short", "")
+	return res.RowsAffected, res.Error
 }
 
 func (p *Proxy) GetItemsByHash(hash string) ([]*dto.ItemDto, error) {
@@ -161,28 +159,25 @@ func (p *Proxy) GetItemsByHash(hash string) ([]*dto.ItemDto, error) {
 	return items, p.db.Where("hash_short = ?", hash).Find(&items).Error
 }
 
-func (p *Proxy) CreateItem(file *dto.FileDto) (*dto.ItemDto, error) {
+func (p *Proxy) createItem(file *dto.FileDto) (*dto.ItemDto, error) {
 	item := dto.ItemDto{
 		State:    dto.New,
 		Path:     file.Path,
 		Guid:     file.GUID,
 		MimeType: file.MimeType,
 	}
-	return p.UpdateItem(&item)
+
+	return p.updateItem(&item)
 }
 
-func (p *Proxy) UpdateItem(item *dto.ItemDto) (*dto.ItemDto, error) {
-	return written(p, func(q *Proxy) (*dto.ItemDto, error) {
-		return item, q.db.Save(&item).Error
-	})
+func (p *Proxy) updateItem(item *dto.ItemDto) (*dto.ItemDto, error) {
+	return item, p.db.Save(&item).Error
 }
 
-func (p *Proxy) DeleteItem(item *dto.ItemDto) error {
+func (p *Proxy) deleteItem(item *dto.ItemDto) error {
 	item.State = dto.Deleted
-	return p.write(func(q *Proxy) error {
-		if err := q.db.Save(item).Error; err != nil {
-			return err
-		}
-		return q.db.Delete(item).Error
-	})
+	if err := p.db.Save(item).Error; err != nil {
+		return err
+	}
+	return p.db.Delete(item).Error
 }

@@ -29,19 +29,19 @@ func (p *Proxy) validateFile(item *dto.FileDto, hashShort string) (*dto.ItemDto,
 
 		// Not found, or a duplicate (same hash, the old path still exists): a new item.
 		// Reusing a duplicate's thumbnails is a later optimisation.
-		created, err := p.CreateItem(item)
+		created, err := p.createItem(item)
 		if err != nil {
 			return created, err
 		}
 		created.HashShort = hashShort
-		_, err = p.UpdateItem(created)
+		_, err = p.updateItem(created)
 		return created, err
 	}
 
 	// The type may be known better now (mime step): keep the item's in sync
 	if item.MimeType != "" && itemByGUID.MimeType != item.MimeType {
 		itemByGUID.MimeType = item.MimeType
-		if _, err := p.UpdateItem(itemByGUID); err != nil {
+		if _, err := p.updateItem(itemByGUID); err != nil {
 			return itemByGUID, err
 		}
 	}
@@ -55,7 +55,7 @@ func (p *Proxy) validateFile(item *dto.FileDto, hashShort string) (*dto.ItemDto,
 	// modified, regenerate thumbs
 	itemByGUID.State = dto.Dirty
 	itemByGUID.HashShort = hashShort
-	_, err := p.UpdateItem(itemByGUID)
+	_, err := p.updateItem(itemByGUID)
 	return itemByGUID, err
 }
 

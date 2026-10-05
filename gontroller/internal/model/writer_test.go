@@ -9,7 +9,9 @@ import (
 	"testing"
 
 	"perceptrail/gontroller/internal/config"
+	"perceptrail/gontroller/internal/model/dto"
 
+	pubsub "github.com/eggs-gd/go-pub-sub"
 	l "github.com/eggs-gd/go-zap-decor"
 	"github.com/eggs-gd/go-zap-decor/tree"
 )
@@ -46,16 +48,16 @@ func TestFailingRuleAlone(t *testing.T) {
 			key := fmt.Sprint("k", i)
 			switch i {
 			case 7:
-				err := db.write(func(q *Proxy) error {
-					q.SetMeta(key, "half")
+				_, err := testRule(db, func(q *Proxy) error {
+					q.setMeta(key, "half")
 					return errors.New("a rule gives up")
 				})
 				if err == nil {
 					t.Error("a failing rule returned nil")
 				}
 			case 13:
-				err := db.write(func(q *Proxy) error {
-					q.SetMeta(key, "half")
+				_, err := testRule(db, func(q *Proxy) error {
+					q.setMeta(key, "half")
 					panic("a rule breaks")
 				})
 				if err == nil {
@@ -77,12 +79,13 @@ func TestFailingRuleAlone(t *testing.T) {
 	}
 }
 
-// A write inside a rule runs in the same transaction — no waiting for the writer
-// that runs the rule — and rolls back with it
-func TestWriteInsideRule(t *testing.T) {
+// A rule calls another rule directly — same transaction, rolled back with it; a
+// public write inside a rule is a mistake (the writer would wait for itself): an
+// error, not a hang
+func TestRuleInsideRule(t *testing.T) {
 	db := openTest(t)
-	err := db.write(func(q *Proxy) error {
-		if err := q.SetMeta("inner", "x"); err != nil { // a public write, inside
+	_, err := testRule(db, func(q *Proxy) error {
+		if err := q.setMeta("inner", "x"); err != nil {
 			return err
 		}
 		return errors.New("the rule fails after it")
@@ -92,6 +95,26 @@ func TestWriteInsideRule(t *testing.T) {
 	}
 	if v, _ := db.GetMeta("inner"); v != "" {
 		t.Errorf("the inner write outlived its rule: %q", v)
+	}
+	if _, err := testRule(db, func(q *Proxy) error { return q.SetMeta("public", "x") }); err == nil {
+		t.Error("a public write inside a rule did not fail")
+	}
+}
+
+// Asynchronous: submitted to a rule's topic, the result comes by subscription,
+// after the commit
+func TestTopic(t *testing.T) {
+	db := openTest(t)
+	created := db.CreateFilesTopic()
+	results := created.Subscribe(4)
+	defer results.Close()
+	id := created.Submit([]dto.ItemEntry{{Path: "/a.jpg", Name: "a.jpg"}, {Path: "/b.jpg", Name: "b.jpg"}})
+	r := <-results.C
+	if r.ID != id || r.Err != nil || len(r.Value) != 2 || r.Value[0].ID == 0 {
+		t.Fatalf("result %+v", r)
+	}
+	if f, err := db.FindFile("/b.jpg"); err != nil || f == nil {
+		t.Errorf("not in the database after its result: %v, %v", f, err)
 	}
 }
 
@@ -134,4 +157,9 @@ func TestSynchronousNormal(t *testing.T) {
 	if err := db.writes.Raw("PRAGMA synchronous").Scan(&mode).Error; err != nil || mode != 1 {
 		t.Errorf("synchronous = %d, %v", mode, err)
 	}
+}
+
+// testRule: a rule of the test's own, run as a write
+func testRule(db *Proxy, fn func(q *Proxy) error) (struct{}, error) {
+	return rule(db, pubsub.Frame, func(q *Proxy, _ struct{}) (struct{}, error) { return struct{}{}, fn(q) }).Do(struct{}{})
 }

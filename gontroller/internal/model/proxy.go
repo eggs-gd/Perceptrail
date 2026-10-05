@@ -7,7 +7,6 @@ import (
 	"perceptrail/gontroller/internal/config"
 	"perceptrail/gontroller/internal/model/dto"
 
-	pubsub "github.com/eggs-gd/go-pub-sub"
 	l "github.com/eggs-gd/go-zap-decor"
 
 	"gorm.io/gorm"
@@ -24,17 +23,17 @@ type Config interface {
 // Proxy: the model — the library's data and its rules (ItemsApi, FilesApi, MetaApi
 // and the import's rules); one per run, opened in main and passed to who uses it.
 //
-// Reads go to a pool of read-only connections; writes to the one writer: a write
-// method's body is its rule (wrapped in write / written), run whole — read, decide,
-// write — in the writer's transaction under its own savepoint; its result comes
-// back after the commit.
+// Reads go to a pool of read-only connections; writes to the one writer: each rule
+// (writes.go) runs whole — read, decide, write — in the writer's transaction, under
+// its own savepoint; its result comes back after the commit — waited for by the
+// public method of its name, or by subscription to its topic.
 type Proxy struct {
 	logger *l.Logger
 	db     *gorm.DB // the readers' pool; in a rule, the writer's transaction
-	inRule bool     // bound to the writer's transaction: writes run right there
+	inRule bool     // bound to the writer's transaction (a rule's Proxy)
 
 	writer *writer
-	rules  *pubsub.Op[*gorm.DB, func(*Proxy) error, struct{}]
+	rules  rules    // every write rule as a topic (writes.go)
 	writes *gorm.DB // the writer's connection (closed with the model)
 }
 
@@ -54,9 +53,7 @@ func Open(cfg Config, logger *l.Logger) (*Proxy, error) {
 		return nil, err
 	}
 	p := &Proxy{logger: logger, db: reads, writes: writes, writer: newWriter(writes)}
-	p.rules = pubsub.New(p.writer, pubsub.Frame, func(tx *gorm.DB, rule func(*Proxy) error) (struct{}, error) {
-		return struct{}{}, p.run(tx, rule)
-	})
+	p.rules = newRules(p)
 	return p, nil
 }
 
@@ -75,32 +72,6 @@ func connect(cfg Config, read bool, logger *l.Logger) (*gorm.DB, error) {
 		return nil, fmt.Errorf("configure: %w", err)
 	}
 	return db, nil
-}
-
-// write: the rule runs in the writer's transaction and this returns after the
-// commit; called inside a rule, it runs right there, in the same transaction (the
-// writer is busy with the rule that called it).
-//
-// A rule holds only the work with the database: what is prepared in memory goes
-// before it; a method that only prepares and calls another write needs no rule of
-// its own (that write is one). A rule of several steps — read, decide, write — is
-// one: they happen together.
-func (p *Proxy) write(rule func(q *Proxy) error) error {
-	if p.inRule {
-		return rule(p)
-	}
-	_, err := p.rules.Do(rule)
-	return err
-}
-
-// written: write, for a rule with a result
-func written[R any](p *Proxy, rule func(q *Proxy) (R, error)) (R, error) {
-	var r R
-	err := p.write(func(q *Proxy) (err error) {
-		r, err = rule(q)
-		return err
-	})
-	return r, err
 }
 
 // run: one rule in the writer's transaction, under its own savepoint — a failing

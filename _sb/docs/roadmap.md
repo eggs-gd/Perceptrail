@@ -45,10 +45,11 @@ In steps, each its own PR (designs below: "The write bus", "The work queue",
 
 0. [ ] **The write bus** — [go-pub-sub](https://github.com/eggs-gd/go-pub-sub) (operations as topics, subscriptions,
    classes) and the model's writer. Done: one write connection, a read pool,
-   batches of what is queued, lanes by class, `synchronous=NORMAL` — the model's
-   methods unchanged outside (a write waits for its own result). Next: the
-   classes' deadlines and asynchronous writers (the walk without its own pages,
-   the steps each its own way). Before any new writer comes.
+   batches of what is queued, lanes by class, `synchronous=NORMAL`; every write
+   rule a topic — the public method waits for its result, `…Topic()` gives it
+   asynchronously (nobody uses that yet). Next: the classes' deadlines and the
+   callers going asynchronous (the walk without its own pages, the steps each its
+   own way). Before any new writer comes.
 1. [ ] **The work queue and the render service** — the `work` and `renditions`
    tables, `render.New(cfg, db, logger)` with `feed → source → render → commit` and
    a stand-in renderer (a copy): the queue's rules tested before any codec.
