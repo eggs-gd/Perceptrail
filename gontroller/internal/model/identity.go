@@ -32,6 +32,28 @@ type ValidateAssetArgs struct {
 	Hash  string
 }
 
+// identityCommands: identity's writes as commands
+type identityCommands struct {
+	validateGroup op[ValidateGroupArgs, *dto.ItemDto]
+	validateAsset op[ValidateAssetArgs, *dto.ItemDto]
+}
+
+func (p *Proxy) ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
+	return p.validateGroup.Do(ValidateGroupArgs{files, hash})
+}
+
+func (p *Proxy) ValidateGroupCommand() pubsub.Command[ValidateGroupArgs, *dto.ItemDto] {
+	return p.validateGroup
+}
+
+func (p *Proxy) ValidateAsset(key string, files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
+	return p.validateAsset.Do(ValidateAssetArgs{key, files, hash})
+}
+
+func (p *Proxy) ValidateAssetCommand() pubsub.Command[ValidateAssetArgs, *dto.ItemDto] {
+	return p.validateAsset
+}
+
 // validateGroup: the item of a plain folder's group (files: the main file first).
 // Its files link to the main file; a file that was the main file of its own item
 // before is a sidecar now (a JPEG imported alone, then its RAW appeared): that item
@@ -229,31 +251,9 @@ func (t *tx) validateKeyed(key string, main *dto.FileDto, hash string) (*dto.Ite
 	return &item, t.db.Unscoped().Save(&item).Error
 }
 
-// identityCommands: identity's writes as commands
-type identityCommands struct {
-	validateGroup op[ValidateGroupArgs, *dto.ItemDto]
-	validateAsset op[ValidateAssetArgs, *dto.ItemDto]
-}
-
 func newIdentityCommands(p *Proxy) identityCommands {
 	return identityCommands{
 		validateGroup: command(p, pubsub.Frame, (*tx).validateGroup),
 		validateAsset: command(p, pubsub.Frame, (*tx).validateAsset),
 	}
-}
-
-func (p *Proxy) ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
-	return p.validateGroup.Do(ValidateGroupArgs{files, hash})
-}
-
-func (p *Proxy) ValidateGroupCommand() pubsub.Command[ValidateGroupArgs, *dto.ItemDto] {
-	return p.validateGroup
-}
-
-func (p *Proxy) ValidateAsset(key string, files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
-	return p.validateAsset.Do(ValidateAssetArgs{key, files, hash})
-}
-
-func (p *Proxy) ValidateAssetCommand() pubsub.Command[ValidateAssetArgs, *dto.ItemDto] {
-	return p.validateAsset
 }

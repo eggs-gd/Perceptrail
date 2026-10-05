@@ -14,6 +14,17 @@ import (
 // Files: the rows of the files on disk, each linked to its item (LinkedTo) or
 // ignored. Reads, the writes on tx, their commands and their two public faces.
 
+// fileCommands: the files' writes as commands
+type fileCommands struct {
+	createFile    op[dto.ItemEntry, *dto.FileDto]
+	createFiles   op[[]dto.ItemEntry, []*dto.FileDto]
+	updateFile    op[*dto.FileDto, *dto.FileDto]
+	updateFiles   op[[]*dto.FileDto, []*dto.FileDto]
+	saveStats     op[[]*dto.FileDto, pubsub.None]
+	deleteFiles   op[[]*dto.FileDto, pubsub.None]
+	unignoreFiles op[pubsub.None, int64]
+}
+
 func (q query) GetFileByPath(path string) (*dto.FileDto, error) {
 	var file dto.FileDto
 
@@ -66,6 +77,65 @@ func (q query) CountLinkedFiles(guid string) (int64, error) {
 	var n int64
 	err := q.db.Model(&dto.FileDto{}).Where("linked_to = ?", guid).Count(&n).Error
 	return n, err
+}
+
+func (p *Proxy) CreateFile(entry dto.ItemEntry) (*dto.FileDto, error) {
+	return p.createFile.Do(entry)
+}
+
+func (p *Proxy) CreateFileCommand() pubsub.Command[dto.ItemEntry, *dto.FileDto] {
+	return p.createFile
+}
+
+func (p *Proxy) CreateFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error) {
+	return p.createFiles.Do(entries)
+}
+
+func (p *Proxy) CreateFilesCommand() pubsub.Command[[]dto.ItemEntry, []*dto.FileDto] {
+	return p.createFiles
+}
+
+func (p *Proxy) UpdateFile(file *dto.FileDto) (*dto.FileDto, error) {
+	return p.updateFile.Do(file)
+}
+
+func (p *Proxy) UpdateFileCommand() pubsub.Command[*dto.FileDto, *dto.FileDto] {
+	return p.updateFile
+}
+
+func (p *Proxy) UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error) {
+	return p.updateFiles.Do(files)
+}
+
+func (p *Proxy) UpdateFilesCommand() pubsub.Command[[]*dto.FileDto, []*dto.FileDto] {
+	return p.updateFiles
+}
+
+func (p *Proxy) SaveStats(files []*dto.FileDto) error {
+	_, err := p.saveStats.Do(files)
+	return err
+}
+
+func (p *Proxy) SaveStatsCommand() pubsub.Message[[]*dto.FileDto] {
+	return pubsub.MessageOf(p.saveStats)
+}
+
+func (p *Proxy) DeleteFiles(files []*dto.FileDto) error {
+	_, err := p.deleteFiles.Do(files)
+	return err
+}
+
+func (p *Proxy) DeleteFilesCommand() pubsub.Message[[]*dto.FileDto] {
+	return pubsub.MessageOf(p.deleteFiles)
+}
+
+// UnignoreFiles clears the "ignored" mark: those groups are classified again
+func (p *Proxy) UnignoreFiles() (int64, error) {
+	return p.unignoreFiles.Do(pubsub.None{})
+}
+
+func (p *Proxy) UnignoreFilesCommand() pubsub.Signal[int64] {
+	return pubsub.SignalOf(p.unignoreFiles)
 }
 
 func (t *tx) createFile(entry dto.ItemEntry) (*dto.FileDto, error) {
@@ -152,17 +222,6 @@ func (t *tx) relinkGroup(group, item string) error {
 	return t.db.Model(&dto.FileDto{}).Where("guid = ?", group).Update("guid", item).Error
 }
 
-// fileCommands: the files' writes as commands
-type fileCommands struct {
-	createFile    op[dto.ItemEntry, *dto.FileDto]
-	createFiles   op[[]dto.ItemEntry, []*dto.FileDto]
-	updateFile    op[*dto.FileDto, *dto.FileDto]
-	updateFiles   op[[]*dto.FileDto, []*dto.FileDto]
-	saveStats     op[[]*dto.FileDto, pubsub.None]
-	deleteFiles   op[[]*dto.FileDto, pubsub.None]
-	unignoreFiles op[pubsub.None, int64]
-}
-
 func newFileCommands(p *Proxy) fileCommands {
 	return fileCommands{
 		createFile:    command(p, pubsub.Frame, (*tx).createFile),
@@ -173,63 +232,4 @@ func newFileCommands(p *Proxy) fileCommands {
 		deleteFiles:   command(p, pubsub.Frame, (*tx).deleteFiles),
 		unignoreFiles: command(p, pubsub.Frame, (*tx).unignoreFiles),
 	}
-}
-
-func (p *Proxy) CreateFile(entry dto.ItemEntry) (*dto.FileDto, error) {
-	return p.createFile.Do(entry)
-}
-
-func (p *Proxy) CreateFileCommand() pubsub.Command[dto.ItemEntry, *dto.FileDto] {
-	return p.createFile
-}
-
-func (p *Proxy) CreateFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error) {
-	return p.createFiles.Do(entries)
-}
-
-func (p *Proxy) CreateFilesCommand() pubsub.Command[[]dto.ItemEntry, []*dto.FileDto] {
-	return p.createFiles
-}
-
-func (p *Proxy) UpdateFile(file *dto.FileDto) (*dto.FileDto, error) {
-	return p.updateFile.Do(file)
-}
-
-func (p *Proxy) UpdateFileCommand() pubsub.Command[*dto.FileDto, *dto.FileDto] {
-	return p.updateFile
-}
-
-func (p *Proxy) UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error) {
-	return p.updateFiles.Do(files)
-}
-
-func (p *Proxy) UpdateFilesCommand() pubsub.Command[[]*dto.FileDto, []*dto.FileDto] {
-	return p.updateFiles
-}
-
-func (p *Proxy) SaveStats(files []*dto.FileDto) error {
-	_, err := p.saveStats.Do(files)
-	return err
-}
-
-func (p *Proxy) SaveStatsCommand() pubsub.Message[[]*dto.FileDto] {
-	return pubsub.MessageOf(p.saveStats)
-}
-
-func (p *Proxy) DeleteFiles(files []*dto.FileDto) error {
-	_, err := p.deleteFiles.Do(files)
-	return err
-}
-
-func (p *Proxy) DeleteFilesCommand() pubsub.Message[[]*dto.FileDto] {
-	return pubsub.MessageOf(p.deleteFiles)
-}
-
-// UnignoreFiles clears the "ignored" mark: those groups are classified again
-func (p *Proxy) UnignoreFiles() (int64, error) {
-	return p.unignoreFiles.Do(pubsub.None{})
-}
-
-func (p *Proxy) UnignoreFilesCommand() pubsub.Signal[int64] {
-	return pubsub.SignalOf(p.unignoreFiles)
 }

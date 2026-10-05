@@ -17,6 +17,11 @@ type MetaArgs struct {
 	Key, Value string
 }
 
+// metaCommands: the settings' writes as commands
+type metaCommands struct {
+	setMeta op[MetaArgs, pubsub.None]
+}
+
 // GetMeta returns "" for an unknown key
 func (q query) GetMeta(key string) (string, error) {
 	var m dto.MetaDto
@@ -27,21 +32,6 @@ func (q query) GetMeta(key string) (string, error) {
 	return m.Value, err
 }
 
-func (t *tx) setMeta(m MetaArgs) (pubsub.None, error) {
-	return pubsub.None{}, t.db.Save(&dto.MetaDto{Key: m.Key, Value: m.Value}).Error
-}
-
-// metaCommands: the settings' writes as commands
-type metaCommands struct {
-	setMeta op[MetaArgs, pubsub.None]
-}
-
-func newMetaCommands(p *Proxy) metaCommands {
-	return metaCommands{
-		setMeta: command(p, pubsub.Frame, (*tx).setMeta),
-	}
-}
-
 func (p *Proxy) SetMeta(key, value string) error {
 	_, err := p.setMeta.Do(MetaArgs{key, value})
 	return err
@@ -49,4 +39,14 @@ func (p *Proxy) SetMeta(key, value string) error {
 
 func (p *Proxy) SetMetaCommand() pubsub.Message[MetaArgs] {
 	return pubsub.MessageOf(p.setMeta)
+}
+
+func (t *tx) setMeta(m MetaArgs) (pubsub.None, error) {
+	return pubsub.None{}, t.db.Save(&dto.MetaDto{Key: m.Key, Value: m.Value}).Error
+}
+
+func newMetaCommands(p *Proxy) metaCommands {
+	return metaCommands{
+		setMeta: command(p, pubsub.Frame, (*tx).setMeta),
+	}
 }

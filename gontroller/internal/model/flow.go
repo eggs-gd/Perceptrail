@@ -19,6 +19,14 @@ type GoneResult struct {
 	Deleted, Dirty int
 }
 
+// flowCommands: the flow's writes as commands
+type flowCommands struct {
+	gone       op[[]*dto.FileDto, GoneResult]
+	ignore     op[[]*dto.FileDto, pubsub.None]
+	publish    op[*dto.ItemDto, *dto.ItemDto]
+	markRework op[[]string, int64]
+}
+
 // NeedsWork: the group's files are stored and unchanged on disk — does it still
 // need work? Yes when a file was never linked or is linked outside the group (its
 // main file is gone: a RAW deleted, its JPEG left), a file has no role (from before
@@ -58,6 +66,46 @@ func (q query) NeedsWork(files []*dto.FileDto, key, metaHash string) (needs bool
 	return !cheapStageDone(item) || item.HashShort == "" || item.MetaHash != metaHash || item.Rework, guid, nil
 }
 
+// Unshown: the items nothing can show yet (no file the browser shows, no preview:
+// Waiting) — what a library that draws renditions itself may fill
+func (q query) Unshown() ([]*dto.ItemDto, error) {
+	return q.GetItemsInStates(dto.Waiting)
+}
+
+func (p *Proxy) Gone(files []*dto.FileDto) (deleted, dirty int, err error) {
+	r, err := p.gone.Do(files)
+	return r.Deleted, r.Dirty, err
+}
+
+func (p *Proxy) GoneCommand() pubsub.Command[[]*dto.FileDto, GoneResult] {
+	return p.gone
+}
+
+func (p *Proxy) Ignore(files []*dto.FileDto) error {
+	_, err := p.ignore.Do(files)
+	return err
+}
+
+func (p *Proxy) IgnoreCommand() pubsub.Message[[]*dto.FileDto] {
+	return pubsub.MessageOf(p.ignore)
+}
+
+func (p *Proxy) Publish(item *dto.ItemDto) (*dto.ItemDto, error) {
+	return p.publish.Do(item)
+}
+
+func (p *Proxy) PublishCommand() pubsub.Command[*dto.ItemDto, *dto.ItemDto] {
+	return p.publish
+}
+
+func (p *Proxy) MarkRework(guids []string) (int64, error) {
+	return p.markRework.Do(guids)
+}
+
+func (p *Proxy) MarkReworkCommand() pubsub.Command[[]string, int64] {
+	return p.markRework
+}
+
 // cheapStageDone: the item went through the cheap stage (Visible, Waiting) or is
 // fully done (Ready). An item shown without a preview is from before the cheap
 // stage existed: it goes through once more.
@@ -69,12 +117,6 @@ func cheapStageDone(item *dto.ItemDto) bool {
 		return true
 	}
 	return false
-}
-
-// Unshown: the items nothing can show yet (no file the browser shows, no preview:
-// Waiting) — what a library that draws renditions itself may fill
-func (q query) Unshown() ([]*dto.ItemDto, error) {
-	return q.GetItemsInStates(dto.Waiting)
 }
 
 // gone: these files are gone for the library (the walk found them missing, or
@@ -170,14 +212,6 @@ func (t *tx) markRework(guids []string) (int64, error) {
 	return n, nil
 }
 
-// flowCommands: the flow's writes as commands
-type flowCommands struct {
-	gone       op[[]*dto.FileDto, GoneResult]
-	ignore     op[[]*dto.FileDto, pubsub.None]
-	publish    op[*dto.ItemDto, *dto.ItemDto]
-	markRework op[[]string, int64]
-}
-
 func newFlowCommands(p *Proxy) flowCommands {
 	return flowCommands{
 		gone:       command(p, pubsub.Frame, (*tx).gone),
@@ -185,38 +219,4 @@ func newFlowCommands(p *Proxy) flowCommands {
 		publish:    command(p, pubsub.Frame, (*tx).publish),
 		markRework: command(p, pubsub.Frame, (*tx).markRework),
 	}
-}
-
-func (p *Proxy) Gone(files []*dto.FileDto) (deleted, dirty int, err error) {
-	r, err := p.gone.Do(files)
-	return r.Deleted, r.Dirty, err
-}
-
-func (p *Proxy) GoneCommand() pubsub.Command[[]*dto.FileDto, GoneResult] {
-	return p.gone
-}
-
-func (p *Proxy) Ignore(files []*dto.FileDto) error {
-	_, err := p.ignore.Do(files)
-	return err
-}
-
-func (p *Proxy) IgnoreCommand() pubsub.Message[[]*dto.FileDto] {
-	return pubsub.MessageOf(p.ignore)
-}
-
-func (p *Proxy) Publish(item *dto.ItemDto) (*dto.ItemDto, error) {
-	return p.publish.Do(item)
-}
-
-func (p *Proxy) PublishCommand() pubsub.Command[*dto.ItemDto, *dto.ItemDto] {
-	return p.publish
-}
-
-func (p *Proxy) MarkRework(guids []string) (int64, error) {
-	return p.markRework.Do(guids)
-}
-
-func (p *Proxy) MarkReworkCommand() pubsub.Command[[]string, int64] {
-	return p.markRework
 }

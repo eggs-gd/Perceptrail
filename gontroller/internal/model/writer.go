@@ -37,15 +37,6 @@ type writer struct {
 	mu sync.RWMutex // senders read-lock; quit is closed under the write lock, so no job slips in after it
 }
 
-func newWriter(db *gorm.DB) *writer {
-	w := &writer{db: db, quit: make(chan struct{}), done: make(chan struct{})}
-	for i := range w.lanes {
-		w.lanes[i] = make(chan pubsub.Job[*gorm.DB], maxBatch)
-	}
-	go w.loop()
-	return w
-}
-
 // Enqueue: the job into its class's lane (waiting for room when it is full); once
 // closed, the job fails
 func (w *writer) Enqueue(job pubsub.Job[*gorm.DB]) {
@@ -56,6 +47,15 @@ func (w *writer) Enqueue(job pubsub.Job[*gorm.DB]) {
 		return
 	}
 	w.lanes[lane(job.Class())] <- job
+}
+
+func newWriter(db *gorm.DB) *writer {
+	w := &writer{db: db, quit: make(chan struct{}), done: make(chan struct{})}
+	for i := range w.lanes {
+		w.lanes[i] = make(chan pubsub.Job[*gorm.DB], maxBatch)
+	}
+	go w.loop()
+	return w
 }
 
 // closed: the writer takes no job any more

@@ -12,13 +12,13 @@ import (
 	"gorm.io/gorm"
 )
 
-// ErrNotFound: a lookup found no row (GetFileByPath, GetItemByGuid, …)
-var ErrNotFound = gorm.ErrRecordNotFound
-
 // Config: what the model reads of the config — where its data is
 type Config interface {
 	Database() config.Database
 }
+
+// ErrNotFound: a lookup found no row (GetFileByPath, GetItemByGuid, …)
+var ErrNotFound = gorm.ErrRecordNotFound
 
 // Proxy: the model — the library's data and its rules (items.go, identity.go,
 // flow.go, files.go, meta.go); one per run, opened in main and passed to who uses it.
@@ -75,6 +75,15 @@ func Open(cfg Config, logger *l.Logger) (*Proxy, error) {
 	return p, nil
 }
 
+// Close: the writer writes what is queued and stops; the readers close, then the
+// writer's connection — last, so it merges the journal into the file and removes it
+// (a read-only connection closing last cannot)
+func (p *Proxy) Close() error {
+	p.writer.close()
+	readers := closeDB(p.db)
+	return errors.Join(readers, closeDB(p.writer.db))
+}
+
 // connect: a connection pool of the config's database, for the writer or the
 // readers
 func connect(cfg Config, read bool, logger *l.Logger) (*gorm.DB, error) {
@@ -108,15 +117,6 @@ func (p *Proxy) run(db *gorm.DB, write func(*tx) error) (err error) {
 		db.Exec("RELEASE SAVEPOINT write")
 	}()
 	return write(&tx{query: query{db}, logger: p.logger})
-}
-
-// Close: the writer writes what is queued and stops; the readers close, then the
-// writer's connection — last, so it merges the journal into the file and removes it
-// (a read-only connection closing last cannot)
-func (p *Proxy) Close() error {
-	p.writer.close()
-	readers := closeDB(p.db)
-	return errors.Join(readers, closeDB(p.writer.db))
 }
 
 func closeDB(db *gorm.DB) error {

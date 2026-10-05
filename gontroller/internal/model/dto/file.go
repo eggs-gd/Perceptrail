@@ -48,15 +48,6 @@ type WalkedFile struct {
 	Missing bool
 }
 
-// SetRole: the source's grouper says what the file is to its asset; a new role is
-// new work
-func (f *FileDto) SetRole(role string) {
-	if f.Role != role {
-		f.Role = role
-		f.Changed = true
-	}
-}
-
 // Roles of the files of an asset: the client picks by them (a still for the tile,
 // motion on hover, the biggest still in the viewer, the original on demand)
 const (
@@ -67,6 +58,15 @@ const (
 	RoleFrames   = "frames"   // one frame of a sequence (a flip-book on hover)
 	RoleMeta     = "meta"     // metadata only (.xmp, .aae): not shown
 )
+
+// SetRole: the source's grouper says what the file is to its asset; a new role is
+// new work
+func (f *FileDto) SetRole(role string) {
+	if f.Role != role {
+		f.Role = role
+		f.Changed = true
+	}
+}
 
 func (FileDto) TableName() string {
 	return "files"

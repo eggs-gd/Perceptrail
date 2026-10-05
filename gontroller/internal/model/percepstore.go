@@ -56,47 +56,6 @@ func OpenPerceptorStore(driver, dir string, s api.Schema) (*PerceptorStore, erro
 
 func (s *PerceptorStore) Name() string { return s.schema.Store }
 
-// migrate: the stored schema differs from the declared one → the values go
-func (s *PerceptorStore) migrate() error {
-	desc, _ := json.Marshal(s.schema)
-	if err := s.db.Exec(`CREATE TABLE IF NOT EXISTS schema_info (id INTEGER PRIMARY KEY CHECK (id = 1), schema TEXT NOT NULL)`).Error; err != nil {
-		return err
-	}
-	var stored string // none yet: a new store
-	err := s.db.Raw(`SELECT schema FROM schema_info WHERE id = 1`).Row().Scan(&stored)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
-	if stored == string(desc) {
-		return nil
-	}
-	cols := []string{`guid TEXT PRIMARY KEY`, `has INTEGER NOT NULL`}
-	for _, f := range s.schema.Fields {
-		cols = append(cols, fmt.Sprintf(`%q %s`, f.Name, sqlType(f.Kind)))
-	}
-	return s.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Exec(`DROP TABLE IF EXISTS ` + valuesTable).Error; err != nil {
-			return err
-		}
-		if err := tx.Exec(`CREATE TABLE ` + valuesTable + ` (` + strings.Join(cols, ", ") + `)`).Error; err != nil {
-			return err
-		}
-		return tx.Exec(`INSERT OR REPLACE INTO schema_info (id, schema) VALUES (1, ?)`, string(desc)).Error
-	})
-}
-
-func sqlType(k api.Kind) string {
-	switch k {
-	case api.KindFloat:
-		return "REAL"
-	case api.KindInt, api.KindBool, api.KindTime:
-		return "INTEGER"
-	case api.KindVector:
-		return "BLOB"
-	}
-	return "TEXT"
-}
-
 // Save: the item's values; nil records "processed, nothing found"
 func (s *PerceptorStore) Save(guid string, v api.Values) error {
 	names := []string{"guid", "has"}
@@ -185,6 +144,47 @@ func (s *PerceptorStore) Close() error {
 		return err
 	}
 	return db.Close()
+}
+
+// migrate: the stored schema differs from the declared one → the values go
+func (s *PerceptorStore) migrate() error {
+	desc, _ := json.Marshal(s.schema)
+	if err := s.db.Exec(`CREATE TABLE IF NOT EXISTS schema_info (id INTEGER PRIMARY KEY CHECK (id = 1), schema TEXT NOT NULL)`).Error; err != nil {
+		return err
+	}
+	var stored string // none yet: a new store
+	err := s.db.Raw(`SELECT schema FROM schema_info WHERE id = 1`).Row().Scan(&stored)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if stored == string(desc) {
+		return nil
+	}
+	cols := []string{`guid TEXT PRIMARY KEY`, `has INTEGER NOT NULL`}
+	for _, f := range s.schema.Fields {
+		cols = append(cols, fmt.Sprintf(`%q %s`, f.Name, sqlType(f.Kind)))
+	}
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec(`DROP TABLE IF EXISTS ` + valuesTable).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec(`CREATE TABLE ` + valuesTable + ` (` + strings.Join(cols, ", ") + `)`).Error; err != nil {
+			return err
+		}
+		return tx.Exec(`INSERT OR REPLACE INTO schema_info (id, schema) VALUES (1, ?)`, string(desc)).Error
+	})
+}
+
+func sqlType(k api.Kind) string {
+	switch k {
+	case api.KindFloat:
+		return "REAL"
+	case api.KindInt, api.KindBool, api.KindTime:
+		return "INTEGER"
+	case api.KindVector:
+		return "BLOB"
+	}
+	return "TEXT"
 }
 
 // encode: a Go value of the field's kind as SQLite stores it
