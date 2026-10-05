@@ -8,11 +8,12 @@ import (
 	"gorm.io/gorm"
 )
 
-// driver opens one kind of database. tune adjusts the connection pool after
-// gorm.Open (e.g. sqlite needs a single connection).
+// driver opens one kind of database — for the writer, or for the readers (read:
+// a read-only pool). tune adjusts the connection pool after gorm.Open (e.g. sqlite:
+// one connection to write).
 type driver struct {
-	dialector func(cfg config.Database) (gorm.Dialector, error)
-	tune      func(db *gorm.DB) error
+	dialector func(cfg config.Database, read bool) (gorm.Dialector, error)
+	tune      func(db *gorm.DB, read bool) error
 }
 
 var drivers = map[string]driver{
@@ -22,11 +23,11 @@ var drivers = map[string]driver{
 
 // dialectorOf: the database's driver, or why it cannot be opened (unknown, not
 // implemented yet)
-func dialectorOf(cfg config.Database) (driver, gorm.Dialector, error) {
+func dialectorOf(cfg config.Database, read bool) (driver, gorm.Dialector, error) {
 	d, ok := drivers[cfg.Driver]
 	if !ok {
 		return driver{}, nil, fmt.Errorf("unknown database driver %q", cfg.Driver)
 	}
-	dialector, err := d.dialector(cfg)
+	dialector, err := d.dialector(cfg, read)
 	return d, dialector, err
 }

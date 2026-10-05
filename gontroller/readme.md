@@ -90,15 +90,18 @@ package's own unit tests stay next to it.
 | `internal/importer` | the import chain ([README](internal/importer/README.md)) |
 | `internal/transcode` | the transcoders' switch and stubs (a chain of its own later) |
 | `internal/perceptor` | the perceptors' registry (built in + `.so`, their storages); `perceptor/builtin`: the built-ins' contract (`builtin.Item`, `builtin.Perceptor`, `OrderByValue`); the built-in EXIF perceptors `perceptor/date`, `size`, `duration` |
-| `internal/model` | the model over GORM (`Open`: SQLite), `ItemsApi`/`FilesApi`/`MetaApi` and the import's rules, DTOs |
+| `internal/model` | the model over GORM (`Open`: SQLite), `ItemsApi`/`FilesApi`/`MetaApi` and the import's rules, DTOs; one writer (a [go-pub-sub](https://github.com/eggs-gd/go-pub-sub) executor: every write rule in its transaction) and a read pool |
 | `internal/web` | the HTTP service (Echo); `web/route`: `/items`, `/assets`, `/perceptors`, `/p/:view/order`, renditions |
 | `internal/library` | the libraries the import reads and the web service asks on demand: Apple Photos, the plain folder ([README](internal/library/README.md)) |
 | `internal/transcoder` | thumbnail stub (needs libvips) |
 
 ## Worth knowing
 
-- SQLite: WAL, **a single connection**. Never query through `db` inside a `tx`
-  transaction — deadlock.
+- SQLite: WAL, `synchronous=NORMAL`; **one writer connection** (its goroutine runs
+  every write rule — `writes.go` — in its transaction, each under its own savepoint)
+  and a read-only pool. Inside a rule, reads and writes go through the rule's own
+  `Proxy` (bound to the transaction): a public write called there runs right there,
+  not through the writer (it would wait for itself).
 - `internal/transcoder/images` does not build without libvips (`pkg-config vips`); it is
   not imported by `main`, so the server is unaffected. Run vet/tests without it:
   `go test $(go list ./... | grep -v transcoder/images)`.

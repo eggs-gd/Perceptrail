@@ -25,7 +25,7 @@ type FilesApi interface {
 	GetFileByID(id uint) (*dto.FileDto, error)
 }
 
-func (p *Proxy) CreateFile(entry dto.ItemEntry) (*dto.FileDto, error) {
+func (p *Proxy) createFile(entry dto.ItemEntry) (*dto.FileDto, error) {
 	var file *dto.FileDto = &dto.FileDto{
 		GUID:      uuid.New().String(),
 		ItemEntry: entry,
@@ -34,11 +34,11 @@ func (p *Proxy) CreateFile(entry dto.ItemEntry) (*dto.FileDto, error) {
 	return p.UpdateFile(file)
 }
 
-func (p *Proxy) UpdateFile(file *dto.FileDto) (*dto.FileDto, error) {
+func (p *Proxy) updateFile(file *dto.FileDto) (*dto.FileDto, error) {
 	return file, p.db.Save(&file).Error
 }
 
-func (p *Proxy) UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error) {
+func (p *Proxy) updateFiles(files []*dto.FileDto) ([]*dto.FileDto, error) {
 	return files, p.db.Save(&files).Error
 }
 
@@ -78,9 +78,9 @@ func (p *Proxy) GetFilesByID(ids []uint) ([]*dto.FileDto, error) {
 	return files, nil
 }
 
-// CreateFiles: the rows of new files, in one transaction; each gets its GUID and
+// createFiles: the rows of new files, in one transaction; each gets its GUID and
 // is marked Changed (new work)
-func (p *Proxy) CreateFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error) {
+func (p *Proxy) createFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error) {
 	if len(entries) == 0 {
 		return nil, nil
 	}
@@ -91,10 +91,10 @@ func (p *Proxy) CreateFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error) {
 	return files, p.db.CreateInBatches(files, 200).Error
 }
 
-// SaveStats: the new stat of changed files (size, mtime) and their Changed mark —
+// saveStats: the new stat of changed files (size, mtime) and their Changed mark —
 // only those columns (the rest of a row may have moved on since the walk read
 // it), in one transaction
-func (p *Proxy) SaveStats(files []*dto.FileDto) error {
+func (p *Proxy) saveStats(files []*dto.FileDto) error {
 	if len(files) == 0 {
 		return nil
 	}
@@ -110,14 +110,14 @@ func (p *Proxy) SaveStats(files []*dto.FileDto) error {
 	})
 }
 
-func (p *Proxy) DeleteFiles(files []*dto.FileDto) error {
+func (p *Proxy) deleteFiles(files []*dto.FileDto) error {
 	if len(files) == 0 {
 		return nil
 	}
 	return p.db.Delete(&files).Error
 }
 
-func (p *Proxy) UnignoreFiles() (int64, error) {
+func (p *Proxy) unignoreFiles() (int64, error) {
 	res := p.db.Model(&dto.FileDto{}).Where("linked_to = ?", "-").Update("linked_to", "")
 	return res.RowsAffected, res.Error
 }

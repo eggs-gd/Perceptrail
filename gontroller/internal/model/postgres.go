@@ -12,8 +12,8 @@ import (
 // accept it. Implementing it = gorm.io/driver/postgres with a DSN from
 // Host/Port/Username/Password (or Token)/Name, and the default pool.
 var postgresDriver = driver{
-	dialector: func(cfg config.Database) (gorm.Dialector, error) {
+	dialector: func(cfg config.Database, read bool) (gorm.Dialector, error) {
 		return nil, errors.New("database driver postgres: not implemented yet")
 	},
-	tune: func(db *gorm.DB) error { return nil },
+	tune: func(db *gorm.DB, read bool) error { return nil },
 }

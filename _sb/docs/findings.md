@@ -258,8 +258,12 @@ content is for when a second provider exists).
 - An embedded RAW preview has no EXIF of its own: copy the RAW's Orientation onto
   it, or a portrait lies on its side.
 - MIME detection never uses the system tables (a minimal Docker image has none).
-- **SQLite**: WAL + `busy_timeout`, **one connection** ("database is locked"
-  otherwise); never query through `db` inside a `tx` — deadlock.
+- **SQLite**: WAL + `busy_timeout`; one writer (see "The write bus") — no more
+  "database is locked", and reads no longer queue behind writes. A rule that calls
+  another public write runs it in its own transaction (the writer would wait for
+  itself). Close the read-only connections first: the last connection to close
+  merges and removes the journal, and a read-only one cannot (smoke caught `-wal`
+  and `-shm` left behind).
 
 ## The write bus and the queue (SQLite, 2026-10-04, design)
 
@@ -288,6 +292,10 @@ an item):
 - **Grouping commits gains little in speed** here (a commit is ~0.17 ms with FULL);
   the bus is for one writer whatever writes, parallel reads, and steps that never
   stall on a write.
+- **The writer in place, callers still synchronous** (2026-10-05): the import of
+  10 000 files — first pass 4.0 s (4.6 s before), idle passes 0.09 s (0.11–0.13 s);
+  the grouping comes from callers writing at once (identify's five readers). No
+  deadlines yet: a caller waiting for each result would pay one per call.
 
 - **Who may write what is decided by who holds what** (the owner asked: a `Job`
   can run anything — "remove all tables"): `Job` is sealed (only an `Op` makes

@@ -66,12 +66,12 @@ func cheapStageDone(item *dto.ItemDto) bool {
 	return false
 }
 
-// Gone: these files are gone for the library (the walk found them missing, or
+// gone: these files are gone for the library (the walk found them missing, or
 // their provider says so).
 // A main file gone: its item is deleted; a sidecar gone: its item is Dirty (processed
 // again); an item with no files left is gone too (a keyed asset: every file is
 // "linked", none is "main" by its own GUID). The files' rows go.
-func (p *Proxy) Gone(files []*dto.FileDto) (deleted, dirty int, err error) {
+func (p *Proxy) gone(files []*dto.FileDto) (deleted, dirty int, err error) {
 	for _, f := range files {
 		switch {
 		case f.IsIgnored() || f.LinkedTo == "":
@@ -114,10 +114,10 @@ func (p *Proxy) Gone(files []*dto.FileDto) (deleted, dirty int, err error) {
 	return deleted, dirty, nil
 }
 
-// Ignore: the group is not an item (not media, or its main file is broken): its
+// ignore: the group is not an item (not media, or its main file is broken): its
 // files are remembered as ignored — the gate skips them until a file changes — and
 // an item its main file used to be (it got corrupted) goes
-func (p *Proxy) Ignore(files []*dto.FileDto) error {
+func (p *Proxy) ignore(files []*dto.FileDto) error {
 	if item, err := p.GetItemByGuid(files[0].GUID); err == nil {
 		if err := p.DeleteItem(item); err != nil {
 			return err
@@ -130,11 +130,11 @@ func (p *Proxy) Ignore(files []*dto.FileDto) error {
 	return err
 }
 
-// ValidateGroup: the item of a plain folder's group (files: the main file first).
+// validateGroup: the item of a plain folder's group (files: the main file first).
 // Its files link to the main file; a file that was the main file of its own item
 // before is a sidecar now (a JPEG imported alone, then its RAW appeared): that item
 // goes. Then the main file's item by its path and fingerprint (ValidateFile).
-func (p *Proxy) ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
+func (p *Proxy) validateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
 	main := files[0]
 	for _, f := range files {
 		f.LinkTo(main)
@@ -153,11 +153,11 @@ func (p *Proxy) ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, 
 	return p.validateFile(main, hash)
 }
 
-// ValidateAsset: the item of a group whose source knows its identity (an Apple
+// validateAsset: the item of a group whose source knows its identity (an Apple
 // Photos asset UUID: the key, whatever the main file is). Every file links to it; an
 // item of a file's own from before (the plain folder's grouper read the library's
 // originals) goes. Then the keyed item (validateKeyed).
-func (p *Proxy) ValidateAsset(key string, files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
+func (p *Proxy) validateAsset(key string, files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
 	for _, f := range files {
 		if f.GUID != key {
 			if old, err := p.GetItemByGuid(f.GUID); err == nil {
@@ -174,9 +174,9 @@ func (p *Proxy) ValidateAsset(key string, files []*dto.FileDto, hash string) (*d
 	return p.validateKeyed(key, files[0], hash)
 }
 
-// Publish: the item at the end of the import's cheap stage — Visible when it has
+// publish: the item at the end of the import's cheap stage — Visible when it has
 // something the browser shows (a preview), else Waiting (the expensive stage later)
-func (p *Proxy) Publish(item *dto.ItemDto) (*dto.ItemDto, error) {
+func (p *Proxy) publish(item *dto.ItemDto) (*dto.ItemDto, error) {
 	item.Rework = false
 	item.State = dto.Waiting
 	if item.PreviewPath != "" {
@@ -185,11 +185,11 @@ func (p *Proxy) Publish(item *dto.ItemDto) (*dto.ItemDto, error) {
 	return p.UpdateItem(item)
 }
 
-// MarkRework: these items are processed again on the next walk (NeedsWork), their
+// markRework: these items are processed again on the next walk (NeedsWork), their
 // files unchanged — e.g. a perceptor has no row for them, a library made a file of
 // one local; publishing clears the mark. Not a change the client sees: updated_at
 // stays (the client's delta would bring the item back in its old state)
-func (p *Proxy) MarkRework(guids []string) (int64, error) {
+func (p *Proxy) markRework(guids []string) (int64, error) {
 	var n int64
 	for start := 0; start < len(guids); start += 500 { // under SQLite's variable limit
 		page := guids[start:min(start+500, len(guids))]

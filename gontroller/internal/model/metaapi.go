@@ -23,6 +23,6 @@ func (p *Proxy) GetMeta(key string) (string, error) {
 	return m.Value, err
 }
 
-func (p *Proxy) SetMeta(key, value string) error {
+func (p *Proxy) setMeta(key, value string) error {
 	return p.db.Save(&dto.MetaDto{Key: key, Value: value}).Error
 }
