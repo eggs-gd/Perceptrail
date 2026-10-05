@@ -23,7 +23,7 @@ type Config interface {
 // Proxy: the model — the library's data and its rules (ItemsApi, FilesApi, MetaApi
 // and the import's rules); one per run, opened in main and passed to who uses it.
 //
-// Reads go to a pool of read-only connections; writes to the one writer: each rule
+// Reads go to a pool of read-only connections; writes to the one writer: each write
 // (writes.go) runs whole — read, decide, write — in the writer's transaction, under
 // its own savepoint; its result comes back after the commit — waited for by the
 // public method of its name, or by subscription to its topic.
@@ -31,19 +31,19 @@ type Proxy struct {
 	query  // reads, over the readers' pool
 	logger *l.Logger
 
-	writer *writer
-	rules  rules    // every write rule as a topic (writes.go)
-	writes *gorm.DB // the writer's connection (closed with the model)
+	writer   *writer
+	commands          // every write as a command (writes.go)
+	writes   *gorm.DB // the writer's connection (closed with the model)
 }
 
 // query: the model's reads over a connection — the readers' pool (Proxy), or a
-// rule's transaction (tx)
+// write's transaction (tx)
 type query struct {
 	db *gorm.DB
 }
 
-// tx: what a rule runs on — the reads and the rules themselves, over the writer's
-// transaction. It has no public writes: a rule calls other rules directly, in the
+// tx: what a write runs on — the reads and the writes themselves, over the writer's
+// transaction. It has no public writes: a write calls other writes directly, in the
 // same transaction (a public write would wait for the writer that runs it).
 type tx struct {
 	query
@@ -66,7 +66,7 @@ func Open(cfg Config, logger *l.Logger) (*Proxy, error) {
 		return nil, err
 	}
 	p := &Proxy{query: query{reads}, logger: logger, writes: writes, writer: newWriter(writes)}
-	p.rules = newRules(p)
+	p.commands = newCommands(p)
 	return p, nil
 }
 
@@ -87,22 +87,22 @@ func connect(cfg Config, read bool, logger *l.Logger) (*gorm.DB, error) {
 	return db, nil
 }
 
-// run: one rule in the writer's transaction, under its own savepoint — a failing
-// rule (an error, a panic) rolls back alone, the batch commits
-func (p *Proxy) run(db *gorm.DB, rule func(*tx) error) (err error) {
-	if err := db.SavePoint("rule").Error; err != nil {
+// run: one write in the writer's transaction, under its own savepoint — a failing
+// write (an error, a panic) rolls back alone, the batch commits
+func (p *Proxy) run(db *gorm.DB, write func(*tx) error) (err error) {
+	if err := db.SavePoint("write").Error; err != nil {
 		return err
 	}
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("model: a rule panicked: %v", r)
+			err = fmt.Errorf("model: a write panicked: %v", r)
 		}
 		if err != nil {
-			db.RollbackTo("rule")
+			db.RollbackTo("write")
 		}
-		db.Exec("RELEASE SAVEPOINT rule")
+		db.Exec("RELEASE SAVEPOINT write")
 	}()
-	return rule(&tx{query: query{db}, logger: p.logger})
+	return write(&tx{query: query{db}, logger: p.logger})
 }
 
 // Close: the writer writes what is queued and stops; the readers close, then the

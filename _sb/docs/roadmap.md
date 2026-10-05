@@ -31,7 +31,7 @@ One line each; the details are in the READMEs and the PRs.
   ([go-chain](https://github.com/eggs-gd/go-chain),
   [go-zap-decor](https://github.com/eggs-gd/go-zap-decor)) · #30 the write bus:
   the model's one writer and a read pool on
-  [go-pub-sub](https://github.com/eggs-gd/go-pub-sub), every write rule a topic
+  [go-pub-sub](https://github.com/eggs-gd/go-pub-sub), every write a command
   (sync and asynchronous), `query` / `tx` / `Proxy`; the designs of the bus and the
   work queue.
 
@@ -240,11 +240,11 @@ A stable core first.
 
 ## Design: the write bus — what is left
 
-Built: one writer, a read pool, every write rule a command — the
+Built: one writer, a read pool, every write a command — the
 [model README](../../gontroller/internal/model/README.md). Why, measured:
 findings "The write bus". Open:
 
-- **The classes' deadlines** — how long a rule tolerates waiting for a batch, a
+- **The classes' deadlines** — how long a write tolerates waiting for a batch, a
   property of the rule:
 
   | class | waits | for |
@@ -275,10 +275,10 @@ commands (`Op` seen as a `Command`, a `Client` with only its own results), the
 bridge (`Done`); the rules in its godoc, the handling patterns in its examples. The
 model is on it (`…Command()`). Open, the product's side:
 
-**Domain events, after the commit.** What others react to is not a rule's raw
+**Domain events, after the commit.** What others react to is not a write's raw
 result but a fact of the library: `ItemPublished{GUID, State}`, `ItemGone{GUID}`. A
-rule emits it inside its transaction (`tx.emit`); the writer publishes it only
-after the commit, and a rule rolled back to its savepoint takes its events with it
+write emits it inside its transaction (`tx.emit`); the writer publishes it only
+after the commit, and a write rolled back to its savepoint takes its events with it
 (an outbox in memory — no one hears of a write that is not there). Across processes
 later (goMLer on another box): the same `Topic` over another transport (NATS,
 MQTT — `ML Flow.puml`), or a persistent outbox if an event must outlive a restart.

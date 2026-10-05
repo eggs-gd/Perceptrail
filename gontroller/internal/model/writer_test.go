@@ -38,9 +38,9 @@ func TestWriteThenRead(t *testing.T) {
 	}
 }
 
-// Many writers at once, a failing rule among them (an error, a panic): it rolls
+// Many writers at once, a failing write among them (an error, a panic): it rolls
 // back alone, everything else is written
-func TestFailingRuleAlone(t *testing.T) {
+func TestFailingWriteAlone(t *testing.T) {
 	db := openTest(t)
 	var writers sync.WaitGroup
 	for i := range 50 {
@@ -48,20 +48,20 @@ func TestFailingRuleAlone(t *testing.T) {
 			key := fmt.Sprint("k", i)
 			switch i {
 			case 7:
-				_, err := testRule(db, func(in *tx) error {
+				_, err := testWrite(db, func(in *tx) error {
 					in.setMeta(MetaArgs{key, "half"})
-					return errors.New("a rule gives up")
+					return errors.New("a write gives up")
 				})
 				if err == nil {
-					t.Error("a failing rule returned nil")
+					t.Error("a failing write returned nil")
 				}
 			case 13:
-				_, err := testRule(db, func(in *tx) error {
+				_, err := testWrite(db, func(in *tx) error {
 					in.setMeta(MetaArgs{key, "half"})
-					panic("a rule breaks")
+					panic("a write breaks")
 				})
 				if err == nil {
-					t.Error("a panicking rule returned nil")
+					t.Error("a panicking write returned nil")
 				}
 			default:
 				if err := db.SetMeta(key, "ok"); err != nil {
@@ -79,21 +79,21 @@ func TestFailingRuleAlone(t *testing.T) {
 	}
 }
 
-// A rule calls another rule directly — same transaction, rolled back with it (a
+// A write calls another write directly — same transaction, rolled back with it (a
 // public write cannot be called there: tx has none)
-func TestRuleInsideRule(t *testing.T) {
+func TestWriteInsideWrite(t *testing.T) {
 	db := openTest(t)
-	_, err := testRule(db, func(in *tx) error {
+	_, err := testWrite(db, func(in *tx) error {
 		if _, err := in.setMeta(MetaArgs{"inner", "x"}); err != nil {
 			return err
 		}
-		return errors.New("the rule fails after it")
+		return errors.New("the write fails after it")
 	})
 	if err == nil {
-		t.Fatal("the rule's error got lost")
+		t.Fatal("the write's error got lost")
 	}
 	if v, _ := db.GetMeta("inner"); v != "" {
-		t.Errorf("the inner write outlived its rule: %q", v)
+		t.Errorf("the inner write outlived its write: %q", v)
 	}
 }
 
@@ -161,12 +161,12 @@ func TestSynchronousNormal(t *testing.T) {
 	}
 }
 
-// testRule: a rule of the test's own, run as a write
-func testRule(db *Proxy, fn func(in *tx) error) (pubsub.None, error) {
-	return rule(db, pubsub.Frame, func(in *tx, _ pubsub.None) (pubsub.None, error) { return pubsub.None{}, fn(in) }).Do(pubsub.None{})
+// testWrite: a write of the test's own, run as a command
+func testWrite(db *Proxy, fn func(in *tx) error) (pubsub.None, error) {
+	return command(db, pubsub.Frame, func(in *tx, _ pubsub.None) (pubsub.None, error) { return pubsub.None{}, fn(in) }).Do(pubsub.None{})
 }
 
-// A rule without a result is a Message: Submit its argument, a result per ID with
+// A write without a result is a Message: Submit its argument, a result per ID with
 // its error; without an argument, a Signal: Submit nothing
 func TestShapedCommands(t *testing.T) {
 	db := openTest(t)
