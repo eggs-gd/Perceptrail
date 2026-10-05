@@ -20,19 +20,24 @@ type Config interface {
 	Database() config.Database
 }
 
-// Proxy: the model — the library's data and its rules (ItemsApi, FilesApi, MetaApi
-// and the import's rules); one per run, opened in main and passed to who uses it.
+// Proxy: the model — the library's data and its rules (items.go, identity.go,
+// flow.go, files.go, meta.go); one per run, opened in main and passed to who uses it.
 //
 // Reads go to a pool of read-only connections; writes to the one writer: each write
-// (writes.go) runs whole — read, decide, write — in the writer's transaction, under
+// (command.go) runs whole — read, decide, write — in the writer's transaction, under
 // its own savepoint; its result comes back after the commit — waited for by the
 // public method of its name, or through its command.
 type Proxy struct {
 	query  // reads, over the readers' pool
 	logger *l.Logger
 
-	writer   *writer
-	commands // every write as a command (writes.go)
+	writer *writer
+	// every write as a command (command.go), each file its own
+	itemCommands
+	identityCommands
+	flowCommands
+	fileCommands
+	metaCommands
 }
 
 // query: the model's reads over a connection — the readers' pool (Proxy), or a
@@ -65,7 +70,8 @@ func Open(cfg Config, logger *l.Logger) (*Proxy, error) {
 		return nil, err
 	}
 	p := &Proxy{query: query{reads}, logger: logger, writer: newWriter(writes)}
-	p.commands = newCommands(p)
+	p.itemCommands, p.identityCommands, p.flowCommands = newItemCommands(p), newIdentityCommands(p), newFlowCommands(p)
+	p.fileCommands, p.metaCommands = newFileCommands(p), newMetaCommands(p)
 	return p, nil
 }
 

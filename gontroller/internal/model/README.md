@@ -19,6 +19,23 @@ step only gathers facts (see the [importer README](../importer/README.md#the-mod
 A write calls other writes directly, in the same transaction; it cannot call a public
 write (`tx` has none) — that would wait for the writer that runs it.
 
+## A file per subject
+
+Each subject is whole in its file — its reads (`query`), its writes (`tx`), its
+commands and their public faces:
+
+| file | subject |
+|---|---|
+| `items.go` | items: what the library shows |
+| `identity.go` | which item a group of files is (by path and fingerprint, or by a key) |
+| `flow.go` | an item's flow through its states: needs work, gone, ignored, published |
+| `files.go` | the files' rows and their links to items |
+| `meta.go` | the library's own settings |
+| `percepstore.go` | a perceptor's values, in its own file |
+
+Around them: `proxy.go` (the three types, `Open`, a write's savepoint, `Close`),
+`writer.go` (the executor), `command.go` (how a write becomes a command).
+
 ## One writer, a read pool
 
 - **The writer** (`writer.go`) owns the one write connection, in one goroutine. It
@@ -39,8 +56,8 @@ write (`tx` has none) — that would wait for the writer that runs it.
 
 ## Every write is a command
 
-`writes.go`: each write (a method on `tx`) is submitted as a [go-pub-sub](https://github.com/eggs-gd/go-pub-sub) `Op`
-run by the writer, with two faces, in pairs:
+Each write (a method on `tx`) is submitted as a [go-pub-sub](https://github.com/eggs-gd/go-pub-sub) `Op`
+run by the writer (`command.go`), with two faces, in pairs:
 
 ```go
 func (p *Proxy) CreateFile(entry dto.ItemEntry) (*dto.FileDto, error)        // submit, wait for its result

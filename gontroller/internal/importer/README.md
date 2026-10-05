@@ -72,7 +72,7 @@ Every step declares the DB methods it calls as its own small `Store`; a sub-chai
 ## The model decides, the steps gather facts
 
 The rules about the library's data live in the model
-([`model/itemslife.go`](../model/itemslife.go)), so every chain that touches items
+([`model`](../model/README.md#a-file-per-subject): `flow.go`, `identity.go`), so every chain that touches items
 goes by the same ones: which item a group is (`ValidateGroup`, `ValidateAsset`),
 whether an unchanged group needs work (`NeedsWork`), what a file gone means
 (`Gone`), a group that is no item (`Ignore`), publishing (`Publish`), what an asset

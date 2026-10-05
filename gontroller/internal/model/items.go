@@ -1,69 +1,26 @@
 package model
 
 import (
-	pubsub "github.com/eggs-gd/go-pub-sub"
 	"time"
 
 	"perceptrail/gontroller/internal/model/dto"
 
+	pubsub "github.com/eggs-gd/go-pub-sub"
 	"gorm.io/gorm"
 )
 
-type ItemsApi interface {
-	// GetShortHash the idea is to hash only size in bytes and whole set of metadata fields
-	// Means that expecting if something changed - size in bytes will be different
-	// If exifdata changed - full hash will be different
-	// Not perfect but as another one gate in bunch of sequential checks:
-	// - file scanner gate,
-	// - short hash gate,
-	// - full hash gate
-	//GetShortHash(rawExif t.RawExif, fileSizeBytes uint64) string
-	// An item's life (itemslife.go): the rules every chain goes by
-	ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, error)
-	ValidateAsset(key string, files []*dto.FileDto, hash string) (*dto.ItemDto, error)
-	NeedsWork(files []*dto.FileDto, key, metaHash string) (needs bool, guid string, err error)
-	Gone(files []*dto.FileDto) (deleted, dirty int, err error)
-	Ignore(files []*dto.FileDto) error
-	Publish(item *dto.ItemDto) (*dto.ItemDto, error)
-	MarkRework(guids []string) (int64, error)
-	Unshown() ([]*dto.ItemDto, error)
+// Items: what the library shows — one per photo or video, whatever its files.
+// Reads, the writes on tx, their commands and their two public faces.
 
-	// GetAllGuids: the GUIDs of every item (deleted ones excluded)
-	GetAllGuids() ([]string, error)
-	// StreamAllItems walks items newest first (the default sheet: date) without
-	// loading the full table into memory; every item comes with its files (one query
-	// per page)
-	StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) error
-	// GetItemsInStates: the items in these states, newest first, with what
-	// perceptors read to order them (guid, date and its zone, size, duration) and
-	// where they come from (path, kind) — not the whole rows
-	GetItemsInStates(states ...dto.ItemState) ([]*dto.ItemDto, error)
-	// CountItemsInStates: how many items are in these states (deleted ones excluded)
-	CountItemsInStates(states ...dto.ItemState) (int64, error)
-	// StreamItemsSince: the items changed or deleted since then (deleted ones too:
-	// DeletedAt is set), for the client's delta sync
-	StreamItemsSince(since time.Time, fn func(*dto.ItemDto, []*dto.FileDto) error) error
-	GetItemByGuid(guid string) (*dto.ItemDto, error)
-	// ClearHashes: every item forgets its fingerprint (the fingerprint changed): the
-	// gate sends each group once more to get the new one. Not a change the client
-	// sees: updated_at stays (a delta would stream the whole library)
-	ClearHashes() (int64, error)
-	GetItemByPath(path string) (*dto.ItemDto, error)
-	GetItemsByHash(path string) ([]*dto.ItemDto, error)
-
-	CreateItem(file *dto.FileDto) (*dto.ItemDto, error)
-
-	UpdateItem(item *dto.ItemDto) (*dto.ItemDto, error)
-
-	// DeleteItem marks the item Deleted and soft-deletes it (hidden from queries)
-	DeleteItem(item *dto.ItemDto) error
-}
-
+// GetAllGuids: the GUIDs of every item (deleted ones excluded)
 func (q query) GetAllGuids() ([]string, error) {
 	var guids []string
 	return guids, q.db.Model(&dto.ItemDto{}).Pluck("guid", &guids).Error
 }
 
+// StreamAllItems walks items newest first (the default sheet: date) without
+// loading the full table into memory; every item comes with its files (one query
+// per page)
 func (q query) StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) error {
 	// The ids in sheet order first (cheap), then the items page by page: a stable
 	// order while the import writes, without paging by a date
@@ -78,6 +35,8 @@ func (q query) StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) error
 // zone (written as local time); a tombstone too many is harmless
 const deletionMargin = 24 * time.Hour
 
+// StreamItemsSince: the items changed or deleted since then (deleted ones too:
+// DeletedAt is set), for the client's delta sync
 func (q query) StreamItemsSince(since time.Time, fn func(*dto.ItemDto, []*dto.FileDto) error) error {
 	// SQLite keeps times as text with the writer's offset ("…+03:00", across DST
 	// changes too): compared as julian days, not as text
@@ -129,12 +88,16 @@ func (q query) streamIDs(db *gorm.DB, ids []uint, fn func(*dto.ItemDto, []*dto.F
 	return nil
 }
 
+// GetItemsInStates: the items in these states, newest first, with what
+// perceptors read to order them (guid, date and its zone, size, duration) and
+// where they come from (path, kind) — not the whole rows
 func (q query) GetItemsInStates(states ...dto.ItemState) ([]*dto.ItemDto, error) {
 	var items []*dto.ItemDto
 	return items, q.db.Select("id", "guid", "date", "date_offset", "date_source", "size_w", "size_h", "ratio_w", "ratio_h", "duration", "path", "kind").
 		Where("state IN ?", states).Order("date DESC, id DESC").Find(&items).Error
 }
 
+// CountItemsInStates: how many items are in these states (deleted ones excluded)
 func (q query) CountItemsInStates(states ...dto.ItemState) (int64, error) {
 	var n int64
 	return n, q.db.Model(&dto.ItemDto{}).Where("state IN ?", states).Count(&n).Error
@@ -148,11 +111,6 @@ func (q query) GetItemByGuid(guid string) (*dto.ItemDto, error) {
 func (q query) GetItemByPath(path string) (*dto.ItemDto, error) {
 	var item dto.ItemDto
 	return &item, q.db.Where("path = ?", path).First(&item).Error
-}
-
-func (t *tx) clearHashes(pubsub.None) (int64, error) {
-	res := t.db.Unscoped().Model(&dto.ItemDto{}).Where("hash_short <> ''").UpdateColumn("hash_short", "")
-	return res.RowsAffected, res.Error
 }
 
 func (q query) GetItemsByHash(hash string) ([]*dto.ItemDto, error) {
@@ -181,4 +139,63 @@ func (t *tx) deleteItem(item *dto.ItemDto) (pubsub.None, error) {
 		return pubsub.None{}, err
 	}
 	return pubsub.None{}, t.db.Delete(item).Error
+}
+
+func (t *tx) clearHashes(pubsub.None) (int64, error) {
+	res := t.db.Unscoped().Model(&dto.ItemDto{}).Where("hash_short <> ''").UpdateColumn("hash_short", "")
+	return res.RowsAffected, res.Error
+}
+
+// itemCommands: the items' writes as commands
+type itemCommands struct {
+	createItem  op[*dto.FileDto, *dto.ItemDto]
+	updateItem  op[*dto.ItemDto, *dto.ItemDto]
+	deleteItem  op[*dto.ItemDto, pubsub.None]
+	clearHashes op[pubsub.None, int64]
+}
+
+func newItemCommands(p *Proxy) itemCommands {
+	return itemCommands{
+		createItem:  command(p, pubsub.Frame, (*tx).createItem),
+		updateItem:  command(p, pubsub.Frame, (*tx).updateItem),
+		deleteItem:  command(p, pubsub.Frame, (*tx).deleteItem),
+		clearHashes: command(p, pubsub.Frame, (*tx).clearHashes),
+	}
+}
+
+func (p *Proxy) CreateItem(file *dto.FileDto) (*dto.ItemDto, error) {
+	return p.createItem.Do(file)
+}
+
+func (p *Proxy) CreateItemCommand() pubsub.Command[*dto.FileDto, *dto.ItemDto] {
+	return p.createItem
+}
+
+func (p *Proxy) UpdateItem(item *dto.ItemDto) (*dto.ItemDto, error) {
+	return p.updateItem.Do(item)
+}
+
+func (p *Proxy) UpdateItemCommand() pubsub.Command[*dto.ItemDto, *dto.ItemDto] {
+	return p.updateItem
+}
+
+// DeleteItem marks the item Deleted and soft-deletes it (hidden from queries)
+func (p *Proxy) DeleteItem(item *dto.ItemDto) error {
+	_, err := p.deleteItem.Do(item)
+	return err
+}
+
+func (p *Proxy) DeleteItemCommand() pubsub.Message[*dto.ItemDto] {
+	return pubsub.MessageOf(p.deleteItem)
+}
+
+// ClearHashes: every item forgets its fingerprint (the fingerprint changed): the
+// gate sends each group once more to get the new one. Not a change the client
+// sees: updated_at stays (a delta would stream the whole library)
+func (p *Proxy) ClearHashes() (int64, error) {
+	return p.clearHashes.Do(pubsub.None{})
+}
+
+func (p *Proxy) ClearHashesCommand() pubsub.Signal[int64] {
+	return pubsub.SignalOf(p.clearHashes)
 }

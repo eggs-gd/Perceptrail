@@ -3,21 +3,27 @@
 package route
 
 import (
+	"time"
+
 	"perceptrail/gontroller/internal/library/provider"
-	"perceptrail/gontroller/internal/model"
 	"perceptrail/gontroller/internal/model/dto"
 
 	l "github.com/eggs-gd/go-zap-decor"
 	"github.com/eggs-gd/perceplib/api"
-
 	"github.com/labstack/echo/v4"
 )
 
-// Store: what the routes read of the model
+// Store: what the routes read of the model (and the delta sync's epoch they keep)
 type Store interface {
-	model.ItemsApi
-	model.FilesApi
-	model.MetaApi
+	GetItemByGuid(guid string) (*dto.ItemDto, error)
+	GetItemsInStates(states ...dto.ItemState) ([]*dto.ItemDto, error)
+	CountItemsInStates(states ...dto.ItemState) (int64, error)
+	StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) error
+	StreamItemsSince(since time.Time, fn func(*dto.ItemDto, []*dto.FileDto) error) error
+	GetFileByID(id uint) (*dto.FileDto, error)
+	GetLinkedFiles(guid string) ([]*dto.FileDto, error)
+	GetMeta(key string) (string, error)
+	SetMeta(key, value string) error
 }
 
 // Library: what the routes ask of an item's library — what may be asked for on
