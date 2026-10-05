@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 )
 
 // The fingerprint changes: a new hashVersion makes every item forget its old one

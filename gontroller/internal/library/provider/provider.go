@@ -17,7 +17,7 @@ import (
 
 	"perceptrail/gontroller/internal/model/dto"
 
-	"github.com/eggs-gd/perceplib/chain"
+	chain "github.com/eggs-gd/go-chain"
 )
 
 // Grouper: the logic of a provider's step — the walk's files in, whole assets out

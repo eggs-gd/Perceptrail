@@ -12,9 +12,9 @@ import (
 
 	"perceptrail/gontroller/internal/model/dto"
 
-	"github.com/eggs-gd/perceplib/chain"
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
+	chain "github.com/eggs-gd/go-chain"
+	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/go-zap-decor/tree"
 )
 
 const (
@@ -171,7 +171,7 @@ func names(files []*dto.FileDto) []string {
 func TestGrouper(t *testing.T) {
 	root := t.TempDir()
 	bundle := makeLibrary(t, root, fixture())
-	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	g := newGrouper(l.NewLogger(l.ErrorLevel, &tree.Decorator{}))
 
 	vanished := filepath.Join(bundle, "resources/derivatives/masters/E/"+vanishing+"_4_5005_c.jpeg")
 	groups := walk(t, g, root, func(p string) {
@@ -217,7 +217,7 @@ func TestGrouper(t *testing.T) {
 
 // A file the walk found missing passes through as it is, an asset of its own
 func TestGrouperMissing(t *testing.T) {
-	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	g := newGrouper(l.NewLogger(l.ErrorLevel, &tree.Decorator{}))
 	gone := &dto.FileDto{Path: "/lib/x.photoslibrary/originals/A/A.heic"}
 	out, err := g.Decorate(dto.WalkedFile{FileDto: gone, Missing: true})
 	if err != nil || len(out.Files) != 0 || len(out.Missing) != 1 || out.Missing[0] != gone {
@@ -233,7 +233,7 @@ func TestGrouperUnreadableLibrary(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(bundle, "database", "Photos.sqlite"), []byte("not a database"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	g := newGrouper(l.NewLogger(l.ErrorLevel, &tree.Decorator{}))
 	if groups := walk(t, g, root, nil); len(groups) != 0 {
 		t.Errorf("groups %v, want none", groups)
 	}
@@ -253,7 +253,7 @@ func TestBundleRoot(t *testing.T) {
 func TestMetaRecord(t *testing.T) {
 	root := t.TempDir()
 	makeLibrary(t, root, fixture())
-	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	g := newGrouper(l.NewLogger(l.ErrorLevel, &tree.Decorator{}))
 	groups := walk(t, g, root, nil)
 	m := groups[edited].Meta
 	want := map[string]string{
@@ -293,7 +293,7 @@ func TestMetaRecord(t *testing.T) {
 func TestGrouperRoles(t *testing.T) {
 	root := t.TempDir()
 	makeLibrary(t, root, fixture())
-	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	g := newGrouper(l.NewLogger(l.ErrorLevel, &tree.Decorator{}))
 	groups := walk(t, g, root, nil)
 
 	roles := func(uuid string) map[string]string {
@@ -344,7 +344,7 @@ func TestGrouperVideoRenditions(t *testing.T) {
 			"resources/derivatives/G/" + livePhoto + "_2_101_o.mov",
 		}},
 	})
-	g := newGrouper(l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	g := newGrouper(l.NewLogger(l.ErrorLevel, &tree.Decorator{}))
 	groups := walk(t, g, root, nil)
 
 	for uuid, want := range map[string][]string{

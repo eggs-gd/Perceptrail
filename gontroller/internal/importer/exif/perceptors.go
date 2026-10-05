@@ -6,8 +6,8 @@ import (
 	"perceptrail/gontroller/internal/perceptor"
 	"perceptrail/gontroller/internal/perceptor/builtin"
 
+	l "github.com/eggs-gd/go-zap-decor"
 	"github.com/eggs-gd/perceplib/api"
-	l "github.com/eggs-gd/perceplib/logger"
 )
 
 // The perceptors as the import sees them: the ones that run in the chain (EXIF

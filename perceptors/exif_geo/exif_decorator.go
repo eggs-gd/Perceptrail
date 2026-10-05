@@ -8,7 +8,7 @@ import (
 	"github.com/eggs-gd/perceplib/api"
 	"github.com/eggs-gd/perceplib/exif"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 )
 
 // geotagsExtractor keeps where the photo was taken: the coordinates from EXIF (or

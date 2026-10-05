@@ -10,7 +10,7 @@ import (
 	"perceptrail/gontroller/internal/library/provider"
 	"perceptrail/gontroller/internal/model/dto"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 )
 
 // Items: what the provider asks of the library's items — the ones nothing can show

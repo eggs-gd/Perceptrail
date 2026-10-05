@@ -3,9 +3,9 @@ package builtin
 import (
 	"time"
 
+	chain "github.com/eggs-gd/go-chain"
+	l "github.com/eggs-gd/go-zap-decor"
 	"github.com/eggs-gd/perceplib/api"
-	"github.com/eggs-gd/perceplib/chain"
-	l "github.com/eggs-gd/perceplib/logger"
 )
 
 // Item: the item as the core perceptors see it — they write into it; external

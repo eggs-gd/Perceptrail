@@ -6,9 +6,9 @@ import (
 
 	"perceptrail/gontroller/internal/model/dto"
 
+	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/go-zap-decor/tree"
 	"github.com/eggs-gd/perceplib/api"
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
 )
 
 type pf struct {
@@ -27,7 +27,7 @@ func pick(t *testing.T, files ...pf) (string, string, []string) {
 		it.Kinds = append(it.Kinds, f.kind)
 		it.Exif = append(it.Exif, f.exif)
 	}
-	path, mime := preview(it, tool, "/cache/previews", l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}))
+	path, mime := preview(it, tool, "/cache/previews", l.NewLogger(l.ErrorLevel, &tree.Decorator{}))
 	return path, mime, tool.extracted
 }
 

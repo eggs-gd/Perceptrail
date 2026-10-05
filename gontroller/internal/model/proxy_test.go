@@ -8,8 +8,8 @@ import (
 
 	"perceptrail/gontroller/internal/config"
 
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
+	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/go-zap-decor/tree"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -36,7 +36,7 @@ func TestSqliteDSNEscapesPath(t *testing.T) {
 
 // The driver: sqlite opens; postgres is not implemented yet; an unknown one fails
 func TestOpenDrivers(t *testing.T) {
-	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
+	logger := l.NewLogger(l.ErrorLevel, &tree.Decorator{})
 	db, err := Open(database{config.Database{Driver: config.DriverSQLite, Name: filepath.Join(t.TempDir(), "x.db")}}, logger)
 	if err != nil {
 		t.Fatalf("sqlite: %v", err)

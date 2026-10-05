@@ -6,7 +6,7 @@ import (
 
 	"perceptrail/gontroller/internal/perceptor/builtin"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 )
 
 // The length of a video (or an animation), for the tile: seconds (exiftool -n; the

@@ -17,8 +17,8 @@ import (
 	"perceptrail/gontroller/internal/perceptor"
 	"perceptrail/gontroller/internal/web"
 
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
+	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/go-zap-decor/tree"
 )
 
 // The server: its modules, in the order they start. Each reads what it needs of
@@ -31,7 +31,7 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 	// Release: Info and up — no SQL (logged at Debug), no per-request lines
-	logs := l.NewLogger(cfg.LogLevel(), &decorators.GontrollerDecorator{})
+	logs := l.NewLogger(cfg.LogLevel(), &tree.Decorator{}).Named("App")
 	logs.Info("Configuration loaded", l.String("config", cfg.File()), l.String("mode", cfg.Mode()), l.String("data_dir", cfg.DataDir()))
 
 	db, err := model.Open(cfg, logs.Named("db"))

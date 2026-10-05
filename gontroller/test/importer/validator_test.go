@@ -15,8 +15,8 @@ import (
 	"perceptrail/gontroller/internal/model/dto"
 	"perceptrail/gontroller/internal/perceptor"
 
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
+	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/go-zap-decor/tree"
 )
 
 // One sqlite database for the package (model keeps a single connection); every test
@@ -38,7 +38,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
+	logger := l.NewLogger(l.ErrorLevel, &tree.Decorator{})
 	if testDB, err = model.Open(cfg, logger); err != nil {
 		panic(err)
 	}
@@ -59,7 +59,7 @@ func TestMain(m *testing.M) {
 // the groupers start empty, as on a restart.
 func scan(t *testing.T, root string) []string {
 	t.Helper()
-	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
+	logger := l.NewLogger(l.ErrorLevel, &tree.Decorator{})
 	start := time.Now()
 	if err := importer.New(pass{root: root, cache: t.TempDir()}, testDB, logger).Pass(t.Context()); err != nil {
 		t.Fatal(err)

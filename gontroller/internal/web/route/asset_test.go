@@ -7,8 +7,8 @@ import (
 	"perceptrail/gontroller/internal/library/apple/photokit"
 	"perceptrail/gontroller/internal/model/dto"
 
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
+	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/go-zap-decor/tree"
 )
 
 func TestClientAssetByRoles(t *testing.T) {
@@ -66,7 +66,7 @@ func TestClientAssetKind(t *testing.T) {
 // what moves
 func TestOnDemandInAsset(t *testing.T) {
 	lib := "/p/Photos Library.photoslibrary/originals/A/A1.heic"
-	photos := apple.New("/p", photokit.Library{}, nil, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	photos := apple.New("/p", photokit.Library{}, nil, l.NewLogger(l.FatalLevel, &tree.Decorator{}))
 	if od := toClientAsset(&dto.ItemDto{Guid: "A1", Kind: dto.KindPhoto, Path: lib}, nil, photos).OnDemand; od == nil ||
 		od.Medium != "/items/A1/rendition/medium?v="+contractVersion || od.Hover != "" || od.Original != "/items/A1/rendition/original?v="+contractVersion {
 		t.Errorf("photo, original in iCloud: %+v", od)

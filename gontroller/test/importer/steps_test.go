@@ -10,8 +10,8 @@ import (
 	"perceptrail/gontroller/internal/importer"
 	"perceptrail/gontroller/internal/model/dto"
 
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
+	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/go-zap-decor/tree"
 )
 
 // A JPEG imported alone is an item; when its RAW appears, the RAW is the source:
@@ -146,7 +146,7 @@ func TestExiftoolThatCannotStart(t *testing.T) {
 	root := t.TempDir()
 	a := filepath.Join(root, "a.jpg")
 	write(t, a, "never read")
-	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
+	logger := l.NewLogger(l.ErrorLevel, &tree.Decorator{})
 	err := importer.New(pass{root: root, cache: t.TempDir(), exiftool: filepath.Join(root, "no-exiftool")}, testDB, logger).Pass(t.Context())
 	if err == nil || !strings.Contains(err.Error(), "can't start") {
 		t.Fatalf("pass error %v, want exiftool's start failure", err)

@@ -6,7 +6,7 @@ import (
 
 	"perceptrail/gontroller/internal/model/dto"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 )
 
 // Embedded previews, the biggest kind first

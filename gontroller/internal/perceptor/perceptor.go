@@ -17,8 +17,8 @@ import (
 	"perceptrail/gontroller/internal/perceptor/duration"
 	"perceptrail/gontroller/internal/perceptor/size"
 
+	l "github.com/eggs-gd/go-zap-decor"
 	"github.com/eggs-gd/perceplib/api"
-	l "github.com/eggs-gd/perceplib/logger"
 )
 
 // Config: what the registry reads of the config — the external plugins' files,

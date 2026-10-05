@@ -25,9 +25,9 @@ import (
 
 	"github.com/eggs-gd/perceplib/api"
 
-	"github.com/eggs-gd/perceplib/chain"
+	chain "github.com/eggs-gd/go-chain"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 
 	_ "github.com/mattn/go-sqlite3"
 )

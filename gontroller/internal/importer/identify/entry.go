@@ -18,8 +18,8 @@ package identify
 import (
 	"perceptrail/gontroller/internal/model/dto"
 
-	"github.com/eggs-gd/perceplib/chain"
-	l "github.com/eggs-gd/perceplib/logger"
+	chain "github.com/eggs-gd/go-chain"
+	l "github.com/eggs-gd/go-zap-decor"
 )
 
 // Store: what identify reads and writes — its steps' needs

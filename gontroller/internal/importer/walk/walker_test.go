@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/eggs-gd/perceplib/chain"
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
+	chain "github.com/eggs-gd/go-chain"
+	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/go-zap-decor/tree"
 )
 
-var testLogger = l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
+var testLogger = l.NewLogger(l.ErrorLevel, &tree.Decorator{})
 
 func newTestWalker(root string) *Walker {
 	return &Walker{logger: testLogger, root: root}

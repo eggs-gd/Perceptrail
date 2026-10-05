@@ -3,7 +3,7 @@ package date
 import (
 	"perceptrail/gontroller/internal/perceptor/builtin"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 )
 
 type datesExtractor struct {

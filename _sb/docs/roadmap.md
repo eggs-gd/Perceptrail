@@ -5,7 +5,7 @@ module READMEs ([gontroller](../../gontroller/readme.md),
 [importer](../../gontroller/internal/importer/README.md),
 [library](../../gontroller/internal/library/README.md),
 [perceptors](../../perceptors/readme.md), [svebapp](../../svebapp/README.md),
-[perceplib chain](../../perceplib/chain/README.md)); why it is so and what was
+[go-chain](https://github.com/eggs-gd/go-chain)); why it is so and what was
 rejected — [findings.md](findings.md); the target flows — [`../puml`](../puml).
 This file holds only what is open and the designs not built yet.
 
@@ -27,7 +27,9 @@ One line each; the details are in the READMEs and the PRs.
   v0.5.2); the plugin tests under `-race` · #28 the gopls MCP over every Go module
   (`gopls.work`) · #29 the walk in pages, no write for an unchanged file; a
   library's own directories (Photos' database, caches) not walked. The PR #24
-  review is done.
+  review is done · #31 the chain and the logger as libraries
+  ([go-chain](https://github.com/eggs-gd/go-chain),
+  [go-zap-decor](https://github.com/eggs-gd/go-zap-decor)).
 
 ## Releases
 

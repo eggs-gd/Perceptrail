@@ -5,7 +5,7 @@ import (
 
 	"perceptrail/gontroller/internal/model/dto"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 )
 
 // An item's life: the rules about the library's data — when a group needs work,

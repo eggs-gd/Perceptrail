@@ -10,20 +10,13 @@ as a **git subtree** under `perceplib/`.
 | Package | What |
 |---|---|
 | `api` | perceptor contract (`Perceptor`, `ExifPerceptor` (+ `ExifTagger`: the tags it reads — only declared tags are read, `GetExif` of another is ""; + `Decorator(logger)`: its logic over one item, the host runs it as a step), every perceptor also navigates: `View` (its button) + `Order` (the gallery's sheet in its order, with sections); what it knows about an item: `Info` (facts for the info panel); its data: `Schema` + a typed `Store[T]` (`NewStore`, `Put`, `Get` — the host keeps the storage)), data types (`RawExif`, `Size`), item access interfaces (`RawItemR`, `ItemDataProvider/Editor`), `GetRatio` |
-| `chain` | steps connected by channels: `NewEntryPoint` (the one input), `NewDecorator`, `NewSwitch`, `NewSwitchDecorator` (each with an `…N` variant: n workers), `NewEnd`, `NewChainProcessor`; `Process` is a pass — an output closes once every step writing to it has returned (a `WaitGroup` per output); `ErrSkippedItem` (a skip, not an error) — [README](chain/README.md) |
 | `exif` | helpers for the values the host reads with exiftool `-n` (numbers as numbers): `Coordinates` (signed decimal degrees) + `CoordinateTags` to declare |
-| `logger` | zap wrapper with a custom console encoder |
-| `logger/decorators` | `GontrollerDecorator` — tree-style fields, SQL highlighting |
 
-### chain
-
-Each step is a goroutine reading one channel and writing another; its logic is
-plain Go (`EntryPoint`, `Decorator`, `Switcher`, `Consumer`). A pass (`Process`) ends from
-its input: the entry returns and its output closes, every step reads to the end,
-gives what it holds and returns, and an output closes once all its writers have
-returned (a `WaitGroup` per output) — so when `Process` returns, the pass is
-done. Errors go to the chain's error channel (a skip never does); a chain is a step
-too, so chains nest. Details: [`chain/README.md`](chain/README.md).
+The perceptor contract builds on two libraries of their own (2026-10-05, they were
+packages here): [go-chain](https://github.com/eggs-gd/go-chain) — a perceptor's
+logic is a `chain.Decorator` — and [go-zap-decor](https://github.com/eggs-gd/go-zap-decor),
+the logger a perceptor gets. A Go plugin and its host must use the very same
+versions of both.
 
 ## Working from Perceptrail (subtree)
 

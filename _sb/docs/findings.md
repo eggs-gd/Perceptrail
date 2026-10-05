@@ -371,6 +371,20 @@ Layout, the DB's facts and PhotoKit's behaviour: the
 
 ## Repository
 
+- **Libraries of their own** (2026-10-05): the chain, the logger and the write bus
+  are general — [go-chain](https://github.com/eggs-gd/go-chain),
+  [go-zap-decor](https://github.com/eggs-gd/go-zap-decor),
+  [go-pub-sub](https://github.com/eggs-gd/go-pub-sub) — public repos with their own
+  tags, as go-exiftool; perceplib keeps the perceptor contract (`api`, `exif`).
+  Their own reviews found bugs the packages had carried for months: a join written
+  by two sub-chains closed by the faster one (send on closed channel); a switch
+  index past its outputs lost silently; `DisableService` never matched (zap's name
+  carries the color codes); `With` fields bypassed the decorator (zap's core wrote
+  them inline, the promoted `Clone` dropped the decorating encoder); zero values
+  and durations misformatted; the stack trace between the line and its fields; a
+  race in `Named`. Go plugins still need the very same versions of these as the
+  host (perceplib's `api` imports go-chain and go-zap-decor).
+
 - **perceplib is a subtree, not a submodule**: detached HEADs, gontroller depending
   on uncommitted perceplib changes, two commits per change. It stays a separate
   public repo with tags for third-party perceptors; publishing is explicit

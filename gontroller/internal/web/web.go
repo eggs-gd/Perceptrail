@@ -15,7 +15,7 @@ import (
 	"perceptrail/gontroller/internal/perceptor"
 	"perceptrail/gontroller/internal/web/route"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
