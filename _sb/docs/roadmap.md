@@ -33,7 +33,10 @@ One line each; the details are in the READMEs and the PRs.
   the model's one writer and a read pool on
   [go-pub-sub](https://github.com/eggs-gd/go-pub-sub), every write a command
   (sync and asynchronous), `query` / `tx` / `Proxy`; the designs of the bus and the
-  work queue.
+  work queue · #32 events and commands: go-pub-sub v0.3.0 in layers
+  (events, commands, clients), the model on it; the model a file per subject (a
+  write and its command, not a rule), interfaces at their consumers; public first
+  in every file.
 
 ## Releases
 
