@@ -97,20 +97,26 @@ func TestRuleInsideRule(t *testing.T) {
 	}
 }
 
-// Asynchronous: submitted to a rule's topic, the result comes by subscription,
-// after the commit
-func TestTopic(t *testing.T) {
+// Asynchronous: submitted through a client, its own result comes back after the
+// commit; Done's listeners hear it too
+func TestCommand(t *testing.T) {
 	db := openTest(t)
-	created := db.CreateFilesTopic()
-	results := created.Subscribe(4)
-	defer results.Close()
-	id := created.Submit([]dto.ItemEntry{{Path: "/a.jpg", Name: "a.jpg"}, {Path: "/b.jpg", Name: "b.jpg"}})
-	r := <-results.C
-	if r.ID != id || r.Err != nil || len(r.Value) != 2 || r.Value[0].ID == 0 {
-		t.Fatalf("result %+v", r)
+	created := db.CreateFilesCommand()
+	var heard []pubsub.ID
+	created.Done().Subscribe(func(r pubsub.Result[[]*dto.FileDto]) { heard = append(heard, r.ID) })
+	files := created.Client(1)
+	id := files.Submit([]dto.ItemEntry{{Path: "/a.jpg", Name: "a.jpg"}, {Path: "/b.jpg", Name: "b.jpg"}})
+	files.Close()
+	for r := range files.Results() {
+		if r.ID != id || r.Err != nil || len(r.Value) != 2 || r.Value[0].ID == 0 {
+			t.Fatalf("result %+v", r)
+		}
+		if f, err := db.FindFile("/b.jpg"); err != nil || f == nil {
+			t.Errorf("not in the database after its result: %v, %v", f, err)
+		}
 	}
-	if f, err := db.FindFile("/b.jpg"); err != nil || f == nil {
-		t.Errorf("not in the database after its result: %v, %v", f, err)
+	if len(heard) != 1 || heard[0] != id {
+		t.Errorf("Done heard %v, want [%d]", heard, id)
 	}
 }
 
@@ -162,19 +168,20 @@ func testRule(db *Proxy, fn func(in *tx) error) (pubsub.None, error) {
 
 // A rule without a result is a Message: Submit its argument, a result per ID with
 // its error; without an argument, a Signal: Submit nothing
-func TestShapedTopics(t *testing.T) {
+func TestShapedCommands(t *testing.T) {
 	db := openTest(t)
-	meta := db.SetMetaTopic()
-	done := meta.Subscribe(1)
-	defer done.Close()
+	meta := db.SetMetaCommand().Client(1)
 	id := meta.Submit(MetaArgs{"k", "v"})
-	if r := <-done.C; r.ID != id || r.Err != nil {
-		t.Fatalf("result %+v", r)
+	meta.Close()
+	for r := range meta.Results() {
+		if r.ID != id || r.Err != nil {
+			t.Fatalf("result %+v", r)
+		}
 	}
 	if v, _ := db.GetMeta("k"); v != "v" {
 		t.Errorf("k = %q", v)
 	}
-	if n, err := db.UnignoreFilesTopic().Do(); n != 0 || err != nil {
+	if n, err := db.UnignoreFilesCommand().Do(); n != 0 || err != nil {
 		t.Errorf("unignore: %d, %v", n, err)
 	}
 }

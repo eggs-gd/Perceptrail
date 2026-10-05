@@ -298,7 +298,7 @@ an item):
   deadlines yet: a caller waiting for each result would pay one per call.
 - **A rule and its two faces** (the owner, after two wrong turns): a write rule is
   the unexported method (its debugged logic, untouched); the public method of its
-  name submits and waits (`Do`), its `…Topic()` submits and goes on. Rejected: the
+  name submits and waits (`Do`), its `…Command()` submits and goes on. Rejected: the
   public methods as mere pass-throughs to their twins with nothing to show for it
   (and a rule calling a public write that came back to the writer); folding the
   bodies into closures inside the public methods (the working methods taken apart,
@@ -307,15 +307,15 @@ an item):
   write called from a rule was caught at run time (a panic) where the types should
   not offer it. Now three types: `query` (the reads, over the pool or a
   transaction), `tx` (a rule's: the reads and the rules, no public writes), `Proxy`
-  (the reads over the pool, the public writes, the topics). Every rule takes one
+  (the reads over the pool, the public writes, their commands). Every rule takes one
   argument and gives one result (`pubsub.None` where there is none), so its method
-  on `tx` is its topic's function as it is; go-pub-sub's shapes (`Message`,
+  on `tx` is its command's function as it is; go-pub-sub's shapes (`Message`,
   `Signal`, `Trigger`) keep `None` out of a caller's hands.
 
 - **Who may write what is decided by who holds what** (the owner asked: a `Job`
   can run anything — "remove all tables"): `Job` is sealed (only an `Op` makes
   one), an `Op` needs the executor and the model keeps it to itself, so every rule
-  is the model's; steps and perceptors get `Topic`s — an argument for a given rule,
+  is the model's; steps and perceptors get `Command`s — an argument for a given rule,
   no transaction, no code. In one process that is discipline, not security: any
   code in it can open the database file; today's `.so` plugins could delete it.
   Only isolation (WebAssembly, a process) makes a plugin unable to — and what it
@@ -329,10 +329,12 @@ an item):
 - A batch timer (30 fps) for synchronous callers: one waiting in a loop pays the
   deadline per call (1000 validates × 33 ms). Kept as a class (Frame) once nobody
   waits synchronously.
-- A result channel per call; then `any` results in one stream per caller — a topic
+- A result channel per call; then `any` results in one stream per caller — a command
   per write rule (`Op[A, R]`) is typed and needs no routing.
 - Blocking or failing a subscriber that does not read: the writer never waits —
-  a lost subscription is its owner's loss.
+  a lost subscription is its owner's loss. (Superseded by go-pub-sub v0.3.0: a
+  `Client` counts its room at submit, so delivery never waits and nothing of its
+  own is lost — "Events and commands" below.)
 - A new primitive in `chain` for asynchronous steps: a step keeps its own
   operations; `chain` and everything above stay as they are.
 - A rule split into a read outside and a write through the bus: decisions on stale

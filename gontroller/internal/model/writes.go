@@ -10,11 +10,12 @@ import (
 
 // The model's writes. Each rule is the unexported method of its name on tx — read,
 // decide, write, in the writer's transaction; a rule calls other rules directly
-// (tx has no public writes). Each rule is a topic (an Op): the
-// public method of its name submits and waits for its own result (Do); its Topic
-// lets a caller submit and go on, picking its results from a subscription.
+// (tx has no public writes). Each rule is a command (an Op): the
+// public method of its name submits and waits for its own result (Do); its Command
+// lets a caller submit and go on — fire and forget, or its own results through a
+// Client — and its Done is every result, as an event.
 
-// Arguments and results of the rules with more than one: a topic carries one value
+// Arguments and results of the rules with more than one: a command carries one value
 type (
 	ValidateGroupArgs struct {
 		Files []*dto.FileDto
@@ -33,9 +34,9 @@ type (
 	}
 )
 
-// rules: every write rule as a topic, run by the writer. A rule takes one argument
-// and gives one result (pubsub.None where it has none): its method on tx is the
-// topic's function as it is.
+// rules: every write rule as a command, run by the writer. A rule takes one
+// argument and gives one result (pubsub.None where it has none): its method on tx
+// is the command's function as it is.
 type rules struct {
 	clearHashes   *pubsub.Op[*gorm.DB, pubsub.None, int64]
 	createItem    *pubsub.Op[*gorm.DB, *dto.FileDto, *dto.ItemDto]
@@ -81,14 +82,14 @@ func newRules(p *Proxy) rules {
 }
 
 // Each rule's two faces, in pairs: the public method of its name submits and waits
-// for its own result; its Topic submits and goes on, results by subscription — in
-// the view of its shape (a Message without a result, a Signal without an argument).
+// for its own result; its Command submits and goes on — in the view of its shape
+// (a Message without a result, a Signal without an argument).
 
 func (p *Proxy) ClearHashes() (int64, error) {
 	return p.rules.clearHashes.Do(pubsub.None{})
 }
 
-func (p *Proxy) ClearHashesTopic() pubsub.Signal[int64] {
+func (p *Proxy) ClearHashesCommand() pubsub.Signal[int64] {
 	return pubsub.SignalOf(p.rules.clearHashes)
 }
 
@@ -96,7 +97,7 @@ func (p *Proxy) CreateItem(file *dto.FileDto) (*dto.ItemDto, error) {
 	return p.rules.createItem.Do(file)
 }
 
-func (p *Proxy) CreateItemTopic() pubsub.Topic[*dto.FileDto, *dto.ItemDto] {
+func (p *Proxy) CreateItemCommand() pubsub.Command[*dto.FileDto, *dto.ItemDto] {
 	return p.rules.createItem
 }
 
@@ -104,7 +105,7 @@ func (p *Proxy) UpdateItem(item *dto.ItemDto) (*dto.ItemDto, error) {
 	return p.rules.updateItem.Do(item)
 }
 
-func (p *Proxy) UpdateItemTopic() pubsub.Topic[*dto.ItemDto, *dto.ItemDto] {
+func (p *Proxy) UpdateItemCommand() pubsub.Command[*dto.ItemDto, *dto.ItemDto] {
 	return p.rules.updateItem
 }
 
@@ -113,7 +114,7 @@ func (p *Proxy) DeleteItem(item *dto.ItemDto) error {
 	return err
 }
 
-func (p *Proxy) DeleteItemTopic() pubsub.Message[*dto.ItemDto] {
+func (p *Proxy) DeleteItemCommand() pubsub.Message[*dto.ItemDto] {
 	return pubsub.MessageOf(p.rules.deleteItem)
 }
 
@@ -122,7 +123,7 @@ func (p *Proxy) Gone(files []*dto.FileDto) (deleted, dirty int, err error) {
 	return r.Deleted, r.Dirty, err
 }
 
-func (p *Proxy) GoneTopic() pubsub.Topic[[]*dto.FileDto, GoneResult] {
+func (p *Proxy) GoneCommand() pubsub.Command[[]*dto.FileDto, GoneResult] {
 	return p.rules.gone
 }
 
@@ -131,7 +132,7 @@ func (p *Proxy) Ignore(files []*dto.FileDto) error {
 	return err
 }
 
-func (p *Proxy) IgnoreTopic() pubsub.Message[[]*dto.FileDto] {
+func (p *Proxy) IgnoreCommand() pubsub.Message[[]*dto.FileDto] {
 	return pubsub.MessageOf(p.rules.ignore)
 }
 
@@ -139,7 +140,7 @@ func (p *Proxy) ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, 
 	return p.rules.validateGroup.Do(ValidateGroupArgs{files, hash})
 }
 
-func (p *Proxy) ValidateGroupTopic() pubsub.Topic[ValidateGroupArgs, *dto.ItemDto] {
+func (p *Proxy) ValidateGroupCommand() pubsub.Command[ValidateGroupArgs, *dto.ItemDto] {
 	return p.rules.validateGroup
 }
 
@@ -147,7 +148,7 @@ func (p *Proxy) ValidateAsset(key string, files []*dto.FileDto, hash string) (*d
 	return p.rules.validateAsset.Do(ValidateAssetArgs{key, files, hash})
 }
 
-func (p *Proxy) ValidateAssetTopic() pubsub.Topic[ValidateAssetArgs, *dto.ItemDto] {
+func (p *Proxy) ValidateAssetCommand() pubsub.Command[ValidateAssetArgs, *dto.ItemDto] {
 	return p.rules.validateAsset
 }
 
@@ -155,7 +156,7 @@ func (p *Proxy) Publish(item *dto.ItemDto) (*dto.ItemDto, error) {
 	return p.rules.publish.Do(item)
 }
 
-func (p *Proxy) PublishTopic() pubsub.Topic[*dto.ItemDto, *dto.ItemDto] {
+func (p *Proxy) PublishCommand() pubsub.Command[*dto.ItemDto, *dto.ItemDto] {
 	return p.rules.publish
 }
 
@@ -163,7 +164,7 @@ func (p *Proxy) MarkRework(guids []string) (int64, error) {
 	return p.rules.markRework.Do(guids)
 }
 
-func (p *Proxy) MarkReworkTopic() pubsub.Topic[[]string, int64] {
+func (p *Proxy) MarkReworkCommand() pubsub.Command[[]string, int64] {
 	return p.rules.markRework
 }
 
@@ -171,7 +172,7 @@ func (p *Proxy) CreateFile(entry dto.ItemEntry) (*dto.FileDto, error) {
 	return p.rules.createFile.Do(entry)
 }
 
-func (p *Proxy) CreateFileTopic() pubsub.Topic[dto.ItemEntry, *dto.FileDto] {
+func (p *Proxy) CreateFileCommand() pubsub.Command[dto.ItemEntry, *dto.FileDto] {
 	return p.rules.createFile
 }
 
@@ -179,7 +180,7 @@ func (p *Proxy) UpdateFile(file *dto.FileDto) (*dto.FileDto, error) {
 	return p.rules.updateFile.Do(file)
 }
 
-func (p *Proxy) UpdateFileTopic() pubsub.Topic[*dto.FileDto, *dto.FileDto] {
+func (p *Proxy) UpdateFileCommand() pubsub.Command[*dto.FileDto, *dto.FileDto] {
 	return p.rules.updateFile
 }
 
@@ -187,7 +188,7 @@ func (p *Proxy) UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error) {
 	return p.rules.updateFiles.Do(files)
 }
 
-func (p *Proxy) UpdateFilesTopic() pubsub.Topic[[]*dto.FileDto, []*dto.FileDto] {
+func (p *Proxy) UpdateFilesCommand() pubsub.Command[[]*dto.FileDto, []*dto.FileDto] {
 	return p.rules.updateFiles
 }
 
@@ -195,7 +196,7 @@ func (p *Proxy) CreateFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error) {
 	return p.rules.createFiles.Do(entries)
 }
 
-func (p *Proxy) CreateFilesTopic() pubsub.Topic[[]dto.ItemEntry, []*dto.FileDto] {
+func (p *Proxy) CreateFilesCommand() pubsub.Command[[]dto.ItemEntry, []*dto.FileDto] {
 	return p.rules.createFiles
 }
 
@@ -204,7 +205,7 @@ func (p *Proxy) SaveStats(files []*dto.FileDto) error {
 	return err
 }
 
-func (p *Proxy) SaveStatsTopic() pubsub.Message[[]*dto.FileDto] {
+func (p *Proxy) SaveStatsCommand() pubsub.Message[[]*dto.FileDto] {
 	return pubsub.MessageOf(p.rules.saveStats)
 }
 
@@ -213,7 +214,7 @@ func (p *Proxy) DeleteFiles(files []*dto.FileDto) error {
 	return err
 }
 
-func (p *Proxy) DeleteFilesTopic() pubsub.Message[[]*dto.FileDto] {
+func (p *Proxy) DeleteFilesCommand() pubsub.Message[[]*dto.FileDto] {
 	return pubsub.MessageOf(p.rules.deleteFiles)
 }
 
@@ -221,7 +222,7 @@ func (p *Proxy) UnignoreFiles() (int64, error) {
 	return p.rules.unignoreFiles.Do(pubsub.None{})
 }
 
-func (p *Proxy) UnignoreFilesTopic() pubsub.Signal[int64] {
+func (p *Proxy) UnignoreFilesCommand() pubsub.Signal[int64] {
 	return pubsub.SignalOf(p.rules.unignoreFiles)
 }
 
@@ -230,11 +231,11 @@ func (p *Proxy) SetMeta(key, value string) error {
 	return err
 }
 
-func (p *Proxy) SetMetaTopic() pubsub.Message[MetaArgs] {
+func (p *Proxy) SetMetaCommand() pubsub.Message[MetaArgs] {
 	return pubsub.MessageOf(p.rules.setMeta)
 }
 
-// rule: a rule as a topic — it runs in the writer's transaction, under its own
+// rule: a rule as a command — it runs in the writer's transaction, under its own
 // savepoint (run)
 func rule[A, R any](p *Proxy, class pubsub.Class, fn func(t *tx, arg A) (R, error)) *pubsub.Op[*gorm.DB, A, R] {
 	return pubsub.New(p.writer, class, func(db *gorm.DB, arg A) (R, error) {
