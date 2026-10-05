@@ -24,9 +24,10 @@ type Config interface {
 // Proxy: the model — the library's data and its rules (ItemsApi, FilesApi, MetaApi
 // and the import's rules); one per run, opened in main and passed to who uses it.
 //
-// Reads go to a pool of read-only connections; writes to the one writer — a write
-// method's body is its rule, wrapped in write / written: each rule runs whole — read, decide, write — in the writer's transaction,
-// under its own savepoint, and its result comes back after the commit.
+// Reads go to a pool of read-only connections; writes to the one writer: a write
+// method's body is its rule (wrapped in write / written), run whole — read, decide,
+// write — in the writer's transaction under its own savepoint; its result comes
+// back after the commit.
 type Proxy struct {
 	logger *l.Logger
 	db     *gorm.DB // the readers' pool; in a rule, the writer's transaction
