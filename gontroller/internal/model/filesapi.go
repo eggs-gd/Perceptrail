@@ -25,14 +25,7 @@ type FilesApi interface {
 }
 
 func (p *Proxy) CreateFile(entry dto.ItemEntry) (*dto.FileDto, error) {
-	return written(p, func(q *Proxy) (*dto.FileDto, error) {
-		var file *dto.FileDto = &dto.FileDto{
-			GUID:      uuid.New().String(),
-			ItemEntry: entry,
-		}
-
-		return q.UpdateFile(file)
-	})
+	return p.UpdateFile(&dto.FileDto{GUID: uuid.New().String(), ItemEntry: entry})
 }
 
 func (p *Proxy) UpdateFile(file *dto.FileDto) (*dto.FileDto, error) {
@@ -86,15 +79,15 @@ func (p *Proxy) GetFilesByID(ids []uint) ([]*dto.FileDto, error) {
 // CreateFiles: the rows of new files, in one transaction; each gets its GUID and
 // is marked Changed (new work)
 func (p *Proxy) CreateFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error) {
-	return written(p, func(q *Proxy) ([]*dto.FileDto, error) {
-		if len(entries) == 0 {
-			return nil, nil
-		}
-		files := make([]*dto.FileDto, len(entries))
-		for i, e := range entries {
-			files[i] = &dto.FileDto{GUID: uuid.New().String(), ItemEntry: e, Changed: true}
-		}
-		return files, q.db.CreateInBatches(files, 200).Error
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	files := make([]*dto.FileDto, len(entries))
+	for i, e := range entries {
+		files[i] = &dto.FileDto{GUID: uuid.New().String(), ItemEntry: e, Changed: true}
+	}
+	return files, p.write(func(q *Proxy) error {
+		return q.db.CreateInBatches(files, 200).Error
 	})
 }
 
@@ -102,10 +95,10 @@ func (p *Proxy) CreateFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error) {
 // only those columns (the rest of a row may have moved on since the walk read
 // it)
 func (p *Proxy) SaveStats(files []*dto.FileDto) error {
+	if len(files) == 0 {
+		return nil
+	}
 	return p.write(func(q *Proxy) error {
-		if len(files) == 0 {
-			return nil
-		}
 		for _, f := range files {
 			err := q.db.Model(&dto.FileDto{}).Where("id = ?", f.ID).
 				UpdateColumns(map[string]any{"size": f.Size, "mod_time": f.ModTime, "changed": f.Changed}).Error
@@ -118,10 +111,10 @@ func (p *Proxy) SaveStats(files []*dto.FileDto) error {
 }
 
 func (p *Proxy) DeleteFiles(files []*dto.FileDto) error {
+	if len(files) == 0 {
+		return nil
+	}
 	return p.write(func(q *Proxy) error {
-		if len(files) == 0 {
-			return nil
-		}
 		return q.db.Delete(&files).Error
 	})
 }

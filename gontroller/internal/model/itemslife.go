@@ -121,14 +121,14 @@ func (p *Proxy) Gone(files []*dto.FileDto) (deleted, dirty int, err error) {
 // files are remembered as ignored — the gate skips them until a file changes — and
 // an item its main file used to be (it got corrupted) goes
 func (p *Proxy) Ignore(files []*dto.FileDto) error {
+	for _, f := range files {
+		f.SetIgnored()
+	}
 	return p.write(func(q *Proxy) error {
 		if item, err := q.GetItemByGuid(files[0].GUID); err == nil {
 			if err := q.DeleteItem(item); err != nil {
 				return err
 			}
-		}
-		for _, f := range files {
-			f.SetIgnored()
 		}
 		_, err := q.UpdateFiles(files)
 		return err
@@ -140,11 +140,11 @@ func (p *Proxy) Ignore(files []*dto.FileDto) error {
 // before is a sidecar now (a JPEG imported alone, then its RAW appeared): that item
 // goes. Then the main file's item by its path and fingerprint (ValidateFile).
 func (p *Proxy) ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
+	main := files[0]
+	for _, f := range files {
+		f.LinkTo(main)
+	}
 	return written(p, func(q *Proxy) (*dto.ItemDto, error) {
-		main := files[0]
-		for _, f := range files {
-			f.LinkTo(main)
-		}
 		for _, f := range files[1:] {
 			if old, err := q.GetItemByGuid(f.GUID); err == nil {
 				if err := q.DeleteItem(old); err != nil {
@@ -165,16 +165,18 @@ func (p *Proxy) ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, 
 // item of a file's own from before (the plain folder's grouper read the library's
 // originals) goes. Then the keyed item (validateKeyed).
 func (p *Proxy) ValidateAsset(key string, files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
+	for _, f := range files {
+		f.LinkToItem(key)
+	}
 	return written(p, func(q *Proxy) (*dto.ItemDto, error) {
 		for _, f := range files {
-			if f.GUID != key {
+			if f.GUID != key { // an item of the file's own from before goes
 				if old, err := q.GetItemByGuid(f.GUID); err == nil {
 					if err := q.DeleteItem(old); err != nil {
 						return nil, err
 					}
 				}
 			}
-			f.LinkToItem(key)
 		}
 		if _, err := q.UpdateFiles(files); err != nil {
 			return nil, err
@@ -186,14 +188,12 @@ func (p *Proxy) ValidateAsset(key string, files []*dto.FileDto, hash string) (*d
 // Publish: the item at the end of the import's cheap stage — Visible when it has
 // something the browser shows (a preview), else Waiting (the expensive stage later)
 func (p *Proxy) Publish(item *dto.ItemDto) (*dto.ItemDto, error) {
-	return written(p, func(q *Proxy) (*dto.ItemDto, error) {
-		item.Rework = false
-		item.State = dto.Waiting
-		if item.PreviewPath != "" {
-			item.State = dto.Visible
-		}
-		return q.UpdateItem(item)
-	})
+	item.Rework = false
+	item.State = dto.Waiting
+	if item.PreviewPath != "" {
+		item.State = dto.Visible
+	}
+	return p.UpdateItem(item)
 }
 
 // MarkRework: these items are processed again on the next walk (NeedsWork), their

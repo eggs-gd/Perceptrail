@@ -79,7 +79,12 @@ func connect(cfg Config, read bool, logger *l.Logger) (*gorm.DB, error) {
 
 // write: the rule runs in the writer's transaction and this returns after the
 // commit; called inside a rule, it runs right there, in the same transaction (the
-// writer is busy with the rule that called it)
+// writer is busy with the rule that called it).
+//
+// A rule holds only the work with the database: what is prepared in memory goes
+// before it; a method that only prepares and calls another write needs no rule of
+// its own (that write is one). A rule of several steps — read, decide, write — is
+// one: they happen together.
 func (p *Proxy) write(rule func(q *Proxy) error) error {
 	if p.inRule {
 		return rule(p)

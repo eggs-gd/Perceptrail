@@ -162,16 +162,13 @@ func (p *Proxy) GetItemsByHash(hash string) ([]*dto.ItemDto, error) {
 }
 
 func (p *Proxy) CreateItem(file *dto.FileDto) (*dto.ItemDto, error) {
-	return written(p, func(q *Proxy) (*dto.ItemDto, error) {
-		item := dto.ItemDto{
-			State:    dto.New,
-			Path:     file.Path,
-			Guid:     file.GUID,
-			MimeType: file.MimeType,
-		}
-
-		return q.UpdateItem(&item)
-	})
+	item := dto.ItemDto{
+		State:    dto.New,
+		Path:     file.Path,
+		Guid:     file.GUID,
+		MimeType: file.MimeType,
+	}
+	return p.UpdateItem(&item)
 }
 
 func (p *Proxy) UpdateItem(item *dto.ItemDto) (*dto.ItemDto, error) {
@@ -181,8 +178,8 @@ func (p *Proxy) UpdateItem(item *dto.ItemDto) (*dto.ItemDto, error) {
 }
 
 func (p *Proxy) DeleteItem(item *dto.ItemDto) error {
+	item.State = dto.Deleted
 	return p.write(func(q *Proxy) error {
-		item.State = dto.Deleted
 		if err := q.db.Save(item).Error; err != nil {
 			return err
 		}
