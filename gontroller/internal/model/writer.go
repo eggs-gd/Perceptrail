@@ -31,11 +31,10 @@ const maxBatch = 512
 type writer struct {
 	db    *gorm.DB
 	lanes [3]chan pubsub.Job[*gorm.DB] // by class: Now, Frame, Idle
-	quit  chan struct{}
+	quit  chan struct{}                // closed: no job is taken any more (closed())
 	done  chan struct{}
 
-	mu     sync.RWMutex // closed is set before the loop is told to stop: no job slips in after it
-	closed bool
+	mu sync.RWMutex // senders read-lock; quit is closed under the write lock, so no job slips in after it
 }
 
 func newWriter(db *gorm.DB) *writer {
@@ -52,23 +51,31 @@ func newWriter(db *gorm.DB) *writer {
 func (w *writer) Enqueue(job pubsub.Job[*gorm.DB]) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
-	if w.closed {
+	if w.closed() {
 		job.Done(errClosed)
 		return
 	}
 	w.lanes[lane(job.Class())] <- job
 }
 
+// closed: the writer takes no job any more
+func (w *writer) closed() bool {
+	select {
+	case <-w.quit:
+		return true
+	default:
+		return false
+	}
+}
+
 // close: no job is taken any more; the queued ones are written, then the writer
 // stops
 func (w *writer) close() {
 	w.mu.Lock()
-	already := w.closed
-	w.closed = true
-	w.mu.Unlock()
-	if !already {
+	if !w.closed() {
 		close(w.quit)
 	}
+	w.mu.Unlock()
 	<-w.done
 }
 

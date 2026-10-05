@@ -162,8 +162,7 @@ the resources differ (IO and exiftool, CPU / GPU, ML); roles later
 ## Smaller open items
 
 - [ ] **Booleans set by hand** (AGENTS.md "Code Style"), each where it belongs:
-      - small, with the next change of their code: `model.writer.closed` → "`quit`
-        is closed"; `perceptor.loaded` → `sync.Once` or the registry itself;
+      - small, with the next change of their code: `perceptor.loaded` → `sync.Once` or the registry itself;
         `apple.asset.sent` → a sent group leaves the map; `walk.Result.Complete` →
         `Result.Err` (why it is incomplete), `Complete()` = no error;
       - `dto.FileDto.Changed` (stored) → the stat the group was validated with,
@@ -239,49 +238,14 @@ A stable core first.
 - Several codecs / formats at once (`codecs: [h264, av1]`, `formats: [avif, webp]`)
   — the asset contract is ready, but each is another encode: N× disk and time.
 
-## Design: the write bus
+## Design: the write bus — what is left
 
-One writer for SQLite, no lock errors whatever writes; every write is asynchronous
-inside, a step may still look synchronous outside. Measured, and why each choice:
-findings "The write bus".
+Built: one writer, a read pool, every write rule a topic — the
+[model README](../../gontroller/internal/model/README.md). Why, measured:
+findings "The write bus". Open:
 
-- **One write connection, owned by one goroutine; reads from a pool** (WAL lets
-  readers run beside the writer). Today everything shares one connection, so reads
-  queue behind writes — with render, import, web and ML writing, that is the limit,
-  not SQLite.
-- **An operation is a model rule, whole**: read → decide → write inside the
-  writer's transaction (`ValidateGroup`, `Gone`, `NeedsWork` keep the atomicity the
-  one connection gives now). Not "an UPDATE": a rule read outside and written
-  inside would decide on stale data.
-- **[go-pub-sub](https://github.com/eggs-gd/go-pub-sub)** (a library of its own,
-  `pubsub`): one write rule = one topic, a typed value —
-
-  ```go
-  type Op[T, A, R any] struct{ … }              // T: the executor's env (here the transaction); its class fixed when made
-  func (o *Op[T, A, R]) Submit(arg A) ID        // queued: never waits for the work, may wait for room
-  func (o *Op[T, A, R]) Subscribe(n int) *Sub[R] // every result of this rule; filter yours by ID
-  func (o *Op[T, A, R]) Do(arg A) (R, error)    // the sync wrapper: submit, wait for your own
-  type Result[R any] struct{ ID ID; Value R; Err error }
-  type Topic[A, R any] interface{ Submit; Subscribe; Do } // what a step sees
-  ```
-
-  The library does not know who runs an operation: the model gives the executor
-  (its writer) and keeps it to itself; `Job` is sealed — only an `Op` makes one — so
-  every rule is the model's, and the others get `Topic`s.
-- **Perceptors never see the bus**: the methods of the core a perceptor may call
-  are interfaces in `perceplib/api`, declared there by their consumer — each
-  synchronous, or asynchronous with a subscription; the core implements them (with
-  the bus or anything else). A perceptor can do only what that list offers. Added
-  with the first method a perceptor needs (none yet: values go through
-  `Store.Put` in the chain).
-- **Delivery never blocks the writer**: a subscriber's buffer full, or a
-  subscriber gone — its loss. Results reach a subscriber in submit order (one class
-  = one FIFO lane); across subscribers nothing is ordered.
-- **A result only after the commit**: what a receiver reads next is in the
-  database. Each operation of a batch under its own `SAVEPOINT`: a failing one rolls
-  back alone, the batch commits.
-- **Classes — how long a rule tolerates waiting for a batch**, a property of the
-  rule, not chosen by the caller:
+- **The classes' deadlines** — how long a rule tolerates waiting for a batch, a
+  property of the rule:
 
   | class | waits | for |
   |---|---|---|
@@ -289,16 +253,17 @@ findings "The write bus".
   | **Frame** | ~33 ms or ~1000 operations | the import's steps, the walk, perceptor values |
   | **Idle** | ~250 ms or ~5000, only while nothing else waits | `Reconcile` / prune, maintenance |
 
-  Nobody waits on a deadline synchronously (a sync caller in a loop would pay it per
-  call): the deadline only delays a result, throughput comes from many in flight.
-  A transaction is cut at ~20–50 ms of work, so Now never waits longer.
-- **Steps stay as they are**: how a step handles its operations is its own
-  business — the walk submits (Frame) and sends a file on when its result came, so
-  its pages go (the writer batches); a step that needs the answer for its output
-  (validate: the item a group became) waits for it inside, or keeps its own queue.
-  `chain` does not change; nothing above the step does.
-- **`synchronous=NORMAL`** with WAL: a power loss may lose the last transactions,
-  never corrupts; our data comes back from the disk anyway.
+  Only for callers that are asynchronous: one waiting for each result in a loop
+  would pay the deadline per call. A transaction cut at ~20–50 ms of work, so Now
+  never waits longer.
+- **The callers asynchronous**, each its own way (`chain` and everything above the
+  step unchanged): the walk submits and sends a file on when its result came — its
+  pages go; a step that needs the answer for its output (validate: the item a group
+  became) waits inside, or keeps its own queue.
+- **Perceptors never see the bus**: the core methods a perceptor may call become
+  interfaces in `perceplib/api`, declared by their consumer — synchronous, or
+  asynchronous with a subscription; the core implements them. Added with the first
+  method a perceptor needs (none yet: values go through `Store.Put` in the chain).
 - Later, from qwr's ideas: error classes (lock / constraint / schema) and a
   dead-letter list for operations that failed for good.
 
