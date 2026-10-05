@@ -356,6 +356,28 @@ an item):
   backoff written into foreign files); rows of "to do" (someone must remember to
   enqueue; a config change or a new version would not enqueue anything).
 
+## Events and commands (2026-10-05, design)
+
+Design: roadmap "Design: events and commands". The owner's line: the library is a
+mechanism; how to handle an event is the product's, per consumer (the walk a
+transit, render bounded by its workers) — patterns go to docs and examples.
+
+**Rejected on the way:**
+
+- The `Op` as command and broadcast at once: a caller's results mixed with everyone
+  else's in its subscription, picked by ID — and lost when foreign traffic filled
+  its buffer. A command's results go to its caller (a client), a broadcast is an
+  event.
+- Delivery "policies" (drop / latest / block) as a library enum: a capacity of the
+  subscriber's channel dressed up as an API.
+- A channel in the subscription API (`Subscribe(chan<- E)`): how a listener handles
+  an event is its own — a channel is one way of many.
+- A queue and a goroutine per subscription inside the library, so the publisher
+  never waits: it hides the backlog. Synchronous dispatch with thin listeners — the
+  rule of every UI engine — and the bus catching a panic and logging a slow listener.
+- Kubernetes-style keyed work queues in the library: needed there because strangers
+  write the handlers of a public product; here an example in the docs.
+
 ## Apple Photos
 
 Layout, the DB's facts and PhotoKit's behaviour: the

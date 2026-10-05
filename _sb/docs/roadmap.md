@@ -257,15 +257,64 @@ findings "The write bus". Open:
   would pay the deadline per call. A transaction cut at ~20–50 ms of work, so Now
   never waits longer.
 - **The callers asynchronous**, each its own way (`chain` and everything above the
-  step unchanged): the walk submits and sends a file on when its result came — its
-  pages go; a step that needs the answer for its output (validate: the item a group
-  became) waits inside, or keeps its own queue.
+  step unchanged) — on the command layer's clients ("Design: events and commands"):
+  the walk submits and sends a file on when its result came — its pages go; a step
+  that needs the answer for its output (validate: the item a group became) waits
+  inside, or keeps its own queue.
 - **Perceptors never see the bus**: the core methods a perceptor may call become
   interfaces in `perceplib/api`, declared by their consumer — synchronous, or
   asynchronous with a subscription; the core implements them. Added with the first
   method a perceptor needs (none yet: values go through `Store.Put` in the chain).
 - Later, from qwr's ideas: error classes (lock / constraint / schema) and a
   dead-letter list for operations that failed for good.
+
+## Design: events and commands (go-pub-sub, the next version)
+
+go-pub-sub's `Op` today is a command and a broadcast at once: a subscriber gets
+everyone's results and picks its own by ID. Laid out in layers instead — the
+library stays a mechanism, how to handle an event is the product's decision (its
+patterns go to the library's docs and examples, not its API):
+
+- **Event** — `Topic[E]`: `Publish(e)` and `Subscribe(fn func(E)) *Sub`, `Close`.
+  For the publisher a black hole: nobody subscribed — nothing happens; subscribed —
+  each one's `fn` is called, in order, right there (synchronous dispatch, as in UI
+  engines). The contract: a listener is thin — it hands work off (to its channel,
+  its queue, its workers) and returns. The bus recovers a listener's panic and logs
+  one that took too long, so a broken contract is seen, not guessed. No channels, no
+  queues, no capacities in the API: what a listener does with an event is its own.
+- **Command** — `Op[T, A, R]` run by an executor (the model's writer): `Do(a)`
+  waits for its own result; a `Client` gets **only its own** results — no foreign
+  traffic, so nothing of its own is lost — and counts its room when it submits
+  (`Submit` waits while its results are not read). The shapes stay (`Message`,
+  `Signal`, `Trigger`).
+- **The bridge** — a command that finished is an event: `op.Done()` is a
+  `Topic[Result[R]]` anyone may listen to without submitting.
+
+**Domain events, after the commit.** What others react to is not a rule's raw
+result but a fact of the library: `ItemPublished{GUID, State}`, `ItemGone{GUID}`. A
+rule emits it inside its transaction (`tx.emit`); the writer publishes it only
+after the commit, and a rule rolled back to its savepoint takes its events with it
+(an outbox in memory — no one hears of a write that is not there). Across processes
+later (goMLer on another box): the same `Topic` over another transport (NATS,
+MQTT — `ML Flow.puml`), or a persistent outbox if an event must outlive a restart.
+
+**The database is the truth, an event is a hint** (level-triggered): an event says
+"look", the listener reads the current state and acts on it; a missed, doubled or
+late event changes nothing — the polling stays as the safety net, the event only
+cuts the wait. Each consumer handles it its own way:
+
+- **the walk** — a transit: submits through its clients, waits for its results,
+  sends a file on; its buffer is the results not yet back — its own business. When
+  it waits on the first, the rest wait too and go together once the batch commits:
+  that is the batching;
+- **render / transcode** — bounded on purpose: an event only wakes it; its pace is
+  its workers (CPU cores, GPU slots), each taking its next item from `work`;
+- **the web** — later, a push to the clients on `ItemPublished` instead of their
+  polling `/items`.
+
+Steps: go-pub-sub — the layers (`Topic`, `Client`, `Done`), docs with the handling
+patterns (a wake-up, a keyed queue, workers) as examples; then the model's domain
+events (`tx.emit`); then the walk on clients; render wakes on `ItemPublished`.
 
 ## Design: the work queue
 
