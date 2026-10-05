@@ -26,14 +26,13 @@ type Config interface {
 // Reads go to a pool of read-only connections; writes to the one writer: each write
 // (writes.go) runs whole — read, decide, write — in the writer's transaction, under
 // its own savepoint; its result comes back after the commit — waited for by the
-// public method of its name, or by subscription to its topic.
+// public method of its name, or through its command.
 type Proxy struct {
 	query  // reads, over the readers' pool
 	logger *l.Logger
 
 	writer   *writer
-	commands          // every write as a command (writes.go)
-	writes   *gorm.DB // the writer's connection (closed with the model)
+	commands // every write as a command (writes.go)
 }
 
 // query: the model's reads over a connection — the readers' pool (Proxy), or a
@@ -65,7 +64,7 @@ func Open(cfg Config, logger *l.Logger) (*Proxy, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &Proxy{query: query{reads}, logger: logger, writes: writes, writer: newWriter(writes)}
+	p := &Proxy{query: query{reads}, logger: logger, writer: newWriter(writes)}
 	p.commands = newCommands(p)
 	return p, nil
 }
@@ -111,7 +110,7 @@ func (p *Proxy) run(db *gorm.DB, write func(*tx) error) (err error) {
 func (p *Proxy) Close() error {
 	p.writer.close()
 	readers := closeDB(p.db)
-	return errors.Join(readers, closeDB(p.writes))
+	return errors.Join(readers, closeDB(p.writer.db))
 }
 
 func closeDB(db *gorm.DB) error {

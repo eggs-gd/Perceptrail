@@ -156,7 +156,7 @@ func TestCloseLeavesNoJournal(t *testing.T) {
 func TestSynchronousNormal(t *testing.T) {
 	db := openTest(t)
 	var mode int
-	if err := db.writes.Raw("PRAGMA synchronous").Scan(&mode).Error; err != nil || mode != 1 {
+	if err := db.writer.db.Raw("PRAGMA synchronous").Scan(&mode).Error; err != nil || mode != 1 {
 		t.Errorf("synchronous = %d, %v", mode, err)
 	}
 }
