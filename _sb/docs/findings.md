@@ -302,7 +302,15 @@ an item):
   public methods as mere pass-throughs to their twins with nothing to show for it
   (and a rule calling a public write that came back to the writer); folding the
   bodies into closures inside the public methods (the working methods taken apart,
-  to be taken apart again for the asynchronous side).
+  to be taken apart again for the asynchronous side). Then one type playing two roles: the
+  `Proxy` was the model and, with an `inRule` flag, a rule's transaction — a public
+  write called from a rule was caught at run time (a panic) where the types should
+  not offer it. Now three types: `query` (the reads, over the pool or a
+  transaction), `tx` (a rule's: the reads and the rules, no public writes), `Proxy`
+  (the reads over the pool, the public writes, the topics). Every rule takes one
+  argument and gives one result (`pubsub.None` where there is none), so its method
+  on `tx` is its topic's function as it is; go-pub-sub's shapes (`Message`,
+  `Signal`, `Trigger`) keep `None` out of a caller's hands.
 
 - **Who may write what is decided by who holds what** (the owner asked: a `Job`
   can run anything — "remove all tables"): `Job` is sealed (only an `Op` makes

@@ -98,11 +98,13 @@ package's own unit tests stay next to it.
 ## Worth knowing
 
 - SQLite: WAL, `synchronous=NORMAL`; **one writer connection** and a read-only
-  pool. Every write is a rule (`internal/model/writes.go`): the unexported method
-  of its name, run in the writer's transaction under its own savepoint; the public
-  method waits for its result, its `…Topic()` gives it asynchronously (submit,
-  subscribe). A rule calls other rules directly — a public write inside a rule
-  would wait for the writer that runs it, so it panics (an error, not a hang).
+  pool. The reads are `query`'s (over the pool for `Proxy`, over the transaction
+  for a rule). Every write is a rule (`internal/model/writes.go`): an unexported
+  method of `tx`, run in the writer's transaction under its own savepoint; the
+  public method of its name waits for its result, its `…Topic()` gives it
+  asynchronously, in the view of its shape. `tx` has no public writes: a rule
+  calls other rules directly — it cannot call a write that would wait for the
+  writer running it.
 - `internal/transcoder/images` does not build without libvips (`pkg-config vips`); it is
   not imported by `main`, so the server is unaffected. Run vet/tests without it:
   `go test $(go list ./... | grep -v transcoder/images)`.

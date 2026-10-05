@@ -28,13 +28,26 @@ type Config interface {
 // its own savepoint; its result comes back after the commit — waited for by the
 // public method of its name, or by subscription to its topic.
 type Proxy struct {
+	query  // reads, over the readers' pool
 	logger *l.Logger
-	db     *gorm.DB // the readers' pool; in a rule, the writer's transaction
-	inRule bool     // bound to the writer's transaction (a rule's Proxy)
 
 	writer *writer
 	rules  rules    // every write rule as a topic (writes.go)
 	writes *gorm.DB // the writer's connection (closed with the model)
+}
+
+// query: the model's reads over a connection — the readers' pool (Proxy), or a
+// rule's transaction (tx)
+type query struct {
+	db *gorm.DB
+}
+
+// tx: what a rule runs on — the reads and the rules themselves, over the writer's
+// transaction. It has no public writes: a rule calls other rules directly, in the
+// same transaction (a public write would wait for the writer that runs it).
+type tx struct {
+	query
+	logger *l.Logger
 }
 
 // Open connects to the database of the config — the writer, then the readers —
@@ -52,7 +65,7 @@ func Open(cfg Config, logger *l.Logger) (*Proxy, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &Proxy{logger: logger, db: reads, writes: writes, writer: newWriter(writes)}
+	p := &Proxy{query: query{reads}, logger: logger, writes: writes, writer: newWriter(writes)}
 	p.rules = newRules(p)
 	return p, nil
 }
@@ -76,8 +89,8 @@ func connect(cfg Config, read bool, logger *l.Logger) (*gorm.DB, error) {
 
 // run: one rule in the writer's transaction, under its own savepoint — a failing
 // rule (an error, a panic) rolls back alone, the batch commits
-func (p *Proxy) run(tx *gorm.DB, rule func(*Proxy) error) (err error) {
-	if err := tx.SavePoint("rule").Error; err != nil {
+func (p *Proxy) run(db *gorm.DB, rule func(*tx) error) (err error) {
+	if err := db.SavePoint("rule").Error; err != nil {
 		return err
 	}
 	defer func() {
@@ -85,11 +98,11 @@ func (p *Proxy) run(tx *gorm.DB, rule func(*Proxy) error) (err error) {
 			err = fmt.Errorf("model: a rule panicked: %v", r)
 		}
 		if err != nil {
-			tx.RollbackTo("rule")
+			db.RollbackTo("rule")
 		}
-		tx.Exec("RELEASE SAVEPOINT rule")
+		db.Exec("RELEASE SAVEPOINT rule")
 	}()
-	return rule(&Proxy{logger: p.logger, db: tx, inRule: true})
+	return rule(&tx{query: query{db}, logger: p.logger})
 }
 
 // Close: the writer writes what is queued and stops; the readers close, then the

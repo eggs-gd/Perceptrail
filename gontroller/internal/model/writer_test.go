@@ -48,16 +48,16 @@ func TestFailingRuleAlone(t *testing.T) {
 			key := fmt.Sprint("k", i)
 			switch i {
 			case 7:
-				_, err := testRule(db, func(q *Proxy) error {
-					q.setMeta(key, "half")
+				_, err := testRule(db, func(in *tx) error {
+					in.setMeta(MetaArgs{key, "half"})
 					return errors.New("a rule gives up")
 				})
 				if err == nil {
 					t.Error("a failing rule returned nil")
 				}
 			case 13:
-				_, err := testRule(db, func(q *Proxy) error {
-					q.setMeta(key, "half")
+				_, err := testRule(db, func(in *tx) error {
+					in.setMeta(MetaArgs{key, "half"})
 					panic("a rule breaks")
 				})
 				if err == nil {
@@ -79,13 +79,12 @@ func TestFailingRuleAlone(t *testing.T) {
 	}
 }
 
-// A rule calls another rule directly — same transaction, rolled back with it; a
-// public write inside a rule is a mistake (the writer would wait for itself): an
-// error, not a hang
+// A rule calls another rule directly — same transaction, rolled back with it (a
+// public write cannot be called there: tx has none)
 func TestRuleInsideRule(t *testing.T) {
 	db := openTest(t)
-	_, err := testRule(db, func(q *Proxy) error {
-		if err := q.setMeta("inner", "x"); err != nil {
+	_, err := testRule(db, func(in *tx) error {
+		if _, err := in.setMeta(MetaArgs{"inner", "x"}); err != nil {
 			return err
 		}
 		return errors.New("the rule fails after it")
@@ -95,9 +94,6 @@ func TestRuleInsideRule(t *testing.T) {
 	}
 	if v, _ := db.GetMeta("inner"); v != "" {
 		t.Errorf("the inner write outlived its rule: %q", v)
-	}
-	if _, err := testRule(db, func(q *Proxy) error { return q.SetMeta("public", "x") }); err == nil {
-		t.Error("a public write inside a rule did not fail")
 	}
 }
 
@@ -160,6 +156,25 @@ func TestSynchronousNormal(t *testing.T) {
 }
 
 // testRule: a rule of the test's own, run as a write
-func testRule(db *Proxy, fn func(q *Proxy) error) (struct{}, error) {
-	return rule(db, pubsub.Frame, func(q *Proxy, _ struct{}) (struct{}, error) { return struct{}{}, fn(q) }).Do(struct{}{})
+func testRule(db *Proxy, fn func(in *tx) error) (pubsub.None, error) {
+	return rule(db, pubsub.Frame, func(in *tx, _ pubsub.None) (pubsub.None, error) { return pubsub.None{}, fn(in) }).Do(pubsub.None{})
+}
+
+// A rule without a result is a Message: Submit its argument, a result per ID with
+// its error; without an argument, a Signal: Submit nothing
+func TestShapedTopics(t *testing.T) {
+	db := openTest(t)
+	meta := db.SetMetaTopic()
+	done := meta.Subscribe(1)
+	defer done.Close()
+	id := meta.Submit(MetaArgs{"k", "v"})
+	if r := <-done.C; r.ID != id || r.Err != nil {
+		t.Fatalf("result %+v", r)
+	}
+	if v, _ := db.GetMeta("k"); v != "v" {
+		t.Errorf("k = %q", v)
+	}
+	if n, err := db.UnignoreFilesTopic().Do(); n != 0 || err != nil {
+		t.Errorf("unignore: %d, %v", n, err)
+	}
 }

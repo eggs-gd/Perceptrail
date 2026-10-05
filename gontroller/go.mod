@@ -5,6 +5,7 @@ go 1.27.1
 require (
 	github.com/eggs-gd/go-chain v0.1.0
 	github.com/eggs-gd/go-exiftool v0.5.2
+	github.com/eggs-gd/go-pub-sub v0.2.0
 	github.com/eggs-gd/go-zap-decor v0.1.0
 	github.com/eggs-gd/perceplib v0.0.6
 	github.com/google/uuid v1.6.0
@@ -19,7 +20,6 @@ require (
 )
 
 require (
-	github.com/eggs-gd/go-pub-sub v0.1.0 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
 	github.com/labstack/gommon v0.5.0 // indirect
