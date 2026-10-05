@@ -94,16 +94,31 @@ func newRules(p *Proxy) rules {
 	}
 }
 
-// Synchronous: submit and wait for its own result
+// Each rule's two faces, in pairs: the public method of its name submits and waits
+// for its own result; its Topic submits and goes on, results by subscription.
 
-func (p *Proxy) ClearHashes() (int64, error) { return do(p, p.rules.clearHashes, struct{}{}) }
+func (p *Proxy) ClearHashes() (int64, error) {
+	return do(p, p.rules.clearHashes, struct{}{})
+}
+
+func (p *Proxy) ClearHashesTopic() pubsub.Topic[struct{}, int64] {
+	return p.rules.clearHashes
+}
 
 func (p *Proxy) CreateItem(file *dto.FileDto) (*dto.ItemDto, error) {
 	return do(p, p.rules.createItem, file)
 }
 
+func (p *Proxy) CreateItemTopic() pubsub.Topic[*dto.FileDto, *dto.ItemDto] {
+	return p.rules.createItem
+}
+
 func (p *Proxy) UpdateItem(item *dto.ItemDto) (*dto.ItemDto, error) {
 	return do(p, p.rules.updateItem, item)
+}
+
+func (p *Proxy) UpdateItemTopic() pubsub.Topic[*dto.ItemDto, *dto.ItemDto] {
+	return p.rules.updateItem
 }
 
 func (p *Proxy) DeleteItem(item *dto.ItemDto) error {
@@ -111,9 +126,17 @@ func (p *Proxy) DeleteItem(item *dto.ItemDto) error {
 	return err
 }
 
+func (p *Proxy) DeleteItemTopic() pubsub.Topic[*dto.ItemDto, struct{}] {
+	return p.rules.deleteItem
+}
+
 func (p *Proxy) Gone(files []*dto.FileDto) (deleted, dirty int, err error) {
 	r, err := do(p, p.rules.gone, files)
 	return r.Deleted, r.Dirty, err
+}
+
+func (p *Proxy) GoneTopic() pubsub.Topic[[]*dto.FileDto, GoneResult] {
+	return p.rules.gone
 }
 
 func (p *Proxy) Ignore(files []*dto.FileDto) error {
@@ -121,34 +144,72 @@ func (p *Proxy) Ignore(files []*dto.FileDto) error {
 	return err
 }
 
+func (p *Proxy) IgnoreTopic() pubsub.Topic[[]*dto.FileDto, struct{}] {
+	return p.rules.ignore
+}
+
 func (p *Proxy) ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
 	return do(p, p.rules.validateGroup, ValidateGroupArgs{files, hash})
+}
+
+func (p *Proxy) ValidateGroupTopic() pubsub.Topic[ValidateGroupArgs, *dto.ItemDto] {
+	return p.rules.validateGroup
 }
 
 func (p *Proxy) ValidateAsset(key string, files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
 	return do(p, p.rules.validateAsset, ValidateAssetArgs{key, files, hash})
 }
 
+func (p *Proxy) ValidateAssetTopic() pubsub.Topic[ValidateAssetArgs, *dto.ItemDto] {
+	return p.rules.validateAsset
+}
+
 func (p *Proxy) Publish(item *dto.ItemDto) (*dto.ItemDto, error) {
 	return do(p, p.rules.publish, item)
 }
 
-func (p *Proxy) MarkRework(guids []string) (int64, error) { return do(p, p.rules.markRework, guids) }
+func (p *Proxy) PublishTopic() pubsub.Topic[*dto.ItemDto, *dto.ItemDto] {
+	return p.rules.publish
+}
+
+func (p *Proxy) MarkRework(guids []string) (int64, error) {
+	return do(p, p.rules.markRework, guids)
+}
+
+func (p *Proxy) MarkReworkTopic() pubsub.Topic[[]string, int64] {
+	return p.rules.markRework
+}
 
 func (p *Proxy) CreateFile(entry dto.ItemEntry) (*dto.FileDto, error) {
 	return do(p, p.rules.createFile, entry)
+}
+
+func (p *Proxy) CreateFileTopic() pubsub.Topic[dto.ItemEntry, *dto.FileDto] {
+	return p.rules.createFile
 }
 
 func (p *Proxy) UpdateFile(file *dto.FileDto) (*dto.FileDto, error) {
 	return do(p, p.rules.updateFile, file)
 }
 
+func (p *Proxy) UpdateFileTopic() pubsub.Topic[*dto.FileDto, *dto.FileDto] {
+	return p.rules.updateFile
+}
+
 func (p *Proxy) UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error) {
 	return do(p, p.rules.updateFiles, files)
 }
 
+func (p *Proxy) UpdateFilesTopic() pubsub.Topic[[]*dto.FileDto, []*dto.FileDto] {
+	return p.rules.updateFiles
+}
+
 func (p *Proxy) CreateFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error) {
 	return do(p, p.rules.createFiles, entries)
+}
+
+func (p *Proxy) CreateFilesTopic() pubsub.Topic[[]dto.ItemEntry, []*dto.FileDto] {
+	return p.rules.createFiles
 }
 
 func (p *Proxy) SaveStats(files []*dto.FileDto) error {
@@ -156,56 +217,35 @@ func (p *Proxy) SaveStats(files []*dto.FileDto) error {
 	return err
 }
 
+func (p *Proxy) SaveStatsTopic() pubsub.Topic[[]*dto.FileDto, struct{}] {
+	return p.rules.saveStats
+}
+
 func (p *Proxy) DeleteFiles(files []*dto.FileDto) error {
 	_, err := do(p, p.rules.deleteFiles, files)
 	return err
 }
 
-func (p *Proxy) UnignoreFiles() (int64, error) { return do(p, p.rules.unignoreFiles, struct{}{}) }
+func (p *Proxy) DeleteFilesTopic() pubsub.Topic[[]*dto.FileDto, struct{}] {
+	return p.rules.deleteFiles
+}
+
+func (p *Proxy) UnignoreFiles() (int64, error) {
+	return do(p, p.rules.unignoreFiles, struct{}{})
+}
+
+func (p *Proxy) UnignoreFilesTopic() pubsub.Topic[struct{}, int64] {
+	return p.rules.unignoreFiles
+}
 
 func (p *Proxy) SetMeta(key, value string) error {
 	_, err := do(p, p.rules.setMeta, MetaArgs{key, value})
 	return err
 }
 
-// Asynchronous: the rule's topic — submit and go on, results by subscription
-
-func (p *Proxy) ClearHashesTopic() pubsub.Topic[struct{}, int64] { return p.rules.clearHashes }
-func (p *Proxy) CreateItemTopic() pubsub.Topic[*dto.FileDto, *dto.ItemDto] {
-	return p.rules.createItem
+func (p *Proxy) SetMetaTopic() pubsub.Topic[MetaArgs, struct{}] {
+	return p.rules.setMeta
 }
-func (p *Proxy) UpdateItemTopic() pubsub.Topic[*dto.ItemDto, *dto.ItemDto] {
-	return p.rules.updateItem
-}
-func (p *Proxy) DeleteItemTopic() pubsub.Topic[*dto.ItemDto, struct{}] { return p.rules.deleteItem }
-func (p *Proxy) GoneTopic() pubsub.Topic[[]*dto.FileDto, GoneResult]   { return p.rules.gone }
-func (p *Proxy) IgnoreTopic() pubsub.Topic[[]*dto.FileDto, struct{}]   { return p.rules.ignore }
-func (p *Proxy) ValidateGroupTopic() pubsub.Topic[ValidateGroupArgs, *dto.ItemDto] {
-	return p.rules.validateGroup
-}
-func (p *Proxy) ValidateAssetTopic() pubsub.Topic[ValidateAssetArgs, *dto.ItemDto] {
-	return p.rules.validateAsset
-}
-func (p *Proxy) PublishTopic() pubsub.Topic[*dto.ItemDto, *dto.ItemDto] { return p.rules.publish }
-func (p *Proxy) MarkReworkTopic() pubsub.Topic[[]string, int64]         { return p.rules.markRework }
-func (p *Proxy) CreateFileTopic() pubsub.Topic[dto.ItemEntry, *dto.FileDto] {
-	return p.rules.createFile
-}
-func (p *Proxy) UpdateFileTopic() pubsub.Topic[*dto.FileDto, *dto.FileDto] {
-	return p.rules.updateFile
-}
-func (p *Proxy) UpdateFilesTopic() pubsub.Topic[[]*dto.FileDto, []*dto.FileDto] {
-	return p.rules.updateFiles
-}
-func (p *Proxy) CreateFilesTopic() pubsub.Topic[[]dto.ItemEntry, []*dto.FileDto] {
-	return p.rules.createFiles
-}
-func (p *Proxy) SaveStatsTopic() pubsub.Topic[[]*dto.FileDto, struct{}] { return p.rules.saveStats }
-func (p *Proxy) DeleteFilesTopic() pubsub.Topic[[]*dto.FileDto, struct{}] {
-	return p.rules.deleteFiles
-}
-func (p *Proxy) UnignoreFilesTopic() pubsub.Topic[struct{}, int64] { return p.rules.unignoreFiles }
-func (p *Proxy) SetMetaTopic() pubsub.Topic[MetaArgs, struct{}]    { return p.rules.setMeta }
 
 // rule: a rule as a topic — it runs in the writer's transaction, under its own
 // savepoint (run)
