@@ -157,6 +157,18 @@ the resources differ (IO and exiftool, CPU / GPU, ML); roles later
 
 ## Smaller open items
 
+- [ ] **Booleans set by hand** (AGENTS.md "Code Style"), each where it belongs:
+      - small, with the next change of their code: `model.writer.closed` → "`quit`
+        is closed"; `perceptor.loaded` → `sync.Once` or the registry itself;
+        `apple.asset.sent` → a sent group leaves the map; `walk.Result.Complete` →
+        `Result.Err` (why it is incomplete), `Complete()` = no error;
+      - `dto.FileDto.Changed` (stored) → the stat the group was validated with,
+        `Changed()` = the stat differs from it — a PR of its own (a schema change,
+        a migration);
+      - `dto.ItemDto.Rework` (stored) goes with the `work` queue: a need derived from
+        versions and inputs, not a mark;
+      - `dto.WalkedFile.Missing` stays for now (a fact in a message).
+
 - [ ] Typed keys: GUIDs and providers' keys are plain `string`.
 - [ ] Dockerfile (with 0.2.0): CGO (sqlite, libvips), jellyfin-ffmpeg, exiftool from
       a `dist-*` release, `CMD --config /data/config.yml`, `/data` a volume. A base
@@ -334,6 +346,9 @@ write over several connections.
   panel can show it). Without it a broken video would come back every pass.
 - **Changed meanwhile**: commit compares the `input` taken with the item's now — a
   new fingerprint discards the result, the item stays due.
+- **`Rework` goes**: today a stored mark (set by `MarkRework`, cleared by
+  `Publish`) — a queue kept as a flag; with `work` the need is derived (a missing
+  row, another `version` or `input`).
 - **A config change** (sizes, format, codec) is a new `version`: re-rendering is
   lazy, maintenance prunes the old files.
 - **A slug may require another**: a pixel perceptor's query asks for `render` done
