@@ -27,7 +27,9 @@ One line each; the details are in the READMEs and the PRs.
   v0.5.2); the plugin tests under `-race` · #28 the gopls MCP over every Go module
   (`gopls.work`) · #29 the walk in pages, no write for an unchanged file; a
   library's own directories (Photos' database, caches) not walked. The PR #24
-  review is done.
+  review is done · #31 the chain and the logger as libraries
+  ([go-chain](https://github.com/eggs-gd/go-chain),
+  [go-zap-decor](https://github.com/eggs-gd/go-zap-decor)).
 
 ## Releases
 
