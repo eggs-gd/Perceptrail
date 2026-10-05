@@ -2,6 +2,7 @@ package walk
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"perceptrail/gontroller/internal/model/dto"
@@ -9,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/eggs-gd/perceplib/chain"
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
+	chain "github.com/eggs-gd/go-chain"
+	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/go-zap-decor/tree"
 )
 
-var testLogger = l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
+var testLogger = l.NewLogger(l.ErrorLevel, &tree.Decorator{})
 
 func newTestWalker(root string) *Walker {
 	return &Walker{logger: testLogger, root: root}
@@ -98,37 +99,55 @@ func TestWalkCancelled(t *testing.T) {
 	}
 }
 
-// rows: the files table in memory
-type rows struct{ byPath map[string]*dto.FileDto }
+// rows: the files table in memory; writes counts the rows written; meanwhile runs
+// after a page's rows are written (what the chain does at the same time)
+type rows struct {
+	byPath    map[string]*dto.FileDto
+	writes    int
+	lastID    uint
+	meanwhile func()
+}
 
-func (r *rows) FindFile(path string) (*dto.FileDto, error) {
-	if f, ok := r.byPath[path]; ok {
-		c := *f
-		return &c, nil
-	}
-	return nil, nil
-}
-func (r *rows) CreateFile(e dto.ItemEntry) (*dto.FileDto, error) {
-	f := &dto.FileDto{ItemEntry: e}
-	r.byPath[e.Path] = f
-	return f, nil
-}
-func (r *rows) UpdateFiles(fs []*dto.FileDto) ([]*dto.FileDto, error) {
-	for _, f := range fs {
-		c := *f
-		r.byPath[f.Path] = &c
-	}
-	return fs, nil
-}
-func (r *rows) GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error) {
+func (r *rows) GetAllFiles() ([]*dto.FileDto, error) {
 	var out []*dto.FileDto
 	for _, f := range r.byPath {
-		if f.CheckTime.Before(t) {
+		c := *f
+		out = append(out, &c)
+	}
+	return out, nil
+}
+func (r *rows) GetFilesByID(ids []uint) ([]*dto.FileDto, error) {
+	var out []*dto.FileDto
+	for _, f := range r.byPath {
+		if slices.Contains(ids, f.ID) {
 			c := *f
 			out = append(out, &c)
 		}
 	}
 	return out, nil
+}
+func (r *rows) CreateFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error) {
+	var out []*dto.FileDto
+	for _, e := range entries {
+		r.lastID++
+		f := &dto.FileDto{ID: 100 + r.lastID, ItemEntry: e, Changed: true} // an ID as the database gives
+		c := *f
+		r.byPath[e.Path] = &c
+		out = append(out, f)
+	}
+	r.writes += len(entries)
+	if r.meanwhile != nil {
+		r.meanwhile()
+	}
+	return out, nil
+}
+func (r *rows) SaveStats(fs []*dto.FileDto) error {
+	for _, f := range fs {
+		row := r.byPath[f.Path]
+		row.Size, row.ModTime, row.Changed = f.Size, f.ModTime, f.Changed
+	}
+	r.writes += len(fs)
+	return nil
 }
 
 // files: the end of a test chain — what it got, by name
@@ -157,7 +176,7 @@ func TestWalkPass(t *testing.T) {
 		found := make(chan dto.WalkedFile)
 		got := &files{}
 		c := chain.NewChainProcessor(nil)
-		c.AddStep(New(db, root, testLogger, found))
+		c.AddStep(New(db, root, nil, testLogger, found))
 		c.AddStep(chain.NewEnd(found, got))
 		c.Process(t.Context())
 		return got.got
@@ -167,15 +186,93 @@ func TestWalkPass(t *testing.T) {
 	}
 	os.Remove(filepath.Join(root, "b.jpg"))
 	// a.jpg's change stays pending (nothing decided its group): still changed
+	db.writes = 0
 	if g := pass(); !slices.Equal(g, []string{"a.jpg changed", "b.jpg gone"}) {
 		t.Errorf("second pass %v", g)
+	}
+	if db.writes != 0 {
+		t.Errorf("an unchanged file was written: %d writes", db.writes)
+	}
+	// A new stat is saved (and marks the change); the rest of the row stays
+	db.byPath[filepath.Join(root, "a.jpg")].Changed = false // its group decided
+	db.byPath[filepath.Join(root, "a.jpg")].Role = "original"
+	writeFile(t, filepath.Join(root, "a.jpg"))
+	later := time.Now().Add(time.Hour)
+	os.Chtimes(filepath.Join(root, "a.jpg"), later, later)
+	if g := pass(); !slices.Equal(g, []string{"a.jpg changed", "b.jpg gone"}) {
+		t.Errorf("third pass %v", g)
+	}
+	if a := db.byPath[filepath.Join(root, "a.jpg")]; !a.ModTime.Equal(later) || !a.Changed || a.Role != "original" {
+		t.Errorf("a.jpg's row %+v", a)
+	}
+}
+
+// A skipped directory is not entered: its files are not sent, rows under it are
+// missing
+func TestWalkSkipped(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "a.jpg"))
+	writeFile(t, filepath.Join(root, "own", "cache.db"))
+	db := &rows{byPath: map[string]*dto.FileDto{}}
+	db.CreateFiles([]dto.ItemEntry{{Path: filepath.Join(root, "own", "old.db"), Name: "old.db"}}) // an older walk's
+	found := make(chan dto.WalkedFile)
+	got := &files{}
+	c := chain.NewChainProcessor(nil)
+	c.AddStep(New(db, root, []string{filepath.Join(root, "own")}, testLogger, found))
+	c.AddStep(chain.NewEnd(found, got))
+	c.Process(t.Context())
+	if !slices.Equal(got.got, []string{"a.jpg changed", "old.db gone"}) {
+		t.Errorf("got %v", got.got)
+	}
+}
+
+// A file moved while the walk runs: the chain validates the new path before the
+// walk ends and the model deletes the old path's row (the item moves to the new
+// one). The old row was read at the walk's start, but is not missing: it is gone
+// already — sent as missing it would delete the moved item.
+func TestWalkMovedMeanwhile(t *testing.T) {
+	root := t.TempDir()
+	old, moved := filepath.Join(root, "a", "old.jpg"), filepath.Join(root, "b", "new.jpg")
+	writeFile(t, moved)
+	db := &rows{byPath: map[string]*dto.FileDto{old: {ID: 1, GUID: "g", ItemEntry: dto.ItemEntry{Path: old, Name: "old.jpg"}}}}
+	db.meanwhile = func() { delete(db.byPath, old) } // validate: the old row goes
+	found := make(chan dto.WalkedFile)
+	got := &files{}
+	c := chain.NewChainProcessor(nil)
+	c.AddStep(New(db, root, nil, testLogger, found))
+	c.AddStep(chain.NewEnd(found, got))
+	c.Process(t.Context())
+	if !slices.Equal(got.got, []string{"new.jpg changed"}) {
+		t.Errorf("got %v: a row deleted meanwhile was sent as missing", got.got)
+	}
+}
+
+// More files than a page: every file once, in the walk's (name) order — the plain
+// folder's grouper relies on it
+func TestWalkPages(t *testing.T) {
+	root := t.TempDir()
+	var want []string
+	for i := range page*2 + 3 {
+		name := fmt.Sprintf("f%04d.jpg", i)
+		writeFile(t, filepath.Join(root, name))
+		want = append(want, name+" changed")
+	}
+	db := &rows{byPath: map[string]*dto.FileDto{}}
+	found := make(chan dto.WalkedFile)
+	got := &files{}
+	c := chain.NewChainProcessor(nil)
+	c.AddStep(New(db, root, nil, testLogger, found))
+	c.AddStep(chain.NewEnd(found, got))
+	c.Process(t.Context())
+	if !slices.Equal(got.got, want) {
+		t.Errorf("got %d files, want %d in order", len(got.got), len(want))
 	}
 }
 
 // Missing: only a complete walk that found files speaks; only under its root; never
 // under an unreadable directory
 func TestMissing(t *testing.T) {
-	file := func(p string) *dto.FileDto { return &dto.FileDto{ItemEntry: dto.ItemEntry{Path: p}} }
+	file := func(p string) *dto.FileDto { return &dto.FileDto{Path: p} }
 	stale := []*dto.FileDto{file("/lib/a.jpg"), file("/lib/locked/b.jpg"), file("/other/c.jpg")}
 	r := Result{Root: "/lib", Complete: true, Files: 3, Unreadable: []string{"/lib/locked"}}
 	if g := Missing(r, stale); len(g) != 1 || g[0].Path != "/lib/a.jpg" {

@@ -7,7 +7,12 @@ we render and store nothing it keeps.
 - **The contract** ([`provider.go`](provider/provider.go)): `Provider` is what a
   library implements; each consumer declares the part it uses — the import's
   grouping `group.Library` (`Claims`, `Grouper`), the routes' `route.Library`
-  (`Levels`, `Rendition`); the registry uses the rest (`Owns`, `Start`).
+  (`Levels`, `Rendition`); the registry uses the rest (`Owns`, `Start`, `Skipped`).
+- **What is walked**: a library lists the directories under the walked root that
+  hold none of its media (`Skipped(root)`: its database, caches); every pass the
+  import collects every enabled library's (`library.Skipped`) and hands the list to
+  the walk, which does not enter them — as it hands identify the perceptors' tags.
+  Rows an older walk wrote there are missing, and go.
 - **Grouping**: the import's switch asks the enabled libraries in order and a file
   goes to the grouper of the first that claims it; the plain folder
   (`library/folder`) is last and claims the rest. A library not enabled is not
@@ -72,8 +77,10 @@ edit's wins):
 | `resources/derivatives/cvt/<X>/<UUID>/…_cvt_tNNNN.jpeg` | video scrubbing frames (0–10, Photos' own analysis; no request makes them; a third of videos have none, Live Photos never) | 400×600 |
 | `_2_4_o.mp4` / `_2_201_o.mov`, `_2_3_o.mp4` / `_2_101_o.mov` | video renditions PhotoKit makes local: fast 360p H.264 / medium (iPhone: HEVC 720p; others: H.264) / a Live Photo's motion | |
 
-Everything outside `originals/` and `resources/` (Messages backdrops in
-`internal/`, iCloud sharing in `scopes/`) is not the user's and is skipped.
+Only `originals/`, `resources/renders/` and `resources/derivatives/` are walked;
+the rest of the bundle — the database (read from a copy), its search index,
+caches, journals, Messages backdrops in `internal/`, iCloud sharing in `scopes/`,
+`private/` — is Photos' own (on the owner's library: 28 253 of 47 609 files).
 
 **The DB** (`Photos.sqlite`, read from a copy):
 

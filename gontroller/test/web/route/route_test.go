@@ -14,9 +14,9 @@ import (
 	"perceptrail/gontroller/internal/model/dto"
 	"perceptrail/gontroller/internal/web/route"
 
+	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/go-zap-decor/tree"
 	"github.com/eggs-gd/perceplib/api"
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
 
 	"github.com/labstack/echo/v4"
 )
@@ -36,7 +36,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	if testDB, err = model.Open(cfg, l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})); err != nil {
+	if testDB, err = model.Open(cfg, l.NewLogger(l.ErrorLevel, &tree.Decorator{})); err != nil {
 		panic(err)
 	}
 	code := m.Run()
@@ -51,7 +51,7 @@ func server(of route.LibraryOf, perceptors ...api.Perceptor) *echo.Echo {
 		of = func(*dto.ItemDto) route.Library { return nil }
 	}
 	e := echo.New()
-	route.Register(e, testDB, of, route.AppInfo{}, perceptors, nil, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	route.Register(e, testDB, of, route.AppInfo{}, perceptors, nil, l.NewLogger(l.FatalLevel, &tree.Decorator{}))
 	return e
 }
 

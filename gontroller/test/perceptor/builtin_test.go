@@ -12,15 +12,15 @@ import (
 	"perceptrail/gontroller/internal/perceptor/duration"
 	"perceptrail/gontroller/internal/perceptor/size"
 
+	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/go-zap-decor/tree"
 	"github.com/eggs-gd/perceplib/api"
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
 )
 
 // A built-in perceptor reads only the tags it declares: the core reads nothing else
 // (an undeclared tag is always "")
 func TestReadsDeclaredTags(t *testing.T) {
-	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
+	logger := l.NewLogger(l.ErrorLevel, &tree.Decorator{})
 	for perceptor, items := range map[api.Perceptor][]map[string]string{
 		date.Perceptor: {
 			{},

@@ -9,7 +9,7 @@ import (
 	"perceptrail/gontroller/internal/library/provider"
 	"perceptrail/gontroller/internal/model/dto"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 )
 
 // On demand: the renditions Photos keeps only in iCloud are asked for when the

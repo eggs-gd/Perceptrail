@@ -8,15 +8,15 @@ import (
 	"perceptrail/gontroller/internal/importer/identify"
 	"perceptrail/gontroller/internal/model/dto"
 
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
+	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/go-zap-decor/tree"
 )
 
 // At start, what changed in identify since the last run (the versions kept in the
 // meta table): a new kinds' table makes the ignored files judged again; a new
 // fingerprint makes every item forget its old one. The same versions change nothing.
 func TestMigrate(t *testing.T) {
-	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
+	logger := l.NewLogger(l.ErrorLevel, &tree.Decorator{})
 	clip := filepath.Join(t.TempDir(), "clip.mov")
 	if err := os.WriteFile(clip, []byte("a video the old detection missed"), 0o644); err != nil {
 		t.Fatal(err)

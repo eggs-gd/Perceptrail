@@ -10,8 +10,8 @@ import (
 	"perceptrail/gontroller/internal/perceptor/builtin"
 	"perceptrail/gontroller/test/pluginbuild"
 
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
+	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/go-zap-decor/tree"
 )
 
 // Not written yet: a bare `package main`, no Perceptor symbol
@@ -56,7 +56,7 @@ func TestLoadExternalPlugins(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := perceptor.Load(cfg, l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})); err != nil {
+	if err := perceptor.Load(cfg, l.NewLogger(l.ErrorLevel, &tree.Decorator{})); err != nil {
 		t.Fatal(err)
 	}
 	external := 0

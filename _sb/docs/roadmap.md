@@ -5,7 +5,7 @@ module READMEs ([gontroller](../../gontroller/readme.md),
 [importer](../../gontroller/internal/importer/README.md),
 [library](../../gontroller/internal/library/README.md),
 [perceptors](../../perceptors/readme.md), [svebapp](../../svebapp/README.md),
-[perceplib chain](../../perceplib/chain/README.md)); why it is so and what was
+[go-chain](https://github.com/eggs-gd/go-chain)); why it is so and what was
 rejected — [findings.md](findings.md); the target flows — [`../puml`](../puml).
 This file holds only what is open and the designs not built yet.
 
@@ -24,7 +24,12 @@ One line each; the details are in the READMEs and the PRs.
   integration tests in `test/` · #26 import steps without `model`, `Missing` off
   the files' rows, perceptors' rows reconciled at start, the library contract
   narrowed by its consumers · #27 exiftool: no panic, no orphans (go-exiftool
-  v0.5.2); the plugin tests under `-race`.
+  v0.5.2); the plugin tests under `-race` · #28 the gopls MCP over every Go module
+  (`gopls.work`) · #29 the walk in pages, no write for an unchanged file; a
+  library's own directories (Photos' database, caches) not walked. The PR #24
+  review is done · #31 the chain and the logger as libraries
+  ([go-chain](https://github.com/eggs-gd/go-chain),
+  [go-zap-decor](https://github.com/eggs-gd/go-zap-decor)).
 
 ## Releases
 
@@ -32,15 +37,6 @@ One line each; the details are in the READMEs and the PRs.
   encoding) and Docker. A release is an image someone installs; without the
   transcode HEIC does not show in Chrome, iPhone HEVC does not play, big originals
   slow the grid. Until then everything stays in `develop`.
-
-## Next: before the transcodes
-
-The rest of the PR #24 review ([review-pr24.md](review-pr24.md), its numbers), each
-a PR of its own, so the next chains do not touch everything:
-
-- [ ] The walk in batches: one read of the rows under the root, `CheckTime` stamped
-      per page, rows created in batches (3.1); Photos' own files not written as
-      rows, or measured and accepted (3.2).
 
 ## Next: the expensive stage (transcode)
 

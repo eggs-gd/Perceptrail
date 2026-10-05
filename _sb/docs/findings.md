@@ -207,6 +207,34 @@ content is for when a second provider exists).
 - **The fingerprint is the file's bytes** (size + sha256 of the first and last
   64 KB), not the tags read: a change to the declared tags must not make every
   file new.
+- **The walk writes only what changed** (2026-10-04): it used to read and write
+  every file's row every pass (a `SELECT` + an `UPDATE` stamping `CheckTime`, a WAL
+  commit each) — an idle pass over 10 000 files took 5.8 s, now 0.1 s. The rows are
+  read once; what was not visited is missing (no stamp needed, `CheckTime` gone).
+  **The missing rows are read again before they are sent** (Codex, PR #29): the
+  rows are from the walk's start and the chain works meanwhile — a moved file
+  validated before the walk ends has its old row deleted and its item moved; sent
+  from the snapshot, that row went to `Gone` with its stale `LinkedTo` and deleted
+  the moved item.
+  A changed stat is saved as its columns only: the row read at the walk's start
+  may have moved on (a role, sizes) by the time its page is written.
+  The walk sends a page only once its rows are written (a new row's `ID` comes from
+  the database, and the steps after it update rows by `ID`): the chain gets files
+  in pages of 256, not one by one. Kept on purpose (the owner): the client's
+  progress comes from the server's answers, not from how the walk finds files,
+  and next to the expensive stages the difference is noise. Rejected: holding back
+  only new files (a stream while nothing is new) — order-preserving bookkeeping
+  for no visible gain.
+- **Photos' own files were 60 % of the files table** (2026-10-04, the owner's
+  library: 28 253 of 47 609 rows — `database/search` 18 k, `resources/caches` 9 k),
+  churning every pass for nothing: the Apple grouper dropped them. A library now
+  lists the directories under the root it holds no media in (`Skipped(root)`), the
+  import collects them every pass and gives the walk the list — data, as the
+  perceptors' tags go to identify; the walk knows no library. Rejected: the walk
+  filtering by names of its own (a library's layout is its business, as its claim
+  is); a predicate passed into the walk (a lambda across modules). The root is an
+  argument: the library's own root (its config at `Enable`) need not be the one
+  walked.
 - **Deletions are dangerous**: a cancel, a missing root, an empty mount point or an
   unreadable directory (no Full Disk Access to the Photos library) would delete the
   library. Only after a complete walk that found files, never under an unreadable
@@ -412,6 +440,20 @@ Layout, the DB's facts and PhotoKit's behaviour: the
   with its reason; the next pass tries again.
 
 ## Repository
+
+- **Libraries of their own** (2026-10-05): the chain, the logger and the write bus
+  are general — [go-chain](https://github.com/eggs-gd/go-chain),
+  [go-zap-decor](https://github.com/eggs-gd/go-zap-decor),
+  [go-pub-sub](https://github.com/eggs-gd/go-pub-sub) — public repos with their own
+  tags, as go-exiftool; perceplib keeps the perceptor contract (`api`, `exif`).
+  Their own reviews found bugs the packages had carried for months: a join written
+  by two sub-chains closed by the faster one (send on closed channel); a switch
+  index past its outputs lost silently; `DisableService` never matched (zap's name
+  carries the color codes); `With` fields bypassed the decorator (zap's core wrote
+  them inline, the promoted `Clone` dropped the decorating encoder); zero values
+  and durations misformatted; the stack trace between the line and its fields; a
+  race in `Named`. Go plugins still need the very same versions of these as the
+  host (perceplib's `api` imports go-chain and go-zap-decor).
 
 - **perceplib is a subtree, not a submodule**: detached HEADs, gontroller depending
   on uncommitted perceplib changes, two commits per change. It stays a separate

@@ -3,7 +3,7 @@ package identify
 import (
 	"path/filepath"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 )
 
 // show: the show step's logic — what the client may show of the identified asset:

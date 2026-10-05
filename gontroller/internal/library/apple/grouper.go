@@ -25,9 +25,9 @@ import (
 
 	"github.com/eggs-gd/perceplib/api"
 
-	"github.com/eggs-gd/perceplib/chain"
+	chain "github.com/eggs-gd/go-chain"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -89,12 +89,15 @@ func (g *Grouper) Decorate(walked dto.WalkedFile) (dto.Asset, error) {
 
 // HasLibrary: root is a Photos library or holds one at its top (where Photos keeps
 // it: ~/Pictures) — then Photos is worth asking for access
-func HasLibrary(root string) bool {
+func HasLibrary(root string) bool { return len(bundles(root)) > 0 }
+
+// bundles: the Photos libraries of root — root itself, or the ones at its top
+func bundles(root string) []string {
 	if strings.HasSuffix(strings.ToLower(root), ".photoslibrary") {
-		return true
+		return []string{root}
 	}
 	m, _ := filepath.Glob(filepath.Join(root, "*.photoslibrary"))
-	return len(m) > 0
+	return m
 }
 
 // BundleRoot: the *.photoslibrary directory path contains, "" if none

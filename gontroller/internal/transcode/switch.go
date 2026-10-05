@@ -3,7 +3,7 @@ package transcode
 import (
 	"perceptrail/gontroller/internal/model/dto"
 
-	"github.com/eggs-gd/perceplib/chain"
+	chain "github.com/eggs-gd/go-chain"
 )
 
 // Package transcode routes an asset (the whole group) to the transcoder of its

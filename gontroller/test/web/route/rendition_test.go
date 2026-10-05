@@ -11,8 +11,8 @@ import (
 	"perceptrail/gontroller/internal/web/route"
 	"perceptrail/gontroller/test/fake"
 
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
+	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/go-zap-decor/tree"
 )
 
 // The Apple library through the HTTP API: its renditions with a fake Photos; the
@@ -23,7 +23,7 @@ import (
 func TestRenditionOnDemand(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "Photos Library.photoslibrary")
 	photos := &fake.Photos{Root: root}
-	lib := apple.New(filepath.Dir(root), photos, testDB, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	lib := apple.New(filepath.Dir(root), photos, testDB, l.NewLogger(l.FatalLevel, &tree.Decorator{}))
 	e := server(func(item *dto.ItemDto) route.Library {
 		if lib.Owns(item) {
 			return lib

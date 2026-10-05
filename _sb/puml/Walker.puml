@@ -15,7 +15,7 @@ database "DB (gorm)" as DB
 
 == gate ==
 
-note over Groups: the walk wrote the rows (new? size/mtime changed?\nCheckTime = this walk) before the groupers
+note over Groups: the walk wrote the rows (new? size/mtime changed?)\nbefore the groupers; unchanged rows are not written
 Groups -> Gate: a whole asset: its files (changed?) and\nthe files gone for the library; no main file yet
 activate Gate
 opt Missing
@@ -91,7 +91,7 @@ note over Transcode #LightGreen: then the exif step (perceptors); commit sets <b
 note over Groups, DB #LightGreen
 The walk sends missing files only after a <b>complete</b> walk with files found
 (not on cancel, missing root, empty root), after the files it saw.
-Files with CheckTime older than this walk, under the root,
+Rows the walk did not see (read at its start), under the root,
 not under an unreadable directory, are missing; their provider decides what is
 gone for the library (Apple also counts the files of assets
 trashed or hidden in Photos).

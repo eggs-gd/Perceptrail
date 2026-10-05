@@ -5,9 +5,9 @@ import (
 
 	"perceptrail/gontroller/internal/model/dto"
 
-	"github.com/eggs-gd/perceplib/chain"
+	chain "github.com/eggs-gd/go-chain"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 )
 
 // ValidatorStore: what validate asks of the model — which item a group is (the

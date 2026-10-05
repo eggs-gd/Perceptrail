@@ -51,9 +51,9 @@ import (
 	"perceptrail/gontroller/internal/model/dto"
 	"perceptrail/gontroller/internal/perceptor"
 
-	"github.com/eggs-gd/perceplib/chain"
+	chain "github.com/eggs-gd/go-chain"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 )
 
 // Config: what the import reads of the config — the root walked, where the
@@ -100,7 +100,7 @@ func (s *Service) importChain(errs chan<- error) chain.ChainProcessor {
 	perceived := make(chan *identify.Item)
 
 	c := chain.NewChainProcessor(errs)
-	c.AddStep(walk.New(s.db, s.cfg.LibraryRoot(), s.logger, found))
+	c.AddStep(walk.New(s.db, s.cfg.LibraryRoot(), library.Skipped(s.cfg.LibraryRoot()), s.logger, found))
 	c.AddStep(group.New(library.Enabled(), found, grouped))
 	c.AddStep(gate.New(s.db, s.logger, grouped, stored))
 	c.AddStep(identify.New(s.db, s.cfg.CacheDir(), s.cfg.Exiftool(), perceptor.ExifTags(), s.logger, stored, identified))

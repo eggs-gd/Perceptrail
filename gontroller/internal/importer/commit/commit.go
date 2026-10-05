@@ -7,7 +7,7 @@ import (
 	"perceptrail/gontroller/internal/importer/identify"
 	"perceptrail/gontroller/internal/model/dto"
 
-	"github.com/eggs-gd/perceplib/chain"
+	chain "github.com/eggs-gd/go-chain"
 )
 
 // Store: what commit writes — the item published (the model decides its state)

@@ -2,9 +2,9 @@ package model
 
 import (
 	"perceptrail/gontroller/internal/model/dto"
-	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type FilesApi interface {
@@ -15,8 +15,6 @@ type FilesApi interface {
 	UpdateFile(file *dto.FileDto) (*dto.FileDto, error)
 	UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error)
 
-	// GetFilesCheckedBefore returns files not seen by the walk that started at t
-	GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error)
 	DeleteFiles(files []*dto.FileDto) error
 	// UnignoreFiles clears the "ignored" mark: those groups are classified again
 	UnignoreFiles() (int64, error)
@@ -60,20 +58,56 @@ func (p *Proxy) FindFile(path string) (*dto.FileDto, error) {
 	return files[0], nil
 }
 
-func (p *Proxy) GetFilesCheckedBefore(t time.Time) ([]*dto.FileDto, error) {
+// GetAllFiles: every row of the files table (the walk's one read per pass)
+func (p *Proxy) GetAllFiles() ([]*dto.FileDto, error) {
 	var files []*dto.FileDto
-	if err := p.db.Find(&files).Error; err != nil {
-		return nil, err
-	}
-	// Compared in Go: the driver stores times as text with the local offset, which
-	// differs across DST changes, so a SQL string comparison is not reliable
-	gone := files[:0]
-	for _, f := range files {
-		if f.CheckTime.Before(t) {
-			gone = append(gone, f)
+	return files, p.db.Find(&files).Error
+}
+
+// GetFilesByID: the rows of these IDs as they are now (an ID whose row is gone
+// gives nothing)
+func (p *Proxy) GetFilesByID(ids []uint) ([]*dto.FileDto, error) {
+	var files []*dto.FileDto
+	for start := 0; start < len(ids); start += 500 { // under SQLite's variable limit
+		var page []*dto.FileDto
+		if err := p.db.Where("id IN ?", ids[start:min(start+500, len(ids))]).Find(&page).Error; err != nil {
+			return nil, err
 		}
+		files = append(files, page...)
 	}
-	return gone, nil
+	return files, nil
+}
+
+// CreateFiles: the rows of new files, in one transaction; each gets its GUID and
+// is marked Changed (new work)
+func (p *Proxy) CreateFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error) {
+	if len(entries) == 0 {
+		return nil, nil
+	}
+	files := make([]*dto.FileDto, len(entries))
+	for i, e := range entries {
+		files[i] = &dto.FileDto{GUID: uuid.New().String(), ItemEntry: e, Changed: true}
+	}
+	return files, p.db.CreateInBatches(files, 200).Error
+}
+
+// SaveStats: the new stat of changed files (size, mtime) and their Changed mark —
+// only those columns (the rest of a row may have moved on since the walk read
+// it), in one transaction
+func (p *Proxy) SaveStats(files []*dto.FileDto) error {
+	if len(files) == 0 {
+		return nil
+	}
+	return p.db.Transaction(func(tx *gorm.DB) error {
+		for _, f := range files {
+			err := tx.Model(&dto.FileDto{}).Where("id = ?", f.ID).
+				UpdateColumns(map[string]any{"size": f.Size, "mod_time": f.ModTime, "changed": f.Changed}).Error
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (p *Proxy) DeleteFiles(files []*dto.FileDto) error {

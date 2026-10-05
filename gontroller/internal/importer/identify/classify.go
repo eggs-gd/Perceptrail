@@ -3,7 +3,7 @@ package identify
 import (
 	"perceptrail/gontroller/internal/model/dto"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 	"net/http"
 	"os"
 	"path/filepath"
