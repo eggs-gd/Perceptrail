@@ -7,7 +7,7 @@ import (
 
 	"github.com/eggs-gd/perceplib/api"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 )
 
 // sizePairs: width and height tags, the best first

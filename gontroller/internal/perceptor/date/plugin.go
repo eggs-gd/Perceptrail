@@ -3,10 +3,10 @@ package date
 import (
 	"perceptrail/gontroller/internal/perceptor/builtin"
 
+	chain "github.com/eggs-gd/go-chain"
+	l "github.com/eggs-gd/go-zap-decor"
 	"github.com/eggs-gd/perceplib/api"
-	"github.com/eggs-gd/perceplib/chain"
 	"github.com/eggs-gd/perceplib/exif"
-	l "github.com/eggs-gd/perceplib/logger"
 )
 
 type datePerceptor struct{}

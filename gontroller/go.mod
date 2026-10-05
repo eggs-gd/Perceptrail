@@ -3,7 +3,9 @@ module perceptrail/gontroller
 go 1.27.1
 
 require (
+	github.com/eggs-gd/go-chain v0.1.0
 	github.com/eggs-gd/go-exiftool v0.5.2
+	github.com/eggs-gd/go-zap-decor v0.1.0
 	github.com/eggs-gd/perceplib v0.0.6
 	github.com/google/uuid v1.6.0
 	github.com/h2non/bimg v1.1.9

@@ -14,9 +14,9 @@ import (
 	"perceptrail/gontroller/internal/model/dto"
 	"perceptrail/gontroller/internal/perceptor"
 
-	"github.com/eggs-gd/perceplib/chain"
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
+	chain "github.com/eggs-gd/go-chain"
+	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/go-zap-decor/tree"
 )
 
 // One sqlite database for the package (the model keeps a single connection)
@@ -34,7 +34,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
+	logger := l.NewLogger(l.ErrorLevel, &tree.Decorator{})
 	if testDB, err = model.Open(cfg, logger); err != nil {
 		panic(err)
 	}
@@ -68,7 +68,7 @@ func identifyGroup(t *testing.T, cacheDir string, paths ...string) *identify.Ite
 	errs := make(chan error, 10)
 	c := chain.NewChainProcessor(errs)
 	c.AddStep(chain.NewEntryPoint(in, one{group}))
-	c.AddStep(identify.New(testDB, cacheDir, "exiftool", perceptor.ExifTags(), l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{}), in, out))
+	c.AddStep(identify.New(testDB, cacheDir, "exiftool", perceptor.ExifTags(), l.NewLogger(l.ErrorLevel, &tree.Decorator{}), in, out))
 	c.AddStep(chain.NewEnd(out, got))
 	c.Process(context.Background())
 	select {

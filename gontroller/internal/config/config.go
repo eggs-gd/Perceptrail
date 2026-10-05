@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"time"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 
 	"gopkg.in/yaml.v3"
 )

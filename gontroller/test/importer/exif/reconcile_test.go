@@ -12,8 +12,8 @@ import (
 	"perceptrail/gontroller/internal/perceptor"
 	"perceptrail/gontroller/test/pluginbuild"
 
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
+	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/go-zap-decor/tree"
 )
 
 // At start the import perceptors' rows meet the items: an item a perceptor has no
@@ -31,7 +31,7 @@ func TestReconcile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	logger := l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})
+	logger := l.NewLogger(l.ErrorLevel, &tree.Decorator{})
 	db, err := model.Open(cfg, logger)
 	if err != nil {
 		t.Fatal(err)

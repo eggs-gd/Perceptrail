@@ -15,7 +15,7 @@ import (
 	"github.com/eggs-gd/go-exiftool"
 	"github.com/eggs-gd/perceplib/api"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 )
 
 // Exiftool: what identify asks of exiftool. The stage starts its own (a pool of

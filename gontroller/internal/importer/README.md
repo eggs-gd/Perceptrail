@@ -1,7 +1,7 @@
 # importer — the import chain
 
 `importer` turns a library directory into items in the DB. It is a chain on
-[`perceplib/chain`](../../../perceplib/chain/README.md): every step its own
+[go-chain](https://github.com/eggs-gd/go-chain): every step its own
 goroutine, steps connected by channels, a pass ends from its input.
 
 ```

@@ -13,9 +13,9 @@ import (
 	"perceptrail/gontroller/internal/importer/identify"
 	"perceptrail/gontroller/internal/perceptor/builtin"
 
+	chain "github.com/eggs-gd/go-chain"
+	l "github.com/eggs-gd/go-zap-decor"
 	"github.com/eggs-gd/perceplib/api"
-	"github.com/eggs-gd/perceplib/chain"
-	l "github.com/eggs-gd/perceplib/logger"
 )
 
 // The item as the perceptors see it: the built-in ones read and write it, the

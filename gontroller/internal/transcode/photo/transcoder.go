@@ -5,7 +5,7 @@ package photo
 import (
 	"perceptrail/gontroller/internal/transcode"
 
-	"github.com/eggs-gd/perceplib/chain"
+	chain "github.com/eggs-gd/go-chain"
 )
 
 type Transcoder struct{}

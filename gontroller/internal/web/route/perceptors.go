@@ -6,8 +6,8 @@ import (
 
 	"perceptrail/gontroller/internal/model/dto"
 
+	l "github.com/eggs-gd/go-zap-decor"
 	"github.com/eggs-gd/perceplib/api"
-	l "github.com/eggs-gd/perceplib/logger"
 
 	"github.com/labstack/echo/v4"
 )

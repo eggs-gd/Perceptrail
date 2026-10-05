@@ -10,7 +10,7 @@ import (
 	"slices"
 	"time"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 
 	"github.com/labstack/echo/v4"
 )

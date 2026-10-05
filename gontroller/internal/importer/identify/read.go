@@ -8,7 +8,7 @@ import (
 
 	"github.com/eggs-gd/perceplib/api"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	l "github.com/eggs-gd/go-zap-decor"
 )
 
 // ownTags: what identify itself reads of every file — the kind (classify), a broken

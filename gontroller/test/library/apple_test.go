@@ -14,8 +14,8 @@ import (
 	"perceptrail/gontroller/internal/model/dto"
 	"perceptrail/gontroller/test/fake"
 
-	l "github.com/eggs-gd/perceplib/logger"
-	"github.com/eggs-gd/perceplib/logger/decorators"
+	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/go-zap-decor/tree"
 )
 
 var testDB *model.Proxy
@@ -32,7 +32,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	if testDB, err = model.Open(cfg, l.NewLogger(l.ErrorLevel, &decorators.GontrollerDecorator{})); err != nil {
+	if testDB, err = model.Open(cfg, l.NewLogger(l.ErrorLevel, &tree.Decorator{})); err != nil {
 		panic(err)
 	}
 	code := m.Run()
@@ -48,7 +48,7 @@ func TestHydrateWaiting(t *testing.T) {
 		t.Fatal(err)
 	}
 	photos := &fake.Photos{Root: root}
-	p := apple.New(filepath.Dir(root), photos, testDB, l.NewLogger(l.FatalLevel, &decorators.GontrollerDecorator{}))
+	p := apple.New(filepath.Dir(root), photos, testDB, l.NewLogger(l.FatalLevel, &tree.Decorator{}))
 	for _, it := range []*dto.ItemDto{
 		{Guid: "H1111111-WAITING", State: dto.Waiting, Kind: dto.KindPhoto, Path: filepath.Join(root, "originals/H/H1111111-WAITING.heic")},
 		{Guid: "H2222222-SHOWN", State: dto.Visible, Kind: dto.KindPhoto, Path: filepath.Join(root, "originals/H/H2222222-SHOWN.heic")},

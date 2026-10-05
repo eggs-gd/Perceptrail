@@ -3,8 +3,8 @@ package api
 import (
 	"context"
 
-	"github.com/eggs-gd/perceplib/chain"
-	l "github.com/eggs-gd/perceplib/logger"
+	chain "github.com/eggs-gd/go-chain"
+	l "github.com/eggs-gd/go-zap-decor"
 )
 
 // DataProviderType defines the source of data for the perceptor

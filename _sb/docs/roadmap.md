@@ -5,7 +5,7 @@ module READMEs ([gontroller](../../gontroller/readme.md),
 [importer](../../gontroller/internal/importer/README.md),
 [library](../../gontroller/internal/library/README.md),
 [perceptors](../../perceptors/readme.md), [svebapp](../../svebapp/README.md),
-[perceplib chain](../../perceplib/chain/README.md)); why it is so and what was
+[go-chain](https://github.com/eggs-gd/go-chain)); why it is so and what was
 rejected — [findings.md](findings.md); the target flows — [`../puml`](../puml).
 This file holds only what is open and the designs not built yet.
 
