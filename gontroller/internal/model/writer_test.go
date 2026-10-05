@@ -47,7 +47,7 @@ func TestFailingRuleAlone(t *testing.T) {
 			switch i {
 			case 7:
 				err := db.write(func(q *Proxy) error {
-					q.setMeta(key, "half")
+					q.SetMeta(key, "half")
 					return errors.New("a rule gives up")
 				})
 				if err == nil {
@@ -55,7 +55,7 @@ func TestFailingRuleAlone(t *testing.T) {
 				}
 			case 13:
 				err := db.write(func(q *Proxy) error {
-					q.setMeta(key, "half")
+					q.SetMeta(key, "half")
 					panic("a rule breaks")
 				})
 				if err == nil {

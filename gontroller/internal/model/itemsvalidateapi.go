@@ -121,44 +121,41 @@ func (p *Proxy) findMovedItem(file *dto.FileDto, hashShort string) *dto.ItemDto 
 // deleted item is restored.
 func (p *Proxy) moveItem(item *dto.ItemDto, file *dto.FileDto) error {
 	oldGuid, newGuid := item.Guid, file.GUID
+	fail := func(err error) error { return fmt.Errorf("move %s → %s: %w", oldGuid, file.Path, err) }
 
-	err := p.db.Transaction(func(tx *gorm.DB) error {
-		// The old main row first: GUID is unique
-		if err := tx.Where("guid = ?", oldGuid).Delete(&dto.FileDto{}).Error; err != nil {
-			return err
-		}
-		// Old sidecars that are gone as well; the ones still on disk stay linked
-		var oldSidecars []dto.FileDto
-		if err := tx.Where("linked_to = ?", oldGuid).Find(&oldSidecars).Error; err != nil {
-			return err
-		}
-		for _, f := range oldSidecars {
-			if _, err := os.Stat(f.Path); errors.Is(err, fs.ErrNotExist) {
-				if err := tx.Delete(&f).Error; err != nil {
-					return err
-				}
+	// The old main row first: GUID is unique
+	if err := p.db.Where("guid = ?", oldGuid).Delete(&dto.FileDto{}).Error; err != nil {
+		return fail(err)
+	}
+	// Old sidecars that are gone as well; the ones still on disk stay linked
+	var oldSidecars []dto.FileDto
+	if err := p.db.Where("linked_to = ?", oldGuid).Find(&oldSidecars).Error; err != nil {
+		return fail(err)
+	}
+	for _, f := range oldSidecars {
+		if _, err := os.Stat(f.Path); errors.Is(err, fs.ErrNotExist) {
+			if err := p.db.Delete(&f).Error; err != nil {
+				return fail(err)
 			}
 		}
-		// The new group (main + sidecars) links to the item's GUID
-		if err := tx.Model(&dto.FileDto{}).Where("linked_to = ?", newGuid).Update("linked_to", oldGuid).Error; err != nil {
-			return err
-		}
-		if err := tx.Model(&dto.FileDto{}).Where("guid = ?", newGuid).Update("guid", oldGuid).Error; err != nil {
-			return err
-		}
-
-		item.Path = file.Path
-		item.MimeType = file.MimeType
-		if item.DeletedAt.Valid { // deleted meanwhile: it is back
-			item.DeletedAt = gorm.DeletedAt{}
-			item.State = dto.Dirty
-		}
-		return tx.Unscoped().Save(item).Error
-	})
-	if err != nil {
-		return fmt.Errorf("move %s → %s: %w", oldGuid, file.Path, err)
+	}
+	// The new group (main + sidecars) links to the item's GUID
+	if err := p.db.Model(&dto.FileDto{}).Where("linked_to = ?", newGuid).Update("linked_to", oldGuid).Error; err != nil {
+		return fail(err)
+	}
+	if err := p.db.Model(&dto.FileDto{}).Where("guid = ?", newGuid).Update("guid", oldGuid).Error; err != nil {
+		return fail(err)
 	}
 
+	item.Path = file.Path
+	item.MimeType = file.MimeType
+	if item.DeletedAt.Valid { // deleted meanwhile: it is back
+		item.DeletedAt = gorm.DeletedAt{}
+		item.State = dto.Dirty
+	}
+	if err := p.db.Unscoped().Save(item).Error; err != nil {
+		return fail(err)
+	}
 	file.GUID, file.LinkedTo = oldGuid, oldGuid
 	return nil
 }

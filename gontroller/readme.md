@@ -98,7 +98,7 @@ package's own unit tests stay next to it.
 ## Worth knowing
 
 - SQLite: WAL, `synchronous=NORMAL`; **one writer connection** (its goroutine runs
-  every write rule — `writes.go` — in its transaction, each under its own savepoint)
+  every write method's body in its transaction, each under its own savepoint)
   and a read-only pool. Inside a rule, reads and writes go through the rule's own
   `Proxy` (bound to the transaction): a public write called there runs right there,
   not through the writer (it would wait for itself).

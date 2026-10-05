@@ -66,140 +66,153 @@ func cheapStageDone(item *dto.ItemDto) bool {
 	return false
 }
 
-// gone: these files are gone for the library (the walk found them missing, or
+// Gone: these files are gone for the library (the walk found them missing, or
 // their provider says so).
 // A main file gone: its item is deleted; a sidecar gone: its item is Dirty (processed
 // again); an item with no files left is gone too (a keyed asset: every file is
 // "linked", none is "main" by its own GUID). The files' rows go.
-func (p *Proxy) gone(files []*dto.FileDto) (deleted, dirty int, err error) {
-	for _, f := range files {
-		switch {
-		case f.IsIgnored() || f.LinkedTo == "":
-		case f.LinkedTo == f.GUID: // main file: the item is gone
-			item, err := p.GetItemByGuid(f.GUID)
-			if err != nil {
-				continue // never became an item, or already deleted
+func (p *Proxy) Gone(files []*dto.FileDto) (deleted, dirty int, err error) {
+	err = p.write(func(q *Proxy) error {
+		for _, f := range files {
+			switch {
+			case f.IsIgnored() || f.LinkedTo == "":
+			case f.LinkedTo == f.GUID: // main file: the item is gone
+				item, err := q.GetItemByGuid(f.GUID)
+				if err != nil {
+					continue // never became an item, or already deleted
+				}
+				if err := q.DeleteItem(item); err != nil {
+					return err
+				}
+				deleted++
+			default: // sidecar: its item must be processed again
+				item, err := q.GetItemByGuid(f.LinkedTo)
+				if err != nil {
+					continue
+				}
+				item.State = dto.Dirty
+				if _, err := q.UpdateItem(item); err != nil {
+					return err
+				}
+				dirty++
 			}
-			if err := p.DeleteItem(item); err != nil {
-				return deleted, dirty, err
-			}
-			deleted++
-		default: // sidecar: its item must be processed again
-			item, err := p.GetItemByGuid(f.LinkedTo)
-			if err != nil {
+		}
+		if err := q.DeleteFiles(files); err != nil {
+			return err
+		}
+		for _, f := range files {
+			if f.LinkedTo == "" || f.IsIgnored() {
 				continue
 			}
-			item.State = dto.Dirty
-			if _, err := p.UpdateItem(item); err != nil {
-				return deleted, dirty, err
-			}
-			dirty++
-		}
-	}
-	if err := p.DeleteFiles(files); err != nil {
-		return deleted, dirty, err
-	}
-	for _, f := range files {
-		if f.LinkedTo == "" || f.IsIgnored() {
-			continue
-		}
-		if n, err := p.CountLinkedFiles(f.LinkedTo); err == nil && n == 0 {
-			if item, err := p.GetItemByGuid(f.LinkedTo); err == nil {
-				if err := p.DeleteItem(item); err == nil {
-					deleted++
+			if n, err := q.CountLinkedFiles(f.LinkedTo); err == nil && n == 0 {
+				if item, err := q.GetItemByGuid(f.LinkedTo); err == nil {
+					if err := q.DeleteItem(item); err == nil {
+						deleted++
+					}
 				}
 			}
 		}
-	}
-	return deleted, dirty, nil
+		return nil
+	})
+	return deleted, dirty, err
 }
 
-// ignore: the group is not an item (not media, or its main file is broken): its
+// Ignore: the group is not an item (not media, or its main file is broken): its
 // files are remembered as ignored — the gate skips them until a file changes — and
 // an item its main file used to be (it got corrupted) goes
-func (p *Proxy) ignore(files []*dto.FileDto) error {
-	if item, err := p.GetItemByGuid(files[0].GUID); err == nil {
-		if err := p.DeleteItem(item); err != nil {
-			return err
+func (p *Proxy) Ignore(files []*dto.FileDto) error {
+	return p.write(func(q *Proxy) error {
+		if item, err := q.GetItemByGuid(files[0].GUID); err == nil {
+			if err := q.DeleteItem(item); err != nil {
+				return err
+			}
 		}
-	}
-	for _, f := range files {
-		f.SetIgnored()
-	}
-	_, err := p.UpdateFiles(files)
-	return err
+		for _, f := range files {
+			f.SetIgnored()
+		}
+		_, err := q.UpdateFiles(files)
+		return err
+	})
 }
 
-// validateGroup: the item of a plain folder's group (files: the main file first).
+// ValidateGroup: the item of a plain folder's group (files: the main file first).
 // Its files link to the main file; a file that was the main file of its own item
 // before is a sidecar now (a JPEG imported alone, then its RAW appeared): that item
 // goes. Then the main file's item by its path and fingerprint (ValidateFile).
-func (p *Proxy) validateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
-	main := files[0]
-	for _, f := range files {
-		f.LinkTo(main)
-	}
-	for _, f := range files[1:] {
-		if old, err := p.GetItemByGuid(f.GUID); err == nil {
-			if err := p.DeleteItem(old); err != nil {
-				return nil, err
-			}
-			p.logger.Info("Former main file is a sidecar now", l.String("file", f.Path), l.String("main", main.Path))
+func (p *Proxy) ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
+	return written(p, func(q *Proxy) (*dto.ItemDto, error) {
+		main := files[0]
+		for _, f := range files {
+			f.LinkTo(main)
 		}
-	}
-	if _, err := p.UpdateFiles(files); err != nil {
-		return nil, err
-	}
-	return p.validateFile(main, hash)
+		for _, f := range files[1:] {
+			if old, err := q.GetItemByGuid(f.GUID); err == nil {
+				if err := q.DeleteItem(old); err != nil {
+					return nil, err
+				}
+				q.logger.Info("Former main file is a sidecar now", l.String("file", f.Path), l.String("main", main.Path))
+			}
+		}
+		if _, err := q.UpdateFiles(files); err != nil {
+			return nil, err
+		}
+		return q.validateFile(main, hash)
+	})
 }
 
-// validateAsset: the item of a group whose source knows its identity (an Apple
+// ValidateAsset: the item of a group whose source knows its identity (an Apple
 // Photos asset UUID: the key, whatever the main file is). Every file links to it; an
 // item of a file's own from before (the plain folder's grouper read the library's
 // originals) goes. Then the keyed item (validateKeyed).
-func (p *Proxy) validateAsset(key string, files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
-	for _, f := range files {
-		if f.GUID != key {
-			if old, err := p.GetItemByGuid(f.GUID); err == nil {
-				if err := p.DeleteItem(old); err != nil {
-					return nil, err
+func (p *Proxy) ValidateAsset(key string, files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
+	return written(p, func(q *Proxy) (*dto.ItemDto, error) {
+		for _, f := range files {
+			if f.GUID != key {
+				if old, err := q.GetItemByGuid(f.GUID); err == nil {
+					if err := q.DeleteItem(old); err != nil {
+						return nil, err
+					}
 				}
 			}
+			f.LinkToItem(key)
 		}
-		f.LinkToItem(key)
-	}
-	if _, err := p.UpdateFiles(files); err != nil {
-		return nil, err
-	}
-	return p.validateKeyed(key, files[0], hash)
+		if _, err := q.UpdateFiles(files); err != nil {
+			return nil, err
+		}
+		return q.validateKeyed(key, files[0], hash)
+	})
 }
 
-// publish: the item at the end of the import's cheap stage — Visible when it has
+// Publish: the item at the end of the import's cheap stage — Visible when it has
 // something the browser shows (a preview), else Waiting (the expensive stage later)
-func (p *Proxy) publish(item *dto.ItemDto) (*dto.ItemDto, error) {
-	item.Rework = false
-	item.State = dto.Waiting
-	if item.PreviewPath != "" {
-		item.State = dto.Visible
-	}
-	return p.UpdateItem(item)
+func (p *Proxy) Publish(item *dto.ItemDto) (*dto.ItemDto, error) {
+	return written(p, func(q *Proxy) (*dto.ItemDto, error) {
+		item.Rework = false
+		item.State = dto.Waiting
+		if item.PreviewPath != "" {
+			item.State = dto.Visible
+		}
+		return q.UpdateItem(item)
+	})
 }
 
-// markRework: these items are processed again on the next walk (NeedsWork), their
+// MarkRework: these items are processed again on the next walk (NeedsWork), their
 // files unchanged — e.g. a perceptor has no row for them, a library made a file of
 // one local; publishing clears the mark. Not a change the client sees: updated_at
 // stays (the client's delta would bring the item back in its old state)
-func (p *Proxy) markRework(guids []string) (int64, error) {
-	var n int64
-	for start := 0; start < len(guids); start += 500 { // under SQLite's variable limit
-		page := guids[start:min(start+500, len(guids))]
-		res := p.db.Model(&dto.ItemDto{}).Where("guid IN ?", page).UpdateColumn("rework", true)
-		if res.Error != nil {
-			return n, res.Error
+func (p *Proxy) MarkRework(guids []string) (int64, error) {
+	return written(p, func(q *Proxy) (int64, error) {
+		var n int64
+		for start := 0; start < len(guids); start += 500 { // under SQLite's variable limit
+			page := guids[start:min(start+500, len(guids))]
+			res := q.db.Model(&dto.ItemDto{}).Where("guid IN ?", page).UpdateColumn("rework", true)
+			if res.Error != nil {
+				return n, res.Error
+			}
+			n += res.RowsAffected
 		}
-		n += res.RowsAffected
-	}
-	return n, nil
+		return n, nil
+	})
 }
 
 // Unshown: the items nothing can show yet (no file the browser shows, no preview:

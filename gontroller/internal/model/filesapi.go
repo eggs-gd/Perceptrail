@@ -4,7 +4,6 @@ import (
 	"perceptrail/gontroller/internal/model/dto"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 type FilesApi interface {
@@ -25,21 +24,27 @@ type FilesApi interface {
 	GetFileByID(id uint) (*dto.FileDto, error)
 }
 
-func (p *Proxy) createFile(entry dto.ItemEntry) (*dto.FileDto, error) {
-	var file *dto.FileDto = &dto.FileDto{
-		GUID:      uuid.New().String(),
-		ItemEntry: entry,
-	}
+func (p *Proxy) CreateFile(entry dto.ItemEntry) (*dto.FileDto, error) {
+	return written(p, func(q *Proxy) (*dto.FileDto, error) {
+		var file *dto.FileDto = &dto.FileDto{
+			GUID:      uuid.New().String(),
+			ItemEntry: entry,
+		}
 
-	return p.UpdateFile(file)
+		return q.UpdateFile(file)
+	})
 }
 
-func (p *Proxy) updateFile(file *dto.FileDto) (*dto.FileDto, error) {
-	return file, p.db.Save(&file).Error
+func (p *Proxy) UpdateFile(file *dto.FileDto) (*dto.FileDto, error) {
+	return written(p, func(q *Proxy) (*dto.FileDto, error) {
+		return file, q.db.Save(&file).Error
+	})
 }
 
-func (p *Proxy) updateFiles(files []*dto.FileDto) ([]*dto.FileDto, error) {
-	return files, p.db.Save(&files).Error
+func (p *Proxy) UpdateFiles(files []*dto.FileDto) ([]*dto.FileDto, error) {
+	return written(p, func(q *Proxy) ([]*dto.FileDto, error) {
+		return files, q.db.Save(&files).Error
+	})
 }
 
 func (p *Proxy) GetFileByPath(path string) (*dto.FileDto, error) {
@@ -78,29 +83,31 @@ func (p *Proxy) GetFilesByID(ids []uint) ([]*dto.FileDto, error) {
 	return files, nil
 }
 
-// createFiles: the rows of new files, in one transaction; each gets its GUID and
+// CreateFiles: the rows of new files, in one transaction; each gets its GUID and
 // is marked Changed (new work)
-func (p *Proxy) createFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error) {
-	if len(entries) == 0 {
-		return nil, nil
-	}
-	files := make([]*dto.FileDto, len(entries))
-	for i, e := range entries {
-		files[i] = &dto.FileDto{GUID: uuid.New().String(), ItemEntry: e, Changed: true}
-	}
-	return files, p.db.CreateInBatches(files, 200).Error
+func (p *Proxy) CreateFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error) {
+	return written(p, func(q *Proxy) ([]*dto.FileDto, error) {
+		if len(entries) == 0 {
+			return nil, nil
+		}
+		files := make([]*dto.FileDto, len(entries))
+		for i, e := range entries {
+			files[i] = &dto.FileDto{GUID: uuid.New().String(), ItemEntry: e, Changed: true}
+		}
+		return files, q.db.CreateInBatches(files, 200).Error
+	})
 }
 
-// saveStats: the new stat of changed files (size, mtime) and their Changed mark —
+// SaveStats: the new stat of changed files (size, mtime) and their Changed mark —
 // only those columns (the rest of a row may have moved on since the walk read
-// it), in one transaction
-func (p *Proxy) saveStats(files []*dto.FileDto) error {
-	if len(files) == 0 {
-		return nil
-	}
-	return p.db.Transaction(func(tx *gorm.DB) error {
+// it)
+func (p *Proxy) SaveStats(files []*dto.FileDto) error {
+	return p.write(func(q *Proxy) error {
+		if len(files) == 0 {
+			return nil
+		}
 		for _, f := range files {
-			err := tx.Model(&dto.FileDto{}).Where("id = ?", f.ID).
+			err := q.db.Model(&dto.FileDto{}).Where("id = ?", f.ID).
 				UpdateColumns(map[string]any{"size": f.Size, "mod_time": f.ModTime, "changed": f.Changed}).Error
 			if err != nil {
 				return err
@@ -110,16 +117,20 @@ func (p *Proxy) saveStats(files []*dto.FileDto) error {
 	})
 }
 
-func (p *Proxy) deleteFiles(files []*dto.FileDto) error {
-	if len(files) == 0 {
-		return nil
-	}
-	return p.db.Delete(&files).Error
+func (p *Proxy) DeleteFiles(files []*dto.FileDto) error {
+	return p.write(func(q *Proxy) error {
+		if len(files) == 0 {
+			return nil
+		}
+		return q.db.Delete(&files).Error
+	})
 }
 
-func (p *Proxy) unignoreFiles() (int64, error) {
-	res := p.db.Model(&dto.FileDto{}).Where("linked_to = ?", "-").Update("linked_to", "")
-	return res.RowsAffected, res.Error
+func (p *Proxy) UnignoreFiles() (int64, error) {
+	return written(p, func(q *Proxy) (int64, error) {
+		res := q.db.Model(&dto.FileDto{}).Where("linked_to = ?", "-").Update("linked_to", "")
+		return res.RowsAffected, res.Error
+	})
 }
 
 func (p *Proxy) GetLinkedFiles(guid string) ([]*dto.FileDto, error) {
