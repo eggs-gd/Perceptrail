@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	pubsub "github.com/eggs-gd/go-pub-sub"
 
 	"perceptrail/gontroller/internal/model/dto"
 
@@ -14,15 +15,15 @@ type MetaApi interface {
 	SetMeta(key, value string) error
 }
 
-func (p *Proxy) GetMeta(key string) (string, error) {
+func (q query) GetMeta(key string) (string, error) {
 	var m dto.MetaDto
-	err := p.db.Where("key = ?", key).First(&m).Error
+	err := q.db.Where("key = ?", key).First(&m).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return "", nil
 	}
 	return m.Value, err
 }
 
-func (p *Proxy) SetMeta(key, value string) error {
-	return p.db.Save(&dto.MetaDto{Key: key, Value: value}).Error
+func (t *tx) setMeta(m MetaArgs) (pubsub.None, error) {
+	return pubsub.None{}, t.db.Save(&dto.MetaDto{Key: m.Key, Value: m.Value}).Error
 }

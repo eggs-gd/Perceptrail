@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	pubsub "github.com/eggs-gd/go-pub-sub"
 
 	"perceptrail/gontroller/internal/model/dto"
 
@@ -22,7 +23,7 @@ import (
 // metadata changed while the files did not (metaHash), or it is marked for rework
 // (MarkRework). guid: the group's item; "" when the whole group is ignored (not media,
 // broken).
-func (p *Proxy) NeedsWork(files []*dto.FileDto, key, metaHash string) (needs bool, guid string, err error) {
+func (q query) NeedsWork(files []*dto.FileDto, key, metaHash string) (needs bool, guid string, err error) {
 	inGroup := map[string]bool{key: key != ""}
 	for _, f := range files {
 		inGroup[f.GUID] = true
@@ -43,7 +44,7 @@ func (p *Proxy) NeedsWork(files []*dto.FileDto, key, metaHash string) (needs boo
 	if guid == "" {
 		return false, "", nil
 	}
-	item, err := p.GetItemByGuid(guid)
+	item, err := q.GetItemByGuid(guid)
 	if errors.Is(err, ErrNotFound) {
 		return true, guid, nil
 	}
@@ -66,134 +67,137 @@ func cheapStageDone(item *dto.ItemDto) bool {
 	return false
 }
 
-// Gone: these files are gone for the library (the walk found them missing, or
+// gone: these files are gone for the library (the walk found them missing, or
 // their provider says so).
 // A main file gone: its item is deleted; a sidecar gone: its item is Dirty (processed
 // again); an item with no files left is gone too (a keyed asset: every file is
 // "linked", none is "main" by its own GUID). The files' rows go.
-func (p *Proxy) Gone(files []*dto.FileDto) (deleted, dirty int, err error) {
+func (t *tx) gone(files []*dto.FileDto) (GoneResult, error) {
+	var deleted, dirty int
 	for _, f := range files {
 		switch {
 		case f.IsIgnored() || f.LinkedTo == "":
 		case f.LinkedTo == f.GUID: // main file: the item is gone
-			item, err := p.GetItemByGuid(f.GUID)
+			item, err := t.GetItemByGuid(f.GUID)
 			if err != nil {
 				continue // never became an item, or already deleted
 			}
-			if err := p.DeleteItem(item); err != nil {
-				return deleted, dirty, err
+			if _, err := t.deleteItem(item); err != nil {
+				return GoneResult{deleted, dirty}, err
 			}
 			deleted++
 		default: // sidecar: its item must be processed again
-			item, err := p.GetItemByGuid(f.LinkedTo)
+			item, err := t.GetItemByGuid(f.LinkedTo)
 			if err != nil {
 				continue
 			}
 			item.State = dto.Dirty
-			if _, err := p.UpdateItem(item); err != nil {
-				return deleted, dirty, err
+			if _, err := t.updateItem(item); err != nil {
+				return GoneResult{deleted, dirty}, err
 			}
 			dirty++
 		}
 	}
-	if err := p.DeleteFiles(files); err != nil {
-		return deleted, dirty, err
+	if _, err := t.deleteFiles(files); err != nil {
+		return GoneResult{deleted, dirty}, err
 	}
 	for _, f := range files {
 		if f.LinkedTo == "" || f.IsIgnored() {
 			continue
 		}
-		if n, err := p.CountLinkedFiles(f.LinkedTo); err == nil && n == 0 {
-			if item, err := p.GetItemByGuid(f.LinkedTo); err == nil {
-				if err := p.DeleteItem(item); err == nil {
+		if n, err := t.CountLinkedFiles(f.LinkedTo); err == nil && n == 0 {
+			if item, err := t.GetItemByGuid(f.LinkedTo); err == nil {
+				if _, err := t.deleteItem(item); err == nil {
 					deleted++
 				}
 			}
 		}
 	}
-	return deleted, dirty, nil
+	return GoneResult{deleted, dirty}, nil
 }
 
-// Ignore: the group is not an item (not media, or its main file is broken): its
+// ignore: the group is not an item (not media, or its main file is broken): its
 // files are remembered as ignored — the gate skips them until a file changes — and
 // an item its main file used to be (it got corrupted) goes
-func (p *Proxy) Ignore(files []*dto.FileDto) error {
-	if item, err := p.GetItemByGuid(files[0].GUID); err == nil {
-		if err := p.DeleteItem(item); err != nil {
-			return err
+func (t *tx) ignore(files []*dto.FileDto) (pubsub.None, error) {
+	if item, err := t.GetItemByGuid(files[0].GUID); err == nil {
+		if _, err := t.deleteItem(item); err != nil {
+			return pubsub.None{}, err
 		}
 	}
 	for _, f := range files {
 		f.SetIgnored()
 	}
-	_, err := p.UpdateFiles(files)
-	return err
+	_, err := t.updateFiles(files)
+	return pubsub.None{}, err
 }
 
-// ValidateGroup: the item of a plain folder's group (files: the main file first).
+// validateGroup: the item of a plain folder's group (files: the main file first).
 // Its files link to the main file; a file that was the main file of its own item
 // before is a sidecar now (a JPEG imported alone, then its RAW appeared): that item
 // goes. Then the main file's item by its path and fingerprint (ValidateFile).
-func (p *Proxy) ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
+func (t *tx) validateGroup(a ValidateGroupArgs) (*dto.ItemDto, error) {
+	files, hash := a.Files, a.Hash
 	main := files[0]
 	for _, f := range files {
 		f.LinkTo(main)
 	}
 	for _, f := range files[1:] {
-		if old, err := p.GetItemByGuid(f.GUID); err == nil {
-			if err := p.DeleteItem(old); err != nil {
+		if old, err := t.GetItemByGuid(f.GUID); err == nil {
+			if _, err := t.deleteItem(old); err != nil {
 				return nil, err
 			}
-			p.logger.Info("Former main file is a sidecar now", l.String("file", f.Path), l.String("main", main.Path))
+			t.logger.Info("Former main file is a sidecar now", l.String("file", f.Path), l.String("main", main.Path))
 		}
 	}
-	if _, err := p.UpdateFiles(files); err != nil {
+	if _, err := t.updateFiles(files); err != nil {
 		return nil, err
 	}
-	return p.validateFile(main, hash)
+	return t.validateFile(main, hash)
 }
 
-// ValidateAsset: the item of a group whose source knows its identity (an Apple
+// validateAsset: the item of a group whose source knows its identity (an Apple
 // Photos asset UUID: the key, whatever the main file is). Every file links to it; an
 // item of a file's own from before (the plain folder's grouper read the library's
 // originals) goes. Then the keyed item (validateKeyed).
-func (p *Proxy) ValidateAsset(key string, files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
+func (t *tx) validateAsset(a ValidateAssetArgs) (*dto.ItemDto, error) {
+	key, files, hash := a.Key, a.Files, a.Hash
 	for _, f := range files {
 		if f.GUID != key {
-			if old, err := p.GetItemByGuid(f.GUID); err == nil {
-				if err := p.DeleteItem(old); err != nil {
+			if old, err := t.GetItemByGuid(f.GUID); err == nil {
+				if _, err := t.deleteItem(old); err != nil {
 					return nil, err
 				}
 			}
 		}
 		f.LinkToItem(key)
 	}
-	if _, err := p.UpdateFiles(files); err != nil {
+	if _, err := t.updateFiles(files); err != nil {
 		return nil, err
 	}
-	return p.validateKeyed(key, files[0], hash)
+	return t.validateKeyed(key, files[0], hash)
 }
 
-// Publish: the item at the end of the import's cheap stage — Visible when it has
+// publish: the item at the end of the import's cheap stage — Visible when it has
 // something the browser shows (a preview), else Waiting (the expensive stage later)
-func (p *Proxy) Publish(item *dto.ItemDto) (*dto.ItemDto, error) {
+func (t *tx) publish(item *dto.ItemDto) (*dto.ItemDto, error) {
 	item.Rework = false
 	item.State = dto.Waiting
 	if item.PreviewPath != "" {
 		item.State = dto.Visible
 	}
-	return p.UpdateItem(item)
+	return t.updateItem(item)
 }
 
-// MarkRework: these items are processed again on the next walk (NeedsWork), their
+// markRework: these items are processed again on the next walk (NeedsWork), their
 // files unchanged — e.g. a perceptor has no row for them, a library made a file of
 // one local; publishing clears the mark. Not a change the client sees: updated_at
 // stays (the client's delta would bring the item back in its old state)
-func (p *Proxy) MarkRework(guids []string) (int64, error) {
+func (t *tx) markRework(guids []string) (int64, error) {
 	var n int64
 	for start := 0; start < len(guids); start += 500 { // under SQLite's variable limit
 		page := guids[start:min(start+500, len(guids))]
-		res := p.db.Model(&dto.ItemDto{}).Where("guid IN ?", page).UpdateColumn("rework", true)
+		res := t.db.Model(&dto.ItemDto{}).Where("guid IN ?", page).UpdateColumn("rework", true)
 		if res.Error != nil {
 			return n, res.Error
 		}
@@ -204,6 +208,6 @@ func (p *Proxy) MarkRework(guids []string) (int64, error) {
 
 // Unshown: the items nothing can show yet (no file the browser shows, no preview:
 // Waiting) — what a library that draws renditions itself may fill
-func (p *Proxy) Unshown() ([]*dto.ItemDto, error) {
-	return p.GetItemsInStates(dto.Waiting)
+func (q query) Unshown() ([]*dto.ItemDto, error) {
+	return q.GetItemsInStates(dto.Waiting)
 }

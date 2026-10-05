@@ -47,7 +47,7 @@ func OpenPerceptorStore(driver, dir string, s api.Schema) (*PerceptorStore, erro
 	if err != nil {
 		return nil, err
 	}
-	if err := sqliteDriver.tune(db); err != nil {
+	if err := sqliteDriver.tune(db, false); err != nil {
 		return nil, err
 	}
 	st := &PerceptorStore{schema: s, db: db}

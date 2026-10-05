@@ -26,6 +26,7 @@ No symlinks (Windows).
   redesigning a flow; if the code deviates from a diagram, say so in findings.
 - Module READMEs — how things work now: `gontroller/readme.md`,
   `gontroller/internal/importer/README.md`, `gontroller/internal/library/README.md`,
+  `gontroller/internal/model/README.md`,
   `perceplib/README.md`, `perceptors/readme.md`, `svebapp/README.md`.
 
 ### Documentation contract — one fact, one place
@@ -36,7 +37,7 @@ retelling (a retold fact goes stale on the next change and widens every PR).
 | What | Where |
 |---|---|
 | how a package works: its API, the non-obvious lines | godoc in the code |
-| a module's design: its parts, the rules across them, the types it owns | that module's README (`internal/importer`, `internal/library`, `svebapp`, `perceplib`, `perceptors`) |
+| a module's design: its parts, the rules across them, the types it owns | that module's README (`internal/importer`, `internal/library`, `internal/model`, `svebapp`, `perceplib`, `perceptors`) |
 | running, config, the HTTP API, the map of packages (one line each + a link) | the top README of the program (`gontroller/readme.md`) |
 | target flows: steps and who does what | `_sb/puml`, rendered to `_sb/diagrams/*.svg` (the READMEs show them: re-render with every `.puml` change) |
 | why it is so, what was rejected, traps | `_sb/docs/findings.md` |
@@ -109,6 +110,15 @@ Before writing new code, read the neighbouring files of the package and follow
 them: their naming, comment density, error handling, how they declare their
 dependencies. Comments: one line per step (what it means for the product), plus a
 short "not obvious" list where there is something non-obvious.
+
+**A boolean is a getter of real state, not a field set by hand** — in any language.
+`closed()` is "the channel is closed", `changed()` is "the stat differs from the
+validated one", "is it a rule" is "is it the rule's type". A bool someone sets and
+someone else clears duplicates a state and keeps the copy in sync by hand: at least
+a smell, nearly always an architecture problem (one type playing two roles, a
+queue kept as a flag, a "done once" instead of the thing that is done). The rare
+exceptions are data, not state: a field on the wire (`removed` in a JSON line), an
+input option (`hevc` from a request).
 
 ### Go — write it like Go
 

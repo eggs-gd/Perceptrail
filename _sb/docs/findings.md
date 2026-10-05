@@ -258,8 +258,103 @@ content is for when a second provider exists).
 - An embedded RAW preview has no EXIF of its own: copy the RAW's Orientation onto
   it, or a portrait lies on its side.
 - MIME detection never uses the system tables (a minimal Docker image has none).
-- **SQLite**: WAL + `busy_timeout`, **one connection** ("database is locked"
-  otherwise); never query through `db` inside a `tx` — deadlock.
+- **SQLite**: WAL + `busy_timeout`; one writer (see "The write bus") — no more
+  "database is locked", and reads no longer queue behind writes. A rule that calls
+  another public write runs it in its own transaction (the writer would wait for
+  itself). Close the read-only connections first: the last connection to close
+  merges and removes the journal, and a read-only one cannot (smoke caught `-wal`
+  and `-shm` left behind).
+
+## The write bus and the queue (SQLite, 2026-10-04, design)
+
+Design: roadmap "The write bus", "The work queue". SQLite first (the owner): tuned
+to it, Postgres the way up — what works here gets better there.
+
+**Measured** (SQLite 3.51, WAL, this Mac; 200 k items, 1.08 M queue rows — six slugs
+an item):
+
+| | |
+|---|---|
+| 1.08 M rows in one transaction / 100 k | 1.1 s / 0.28 s (~1 M rows/s) |
+| a point read by primary key | microseconds |
+| the next 64 of a slug through the `(state, date)` index | 1–2 ms, even with everything due |
+| the same with `ORDER BY (state = Waiting) DESC` | 95 ms: sorts everything |
+| nothing due: a full scan to know it | 143 ms at 200 k |
+| 1000 one-row commits: `synchronous=FULL` / `NORMAL` | ~0.17 / ~0.03 ms a commit |
+| the database | 83 MB |
+
+- **What degrades SQLite is not size** (281 TB, 2⁶⁴ rows; ours is hundreds of MB to
+  a few GB) but one writer at a time, queries off an index (~0.7 µs a row scanned)
+  and a WAL kept from its checkpoint by long readers; `VACUUM` after mass deletes.
+  **Our real limit was ours**: one connection for everything (`MaxOpenConns(1)`
+  against "database is locked") — reads wait behind writes. One writer + a read
+  pool is the fix.
+- **Grouping commits gains little in speed** here (a commit is ~0.17 ms with FULL);
+  the bus is for one writer whatever writes, parallel reads, and steps that never
+  stall on a write.
+- **The writer in place, callers still synchronous** (2026-10-05): the import of
+  10 000 files — first pass 4.0 s (4.6 s before), idle passes 0.09 s (0.11–0.13 s);
+  the grouping comes from callers writing at once (identify's five readers). No
+  deadlines yet: a caller waiting for each result would pay one per call.
+- **A rule and its two faces** (the owner, after two wrong turns): a write rule is
+  the unexported method (its debugged logic, untouched); the public method of its
+  name submits and waits (`Do`), its `…Topic()` submits and goes on. Rejected: the
+  public methods as mere pass-throughs to their twins with nothing to show for it
+  (and a rule calling a public write that came back to the writer); folding the
+  bodies into closures inside the public methods (the working methods taken apart,
+  to be taken apart again for the asynchronous side). Then one type playing two roles: the
+  `Proxy` was the model and, with an `inRule` flag, a rule's transaction — a public
+  write called from a rule was caught at run time (a panic) where the types should
+  not offer it. Now three types: `query` (the reads, over the pool or a
+  transaction), `tx` (a rule's: the reads and the rules, no public writes), `Proxy`
+  (the reads over the pool, the public writes, the topics). Every rule takes one
+  argument and gives one result (`pubsub.None` where there is none), so its method
+  on `tx` is its topic's function as it is; go-pub-sub's shapes (`Message`,
+  `Signal`, `Trigger`) keep `None` out of a caller's hands.
+
+- **Who may write what is decided by who holds what** (the owner asked: a `Job`
+  can run anything — "remove all tables"): `Job` is sealed (only an `Op` makes
+  one), an `Op` needs the executor and the model keeps it to itself, so every rule
+  is the model's; steps and perceptors get `Topic`s — an argument for a given rule,
+  no transaction, no code. In one process that is discipline, not security: any
+  code in it can open the database file; today's `.so` plugins could delete it.
+  Only isolation (WebAssembly, a process) makes a plugin unable to — and what it
+  is given is the core's methods as `perceplib/api` declares them.
+
+**Rejected on the way:**
+
+- One batching for everyone: a writer that does not care (the walk) and one whose
+  every result matters (render's commit) want opposite things — classes, by how
+  long a rule tolerates waiting.
+- A batch timer (30 fps) for synchronous callers: one waiting in a loop pays the
+  deadline per call (1000 validates × 33 ms). Kept as a class (Frame) once nobody
+  waits synchronously.
+- A result channel per call; then `any` results in one stream per caller — a topic
+  per write rule (`Op[A, R]`) is typed and needs no routing.
+- Blocking or failing a subscriber that does not read: the writer never waits —
+  a lost subscription is its owner's loss.
+- A new primitive in `chain` for asynchronous steps: a step keeps its own
+  operations; `chain` and everything above stay as they are.
+- A rule split into a read outside and a write through the bus: decisions on stale
+  data. The whole rule is one operation in the writer.
+- Ready-made packages: [qwr](https://pkg.go.dev/github.com/jpl-au/qwr) (a SQLite
+  writer with job IDs — but its batches are not one transaction, it takes SQL
+  strings, a default driver not ours, 25 dependencies, pre-1.0);
+  [go-relay](https://pkg.go.dev/github.com/binozo/go-relay), kelindar/event and the
+  like (broadcast only: no submit → result by ID, no batching) — the bus is a few
+  dozen lines on channels.
+- The bus in perceplib (first written there): it is the core's mechanism and its
+  restrictions; a perceptor needs only the list of core methods it may call —
+  interfaces in `perceplib/api`, synchronous or asynchronous, whatever implements
+  them. Then a library of its own:
+  [go-pub-sub](https://github.com/eggs-gd/go-pub-sub) — the restrictions stay the
+  model's (it keeps the executor).
+- The queue as a column per perceptor (a schema that changes with the loaded `.so`
+  files, a dead column per removed one, an index per column, five columns of state
+  each); the queue in each perceptor's database (every poll a join with `items` in
+  another file — no `ATTACH`, so guid sets diffed in Go, O(N) per poll; leases and
+  backoff written into foreign files); rows of "to do" (someone must remember to
+  enqueue; a config change or a new version would not enqueue anything).
 
 ## Apple Photos
 
