@@ -120,6 +120,11 @@ queue kept as a flag, a "done once" instead of the thing that is done). The rare
 exceptions are data, not state: a field on the wire (`removed` in a JSON line), an
 input option (`hevc` from a request).
 
+**A file reads top-down, public first** — in any language: public interfaces,
+then public declarations (types, constants, variables), private declarations,
+public implementations (functions and methods of exported names), private
+implementations. A reader sees what the file offers before how.
+
 ### Go — write it like Go
 
 - **Names: length follows distance.** Short where the whole use is on one screen —
@@ -141,10 +146,6 @@ input option (`hevc` from a request).
 - **An abstraction and its instance are named apart**: the package and the type
   say what it is (`provider.Provider`), a value says which one (`library`,
   `libraries`).
-- **A file reads top-down, public first**: public interfaces, then public
-  declarations (types, constants, variables), private declarations, public
-  implementations (functions and methods of exported names), private
-  implementations — in every file. A reader sees what the file offers before how.
 - **Interfaces are declared by their consumer**, with only the methods it calls
   (a step's `Store`, a module's `Config`); the producer passes its whole value.
   No interface just in case: one implementation and no test fake — no interface.
