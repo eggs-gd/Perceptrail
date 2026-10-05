@@ -323,7 +323,9 @@ an item):
 - The bus in perceplib (first written there): it is the core's mechanism and its
   restrictions; a perceptor needs only the list of core methods it may call —
   interfaces in `perceplib/api`, synchronous or asynchronous, whatever implements
-  them. `internal/bus`.
+  them. Then a library of its own:
+  [go-pub-sub](https://github.com/eggs-gd/go-pub-sub) — the restrictions stay the
+  model's (it keeps the executor).
 - The queue as a column per perceptor (a schema that changes with the loaded `.so`
   files, a dead column per removed one, an index per column, five columns of state
   each); the queue in each perceptor's database (every poll a join with `items` in

@@ -43,7 +43,7 @@ One line each; the details are in the READMEs and the PRs.
 In steps, each its own PR (designs below: "The write bus", "The work queue",
 "Expensive stage"):
 
-0. [ ] **The write bus** — `internal/bus` (operations as topics, subscriptions,
+0. [ ] **The write bus** — [go-pub-sub](https://github.com/eggs-gd/go-pub-sub) (operations as topics, subscriptions,
    classes) and the model's writer (one write connection, a read pool, batches by
    class, `synchronous=NORMAL`); the import's steps on it, the walk without its own
    pages. Before any new writer comes.
@@ -234,20 +234,20 @@ findings "The write bus".
   writer's transaction (`ValidateGroup`, `Gone`, `NeedsWork` keep the atomicity the
   one connection gives now). Not "an UPDATE": a rule read outside and written
   inside would decide on stale data.
-- **`gontroller/internal/bus`** — the core's own mechanism: one write rule = one
-  topic, a typed value —
+- **[go-pub-sub](https://github.com/eggs-gd/go-pub-sub)** (a library of its own,
+  `pubsub`): one write rule = one topic, a typed value —
 
   ```go
-  type Op[T, A, R any] struct{ … }              // T: the executor's transaction; its class fixed when made
-  func (o *Op[T, A, R]) Submit(arg A) ID        // queued, returns at once
+  type Op[T, A, R any] struct{ … }              // T: the executor's env (here the transaction); its class fixed when made
+  func (o *Op[T, A, R]) Submit(arg A) ID        // queued: never waits for the work, may wait for room
   func (o *Op[T, A, R]) Subscribe(n int) *Sub[R] // every result of this rule; filter yours by ID
   func (o *Op[T, A, R]) Do(arg A) (R, error)    // the sync wrapper: submit, wait for your own
   type Result[R any] struct{ ID ID; Value R; Err error }
   type Topic[A, R any] interface{ Submit; Subscribe; Do } // what a step sees
   ```
 
-  The bus does not know who runs an operation: the model gives the executor (its
-  writer) and keeps it to itself; `Job` is sealed — only an `Op` makes one — so
+  The library does not know who runs an operation: the model gives the executor
+  (its writer) and keeps it to itself; `Job` is sealed — only an `Op` makes one — so
   every rule is the model's, and the others get `Topic`s.
 - **Perceptors never see the bus**: the methods of the core a perceptor may call
   are interfaces in `perceplib/api`, declared there by their consumer — each

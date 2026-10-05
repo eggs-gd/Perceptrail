@@ -86,7 +86,6 @@ package's own unit tests stay next to it.
 | Package | What |
 |---|---|
 | `internal/app` | the server as a whole: its services run together (`Services`), the version |
-| `internal/bus` | write operations as topics: an `Op` per write rule (`Submit`, `Subscribe`, `Do`), classes; the model runs them (its executor stays its own) — steps see `Topic`s |
 | `internal/config` | the config file, read once (`Load`, `Read`); a leaf — a module declares the getters it reads as its own `Config` interface |
 | `internal/importer` | the import chain ([README](internal/importer/README.md)) |
 | `internal/transcode` | the transcoders' switch and stubs (a chain of its own later) |
