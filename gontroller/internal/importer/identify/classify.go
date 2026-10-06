@@ -3,12 +3,13 @@ package identify
 import (
 	"perceptrail/gontroller/internal/model/dto"
 
-	l "github.com/eggs-gd/go-zap-decor"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	l "github.com/eggs-gd/go-zap-decor"
 )
 
 // mime: what every file of the group is, then which one is the main file. The

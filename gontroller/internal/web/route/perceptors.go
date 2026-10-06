@@ -16,7 +16,7 @@ import (
 // per perceptor, asks one for the order of the sheet and lays it out itself.
 
 // ValuesLoader: a perceptor's stored values for these items (store name, by guid)
-type ValuesLoader func(perceptor string, guids []string) (string, map[string]api.Values, error)
+type ValuesLoader func(perceptor string, guids []api.GUID) (string, map[api.GUID]api.Values, error)
 
 type clientPerceptor struct {
 	Slug     string `json:"slug"` // the view's name in URLs; the plugin's name stays inside
@@ -27,7 +27,7 @@ type clientPerceptor struct {
 }
 
 type clientEntry struct {
-	Guid     string          `json:"guid"`
+	GUID     api.GUID        `json:"guid"`
 	Sections []clientSection `json:"sections,omitempty"` // started here, coarsest first
 }
 
@@ -59,7 +59,7 @@ type perceived struct {
 	values map[string]api.Values
 }
 
-func (p *perceived) GetGuid() string { return p.Guid }
+func (p *perceived) GetGUID() api.GUID { return p.GUID }
 
 func (p *perceived) GetSize() api.Size { return p.Size }
 
@@ -127,12 +127,12 @@ func (r *routes) getOrder(c echo.Context) error {
 		return err
 	}
 	in := make([]api.ItemDataProvider, len(items))
-	byGuid := make(map[string]*perceived, len(items))
-	guids := make([]string, len(items))
+	byGuid := make(map[api.GUID]*perceived, len(items))
+	guids := make([]api.GUID, len(items))
 	for i, it := range items {
 		p := &perceived{ItemDto: it}
-		in[i], byGuid[it.Guid] = p, p
-		guids[i] = it.Guid
+		in[i], byGuid[it.GUID] = p, p
+		guids[i] = it.GUID
 	}
 	// The perceptor's own values ride on the items it orders
 	if r.values != nil {
@@ -157,7 +157,7 @@ func (r *routes) getOrder(c echo.Context) error {
 	w.WriteHeader(http.StatusOK)
 	enc := json.NewEncoder(w)
 	for _, e := range entries {
-		out := clientEntry{Guid: e.Guid}
+		out := clientEntry{GUID: e.GUID}
 		for _, s := range e.Sections {
 			out.Sections = append(out.Sections, clientSection{Level: s.Level, Label: s.Label})
 		}
@@ -171,7 +171,7 @@ func (r *routes) getOrder(c echo.Context) error {
 // r.getInfo: what every perceptor knows about one item (the viewer's info panel), each
 // with its own values loaded; a perceptor that says nothing is left out
 func (r *routes) getInfo(c echo.Context) error {
-	item, err := r.db.GetItemByGuid(c.Param("guid"))
+	item, err := r.db.GetItemByGUID(api.GUID(c.Param("guid")))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
@@ -179,11 +179,11 @@ func (r *routes) getInfo(c echo.Context) error {
 	pi := &perceived{ItemDto: item}
 	for _, p := range r.perceptors {
 		if r.values != nil {
-			store, values, err := r.values(p.Name(), []string{item.Guid})
+			store, values, err := r.values(p.Name(), []api.GUID{item.GUID})
 			if err != nil {
 				return err
 			}
-			if v, ok := values[item.Guid]; ok {
+			if v, ok := values[item.GUID]; ok {
 				pi.SetStoreValues(store, v)
 			}
 		}

@@ -8,6 +8,7 @@ import (
 	"perceptrail/gontroller/internal/model/dto"
 
 	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/perceplib/api"
 
 	"gorm.io/gorm"
 )
@@ -17,7 +18,7 @@ type Config interface {
 	Database() config.Database
 }
 
-// ErrNotFound: a lookup found no row (GetFileByPath, GetItemByGuid, …)
+// ErrNotFound: a lookup found no row (GetFileByPath, GetItemByGUID, …)
 var ErrNotFound = gorm.ErrRecordNotFound
 
 // Proxy: the model — the library's data and its rules (items.go, identity.go,
@@ -63,6 +64,10 @@ func Open(cfg Config, logger *l.Logger) (*Proxy, error) {
 		return nil, err
 	}
 	if err := writes.AutoMigrate(&dto.ItemDto{}, &dto.FileDto{}, &dto.MetaDto{}); err != nil {
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+	// An ignored group was marked "-" before the GUID had a nil value of its own
+	if err := writes.Model(&dto.FileDto{}).Where("linked_to = ?", "-").Update("linked_to", api.NilGUID).Error; err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	reads, err := connect(cfg, true, logger)

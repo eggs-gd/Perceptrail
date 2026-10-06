@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/eggs-gd/perceplib/api"
 	"github.com/labstack/echo/v4"
 )
 
@@ -29,7 +30,7 @@ func (r *routes) registerAssets(segment string, e *echo.Echo) {
 // r.getItemFiles: every file of the item's group — the original, its edits,
 // derivatives, sidecars, frames — each with a URL to download it
 func (r *routes) getItemFiles(c echo.Context) error {
-	guid := c.Param("guid")
+	guid := api.GUID(c.Param("guid"))
 	files, err := r.db.GetLinkedFiles(guid)
 	if err != nil {
 		return err
@@ -43,9 +44,9 @@ func (r *routes) getItemFiles(c echo.Context) error {
 }
 
 func (r *routes) getFile(c echo.Context) error {
-	guid := c.Param("item")
+	guid := api.GUID(c.Param("item"))
 
-	item, err := r.db.GetItemByGuid(guid)
+	item, err := r.db.GetItemByGUID(guid)
 	if err != nil {
 		return err
 	}
@@ -61,10 +62,10 @@ func (r *routes) getFile(c echo.Context) error {
 // r.getAssetFile serves a file of the asset by its id (or the extracted embedded
 // preview) — only a file linked to this asset, never an arbitrary path
 func (r *routes) getAssetFile(c echo.Context) error {
-	guid, name := c.Param("item"), c.Param("file")
+	guid, name := api.GUID(c.Param("item")), c.Param("file")
 
 	if name == embeddedName {
-		item, err := r.db.GetItemByGuid(guid)
+		item, err := r.db.GetItemByGUID(guid)
 		if err != nil || item.PreviewPath == "" {
 			return echo.NewHTTPError(http.StatusNotFound)
 		}

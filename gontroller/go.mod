@@ -7,8 +7,7 @@ require (
 	github.com/eggs-gd/go-exiftool v0.5.2
 	github.com/eggs-gd/go-pub-sub v0.3.0
 	github.com/eggs-gd/go-zap-decor v0.1.0
-	github.com/eggs-gd/perceplib v0.0.6
-	github.com/google/uuid v1.6.0
+	github.com/eggs-gd/perceplib v0.0.7
 	github.com/h2non/bimg v1.1.9
 	github.com/labstack/echo/v4 v4.16.0
 	github.com/mattn/go-sqlite3 v1.14.52

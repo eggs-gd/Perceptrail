@@ -47,7 +47,7 @@ type draft struct {
 // metadata sidecars, the main file, the derivatives — the first that has it)
 func (it *Item) GetExif(key string) string { return string(it.meta[key]) }
 
-func (it *Item) GetGuid() string { return it.Item.Guid }
+func (it *Item) GetGUID() api.GUID { return it.Item.GUID }
 
 // GetDate returns the date in the local zone of the shot
 func (it *Item) GetDate() time.Time { return it.Item.GetDate() }

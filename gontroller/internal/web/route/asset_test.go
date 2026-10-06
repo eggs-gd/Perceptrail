@@ -12,7 +12,7 @@ import (
 )
 
 func TestClientAssetByRoles(t *testing.T) {
-	item := &dto.ItemDto{Guid: "G", PreviewPath: "/cache/G/embedded.jpg", PreviewMime: "image/jpeg"}
+	item := &dto.ItemDto{GUID: "G", PreviewPath: "/cache/G/embedded.jpg", PreviewMime: "image/jpeg"}
 	file := func(id uint, role, mime string, w int) *dto.FileDto {
 		f := &dto.FileDto{ID: id, Role: role, Width: w, LinkedTo: "G"}
 		f.MimeType = mime
@@ -56,7 +56,7 @@ func TestClientAssetKind(t *testing.T) {
 		{"video", "", []*dto.FileDto{file(dto.RoleOriginal, "video/mp4"), file(dto.RoleStill, "image/jpeg")}, dto.KindVideo},
 		{"apple live", dto.KindLive, []*dto.FileDto{file(dto.RoleOriginal, "video/quicktime"), file(dto.RoleStill, "image/heic")}, dto.KindLive},
 	} {
-		if got := toClientAsset(&dto.ItemDto{Guid: "G", Kind: c.stored}, c.files, nil).Kind; got != c.want {
+		if got := toClientAsset(&dto.ItemDto{GUID: "G", Kind: c.stored}, c.files, nil).Kind; got != c.want {
 			t.Errorf("%s: %q, want %q", c.name, got, c.want)
 		}
 	}
@@ -67,27 +67,27 @@ func TestClientAssetKind(t *testing.T) {
 func TestOnDemandInAsset(t *testing.T) {
 	lib := "/p/Photos Library.photoslibrary/originals/A/A1.heic"
 	photos := apple.New("/p", photokit.Library{}, nil, l.NewLogger(l.FatalLevel, &tree.Decorator{}))
-	if od := toClientAsset(&dto.ItemDto{Guid: "A1", Kind: dto.KindPhoto, Path: lib}, nil, photos).OnDemand; od == nil ||
+	if od := toClientAsset(&dto.ItemDto{GUID: "A1", Kind: dto.KindPhoto, Path: lib}, nil, photos).OnDemand; od == nil ||
 		od.Medium != "/items/A1/rendition/medium?v="+contractVersion || od.Hover != "" || od.Original != "/items/A1/rendition/original?v="+contractVersion {
 		t.Errorf("photo, original in iCloud: %+v", od)
 	}
 	here := []*dto.FileDto{{ID: 1, Role: dto.RoleOriginal, LinkedTo: "A2"}}
 	here[0].MimeType = "image/heic"
-	if od := toClientAsset(&dto.ItemDto{Guid: "A2", Kind: dto.KindPhoto, Path: lib}, here, photos).OnDemand; od == nil || od.Original == "" {
+	if od := toClientAsset(&dto.ItemDto{GUID: "A2", Kind: dto.KindPhoto, Path: lib}, here, photos).OnDemand; od == nil || od.Original == "" {
 		t.Errorf("photo, original here: %+v, want the original still asked from Photos (it may be edited)", od)
 	}
-	if od := toClientAsset(&dto.ItemDto{Guid: "V1", Kind: dto.KindVideo, Path: lib}, nil, photos).OnDemand; od == nil ||
+	if od := toClientAsset(&dto.ItemDto{GUID: "V1", Kind: dto.KindVideo, Path: lib}, nil, photos).OnDemand; od == nil ||
 		od.Hover != "/items/V1/rendition/hover?v="+contractVersion {
 		t.Errorf("video: %+v", od)
 	}
-	if od := toClientAsset(&dto.ItemDto{Guid: "F1", Path: "/photos/f.jpg"}, nil, nil).OnDemand; od != nil {
+	if od := toClientAsset(&dto.ItemDto{GUID: "F1", Path: "/photos/f.jpg"}, nil, nil).OnDemand; od != nil {
 		t.Errorf("a folder's photo: %+v, want none", od)
 	}
 }
 
 // The asset carries the full size of what is seen
 func TestClientAssetFull(t *testing.T) {
-	item := &dto.ItemDto{Guid: "FULL-1"}
+	item := &dto.ItemDto{GUID: "FULL-1"}
 	item.Size.W, item.Size.H = 3024, 4032
 	if a := toClientAsset(item, nil, nil); a.Full == nil || a.Full.W != 3024 || a.Full.H != 4032 {
 		t.Errorf("full %+v, want the item's size", a.Full)

@@ -6,6 +6,7 @@ import (
 	"perceptrail/gontroller/internal/model/dto"
 
 	chain "github.com/eggs-gd/go-chain"
+	"github.com/eggs-gd/perceplib/api"
 
 	l "github.com/eggs-gd/go-zap-decor"
 )
@@ -14,7 +15,7 @@ import (
 // model's identity rules), and a group that is no item remembered as ignored
 type ValidatorStore interface {
 	ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, error)
-	ValidateAsset(key string, files []*dto.FileDto, hash string) (*dto.ItemDto, error)
+	ValidateAsset(key api.GUID, files []*dto.FileDto, hash string) (*dto.ItemDto, error)
 	Ignore(files []*dto.FileDto) error
 }
 

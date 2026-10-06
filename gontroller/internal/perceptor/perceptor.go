@@ -120,7 +120,7 @@ func Store(perceptor string) (*model.PerceptorStore, bool) {
 }
 
 // LoadValues: a perceptor's values for these items (none if it keeps nothing)
-func LoadValues(perceptor string, guids []string) (string, map[string]api.Values, error) {
+func LoadValues(perceptor string, guids []api.GUID) (string, map[api.GUID]api.Values, error) {
 	st, ok := stores[perceptor]
 	if !ok {
 		return "", nil, nil

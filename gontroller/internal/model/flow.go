@@ -6,6 +6,7 @@ import (
 	"perceptrail/gontroller/internal/model/dto"
 
 	pubsub "github.com/eggs-gd/go-pub-sub"
+	"github.com/eggs-gd/perceplib/api"
 )
 
 // An item's flow through its states — the library's own rules: when a group needs
@@ -24,7 +25,7 @@ type flowCommands struct {
 	gone       op[[]*dto.FileDto, GoneResult]
 	ignore     op[[]*dto.FileDto, pubsub.None]
 	publish    op[*dto.ItemDto, *dto.ItemDto]
-	markRework op[[]string, int64]
+	markRework op[[]api.GUID, int64]
 }
 
 // NeedsWork: the group's files are stored and unchanged on disk — does it still
@@ -35,8 +36,8 @@ type flowCommands struct {
 // metadata changed while the files did not (metaHash), or it is marked for rework
 // (MarkRework). guid: the group's item; "" when the whole group is ignored (not media,
 // broken).
-func (q query) NeedsWork(files []*dto.FileDto, key, metaHash string) (needs bool, guid string, err error) {
-	inGroup := map[string]bool{key: key != ""}
+func (q query) NeedsWork(files []*dto.FileDto, key api.GUID, metaHash string) (needs bool, guid api.GUID, err error) {
+	inGroup := map[api.GUID]bool{key: key != ""}
 	for _, f := range files {
 		inGroup[f.GUID] = true
 	}
@@ -56,7 +57,7 @@ func (q query) NeedsWork(files []*dto.FileDto, key, metaHash string) (needs bool
 	if guid == "" {
 		return false, "", nil
 	}
-	item, err := q.GetItemByGuid(guid)
+	item, err := q.GetItemByGUID(guid)
 	if errors.Is(err, ErrNotFound) {
 		return true, guid, nil
 	}
@@ -98,11 +99,11 @@ func (p *Proxy) PublishCommand() pubsub.Command[*dto.ItemDto, *dto.ItemDto] {
 	return p.publish
 }
 
-func (p *Proxy) MarkRework(guids []string) (int64, error) {
+func (p *Proxy) MarkRework(guids []api.GUID) (int64, error) {
 	return p.markRework.Do(guids)
 }
 
-func (p *Proxy) MarkReworkCommand() pubsub.Command[[]string, int64] {
+func (p *Proxy) MarkReworkCommand() pubsub.Command[[]api.GUID, int64] {
 	return p.markRework
 }
 
@@ -130,7 +131,7 @@ func (t *tx) gone(files []*dto.FileDto) (GoneResult, error) {
 		switch {
 		case f.IsIgnored() || f.LinkedTo == "":
 		case f.LinkedTo == f.GUID: // main file: the item is gone
-			item, err := t.GetItemByGuid(f.GUID)
+			item, err := t.GetItemByGUID(f.GUID)
 			if err != nil {
 				continue // never became an item, or already deleted
 			}
@@ -139,7 +140,7 @@ func (t *tx) gone(files []*dto.FileDto) (GoneResult, error) {
 			}
 			deleted++
 		default: // sidecar: its item must be processed again
-			item, err := t.GetItemByGuid(f.LinkedTo)
+			item, err := t.GetItemByGUID(f.LinkedTo)
 			if err != nil {
 				continue
 			}
@@ -158,7 +159,7 @@ func (t *tx) gone(files []*dto.FileDto) (GoneResult, error) {
 			continue
 		}
 		if n, err := t.CountLinkedFiles(f.LinkedTo); err == nil && n == 0 {
-			if item, err := t.GetItemByGuid(f.LinkedTo); err == nil {
+			if item, err := t.GetItemByGUID(f.LinkedTo); err == nil {
 				if _, err := t.deleteItem(item); err == nil {
 					deleted++
 				}
@@ -172,7 +173,7 @@ func (t *tx) gone(files []*dto.FileDto) (GoneResult, error) {
 // files are remembered as ignored — the gate skips them until a file changes — and
 // an item its main file used to be (it got corrupted) goes
 func (t *tx) ignore(files []*dto.FileDto) (pubsub.None, error) {
-	if item, err := t.GetItemByGuid(files[0].GUID); err == nil {
+	if item, err := t.GetItemByGUID(files[0].GUID); err == nil {
 		if _, err := t.deleteItem(item); err != nil {
 			return pubsub.None{}, err
 		}
@@ -199,7 +200,7 @@ func (t *tx) publish(item *dto.ItemDto) (*dto.ItemDto, error) {
 // files unchanged — e.g. a perceptor has no row for them, a library made a file of
 // one local; publishing clears the mark. Not a change the client sees: updated_at
 // stays (the client's delta would bring the item back in its old state)
-func (t *tx) markRework(guids []string) (int64, error) {
+func (t *tx) markRework(guids []api.GUID) (int64, error) {
 	var n int64
 	for start := 0; start < len(guids); start += 500 { // under SQLite's variable limit
 		page := guids[start:min(start+500, len(guids))]

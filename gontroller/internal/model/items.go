@@ -6,6 +6,7 @@ import (
 	"perceptrail/gontroller/internal/model/dto"
 
 	pubsub "github.com/eggs-gd/go-pub-sub"
+	"github.com/eggs-gd/perceplib/api"
 	"gorm.io/gorm"
 )
 
@@ -24,9 +25,9 @@ type itemCommands struct {
 	clearHashes op[pubsub.None, int64]
 }
 
-// GetAllGuids: the GUIDs of every item (deleted ones excluded)
-func (q query) GetAllGuids() ([]string, error) {
-	var guids []string
+// GetAllGUIDs: the GUIDs of every item (deleted ones excluded)
+func (q query) GetAllGUIDs() ([]api.GUID, error) {
+	var guids []api.GUID
 	return guids, q.db.Model(&dto.ItemDto{}).Pluck("guid", &guids).Error
 }
 
@@ -74,7 +75,7 @@ func (q query) CountItemsInStates(states ...dto.ItemState) (int64, error) {
 	return n, q.db.Model(&dto.ItemDto{}).Where("state IN ?", states).Count(&n).Error
 }
 
-func (q query) GetItemByGuid(guid string) (*dto.ItemDto, error) {
+func (q query) GetItemByGUID(guid api.GUID) (*dto.ItemDto, error) {
 	var item dto.ItemDto
 	return &item, q.db.Where("guid = ?", guid).First(&item).Error
 }
@@ -136,16 +137,16 @@ func (q query) streamIDs(db *gorm.DB, ids []uint, fn func(*dto.ItemDto, []*dto.F
 			return err
 		}
 		byID := make(map[uint]*dto.ItemDto, len(batch))
-		guids := make([]string, len(batch))
+		guids := make([]api.GUID, len(batch))
 		for i, it := range batch {
 			byID[it.ID] = it
-			guids[i] = it.Guid
+			guids[i] = it.GUID
 		}
 		var files []*dto.FileDto
 		if err := q.db.Where("linked_to IN ?", guids).Order("id").Find(&files).Error; err != nil {
 			return err
 		}
-		byItem := map[string][]*dto.FileDto{}
+		byItem := map[api.GUID][]*dto.FileDto{}
 		for _, f := range files {
 			byItem[f.LinkedTo] = append(byItem[f.LinkedTo], f)
 		}
@@ -155,7 +156,7 @@ func (q query) streamIDs(db *gorm.DB, ids []uint, fn func(*dto.ItemDto, []*dto.F
 			if !ok {
 				continue // deleted meanwhile
 			}
-			if err := fn(it, byItem[it.Guid]); err != nil {
+			if err := fn(it, byItem[it.GUID]); err != nil {
 				return err
 			}
 		}
@@ -167,7 +168,7 @@ func (t *tx) createItem(file *dto.FileDto) (*dto.ItemDto, error) {
 	item := dto.ItemDto{
 		State:    dto.New,
 		Path:     file.Path,
-		Guid:     file.GUID,
+		GUID:     file.GUID,
 		MimeType: file.MimeType,
 	}
 

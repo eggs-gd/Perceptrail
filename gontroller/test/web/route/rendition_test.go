@@ -13,6 +13,7 @@ import (
 
 	l "github.com/eggs-gd/go-zap-decor"
 	"github.com/eggs-gd/go-zap-decor/tree"
+	"github.com/eggs-gd/perceplib/api"
 )
 
 // The Apple library through the HTTP API: its renditions with a fake Photos; the
@@ -31,9 +32,9 @@ func TestRenditionOnDemand(t *testing.T) {
 		return nil
 	})
 
-	put := func(guid, kind, path string) {
+	put := func(guid api.GUID, kind, path string) {
 		t.Helper()
-		if _, err := testDB.UpdateItem(&dto.ItemDto{Guid: guid, State: dto.Visible, Kind: kind, Path: path}); err != nil {
+		if _, err := testDB.UpdateItem(&dto.ItemDto{GUID: guid, State: dto.Visible, Kind: kind, Path: path}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -100,7 +101,7 @@ func TestRenditionOnDemand(t *testing.T) {
 // The info panel's files: every file of the group, sidecars too, each downloadable
 func TestItemFiles(t *testing.T) {
 	e := server(nil)
-	if _, err := testDB.UpdateItem(&dto.ItemDto{Guid: "FILES-1", State: dto.Visible}); err != nil {
+	if _, err := testDB.UpdateItem(&dto.ItemDto{GUID: "FILES-1", State: dto.Visible}); err != nil {
 		t.Fatal(err)
 	}
 	for _, f := range []struct{ name, role string }{{"a.heic", dto.RoleOriginal}, {"a.xmp", dto.RoleMeta}} {

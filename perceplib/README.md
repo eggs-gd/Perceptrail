@@ -9,7 +9,7 @@ as a **git subtree** under `perceplib/`.
 
 | Package | What |
 |---|---|
-| `api` | perceptor contract (`Perceptor`, `ExifPerceptor` (+ `ExifTagger`: the tags it reads — only declared tags are read, `GetExif` of another is ""; + `Decorator(logger)`: its logic over one item, the host runs it as a step), every perceptor also navigates: `View` (its button) + `Order` (the gallery's sheet in its order, with sections); what it knows about an item: `Info` (facts for the info panel); its data: `Schema` + a typed `Store[T]` (`NewStore`, `Put`, `Get` — the host keeps the storage)), data types (`RawExif`, `Size`), item access interfaces (`RawItemR`, `ItemDataProvider/Editor`), `GetRatio` |
+| `api` | perceptor contract (`Perceptor`, `ExifPerceptor` (+ `ExifTagger`: the tags it reads — only declared tags are read, `GetExif` of another is ""; + `Decorator(logger)`: its logic over one item, the host runs it as a step), every perceptor also navigates: `View` (its button) + `Order` (the gallery's sheet in its order, with sections); what it knows about an item: `Info` (facts for the info panel); its data: `Schema` + a typed `Store[T]` (`NewStore`, `Put`, `Get` — the host keeps the storage)), data types (`GUID` — an item's identity, the same in the host and every perceptor, `NilGUID` names no item; `RawExif`, `Size`), item access interfaces (`RawItemR`, `ItemDataProvider/Editor`), `GetRatio` |
 | `exif` | helpers for the values the host reads with exiftool `-n` (numbers as numbers): `Coordinates` (signed decimal degrees) + `CoordinateTags` to declare |
 
 The perceptor contract builds on two libraries of their own (2026-10-05, they were

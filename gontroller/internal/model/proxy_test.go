@@ -7,9 +7,11 @@ import (
 	"testing"
 
 	"perceptrail/gontroller/internal/config"
+	"perceptrail/gontroller/internal/model/dto"
 
 	l "github.com/eggs-gd/go-zap-decor"
 	"github.com/eggs-gd/go-zap-decor/tree"
+	"github.com/eggs-gd/perceplib/api"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -54,3 +56,30 @@ func TestOpenDrivers(t *testing.T) {
 type database struct{ db config.Database }
 
 func (d database) Database() config.Database { return d.db }
+
+// A group ignored before the GUID had a nil value ("-") is still ignored after Open
+func TestOpenMigratesIgnoredMark(t *testing.T) {
+	logger := l.NewLogger(l.ErrorLevel, &tree.Decorator{})
+	cfg := database{config.Database{Driver: config.DriverSQLite, Name: filepath.Join(t.TempDir(), "x.db")}}
+	db, err := Open(cfg, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := db.CreateFile(dto.ItemEntry{Path: "/old.mov", Name: "old.mov"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.writer.db.Model(&dto.FileDto{}).Where("id = ?", f.ID).Update("linked_to", "-").Error; err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	db, err = Open(cfg, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if got, err := db.GetFileByID(f.ID); err != nil || !got.IsIgnored() || got.LinkedTo != api.NilGUID {
+		t.Errorf("linked to %q (%v), want the nil GUID", got.LinkedTo, err)
+	}
+}

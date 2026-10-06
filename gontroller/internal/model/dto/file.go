@@ -2,6 +2,8 @@ package dto
 
 import (
 	"time"
+
+	"github.com/eggs-gd/perceplib/api"
 )
 
 type ItemEntry struct {
@@ -13,12 +15,12 @@ type ItemEntry struct {
 }
 
 type FileDto struct {
-	ID   uint   `gorm:"primaryKey"`
-	GUID string `gorm:"uniqueIndex"`
-	// - Main file contans its own QUID
-	// - Sidecar contains Guid of main file
-	// - And contains "-" if ignored/unwanted
-	LinkedTo string `gorm:"index"`
+	ID   uint     `gorm:"primaryKey"`
+	GUID api.GUID `gorm:"uniqueIndex"`
+	// The item the file belongs to: a main file's own GUID, a sidecar's main file's
+	// GUID, a keyed group's key; "" — not decided yet; api.NilGUID — no item
+	// (ignored: not media, broken)
+	LinkedTo api.GUID `gorm:"index"`
 
 	// What the file is to its asset (Role*): set by the source's grouper when it
 	// knows (Apple Photos), otherwise by the mime step
@@ -77,7 +79,7 @@ func (f *FileDto) LinkTo(mainFile *FileDto) bool {
 }
 
 // LinkToItem links the file to an item by its GUID (a keyed group: the asset's key)
-func (f *FileDto) LinkToItem(guid string) bool {
+func (f *FileDto) LinkToItem(guid api.GUID) bool {
 	if f.LinkedTo != guid {
 		f.LinkedTo = guid
 		return true
@@ -86,9 +88,9 @@ func (f *FileDto) LinkToItem(guid string) bool {
 }
 
 func (f *FileDto) SetIgnored() {
-	f.LinkedTo = "-"
+	f.LinkedTo = api.NilGUID
 }
 
 func (f *FileDto) IsIgnored() bool {
-	return f.LinkedTo == "-"
+	return f.LinkedTo == api.NilGUID
 }
