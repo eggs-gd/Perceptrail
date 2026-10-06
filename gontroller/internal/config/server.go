@@ -6,8 +6,6 @@ import (
 	"strconv"
 )
 
-const defaultPort = 1323
-
 // Server: the `server` section — the HTTP service
 type Server struct {
 	// Listen host. Default: all interfaces
@@ -17,6 +15,13 @@ type Server struct {
 	// CORS: origins allowed to call the API (the client in dev runs on another
 	// port). Default: any
 	AllowedOrigins []string `yaml:"allowed_origins"`
+}
+
+const defaultPort = 1323
+
+// Addr is the listen address (IPv6 hosts are bracketed)
+func (s Server) Addr() string {
+	return net.JoinHostPort(s.Host, strconv.Itoa(s.Port))
 }
 
 // resolve fills the unset fields and checks the rest
@@ -31,9 +36,4 @@ func (s *Server) resolve() error {
 		s.AllowedOrigins = []string{"*"}
 	}
 	return nil
-}
-
-// Addr is the listen address (IPv6 hosts are bracketed)
-func (s Server) Addr() string {
-	return net.JoinHostPort(s.Host, strconv.Itoa(s.Port))
 }

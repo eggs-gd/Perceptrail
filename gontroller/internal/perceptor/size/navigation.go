@@ -39,14 +39,6 @@ func (p *sizePerceptor) Order(ctx context.Context, _ string, items []api.ItemDat
 	return out, ctx.Err()
 }
 
-// megapixels: whole ones, tenths below one ("12 MP", "0.3 MP")
-func megapixels(mp float64) string {
-	if mp >= 1 {
-		return fmt.Sprintf("%d MP", int(mp))
-	}
-	return fmt.Sprintf("%.1f MP", mp)
-}
-
 // Schema: nothing of its own to keep — the core's item has it
 func (p *sizePerceptor) Schema() api.Schema { return api.Schema{} }
 
@@ -57,4 +49,12 @@ func (p *sizePerceptor) Info(item api.ItemDataProvider) []api.Fact {
 		return nil
 	}
 	return []api.Fact{{Label: "Size", Value: fmt.Sprintf("%d × %d, %.1f MP", s.W, s.H, float64(s.W)*float64(s.H)/1e6)}}
+}
+
+// megapixels: whole ones, tenths below one ("12 MP", "0.3 MP")
+func megapixels(mp float64) string {
+	if mp >= 1 {
+		return fmt.Sprintf("%d MP", int(mp))
+	}
+	return fmt.Sprintf("%.1f MP", mp)
 }

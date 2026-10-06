@@ -31,6 +31,21 @@ type reader struct {
 	declared map[string]bool // the perceptors': what makes the package
 }
 
+func (r *reader) Decorate(g dto.Asset) (*draft, error) {
+	d, err := r.read(g)
+	if err != nil {
+		return nil, err
+	}
+	classify(d)
+	merge(d, r.declared)
+	if d.isMedia() { // else validate ignores it: nothing to identify
+		if d.Hash, err = fingerprint(d.Files[0].Path); err != nil {
+			return nil, err
+		}
+	}
+	return d, nil
+}
+
 // newReader: declared are the tags the perceptors read; identify's own are added
 func newReader(tool Exiftool, declared []string, logger *l.Logger) *reader {
 	r := &reader{logger: logger, tool: tool, declared: map[string]bool{}}
@@ -45,21 +60,6 @@ func newReader(tool Exiftool, declared []string, logger *l.Logger) *reader {
 		}
 	}
 	return r
-}
-
-func (r *reader) Decorate(g dto.Asset) (*draft, error) {
-	d, err := r.read(g)
-	if err != nil {
-		return nil, err
-	}
-	classify(d)
-	merge(d, r.declared)
-	if d.isMedia() { // else validate ignores it: nothing to identify
-		if d.Hash, err = fingerprint(d.Files[0].Path); err != nil {
-			return nil, err
-		}
-	}
-	return d, nil
 }
 
 // read: the group's files and their metadata, every file of it at once (a keyed

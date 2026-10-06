@@ -25,6 +25,12 @@ import (
 //	Places.Put(in, Location{Lat: lat, Lon: lon}) // in the processor
 //	loc, ok := Places.Get(it)                    // in Order
 
+// ValueCarrier: an item carries the values of the stores (the host implements it)
+type ValueCarrier interface {
+	StoreValues(store string) (Values, bool)
+	SetStoreValues(store string, v Values)
+}
+
 // Kind of a stored field, from the Go type of the struct field
 type Kind int
 
@@ -54,12 +60,6 @@ type Schema struct {
 // Values: one item's values of one store, by field name. The exchange between
 // Store[T] and the host — plugins use Put / Get.
 type Values map[string]any
-
-// ValueCarrier: an item carries the values of the stores (the host implements it)
-type ValueCarrier interface {
-	StoreValues(store string) (Values, bool)
-	SetStoreValues(store string, v Values)
-}
 
 // Store: a perceptor's typed data. Create it once (a package variable): the schema
 // is read from T by reflection, and an unsupported field panics at plugin load.

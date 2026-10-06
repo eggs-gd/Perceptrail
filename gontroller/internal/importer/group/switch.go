@@ -21,6 +21,12 @@ type Library interface {
 	Grouper() provider.Grouper
 }
 
+// Switch: a file to the grouper of the first library that claims it (its index in
+// Libraries)
+type Switch[L Library] struct {
+	Libraries []L
+}
+
 // New: the sub-chain from in (the walk's files) to out (whole assets: every grouper
 // writes to it, so it closes once every grouper has returned)
 func New[L Library](libraries []L, in <-chan dto.WalkedFile, out chan<- dto.Asset) chain.Processor {
@@ -33,12 +39,6 @@ func New[L Library](libraries []L, in <-chan dto.WalkedFile, out chan<- dto.Asse
 	}
 	grouping.AddStep(chain.NewSwitch(in, toGroupers, Switch[L]{Libraries: libraries}))
 	return grouping
-}
-
-// Switch: a file to the grouper of the first library that claims it (its index in
-// Libraries)
-type Switch[L Library] struct {
-	Libraries []L
 }
 
 func (s Switch[L]) Switch(f dto.WalkedFile) (int, error) {

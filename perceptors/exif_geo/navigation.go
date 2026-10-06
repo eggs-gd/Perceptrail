@@ -21,6 +21,14 @@ import (
 
 const geoIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.3"/></svg>`
 
+// hilbertOrder: the curve's resolution, 2^16 × 2^16 cells (~300 m at the equator)
+const hilbertOrder = 16
+
+var (
+	finderOnce sync.Once
+	finder     tzf.F
+)
+
 func (p *geoPerceptor) View() api.View {
 	return api.View{
 		Slug:  "place",
@@ -31,9 +39,6 @@ func (p *geoPerceptor) View() api.View {
 }
 
 func (p *geoPerceptor) Schema() api.Schema { return places.Places.Schema() }
-
-// hilbertOrder: the curve's resolution, 2^16 × 2^16 cells (~300 m at the equator)
-const hilbertOrder = 16
 
 func (p *geoPerceptor) Order(ctx context.Context, _ string, items []api.ItemDataProvider) ([]api.Entry, error) {
 	type placed struct {
@@ -108,6 +113,24 @@ func (p *geoPerceptor) Order(ctx context.Context, _ string, items []api.ItemData
 	return out, nil
 }
 
+// Info: where the photo was taken — the place (from the time zone there) and the
+// coordinates
+func (p *geoPerceptor) Info(item api.ItemDataProvider) []api.Fact {
+	loc, ok := places.Places.Get(item)
+	if !ok {
+		return []api.Fact{{Label: "Place", Value: "unknown"}}
+	}
+	region, city := splitZone(zoneName(loc))
+	place := region
+	if city != "" {
+		place = city + ", " + region
+	}
+	return []api.Fact{
+		{Label: "Place", Value: place},
+		{Label: "Coordinates", Value: fmt.Sprintf("%.5f, %.5f", loc.Lat, loc.Lon)},
+	}
+}
+
 // hilbert: the position of (lat, lon) along a Hilbert curve over the whole globe
 // (xy2d — the standard algorithm)
 func hilbert(loc places.Location) uint64 {
@@ -135,11 +158,6 @@ func hilbert(loc places.Location) uint64 {
 	return d
 }
 
-var (
-	finderOnce sync.Once
-	finder     tzf.F
-)
-
 // zoneName: the IANA zone at the place ("Europe/Kyiv"), "" if unknown
 func zoneName(loc places.Location) string {
 	finderOnce.Do(func() {
@@ -165,22 +183,4 @@ func splitZone(zone string) (region, city string) {
 		return zone, ""
 	}
 	return parts[0], strings.ReplaceAll(parts[len(parts)-1], "_", " ")
-}
-
-// Info: where the photo was taken — the place (from the time zone there) and the
-// coordinates
-func (p *geoPerceptor) Info(item api.ItemDataProvider) []api.Fact {
-	loc, ok := places.Places.Get(item)
-	if !ok {
-		return []api.Fact{{Label: "Place", Value: "unknown"}}
-	}
-	region, city := splitZone(zoneName(loc))
-	place := region
-	if city != "" {
-		place = city + ", " + region
-	}
-	return []api.Fact{
-		{Label: "Place", Value: place},
-		{Label: "Coordinates", Value: fmt.Sprintf("%.5f, %.5f", loc.Lat, loc.Lon)},
-	}
 }

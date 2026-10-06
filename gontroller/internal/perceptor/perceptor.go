@@ -91,25 +91,6 @@ func Close() {
 	stores = nil
 }
 
-// openStores: a storage per perceptor that declares data — data_dir/perceptors/
-// (SQLite: a file each). One that cannot be opened is logged: its perceptor runs,
-// its values are not kept.
-func openStores() {
-	stores = map[string]*model.PerceptorStore{}
-	for _, p := range perceptors {
-		s := p.Schema()
-		if s.Store == "" {
-			continue
-		}
-		st, err := model.OpenPerceptorStore(cfg.Database().Driver, filepath.Join(cfg.DataDir(), "perceptors"), s)
-		if err != nil {
-			logger.Error("Perceptor storage not opened", l.String("perceptor", p.Name()), l.Error(err))
-			continue
-		}
-		stores[p.Name()] = st
-	}
-}
-
 // ExifTags: every tag the loaded perceptors read (api.ExifTagger), once each
 func ExifTags() []string {
 	seen := map[string]bool{}
@@ -158,6 +139,25 @@ func Client() []api.Perceptor {
 		}
 	}
 	return out
+}
+
+// openStores: a storage per perceptor that declares data — data_dir/perceptors/
+// (SQLite: a file each). One that cannot be opened is logged: its perceptor runs,
+// its values are not kept.
+func openStores() {
+	stores = map[string]*model.PerceptorStore{}
+	for _, p := range perceptors {
+		s := p.Schema()
+		if s.Store == "" {
+			continue
+		}
+		st, err := model.OpenPerceptorStore(cfg.Database().Driver, filepath.Join(cfg.DataDir(), "perceptors"), s)
+		if err != nil {
+			logger.Error("Perceptor storage not opened", l.String("perceptor", p.Name()), l.Error(err))
+			continue
+		}
+		stores[p.Name()] = st
+	}
 }
 
 // loadExternal: the plugins of the config; one that cannot be loaded is logged

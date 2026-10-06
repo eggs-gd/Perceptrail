@@ -8,13 +8,6 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-func (r *routes) registerAssets(segment string, e *echo.Echo) {
-	userGroup := e.Group(segment)
-	userGroup.GET("/:item", r.getFile)            // the default preview
-	userGroup.GET("/:item/:file", r.getAssetFile) // any file of the asset (the asset contract)
-	e.GET("/items/:guid/files", r.getItemFiles)
-}
-
 // itemFile: one file of the item's group, for the info panel (sidecars too)
 type itemFile struct {
 	Name string `json:"name"`
@@ -24,6 +17,13 @@ type itemFile struct {
 	W    int    `json:"w,omitempty"`
 	H    int    `json:"h,omitempty"`
 	URL  string `json:"url"` // relative to the API: a download
+}
+
+func (r *routes) registerAssets(segment string, e *echo.Echo) {
+	userGroup := e.Group(segment)
+	userGroup.GET("/:item", r.getFile)            // the default preview
+	userGroup.GET("/:item/:file", r.getAssetFile) // any file of the asset (the asset contract)
+	e.GET("/items/:guid/files", r.getItemFiles)
 }
 
 // r.getItemFiles: every file of the item's group — the original, its edits,

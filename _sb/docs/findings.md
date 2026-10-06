@@ -465,6 +465,14 @@ Layout, the DB's facts and PhotoKit's behaviour: the
   (structural typing: no DTO per module). Rejected: per-module config structs built
   in `main`, an `AppContext` singleton of globals, `library.Use` (a setter only
   tests called).
+- **vulncheck GO-2026-5932 is not ours** (2026-10-06): `x/crypto/openpgp` is
+  declared unsafe as a whole package, with no fixed version; `x/crypto` comes with
+  echo (`acme/autocert`) and nothing imports `openpgp`. `govulncheck ./...` says so
+  ("your code doesn't appear to call"); the gopls MCP lists it as a finding by the
+  module alone. Nothing to bump.
+- **Public first, by a script** (2026-10-06): the files were reordered by moving
+  whole declarations (with their comments), so the diff is moves only. Skipped:
+  cgo files (the `import "C"` preamble) by hand, a spike under `_sb`.
 
 ## exiftool
 

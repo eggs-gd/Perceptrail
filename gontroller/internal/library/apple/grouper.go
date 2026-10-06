@@ -37,10 +37,94 @@ type Grouper struct {
 	libs   map[string]*library // by bundle path, loaded once per walk
 }
 
-// newGrouper: the grouper's logic — the importer runs it as a step of the chain
-// (the provider hands it over: provider.Grouper)
-func newGrouper(logger *l.Logger) *Grouper {
-	return &Grouper{logger: logger, libs: map[string]*library{}}
+// Want: what the client asks for on demand (the viewer, a hover)
+type Want int
+
+const (
+	WantImage      Want = iota // the viewer's image: the edit, else ~2048 px
+	WantVideo                  // the viewer's video: 720p, HEVC allowed
+	WantVideoH264              // the same for a browser that plays no HEVC
+	WantVideoHover             // a video on hover: the smallest H.264
+	WantLiveMotion             // a Live Photo's motion
+)
+
+type library struct {
+	assets []*asset
+	byPath map[string]*asset
+	root   string
+	// The files of assets Photos keeps out of the library (trashed, hidden): on disk,
+	// but gone for us
+	dropped map[string]bool
+}
+
+type asset struct {
+	uuid     string
+	meta     api.RawExif // the DB's metadata (wins over the files' EXIF)
+	metaHash string
+	kind     string      // dto.Kind*
+	files    []candidate // on disk at load time, in group order: the main file first
+	show     []string    // what to show first, best first
+	arrived  map[string]*dto.FileDto
+	sent     bool
+}
+
+type candidate struct {
+	path string
+	role role
+}
+
+// role: what a file is to its asset. The order is the group order (the main file
+// is the first that exists); showRank orders what to show.
+type role int
+
+const (
+	roleLiveVideo role = iota // the video of a Live Photo: the source when present
+	roleOriginal
+	roleRender      // the user's edit, full size
+	roleRenderHEIC  // the same as HEIC (not viewable outside Safari)
+	roleEditPreview // ~2000 px of the edit
+	roleLarge       // ~2000–2600 px of the original
+	roleLarge2      // ~2000 px of the original
+	roleMedium      // ~1000 px
+	roleMedium2     // ~1000 px
+	roleThumb       // the small thumbnail (~360×640)
+	roleVideoPoster // .THM (32×32)
+	// Video renditions Photos downloads on request (PhotoKit): after the stills, so
+	// the main file does not change when one appears. _a: of the user's edit (what
+	// Photos shows; seen for a Live Photo's motion, assumed for videos), _o: of the
+	// original.
+	roleLiveMotionEdit  // _2_101_a.mov
+	roleVideoHEVCEdit   // _2_201_a.mov
+	roleVideoMediumEdit // _2_3_a.mp4
+	roleVideoSmallEdit  // _2_4_a.mp4
+	roleVideoHEVC       // _2_201_o.mov: 720p HEVC (an iPhone video's medium)
+	roleVideoMedium     // _2_3_o.mp4: 720p H.264 (another video's medium)
+	roleVideoSmall      // _2_4_o.mp4: 360p H.264 (fast)
+	roleLiveMotion      // _2_101_o.mov: a Live Photo's motion, H.264
+	roleFrame           // cvt/…/_cvt_tNNNN.jpeg: frames of a video (a flip-book)
+)
+
+// showRank: the edit first (it is what the user sees in Photos), then the original,
+// then the biggest derivative; the cheap stage takes the first the browser shows
+var showRank = []role{roleRender, roleEditPreview, roleRenderHEIC, roleOriginal, roleLarge, roleLarge2, roleMedium, roleMedium2, roleThumb, roleVideoPoster}
+
+// wanted: the renditions that answer a want, best first. Not the original: its
+// path is in the DB, not in the naming layout (the caller has it).
+var wanted = map[Want][]role{
+	WantImage:      {roleRender, roleEditPreview, roleLarge, roleLarge2},
+	WantVideo:      {roleVideoHEVCEdit, roleVideoMediumEdit, roleVideoHEVC, roleVideoMedium},
+	WantVideoH264:  {roleVideoMediumEdit, roleVideoSmallEdit, roleVideoMedium, roleVideoSmall},
+	WantVideoHover: {roleVideoSmallEdit, roleVideoMediumEdit, roleVideoSmall, roleVideoMedium},
+	WantLiveMotion: {roleLiveMotionEdit, roleLiveMotion, roleLiveVideo},
+}
+
+type assetRow struct {
+	uuid, dir, filename string
+	trashed, hidden     bool
+	meta                assetMeta
+	// ZKIND: 0 photo, 1 video; ZPLAYBACKSTYLE: 3 a Live Photo (live on). A Live
+	// Photo with live switched off is a still in Photos (ZKINDSUBTYPE 2, style 1).
+	zkind, playback int
 }
 
 // Flush: the walk ended — the next one loads the libraries again. Groups that did
@@ -91,15 +175,6 @@ func (g *Grouper) Decorate(walked dto.WalkedFile) (dto.Asset, error) {
 // it: ~/Pictures) — then Photos is worth asking for access
 func HasLibrary(root string) bool { return len(bundles(root)) > 0 }
 
-// bundles: the Photos libraries of root — root itself, or the ones at its top
-func bundles(root string) []string {
-	if strings.HasSuffix(strings.ToLower(root), ".photoslibrary") {
-		return []string{root}
-	}
-	m, _ := filepath.Glob(filepath.Join(root, "*.photoslibrary"))
-	return m
-}
-
 // BundleRoot: the *.photoslibrary directory path contains, "" if none
 func BundleRoot(path string) string {
 	parts := strings.Split(filepath.ToSlash(path), "/")
@@ -111,29 +186,36 @@ func BundleRoot(path string) string {
 	return ""
 }
 
-type library struct {
-	assets []*asset
-	byPath map[string]*asset
-	root   string
-	// The files of assets Photos keeps out of the library (trashed, hidden): on disk,
-	// but gone for us
-	dropped map[string]bool
+// Local: the best file of the asset in the library for want, "" if none is local
+// yet — then Photos is asked for it (PhotoKit) and Local looks again
+func Local(root, uuid string, want Want) string {
+	byRole := map[role]string{}
+	for _, c := range candidates(root, uuid, "", "") {
+		byRole[c.role] = c.path
+	}
+	for _, r := range wanted[want] {
+		if p, ok := byRole[r]; ok {
+			if info, err := os.Stat(p); err == nil && !info.IsDir() {
+				return p
+			}
+		}
+	}
+	return ""
 }
 
-type asset struct {
-	uuid     string
-	meta     api.RawExif // the DB's metadata (wins over the files' EXIF)
-	metaHash string
-	kind     string      // dto.Kind*
-	files    []candidate // on disk at load time, in group order: the main file first
-	show     []string    // what to show first, best first
-	arrived  map[string]*dto.FileDto
-	sent     bool
+// newGrouper: the grouper's logic — the importer runs it as a step of the chain
+// (the provider hands it over: provider.Grouper)
+func newGrouper(logger *l.Logger) *Grouper {
+	return &Grouper{logger: logger, libs: map[string]*library{}}
 }
 
-type candidate struct {
-	path string
-	role role
+// bundles: the Photos libraries of root — root itself, or the ones at its top
+func bundles(root string) []string {
+	if strings.HasSuffix(strings.ToLower(root), ".photoslibrary") {
+		return []string{root}
+	}
+	m, _ := filepath.Glob(filepath.Join(root, "*.photoslibrary"))
+	return m
 }
 
 func (a *asset) group() dto.Asset {
@@ -153,37 +235,6 @@ func (a *asset) group() dto.Asset {
 	return g
 }
 
-// role: what a file is to its asset. The order is the group order (the main file
-// is the first that exists); showRank orders what to show.
-type role int
-
-const (
-	roleLiveVideo role = iota // the video of a Live Photo: the source when present
-	roleOriginal
-	roleRender      // the user's edit, full size
-	roleRenderHEIC  // the same as HEIC (not viewable outside Safari)
-	roleEditPreview // ~2000 px of the edit
-	roleLarge       // ~2000–2600 px of the original
-	roleLarge2      // ~2000 px of the original
-	roleMedium      // ~1000 px
-	roleMedium2     // ~1000 px
-	roleThumb       // the small thumbnail (~360×640)
-	roleVideoPoster // .THM (32×32)
-	// Video renditions Photos downloads on request (PhotoKit): after the stills, so
-	// the main file does not change when one appears. _a: of the user's edit (what
-	// Photos shows; seen for a Live Photo's motion, assumed for videos), _o: of the
-	// original.
-	roleLiveMotionEdit  // _2_101_a.mov
-	roleVideoHEVCEdit   // _2_201_a.mov
-	roleVideoMediumEdit // _2_3_a.mp4
-	roleVideoSmallEdit  // _2_4_a.mp4
-	roleVideoHEVC       // _2_201_o.mov: 720p HEVC (an iPhone video's medium)
-	roleVideoMedium     // _2_3_o.mp4: 720p H.264 (another video's medium)
-	roleVideoSmall      // _2_4_o.mp4: 360p H.264 (fast)
-	roleLiveMotion      // _2_101_o.mov: a Live Photo's motion, H.264
-	roleFrame           // cvt/…/_cvt_tNNNN.jpeg: frames of a video (a flip-book)
-)
-
 // fileRole: what the file is to the asset, for the client
 func (r role) fileRole() string {
 	switch r {
@@ -200,10 +251,6 @@ func (r role) fileRole() string {
 		return dto.RoleStill
 	}
 }
-
-// showRank: the edit first (it is what the user sees in Photos), then the original,
-// then the biggest derivative; the cheap stage takes the first the browser shows
-var showRank = []role{roleRender, roleEditPreview, roleRenderHEIC, roleOriginal, roleLarge, roleLarge2, roleMedium, roleMedium2, roleThumb, roleVideoPoster}
 
 // candidates: every file an asset may have, per the naming layout
 func candidates(root, uuid, dir, filename string) []candidate {
@@ -231,44 +278,6 @@ func candidates(root, uuid, dir, filename string) []candidate {
 		{filepath.Join(deriv, uuid+"_2_4_o.mp4"), roleVideoSmall},
 		{filepath.Join(deriv, uuid+"_2_101_o.mov"), roleLiveMotion},
 	}
-}
-
-// Want: what the client asks for on demand (the viewer, a hover)
-type Want int
-
-const (
-	WantImage      Want = iota // the viewer's image: the edit, else ~2048 px
-	WantVideo                  // the viewer's video: 720p, HEVC allowed
-	WantVideoH264              // the same for a browser that plays no HEVC
-	WantVideoHover             // a video on hover: the smallest H.264
-	WantLiveMotion             // a Live Photo's motion
-)
-
-// wanted: the renditions that answer a want, best first. Not the original: its
-// path is in the DB, not in the naming layout (the caller has it).
-var wanted = map[Want][]role{
-	WantImage:      {roleRender, roleEditPreview, roleLarge, roleLarge2},
-	WantVideo:      {roleVideoHEVCEdit, roleVideoMediumEdit, roleVideoHEVC, roleVideoMedium},
-	WantVideoH264:  {roleVideoMediumEdit, roleVideoSmallEdit, roleVideoMedium, roleVideoSmall},
-	WantVideoHover: {roleVideoSmallEdit, roleVideoMediumEdit, roleVideoSmall, roleVideoMedium},
-	WantLiveMotion: {roleLiveMotionEdit, roleLiveMotion, roleLiveVideo},
-}
-
-// Local: the best file of the asset in the library for want, "" if none is local
-// yet — then Photos is asked for it (PhotoKit) and Local looks again
-func Local(root, uuid string, want Want) string {
-	byRole := map[role]string{}
-	for _, c := range candidates(root, uuid, "", "") {
-		byRole[c.role] = c.path
-	}
-	for _, r := range wanted[want] {
-		if p, ok := byRole[r]; ok {
-			if info, err := os.Stat(p); err == nil && !info.IsDir() {
-				return p
-			}
-		}
-	}
-	return ""
 }
 
 // frames: the frames Photos keeps for a video (resources/derivatives/cvt/<X>/<UUID>/),
@@ -337,15 +346,6 @@ func newAsset(root string, r assetRow) *asset {
 		}
 	}
 	return a
-}
-
-type assetRow struct {
-	uuid, dir, filename string
-	trashed, hidden     bool
-	meta                assetMeta
-	// ZKIND: 0 photo, 1 video; ZPLAYBACKSTYLE: 3 a Live Photo (live on). A Live
-	// Photo with live switched off is a still in Photos (ZKINDSUBTYPE 2, style 1).
-	zkind, playback int
 }
 
 func (r assetRow) kind() string {

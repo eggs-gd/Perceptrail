@@ -36,7 +36,8 @@ One line each; the details are in the READMEs and the PRs.
   work queue · #32 events and commands: go-pub-sub v0.3.0 in layers
   (events, commands, clients), the model on it; the model a file per subject (a
   write and its command, not a rule), interfaces at their consumers; public first
-  in every file; the design of entities, components, systems.
+  in every file; the design of entities, components, systems · #33 every Go file
+  public first.
 
 ## Releases
 

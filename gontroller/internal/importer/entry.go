@@ -85,30 +85,6 @@ func New(cfg Config, db Store, logger *l.Logger) *Service {
 	return &Service{cfg: cfg, db: db, logger: logger}
 }
 
-// importChain: one pass of the import, its channels new (a pass closes them)
-func (s *Service) importChain(errs chan<- error) chain.ChainProcessor {
-	// walk → group: a file's row (seen: Changed; or Missing)
-	found := make(chan dto.WalkedFile)
-	// group → gate: a whole asset and what is gone of the library (Missing); at the
-	// end, what each grouper held
-	grouped := make(chan dto.Asset)
-	// gate → identify: the assets that need work
-	stored := make(chan dto.Asset)
-	// identify → exif: the identified items
-	identified := make(chan *identify.Item)
-	// exif → commit: + what the perceptors found, their values kept
-	perceived := make(chan *identify.Item)
-
-	c := chain.NewChainProcessor(errs)
-	c.AddStep(walk.New(s.db, s.cfg.LibraryRoot(), library.Skipped(s.cfg.LibraryRoot()), s.logger, found))
-	c.AddStep(group.New(library.Enabled(), found, grouped))
-	c.AddStep(gate.New(s.db, s.logger, grouped, stored))
-	c.AddStep(identify.New(s.db, s.cfg.CacheDir(), s.cfg.Exiftool(), perceptor.ExifTags(), s.logger, stored, identified))
-	c.AddStep(exif.New(s.logger, identified, perceived))
-	c.AddStep(commit.New(s.db, perceived))
-	return c
-}
-
 // Start: what changed since the last run first (identify's detection, the
 // perceptors), then pass after pass, with the rescan pause between, until ctx ends
 func (s *Service) Start(ctx context.Context) {
@@ -145,4 +121,28 @@ func (s *Service) Pass(ctx context.Context) error {
 	close(errs)
 	<-collected
 	return errors.Join(all...)
+}
+
+// importChain: one pass of the import, its channels new (a pass closes them)
+func (s *Service) importChain(errs chan<- error) chain.ChainProcessor {
+	// walk → group: a file's row (seen: Changed; or Missing)
+	found := make(chan dto.WalkedFile)
+	// group → gate: a whole asset and what is gone of the library (Missing); at the
+	// end, what each grouper held
+	grouped := make(chan dto.Asset)
+	// gate → identify: the assets that need work
+	stored := make(chan dto.Asset)
+	// identify → exif: the identified items
+	identified := make(chan *identify.Item)
+	// exif → commit: + what the perceptors found, their values kept
+	perceived := make(chan *identify.Item)
+
+	c := chain.NewChainProcessor(errs)
+	c.AddStep(walk.New(s.db, s.cfg.LibraryRoot(), library.Skipped(s.cfg.LibraryRoot()), s.logger, found))
+	c.AddStep(group.New(library.Enabled(), found, grouped))
+	c.AddStep(gate.New(s.db, s.logger, grouped, stored))
+	c.AddStep(identify.New(s.db, s.cfg.CacheDir(), s.cfg.Exiftool(), perceptor.ExifTags(), s.logger, stored, identified))
+	c.AddStep(exif.New(s.logger, identified, perceived))
+	c.AddStep(commit.New(s.db, perceived))
+	return c
 }
