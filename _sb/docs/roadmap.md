@@ -48,8 +48,7 @@ One line each; the details are in the READMEs and the PRs.
 ## Next: the expensive stage (transcode)
 
 In steps, each its own PR (designs below: "The write bus", "Entities, components,
-systems", "The work queue",
-"Expensive stage"):
+systems", "The work queue", "Expensive stage"):
 
 0. [ ] **The write bus** — [go-pub-sub](https://github.com/eggs-gd/go-pub-sub) (events and commands,
    classes) and the model's writer. Done: one write connection, a read pool,
