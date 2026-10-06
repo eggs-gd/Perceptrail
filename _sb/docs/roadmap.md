@@ -37,7 +37,9 @@ One line each; the details are in the READMEs and the PRs.
   (events, commands, clients), the model on it; the model a file per subject (a
   write and its command, not a rule), interfaces at their consumers; public first
   in every file; the design of entities, components, systems · #33 every Go file
-  public first.
+  public first · #35 the owner's corrections as skills (`pr-flow`, `review-reply`,
+  `self-review`, `smoke`), hard limits in AGENTS.md, the declaration order checked in
+  CI.
 
 ## Releases
 

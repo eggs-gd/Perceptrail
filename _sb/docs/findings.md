@@ -504,6 +504,16 @@ Layout, the DB's facts and PhotoKit's behaviour: the
 
 ## Repository
 
+- **Corrections become skills and checks** (2026-10-06): over one long session the
+  owner kept re-teaching the same things — the push and PR order, answering a
+  review, the smoke pair, and a taste (state held twice, hand-set booleans, names,
+  files by subject). Procedures went to `.agents/skills/` (read on demand, no
+  context spent until then); the taste stayed rules in AGENTS.md, with
+  `self-review` as the checklist that catches them; what a machine can see went to
+  CI (`scripts/declorder`: the declaration order). Rejected: an MCP server for it —
+  MCP gives tools access to systems, it holds no rules; it is how fleet will
+  install these into other projects.
+
 - **Libraries of their own** (2026-10-05): the chain, the logger and the write bus
   are general — [go-chain](https://github.com/eggs-gd/go-chain),
   [go-zap-decor](https://github.com/eggs-gd/go-zap-decor),

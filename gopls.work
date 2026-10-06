@@ -11,4 +11,5 @@ use (
 	./perceptors/ml_faces
 	./perceptors/ml_objects
 	./_sb/spikes/photokit
+	./scripts/declorder
 )
