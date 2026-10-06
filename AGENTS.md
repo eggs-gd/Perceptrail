@@ -120,6 +120,11 @@ queue kept as a flag, a "done once" instead of the thing that is done). The rare
 exceptions are data, not state: a field on the wire (`removed` in a JSON line), an
 input option (`hevc` from a request).
 
+**A file reads top-down, public first** — in any language: public interfaces,
+then public declarations (types, constants, variables), private declarations,
+public implementations (functions and methods of exported names), private
+implementations. A reader sees what the file offers before how.
+
 ### Go — write it like Go
 
 - **Names: length follows distance.** Short where the whole use is on one screen —

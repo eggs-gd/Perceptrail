@@ -12,19 +12,36 @@ step only gathers facts (see the [importer README](../importer/README.md#the-mod
 
 | type | what | over |
 |---|---|---|
-| `query` | the reads (`GetItemByGuid`, `NeedsWork`, `StreamItemsSince`…), written once | a connection: the readers' pool, or a rule's transaction |
-| `tx` | what a rule runs on: the reads and the rules themselves (unexported methods: `createFile`, `gone`, `validateGroup`…) — no public writes | the writer's transaction |
-| `Proxy` | the model as others see it: the reads over the pool, the public writes, their topics | the pool and the writer |
+| `query` | the reads (`GetItemByGuid`, `NeedsWork`, `StreamItemsSince`…), written once | a connection: the readers' pool, or a write's transaction |
+| `tx` | what a write runs on: the reads and the writes themselves (unexported methods: `createFile`, `gone`, `validateGroup`…) — no public writes | the writer's transaction |
+| `Proxy` | the model as others see it: the reads over the pool, the public writes, their commands | the pool and the writer |
 
-A rule calls other rules directly, in the same transaction; it cannot call a public
+A write calls other writes directly, in the same transaction; it cannot call a public
 write (`tx` has none) — that would wait for the writer that runs it.
+
+## A file per subject
+
+Each subject is whole in its file — its reads (`query`), its writes (`tx`), its
+commands and their public faces:
+
+| file | subject |
+|---|---|
+| `items.go` | items: what the library shows |
+| `identity.go` | which item a group of files is (by path and fingerprint, or by a key) |
+| `flow.go` | an item's flow through its states: needs work, gone, ignored, published |
+| `files.go` | the files' rows and their links to items |
+| `meta.go` | the library's own settings |
+| `percepstore.go` | a perceptor's values, in its own file |
+
+Around them: `proxy.go` (the three types, `Open`, a write's savepoint, `Close`),
+`writer.go` (the executor), `command.go` (how a write becomes a command).
 
 ## One writer, a read pool
 
 - **The writer** (`writer.go`) owns the one write connection, in one goroutine. It
   takes a job (the `Now` lane first, then `Frame`, then `Idle`), takes whatever else
-  is queued already (up to 512), runs them in one transaction — each rule under its
-  own savepoint: an error or a panic rolls back that rule alone — commits, then ends
+  is queued already (up to 512), runs them in one transaction — each write under its
+  own savepoint: an error or a panic rolls back that write alone — commits, then ends
   them: **a result is delivered only after the commit**, so whatever its caller
   reads next is there.
 - **The readers**: a pool of read-only connections (WAL lets them read beside the
@@ -37,29 +54,31 @@ write (`tx` has none) — that would wait for the writer that runs it.
   read-only one cannot.
 - Nothing waits for a batch to fill yet: batches come from callers writing at once.
 
-## Every write rule is a topic
+## Every write is a command
 
-`writes.go`: each rule is a [go-pub-sub](https://github.com/eggs-gd/go-pub-sub) `Op`
-run by the writer, with two faces, in pairs:
+Each write (a method on `tx`) is submitted as a [go-pub-sub](https://github.com/eggs-gd/go-pub-sub) `Op`
+run by the writer (`command.go`), with two faces, in pairs:
 
 ```go
-func (p *Proxy) CreateFile(entry dto.ItemEntry) (*dto.FileDto, error)  // submit, wait for its result
-func (p *Proxy) CreateFileTopic() pubsub.Topic[dto.ItemEntry, *dto.FileDto] // submit, go on, results by subscription
+func (p *Proxy) CreateFile(entry dto.ItemEntry) (*dto.FileDto, error)        // submit, wait for its result
+func (p *Proxy) CreateFileCommand() pubsub.Command[dto.ItemEntry, *dto.FileDto] // submit and go on
 ```
 
-- A rule takes one argument and gives one result (`pubsub.None` where it has none;
+- A write takes one argument and gives one result (`pubsub.None` where it has none;
   several travel as one message: `ValidateGroupArgs`, `GoneResult`…), so its method
-  on `tx` is its topic's function as it is: `rule(p, pubsub.Frame, (*tx).createFile)`.
-- A topic comes in the view of its shape: `Message[A]` without a result, `Signal[R]`
-  without an argument — `None` never reaches a caller. Without a result a
-  subscriber still gets one result per operation: its ID and its error.
+  on `tx` is its command's function as it is: `command(p, pubsub.Frame, (*tx).createFile)`.
+- A command comes in the view of its shape: `Message[A]` without a result,
+  `Signal[R]` without an argument — `None` never reaches a caller.
+- An async caller picks how it gets results (the library's README has the
+  patterns): fire and forget, its own through a `Client` (room counted at submit),
+  or every result of the write through `Done`.
 - **Who may write what is who holds what**: the executor is the model's own, so every
-  rule is the model's; a `Job` only an `Op` makes (sealed); others get topics — an
-  argument for a given rule, no transaction, no code of their own.
+  write is the model's; a `Job` only an `Op` makes (sealed); others get commands — an
+  argument for a given write, no transaction, no code of their own.
 
 ## Tests
 
 Unit tests next to the package, over a real SQLite file: the writer (a read after a
-write, a failing rule alone among many writers, a rule calling a rule, topics and
-their shapes, closing, no journal left) and the stores. The rules as the import uses
+write, a failing write alone among many writers, a write calling a write, commands and
+their shapes, closing, no journal left) and the stores. The writes as the import uses
 them are tested through the import, in [`gontroller/test/importer`](../../test/importer).

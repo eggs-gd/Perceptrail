@@ -31,9 +31,12 @@ One line each; the details are in the READMEs and the PRs.
   ([go-chain](https://github.com/eggs-gd/go-chain),
   [go-zap-decor](https://github.com/eggs-gd/go-zap-decor)) · #30 the write bus:
   the model's one writer and a read pool on
-  [go-pub-sub](https://github.com/eggs-gd/go-pub-sub), every write rule a topic
+  [go-pub-sub](https://github.com/eggs-gd/go-pub-sub), every write a command
   (sync and asynchronous), `query` / `tx` / `Proxy`; the designs of the bus and the
-  work queue.
+  work queue · #32 events and commands: go-pub-sub v0.3.0 in layers
+  (events, commands, clients), the model on it; the model a file per subject (a
+  write and its command, not a rule), interfaces at their consumers; public first
+  in every file; the design of entities, components, systems.
 
 ## Releases
 
@@ -44,13 +47,13 @@ One line each; the details are in the READMEs and the PRs.
 
 ## Next: the expensive stage (transcode)
 
-In steps, each its own PR (designs below: "The write bus", "The work queue",
-"Expensive stage"):
+In steps, each its own PR (designs below: "The write bus", "Entities, components,
+systems", "The work queue", "Expensive stage"):
 
-0. [ ] **The write bus** — [go-pub-sub](https://github.com/eggs-gd/go-pub-sub) (operations as topics, subscriptions,
+0. [ ] **The write bus** — [go-pub-sub](https://github.com/eggs-gd/go-pub-sub) (events and commands,
    classes) and the model's writer. Done: one write connection, a read pool,
    batches of what is queued, lanes by class, `synchronous=NORMAL`; every write
-   rule a topic — the public method waits for its result, `…Topic()` gives it
+   rule a command — the public method waits for its result, `…Command()` gives it
    asynchronously (nobody uses that yet). Next: the classes' deadlines and the
    callers going asynchronous (the walk without its own pages, the steps each its
    own way). Before any new writer comes.
@@ -240,11 +243,11 @@ A stable core first.
 
 ## Design: the write bus — what is left
 
-Built: one writer, a read pool, every write rule a topic — the
+Built: one writer, a read pool, every write a command — the
 [model README](../../gontroller/internal/model/README.md). Why, measured:
 findings "The write bus". Open:
 
-- **The classes' deadlines** — how long a rule tolerates waiting for a batch, a
+- **The classes' deadlines** — how long a write tolerates waiting for a batch, a
   property of the rule:
 
   | class | waits | for |
@@ -257,15 +260,101 @@ findings "The write bus". Open:
   would pay the deadline per call. A transaction cut at ~20–50 ms of work, so Now
   never waits longer.
 - **The callers asynchronous**, each its own way (`chain` and everything above the
-  step unchanged): the walk submits and sends a file on when its result came — its
-  pages go; a step that needs the answer for its output (validate: the item a group
-  became) waits inside, or keeps its own queue.
+  step unchanged) — on the command layer's clients ("Design: events and commands"):
+  the walk submits and sends a file on when its result came — its pages go; a step
+  that needs the answer for its output (validate: the item a group became) waits
+  inside, or keeps its own queue.
 - **Perceptors never see the bus**: the core methods a perceptor may call become
   interfaces in `perceplib/api`, declared by their consumer — synchronous, or
   asynchronous with a subscription; the core implements them. Added with the first
   method a perceptor needs (none yet: values go through `Store.Put` in the chain).
 - Later, from qwr's ideas: error classes (lock / constraint / schema) and a
   dead-letter list for operations that failed for good.
+
+## Design: events and commands — the product's side
+
+The library side is built — go-pub-sub v0.3.0, in layers: events (`Topic`),
+commands (`Op` seen as a `Command`, a `Client` with only its own results), the
+bridge (`Done`); the rules in its godoc, the handling patterns in its examples. The
+model is on it (`…Command()`). Open, the product's side:
+
+**Domain events, after the commit.** What others react to is not a write's raw
+result but a fact of the library: `ItemPublished{GUID, State}`, `ItemGone{GUID}`. A
+write emits it inside its transaction (`tx.emit`); the writer publishes it only
+after the commit, and a write rolled back to its savepoint takes its events with it
+(an outbox in memory — no one hears of a write that is not there). Across processes
+later (goMLer on another box): the same `Topic` over another transport (NATS,
+MQTT — `ML Flow.puml`), or a persistent outbox if an event must outlive a restart.
+
+**The database is the truth, an event is a hint** (level-triggered): an event says
+"look", the listener reads the current state and acts on it; a missed, doubled or
+late event changes nothing — the polling stays as the safety net, the event only
+cuts the wait. Each consumer handles it its own way:
+
+- **the walk** — a transit: submits through its clients, waits for its results,
+  sends a file on; its buffer is the results not yet back — its own business. When
+  it waits on the first, the rest wait too and go together once the batch commits:
+  that is the batching;
+- **render / transcode** — bounded on purpose: an event only wakes it; its pace is
+  its workers (CPU cores, GPU slots), each taking its next item from `work`;
+- **the web** — later, a push to the clients on `ItemPublished` instead of their
+  polling `/items`.
+
+Steps: the model's domain events (`tx.emit`); then the walk on clients; render
+wakes on `ItemPublished`.
+
+## Design: entities, components, systems
+
+The library is many random files becoming artifacts we can show: each file gains
+facts — a stat, a fingerprint, exif, kinds, a preview, renditions, a perceptor's
+values — and each fact is computed from others. That is an ECS: the work queue
+below is its first step, not a separate idea.
+
+- **Entity** — the item's GUID, nothing more.
+- **Component** — every derived fact about an item, a table keyed by the GUID; a
+  row knows what it was computed from: `(guid, version, input, …data)` — `version`
+  of the code or config that made it, `input` the versions of what it read. The
+  perceptors' stores already are components (without `input`).
+- **System** — a function and a query: "has A, lacks B or B not computed from the
+  current A". It takes a page of items, computes outside the transaction, commits
+  its component through the writer. A system declares what it reads and what it
+  writes; the order follows from that (no hand-made pipeline), systems with
+  disjoint writes run side by side (faces, colour, geo).
+- **An event is an alarm**: "component X written" wakes the systems that read X —
+  the database is the truth, the event a hint ("Events and commands").
+
+**What goes**: the hand-set states and marks become queries — Visible: has a
+preview; Ready: has every rendition of the current version; Dirty: an input
+changed. `State` as stored, `Rework`, `MarkRework`, `FileDto.Changed` and the
+perceptors' `Reconcile` go; a new perceptor or a new config version is a query that
+finds every item by itself (a backfill nobody enqueues).
+
+**What stays out**: identity — which files make an item, a move, a group — is
+relational across entities in one transaction, not work on one entity: walk →
+group → gate → identity stay a chain in the model; systems start once the entity
+exists. Group perceptors (journeys, face clusters) are systems over the whole set
+(a watermark row, as the work queue has it).
+
+**The hard part — `input`**: it must cover every version a result depends on;
+wrong, it gives endless recomputation or stale data. Worth reading before:
+incremental computation (Salsa in rust-analyzer, Bazel's action keys).
+
+**Cost**: "lacks a component" over every item — measured in the work queue: 1–2 ms
+a page by the index, 143 ms a full pass at 200 k items per slug; full passes only
+at start and after a version change.
+
+**For perceptors**: a plugin declares `reads: [exif, rendition]`, `writes: faces` —
+`perceplib/api` describes a system's contract instead of the core's methods.
+
+Steps, no rewrite:
+
+1. The work queue and renditions (below), `work` read as the components' table and
+   render as the first system.
+2. The perceptors' stores get `input`: perceptors are systems; `MarkRework` and
+   `Reconcile` go.
+3. The states derived (a view or a query), not written: `Rework` and `Changed` go.
+4. The import chain ends at identity: it creates the entity and its first
+   components (stat, fingerprint); the systems' scheduler does the rest.
 
 ## Design: the work queue
 

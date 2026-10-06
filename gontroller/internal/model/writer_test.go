@@ -38,9 +38,9 @@ func TestWriteThenRead(t *testing.T) {
 	}
 }
 
-// Many writers at once, a failing rule among them (an error, a panic): it rolls
+// Many writers at once, a failing write among them (an error, a panic): it rolls
 // back alone, everything else is written
-func TestFailingRuleAlone(t *testing.T) {
+func TestFailingWriteAlone(t *testing.T) {
 	db := openTest(t)
 	var writers sync.WaitGroup
 	for i := range 50 {
@@ -48,20 +48,20 @@ func TestFailingRuleAlone(t *testing.T) {
 			key := fmt.Sprint("k", i)
 			switch i {
 			case 7:
-				_, err := testRule(db, func(in *tx) error {
+				_, err := testWrite(db, func(in *tx) error {
 					in.setMeta(MetaArgs{key, "half"})
-					return errors.New("a rule gives up")
+					return errors.New("a write gives up")
 				})
 				if err == nil {
-					t.Error("a failing rule returned nil")
+					t.Error("a failing write returned nil")
 				}
 			case 13:
-				_, err := testRule(db, func(in *tx) error {
+				_, err := testWrite(db, func(in *tx) error {
 					in.setMeta(MetaArgs{key, "half"})
-					panic("a rule breaks")
+					panic("a write breaks")
 				})
 				if err == nil {
-					t.Error("a panicking rule returned nil")
+					t.Error("a panicking write returned nil")
 				}
 			default:
 				if err := db.SetMeta(key, "ok"); err != nil {
@@ -79,38 +79,44 @@ func TestFailingRuleAlone(t *testing.T) {
 	}
 }
 
-// A rule calls another rule directly — same transaction, rolled back with it (a
+// A write calls another write directly — same transaction, rolled back with it (a
 // public write cannot be called there: tx has none)
-func TestRuleInsideRule(t *testing.T) {
+func TestWriteInsideWrite(t *testing.T) {
 	db := openTest(t)
-	_, err := testRule(db, func(in *tx) error {
+	_, err := testWrite(db, func(in *tx) error {
 		if _, err := in.setMeta(MetaArgs{"inner", "x"}); err != nil {
 			return err
 		}
-		return errors.New("the rule fails after it")
+		return errors.New("the write fails after it")
 	})
 	if err == nil {
-		t.Fatal("the rule's error got lost")
+		t.Fatal("the write's error got lost")
 	}
 	if v, _ := db.GetMeta("inner"); v != "" {
-		t.Errorf("the inner write outlived its rule: %q", v)
+		t.Errorf("the inner write outlived its write: %q", v)
 	}
 }
 
-// Asynchronous: submitted to a rule's topic, the result comes by subscription,
-// after the commit
-func TestTopic(t *testing.T) {
+// Asynchronous: submitted through a client, its own result comes back after the
+// commit; Done's listeners hear it too
+func TestCommand(t *testing.T) {
 	db := openTest(t)
-	created := db.CreateFilesTopic()
-	results := created.Subscribe(4)
-	defer results.Close()
-	id := created.Submit([]dto.ItemEntry{{Path: "/a.jpg", Name: "a.jpg"}, {Path: "/b.jpg", Name: "b.jpg"}})
-	r := <-results.C
-	if r.ID != id || r.Err != nil || len(r.Value) != 2 || r.Value[0].ID == 0 {
-		t.Fatalf("result %+v", r)
+	created := db.CreateFilesCommand()
+	var heard []pubsub.ID
+	created.Done().Subscribe(func(r pubsub.Result[[]*dto.FileDto]) { heard = append(heard, r.ID) })
+	files := created.Client(1)
+	id := files.Submit([]dto.ItemEntry{{Path: "/a.jpg", Name: "a.jpg"}, {Path: "/b.jpg", Name: "b.jpg"}})
+	files.Close()
+	for r := range files.Results() {
+		if r.ID != id || r.Err != nil || len(r.Value) != 2 || r.Value[0].ID == 0 {
+			t.Fatalf("result %+v", r)
+		}
+		if f, err := db.FindFile("/b.jpg"); err != nil || f == nil {
+			t.Errorf("not in the database after its result: %v, %v", f, err)
+		}
 	}
-	if f, err := db.FindFile("/b.jpg"); err != nil || f == nil {
-		t.Errorf("not in the database after its result: %v, %v", f, err)
+	if len(heard) != 1 || heard[0] != id {
+		t.Errorf("Done heard %v, want [%d]", heard, id)
 	}
 }
 
@@ -150,31 +156,32 @@ func TestCloseLeavesNoJournal(t *testing.T) {
 func TestSynchronousNormal(t *testing.T) {
 	db := openTest(t)
 	var mode int
-	if err := db.writes.Raw("PRAGMA synchronous").Scan(&mode).Error; err != nil || mode != 1 {
+	if err := db.writer.db.Raw("PRAGMA synchronous").Scan(&mode).Error; err != nil || mode != 1 {
 		t.Errorf("synchronous = %d, %v", mode, err)
 	}
 }
 
-// testRule: a rule of the test's own, run as a write
-func testRule(db *Proxy, fn func(in *tx) error) (pubsub.None, error) {
-	return rule(db, pubsub.Frame, func(in *tx, _ pubsub.None) (pubsub.None, error) { return pubsub.None{}, fn(in) }).Do(pubsub.None{})
+// testWrite: a write of the test's own, run as a command
+func testWrite(db *Proxy, fn func(in *tx) error) (pubsub.None, error) {
+	return command(db, pubsub.Frame, func(in *tx, _ pubsub.None) (pubsub.None, error) { return pubsub.None{}, fn(in) }).Do(pubsub.None{})
 }
 
-// A rule without a result is a Message: Submit its argument, a result per ID with
+// A write without a result is a Message: Submit its argument, a result per ID with
 // its error; without an argument, a Signal: Submit nothing
-func TestShapedTopics(t *testing.T) {
+func TestShapedCommands(t *testing.T) {
 	db := openTest(t)
-	meta := db.SetMetaTopic()
-	done := meta.Subscribe(1)
-	defer done.Close()
+	meta := db.SetMetaCommand().Client(1)
 	id := meta.Submit(MetaArgs{"k", "v"})
-	if r := <-done.C; r.ID != id || r.Err != nil {
-		t.Fatalf("result %+v", r)
+	meta.Close()
+	for r := range meta.Results() {
+		if r.ID != id || r.Err != nil {
+			t.Fatalf("result %+v", r)
+		}
 	}
 	if v, _ := db.GetMeta("k"); v != "v" {
 		t.Errorf("k = %q", v)
 	}
-	if n, err := db.UnignoreFilesTopic().Do(); n != 0 || err != nil {
+	if n, err := db.UnignoreFilesCommand().Do(); n != 0 || err != nil {
 		t.Errorf("unignore: %d, %v", n, err)
 	}
 }

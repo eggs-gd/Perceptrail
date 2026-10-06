@@ -91,39 +91,3 @@ func (i *ItemDto) GetDate() time.Time {
 	}
 	return i.Date.In(time.FixedZone("", i.DateOffset*60))
 }
-
-// type Tag struct {
-// 	ID        uint   `gorm:"primaryKey"`
-// 	Name      string `gorm:"uniqueIndex"`
-// 	CreatedAt time.Time
-// 	UpdatedAt time.Time
-// }
-
-// type Album struct {
-// 	ID        uint   `gorm:"primaryKey"`
-// 	Name      string `gorm:"uniqueIndex"`
-// 	CreatedAt time.Time
-// 	UpdatedAt time.Time
-// }
-
-// type GeoData struct {
-// 	Longitude float64
-// 	Latitude  float64
-// 	Address   string
-// }
-
-// type Face struct {
-// 	ID         uint `gorm:"primaryKey"`
-// 	ItemID     uint // Foreign Key to Item
-// 	Label      string
-// 	Descriptor [128]int
-// 	Rect       [4]int
-// }
-
-// type Object struct {
-// 	ID         uint `gorm:"primaryKey"`
-// 	ItemID     uint // Foreign Key to Item
-// 	Label      string
-// 	Descriptor [32]int
-// 	Rect       [4]int
-// }

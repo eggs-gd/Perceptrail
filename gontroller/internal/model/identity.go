@@ -5,10 +5,100 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+
 	"perceptrail/gontroller/internal/model/dto"
 
+	pubsub "github.com/eggs-gd/go-pub-sub"
+	l "github.com/eggs-gd/go-zap-decor"
 	"gorm.io/gorm"
 )
+
+// Identity: which item a group of files is — by the main file's path and
+// fingerprint in a plain folder (the same, moved, new or changed: Walker.puml), by
+// its key where the source knows it (an Apple Photos asset). The item side; the
+// files' side (linking, relinking) is in files.go.
+
+// ValidateGroupArgs: a plain folder's group (the main file first) and its
+// fingerprint
+type ValidateGroupArgs struct {
+	Files []*dto.FileDto
+	Hash  string
+}
+
+// ValidateAssetArgs: a keyed group — its key, its files, its fingerprint
+type ValidateAssetArgs struct {
+	Key   string
+	Files []*dto.FileDto
+	Hash  string
+}
+
+// identityCommands: identity's writes as commands
+type identityCommands struct {
+	validateGroup op[ValidateGroupArgs, *dto.ItemDto]
+	validateAsset op[ValidateAssetArgs, *dto.ItemDto]
+}
+
+func (p *Proxy) ValidateGroup(files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
+	return p.validateGroup.Do(ValidateGroupArgs{files, hash})
+}
+
+func (p *Proxy) ValidateGroupCommand() pubsub.Command[ValidateGroupArgs, *dto.ItemDto] {
+	return p.validateGroup
+}
+
+func (p *Proxy) ValidateAsset(key string, files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
+	return p.validateAsset.Do(ValidateAssetArgs{key, files, hash})
+}
+
+func (p *Proxy) ValidateAssetCommand() pubsub.Command[ValidateAssetArgs, *dto.ItemDto] {
+	return p.validateAsset
+}
+
+// validateGroup: the item of a plain folder's group (files: the main file first).
+// Its files link to the main file; a file that was the main file of its own item
+// before is a sidecar now (a JPEG imported alone, then its RAW appeared): that item
+// goes. Then the main file's item by its path and fingerprint (ValidateFile).
+func (t *tx) validateGroup(a ValidateGroupArgs) (*dto.ItemDto, error) {
+	files, hash := a.Files, a.Hash
+	main := files[0]
+	for _, f := range files {
+		f.LinkTo(main)
+	}
+	for _, f := range files[1:] {
+		if old, err := t.GetItemByGuid(f.GUID); err == nil {
+			if _, err := t.deleteItem(old); err != nil {
+				return nil, err
+			}
+			t.logger.Info("Former main file is a sidecar now", l.String("file", f.Path), l.String("main", main.Path))
+		}
+	}
+	if _, err := t.updateFiles(files); err != nil {
+		return nil, err
+	}
+	return t.validateFile(main, hash)
+}
+
+// validateAsset: the item of a group whose source knows its identity (an Apple
+// Photos asset UUID: the key, whatever the main file is). Every file links to it; an
+// item of a file's own from before (the plain folder's grouper read the library's
+// originals) goes. Then the keyed item (validateKeyed).
+func (t *tx) validateAsset(a ValidateAssetArgs) (*dto.ItemDto, error) {
+	key, files, hash := a.Key, a.Files, a.Hash
+	for _, f := range files {
+		if f.GUID != key {
+			if old, err := t.GetItemByGuid(f.GUID); err == nil {
+				if _, err := t.deleteItem(old); err != nil {
+					return nil, err
+				}
+			}
+		}
+		f.LinkToItem(key)
+	}
+	if _, err := t.updateFiles(files); err != nil {
+		return nil, err
+	}
+	return t.validateKeyed(key, files[0], hash)
+}
 
 // validateFile: the item of a plain folder's main file, by its path and its
 // fingerprint (hashShort: the file's bytes, see identify's fingerprint) — the same,
@@ -117,36 +207,12 @@ func (t *tx) findMovedItem(file *dto.FileDto, hashShort string) *dto.ItemDto {
 }
 
 // moveItem gives the item the new main file: the item keeps its GUID (thumbnails
-// and client links are keyed by it), the new file rows take that GUID over. A
-// deleted item is restored.
+// and client links are keyed by it), its files are the new group's now
+// (relinkGroup). A deleted item is restored.
 func (t *tx) moveItem(item *dto.ItemDto, file *dto.FileDto) error {
-	oldGuid, newGuid := item.Guid, file.GUID
-	fail := func(err error) error { return fmt.Errorf("move %s → %s: %w", oldGuid, file.Path, err) }
-
-	// The old main row first: GUID is unique
-	if err := t.db.Where("guid = ?", oldGuid).Delete(&dto.FileDto{}).Error; err != nil {
-		return fail(err)
+	if err := t.relinkGroup(file.GUID, item.Guid); err != nil {
+		return fmt.Errorf("move %s → %s: %w", item.Guid, file.Path, err)
 	}
-	// Old sidecars that are gone as well; the ones still on disk stay linked
-	var oldSidecars []dto.FileDto
-	if err := t.db.Where("linked_to = ?", oldGuid).Find(&oldSidecars).Error; err != nil {
-		return fail(err)
-	}
-	for _, f := range oldSidecars {
-		if _, err := os.Stat(f.Path); errors.Is(err, fs.ErrNotExist) {
-			if err := t.db.Delete(&f).Error; err != nil {
-				return fail(err)
-			}
-		}
-	}
-	// The new group (main + sidecars) links to the item's GUID
-	if err := t.db.Model(&dto.FileDto{}).Where("linked_to = ?", newGuid).Update("linked_to", oldGuid).Error; err != nil {
-		return fail(err)
-	}
-	if err := t.db.Model(&dto.FileDto{}).Where("guid = ?", newGuid).Update("guid", oldGuid).Error; err != nil {
-		return fail(err)
-	}
-
 	item.Path = file.Path
 	item.MimeType = file.MimeType
 	if item.DeletedAt.Valid { // deleted meanwhile: it is back
@@ -154,9 +220,9 @@ func (t *tx) moveItem(item *dto.ItemDto, file *dto.FileDto) error {
 		item.State = dto.Dirty
 	}
 	if err := t.db.Unscoped().Save(item).Error; err != nil {
-		return fail(err)
+		return fmt.Errorf("move %s → %s: %w", item.Guid, file.Path, err)
 	}
-	file.GUID, file.LinkedTo = oldGuid, oldGuid
+	file.GUID, file.LinkedTo = item.Guid, item.Guid
 	return nil
 }
 
@@ -183,4 +249,11 @@ func (t *tx) validateKeyed(key string, main *dto.FileDto, hash string) (*dto.Ite
 	}
 	item.Path, item.MimeType = main.Path, main.MimeType
 	return &item, t.db.Unscoped().Save(&item).Error
+}
+
+func newIdentityCommands(p *Proxy) identityCommands {
+	return identityCommands{
+		validateGroup: command(p, pubsub.Frame, (*tx).validateGroup),
+		validateAsset: command(p, pubsub.Frame, (*tx).validateAsset),
+	}
 }

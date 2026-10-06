@@ -259,7 +259,7 @@ content is for when a second provider exists).
   it, or a portrait lies on its side.
 - MIME detection never uses the system tables (a minimal Docker image has none).
 - **SQLite**: WAL + `busy_timeout`; one writer (see "The write bus") — no more
-  "database is locked", and reads no longer queue behind writes. A rule that calls
+  "database is locked", and reads no longer queue behind writes. A write that calls
   another public write runs it in its own transaction (the writer would wait for
   itself). Close the read-only connections first: the last connection to close
   merges and removes the journal, and a read-only one cannot (smoke caught `-wal`
@@ -296,26 +296,32 @@ an item):
   10 000 files — first pass 4.0 s (4.6 s before), idle passes 0.09 s (0.11–0.13 s);
   the grouping comes from callers writing at once (identify's five readers). No
   deadlines yet: a caller waiting for each result would pay one per call.
-- **A rule and its two faces** (the owner, after two wrong turns): a write rule is
+- **A write and its two faces** (the owner, after two wrong turns): a write is
   the unexported method (its debugged logic, untouched); the public method of its
-  name submits and waits (`Do`), its `…Topic()` submits and goes on. Rejected: the
+  name submits and waits (`Do`), its `…Command()` submits and goes on. Rejected: the
   public methods as mere pass-throughs to their twins with nothing to show for it
-  (and a rule calling a public write that came back to the writer); folding the
+  (and a write calling a public write that came back to the writer); folding the
   bodies into closures inside the public methods (the working methods taken apart,
   to be taken apart again for the asynchronous side). Then one type playing two roles: the
-  `Proxy` was the model and, with an `inRule` flag, a rule's transaction — a public
-  write called from a rule was caught at run time (a panic) where the types should
+  `Proxy` was the model and, with an `inRule` flag, a write's transaction — a public
+  write called from a write was caught at run time (a panic) where the types should
   not offer it. Now three types: `query` (the reads, over the pool or a
-  transaction), `tx` (a rule's: the reads and the rules, no public writes), `Proxy`
-  (the reads over the pool, the public writes, the topics). Every rule takes one
+  transaction), `tx` (a write's: the reads and the writes, no public ones), `Proxy`
+  (the reads over the pool, the public writes, their commands). Every write takes one
   argument and gives one result (`pubsub.None` where there is none), so its method
-  on `tx` is its topic's function as it is; go-pub-sub's shapes (`Message`,
+  on `tx` is its command's function as it is; go-pub-sub's shapes (`Message`,
   `Signal`, `Trigger`) keep `None` out of a caller's hands.
+- **A write, not a rule** (the owner): the logic on `tx` was called a rule, and the
+  code read as policies; it is just logic that runs — a write (the method on `tx`)
+  submitted as a command (the `Op`). "Rules" stay only for the library's own
+  (when a group needs work, what a file gone means). The commands sit in the
+  `Proxy` (embedded): an `Op` holds its executor, the model's writer — package-level
+  ones would make the model one per process.
 
 - **Who may write what is decided by who holds what** (the owner asked: a `Job`
   can run anything — "remove all tables"): `Job` is sealed (only an `Op` makes
-  one), an `Op` needs the executor and the model keeps it to itself, so every rule
-  is the model's; steps and perceptors get `Topic`s — an argument for a given rule,
+  one), an `Op` needs the executor and the model keeps it to itself, so every write
+  is the model's; steps and perceptors get `Command`s — an argument for a given write,
   no transaction, no code. In one process that is discipline, not security: any
   code in it can open the database file; today's `.so` plugins could delete it.
   Only isolation (WebAssembly, a process) makes a plugin unable to — and what it
@@ -325,18 +331,20 @@ an item):
 
 - One batching for everyone: a writer that does not care (the walk) and one whose
   every result matters (render's commit) want opposite things — classes, by how
-  long a rule tolerates waiting.
+  long a write tolerates waiting.
 - A batch timer (30 fps) for synchronous callers: one waiting in a loop pays the
   deadline per call (1000 validates × 33 ms). Kept as a class (Frame) once nobody
   waits synchronously.
-- A result channel per call; then `any` results in one stream per caller — a topic
-  per write rule (`Op[A, R]`) is typed and needs no routing.
+- A result channel per call; then `any` results in one stream per caller — a command
+  per write (`Op[A, R]`) is typed and needs no routing.
 - Blocking or failing a subscriber that does not read: the writer never waits —
-  a lost subscription is its owner's loss.
+  a lost subscription is its owner's loss. (Superseded by go-pub-sub v0.3.0: a
+  `Client` counts its room at submit, so delivery never waits and nothing of its
+  own is lost — "Events and commands" below.)
 - A new primitive in `chain` for asynchronous steps: a step keeps its own
   operations; `chain` and everything above stay as they are.
-- A rule split into a read outside and a write through the bus: decisions on stale
-  data. The whole rule is one operation in the writer.
+- A write split into a read outside and a write through the bus: decisions on stale
+  data. The whole write is one operation in the writer.
 - Ready-made packages: [qwr](https://pkg.go.dev/github.com/jpl-au/qwr) (a SQLite
   writer with job IDs — but its batches are not one transaction, it takes SQL
   strings, a default driver not ours, 25 dependencies, pre-1.0);
@@ -355,6 +363,28 @@ an item):
   another file — no `ATTACH`, so guid sets diffed in Go, O(N) per poll; leases and
   backoff written into foreign files); rows of "to do" (someone must remember to
   enqueue; a config change or a new version would not enqueue anything).
+
+## Events and commands (2026-10-05, design)
+
+Design: roadmap "Design: events and commands". The owner's line: the library is a
+mechanism; how to handle an event is the product's, per consumer (the walk a
+transit, render bounded by its workers) — patterns go to docs and examples.
+
+**Rejected on the way:**
+
+- The `Op` as command and broadcast at once: a caller's results mixed with everyone
+  else's in its subscription, picked by ID — and lost when foreign traffic filled
+  its buffer. A command's results go to its caller (a client), a broadcast is an
+  event.
+- Delivery "policies" (drop / latest / block) as a library enum: a capacity of the
+  subscriber's channel dressed up as an API.
+- A channel in the subscription API (`Subscribe(chan<- E)`): how a listener handles
+  an event is its own — a channel is one way of many.
+- A queue and a goroutine per subscription inside the library, so the publisher
+  never waits: it hides the backlog. Synchronous dispatch with thin listeners — the
+  rule of every UI engine — and the bus catching a panic and logging a slow listener.
+- Kubernetes-style keyed work queues in the library: needed there because strangers
+  write the handlers of a public product; here an example in the docs.
 
 ## Apple Photos
 

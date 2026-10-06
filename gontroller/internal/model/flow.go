@@ -2,18 +2,30 @@ package model
 
 import (
 	"errors"
-	pubsub "github.com/eggs-gd/go-pub-sub"
 
 	"perceptrail/gontroller/internal/model/dto"
 
-	l "github.com/eggs-gd/go-zap-decor"
+	pubsub "github.com/eggs-gd/go-pub-sub"
 )
 
-// An item's life: the rules about the library's data — when a group needs work,
-// what a file gone means, which item a group is, when an item is shown. Every chain
-// that touches items (the import, an asset again on demand, later the API
-// providers and the maintenance) goes by the same ones; a step gathers the facts
-// (stat, exif, kinds, fingerprint), the model decides and keeps.
+// An item's flow through its states — the library's own rules: when a group needs
+// work, what a file gone means, when an item is shown. Every chain that touches
+// items (the import, an asset again on demand, later the API providers and the
+// maintenance) goes by the same ones; a step gathers the facts (stat, exif, kinds,
+// fingerprint), the model decides and keeps.
+
+// GoneResult: what gone did — items deleted, items made Dirty
+type GoneResult struct {
+	Deleted, Dirty int
+}
+
+// flowCommands: the flow's writes as commands
+type flowCommands struct {
+	gone       op[[]*dto.FileDto, GoneResult]
+	ignore     op[[]*dto.FileDto, pubsub.None]
+	publish    op[*dto.ItemDto, *dto.ItemDto]
+	markRework op[[]string, int64]
+}
 
 // NeedsWork: the group's files are stored and unchanged on disk — does it still
 // need work? Yes when a file was never linked or is linked outside the group (its
@@ -52,6 +64,46 @@ func (q query) NeedsWork(files []*dto.FileDto, key, metaHash string) (needs bool
 		return false, guid, err
 	}
 	return !cheapStageDone(item) || item.HashShort == "" || item.MetaHash != metaHash || item.Rework, guid, nil
+}
+
+// Unshown: the items nothing can show yet (no file the browser shows, no preview:
+// Waiting) — what a library that draws renditions itself may fill
+func (q query) Unshown() ([]*dto.ItemDto, error) {
+	return q.GetItemsInStates(dto.Waiting)
+}
+
+func (p *Proxy) Gone(files []*dto.FileDto) (deleted, dirty int, err error) {
+	r, err := p.gone.Do(files)
+	return r.Deleted, r.Dirty, err
+}
+
+func (p *Proxy) GoneCommand() pubsub.Command[[]*dto.FileDto, GoneResult] {
+	return p.gone
+}
+
+func (p *Proxy) Ignore(files []*dto.FileDto) error {
+	_, err := p.ignore.Do(files)
+	return err
+}
+
+func (p *Proxy) IgnoreCommand() pubsub.Message[[]*dto.FileDto] {
+	return pubsub.MessageOf(p.ignore)
+}
+
+func (p *Proxy) Publish(item *dto.ItemDto) (*dto.ItemDto, error) {
+	return p.publish.Do(item)
+}
+
+func (p *Proxy) PublishCommand() pubsub.Command[*dto.ItemDto, *dto.ItemDto] {
+	return p.publish
+}
+
+func (p *Proxy) MarkRework(guids []string) (int64, error) {
+	return p.markRework.Do(guids)
+}
+
+func (p *Proxy) MarkReworkCommand() pubsub.Command[[]string, int64] {
+	return p.markRework
 }
 
 // cheapStageDone: the item went through the cheap stage (Visible, Waiting) or is
@@ -132,52 +184,6 @@ func (t *tx) ignore(files []*dto.FileDto) (pubsub.None, error) {
 	return pubsub.None{}, err
 }
 
-// validateGroup: the item of a plain folder's group (files: the main file first).
-// Its files link to the main file; a file that was the main file of its own item
-// before is a sidecar now (a JPEG imported alone, then its RAW appeared): that item
-// goes. Then the main file's item by its path and fingerprint (ValidateFile).
-func (t *tx) validateGroup(a ValidateGroupArgs) (*dto.ItemDto, error) {
-	files, hash := a.Files, a.Hash
-	main := files[0]
-	for _, f := range files {
-		f.LinkTo(main)
-	}
-	for _, f := range files[1:] {
-		if old, err := t.GetItemByGuid(f.GUID); err == nil {
-			if _, err := t.deleteItem(old); err != nil {
-				return nil, err
-			}
-			t.logger.Info("Former main file is a sidecar now", l.String("file", f.Path), l.String("main", main.Path))
-		}
-	}
-	if _, err := t.updateFiles(files); err != nil {
-		return nil, err
-	}
-	return t.validateFile(main, hash)
-}
-
-// validateAsset: the item of a group whose source knows its identity (an Apple
-// Photos asset UUID: the key, whatever the main file is). Every file links to it; an
-// item of a file's own from before (the plain folder's grouper read the library's
-// originals) goes. Then the keyed item (validateKeyed).
-func (t *tx) validateAsset(a ValidateAssetArgs) (*dto.ItemDto, error) {
-	key, files, hash := a.Key, a.Files, a.Hash
-	for _, f := range files {
-		if f.GUID != key {
-			if old, err := t.GetItemByGuid(f.GUID); err == nil {
-				if _, err := t.deleteItem(old); err != nil {
-					return nil, err
-				}
-			}
-		}
-		f.LinkToItem(key)
-	}
-	if _, err := t.updateFiles(files); err != nil {
-		return nil, err
-	}
-	return t.validateKeyed(key, files[0], hash)
-}
-
 // publish: the item at the end of the import's cheap stage — Visible when it has
 // something the browser shows (a preview), else Waiting (the expensive stage later)
 func (t *tx) publish(item *dto.ItemDto) (*dto.ItemDto, error) {
@@ -206,8 +212,11 @@ func (t *tx) markRework(guids []string) (int64, error) {
 	return n, nil
 }
 
-// Unshown: the items nothing can show yet (no file the browser shows, no preview:
-// Waiting) — what a library that draws renditions itself may fill
-func (q query) Unshown() ([]*dto.ItemDto, error) {
-	return q.GetItemsInStates(dto.Waiting)
+func newFlowCommands(p *Proxy) flowCommands {
+	return flowCommands{
+		gone:       command(p, pubsub.Frame, (*tx).gone),
+		ignore:     command(p, pubsub.Frame, (*tx).ignore),
+		publish:    command(p, pubsub.Frame, (*tx).publish),
+		markRework: command(p, pubsub.Frame, (*tx).markRework),
+	}
 }
