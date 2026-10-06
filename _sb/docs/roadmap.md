@@ -36,7 +36,7 @@ One line each; the details are in the READMEs and the PRs.
   work queue · #32 events and commands: go-pub-sub v0.3.0 in layers
   (events, commands, clients), the model on it; the model a file per subject (a
   write and its command, not a rule), interfaces at their consumers; public first
-  in every file.
+  in every file; the design of entities, components, systems.
 
 ## Releases
 
@@ -47,7 +47,8 @@ One line each; the details are in the READMEs and the PRs.
 
 ## Next: the expensive stage (transcode)
 
-In steps, each its own PR (designs below: "The write bus", "The work queue",
+In steps, each its own PR (designs below: "The write bus", "Entities, components,
+systems", "The work queue",
 "Expensive stage"):
 
 0. [ ] **The write bus** — [go-pub-sub](https://github.com/eggs-gd/go-pub-sub) (events and commands,
@@ -302,6 +303,59 @@ cuts the wait. Each consumer handles it its own way:
 
 Steps: the model's domain events (`tx.emit`); then the walk on clients; render
 wakes on `ItemPublished`.
+
+## Design: entities, components, systems
+
+The library is many random files becoming artifacts we can show: each file gains
+facts — a stat, a fingerprint, exif, kinds, a preview, renditions, a perceptor's
+values — and each fact is computed from others. That is an ECS: the work queue
+below is its first step, not a separate idea.
+
+- **Entity** — the item's GUID, nothing more.
+- **Component** — every derived fact about an item, a table keyed by the GUID; a
+  row knows what it was computed from: `(guid, version, input, …data)` — `version`
+  of the code or config that made it, `input` the versions of what it read. The
+  perceptors' stores already are components (without `input`).
+- **System** — a function and a query: "has A, lacks B or B not computed from the
+  current A". It takes a page of items, computes outside the transaction, commits
+  its component through the writer. A system declares what it reads and what it
+  writes; the order follows from that (no hand-made pipeline), systems with
+  disjoint writes run side by side (faces, colour, geo).
+- **An event is an alarm**: "component X written" wakes the systems that read X —
+  the database is the truth, the event a hint ("Events and commands").
+
+**What goes**: the hand-set states and marks become queries — Visible: has a
+preview; Ready: has every rendition of the current version; Dirty: an input
+changed. `State` as stored, `Rework`, `MarkRework`, `FileDto.Changed` and the
+perceptors' `Reconcile` go; a new perceptor or a new config version is a query that
+finds every item by itself (a backfill nobody enqueues).
+
+**What stays out**: identity — which files make an item, a move, a group — is
+relational across entities in one transaction, not work on one entity: walk →
+group → gate → identity stay a chain in the model; systems start once the entity
+exists. Group perceptors (journeys, face clusters) are systems over the whole set
+(a watermark row, as the work queue has it).
+
+**The hard part — `input`**: it must cover every version a result depends on;
+wrong, it gives endless recomputation or stale data. Worth reading before:
+incremental computation (Salsa in rust-analyzer, Bazel's action keys).
+
+**Cost**: "lacks a component" over every item — measured in the work queue: 1–2 ms
+a page by the index, 143 ms a full pass at 200 k items per slug; full passes only
+at start and after a version change.
+
+**For perceptors**: a plugin declares `reads: [exif, rendition]`, `writes: faces` —
+`perceplib/api` describes a system's contract instead of the core's methods.
+
+Steps, no rewrite:
+
+1. The work queue and renditions (below), `work` read as the components' table and
+   render as the first system.
+2. The perceptors' stores get `input`: perceptors are systems; `MarkRework` and
+   `Reconcile` go.
+3. The states derived (a view or a query), not written: `Rework` and `Changed` go.
+4. The import chain ends at identity: it creates the entity and its first
+   components (stat, fingerprint); the systems' scheduler does the rest.
 
 ## Design: the work queue
 
