@@ -15,6 +15,9 @@ import (
 // Perceptors are the gallery's ways through the library: the client draws a button
 // per perceptor, asks one for the order of the sheet and lays it out itself.
 
+// ValuesLoader: a perceptor's stored values for these items (store name, by guid)
+type ValuesLoader func(perceptor string, guids []string) (string, map[string]api.Values, error)
+
 type clientPerceptor struct {
 	Slug     string `json:"slug"` // the view's name in URLs; the plugin's name stays inside
 	Title    string `json:"title"`
@@ -33,8 +36,48 @@ type clientSection struct {
 	Label string `json:"label"`
 }
 
-// ValuesLoader: a perceptor's stored values for these items (store name, by guid)
-type ValuesLoader func(perceptor string, guids []string) (string, map[string]api.Values, error)
+type clientInfo struct {
+	Slug  string       `json:"slug"`
+	Title string       `json:"title"`
+	Icon  string       `json:"icon"`
+	Facts []clientFact `json:"facts"`
+}
+
+type clientFact struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
+}
+
+// shownStates: what the client is shown (see shown)
+var shownStates = []dto.ItemState{dto.Visible, dto.Ready}
+
+// perceived: a stored item as a perceptor reads it (api.ItemDataProvider) — the
+// item, and the r.perceptors' values loaded for it (each perceptor's storage keeps
+// them, not the items table)
+type perceived struct {
+	*dto.ItemDto
+	values map[string]api.Values
+}
+
+func (p *perceived) GetGuid() string { return p.Guid }
+
+func (p *perceived) GetSize() api.Size { return p.Size }
+
+func (p *perceived) GetRatio() api.Size { return p.Ratio }
+
+func (p *perceived) GetDuration() float64 { return p.Duration }
+
+func (p *perceived) StoreValues(store string) (api.Values, bool) {
+	v, ok := p.values[store]
+	return v, ok
+}
+
+func (p *perceived) SetStoreValues(store string, v api.Values) {
+	if p.values == nil {
+		p.values = map[string]api.Values{}
+	}
+	p.values[store] = v
+}
 
 // registerPerceptors: list is what the client is given, core first (the first is
 // the default view)
@@ -125,18 +168,6 @@ func (r *routes) getOrder(c echo.Context) error {
 	return nil
 }
 
-type clientInfo struct {
-	Slug  string       `json:"slug"`
-	Title string       `json:"title"`
-	Icon  string       `json:"icon"`
-	Facts []clientFact `json:"facts"`
-}
-
-type clientFact struct {
-	Label string `json:"label"`
-	Value string `json:"value"`
-}
-
 // r.getInfo: what every perceptor knows about one item (the viewer's info panel), each
 // with its own values loaded; a perceptor that says nothing is left out
 func (r *routes) getInfo(c echo.Context) error {
@@ -168,32 +199,4 @@ func (r *routes) getInfo(c echo.Context) error {
 		out = append(out, info)
 	}
 	return c.JSON(http.StatusOK, out)
-}
-
-// shownStates: what the client is shown (see shown)
-var shownStates = []dto.ItemState{dto.Visible, dto.Ready}
-
-// perceived: a stored item as a perceptor reads it (api.ItemDataProvider) — the
-// item, and the r.perceptors' values loaded for it (each perceptor's storage keeps
-// them, not the items table)
-type perceived struct {
-	*dto.ItemDto
-	values map[string]api.Values
-}
-
-func (p *perceived) GetGuid() string      { return p.Guid }
-func (p *perceived) GetSize() api.Size    { return p.Size }
-func (p *perceived) GetRatio() api.Size   { return p.Ratio }
-func (p *perceived) GetDuration() float64 { return p.Duration }
-
-func (p *perceived) StoreValues(store string) (api.Values, bool) {
-	v, ok := p.values[store]
-	return v, ok
-}
-
-func (p *perceived) SetStoreValues(store string, v api.Values) {
-	if p.values == nil {
-		p.values = map[string]api.Values{}
-	}
-	p.values[store] = v
 }

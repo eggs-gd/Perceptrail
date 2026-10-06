@@ -33,18 +33,6 @@ func (p *durationPerceptor) Order(ctx context.Context, _ string, items []api.Ite
 	return out, ctx.Err()
 }
 
-// length: whole minutes, whole seconds under a minute, tenths under a second
-// ("12 min", "45 s", "0.4 s")
-func length(seconds float64) string {
-	switch {
-	case seconds >= 60:
-		return fmt.Sprintf("%d min", int(seconds/60))
-	case seconds >= 1:
-		return fmt.Sprintf("%d s", int(seconds))
-	}
-	return fmt.Sprintf("%.1f s", seconds)
-}
-
 // Schema: nothing of its own to keep — the core's item has it
 func (p *durationPerceptor) Schema() api.Schema { return api.Schema{} }
 
@@ -56,4 +44,16 @@ func (p *durationPerceptor) Info(item api.ItemDataProvider) []api.Fact {
 	}
 	s := int(d + 0.5)
 	return []api.Fact{{Label: "Length", Value: fmt.Sprintf("%d:%02d", s/60, s%60)}}
+}
+
+// length: whole minutes, whole seconds under a minute, tenths under a second
+// ("12 min", "45 s", "0.4 s")
+func length(seconds float64) string {
+	switch {
+	case seconds >= 60:
+		return fmt.Sprintf("%d min", int(seconds/60))
+	case seconds >= 1:
+		return fmt.Sprintf("%d s", int(seconds))
+	}
+	return fmt.Sprintf("%.1f s", seconds)
 }

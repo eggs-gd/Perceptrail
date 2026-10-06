@@ -22,6 +22,14 @@ import (
 	l "github.com/eggs-gd/go-zap-decor"
 )
 
+// Store: the files table as a walk reads and writes it
+type Store interface {
+	GetAllFiles() ([]*dto.FileDto, error)
+	GetFilesByID(ids []uint) ([]*dto.FileDto, error)
+	CreateFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error)
+	SaveStats(files []*dto.FileDto) error
+}
+
 // Result describes a finished walk. Deletions may be derived from it only if the
 // walk was complete: a cancelled walk or an unreadable root says nothing about which
 // files are gone.
@@ -35,18 +43,6 @@ type Result struct {
 	Unreadable []string
 }
 
-// Store: the files table as a walk reads and writes it
-type Store interface {
-	GetAllFiles() ([]*dto.FileDto, error)
-	GetFilesByID(ids []uint) ([]*dto.FileDto, error)
-	CreateFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error)
-	SaveStats(files []*dto.FileDto) error
-}
-
-// page: how many files a walk sends at once, their rows written in one transaction
-// first
-const page = 256
-
 // Walker: the walk step's logic (a chain.EntryPoint)
 type Walker struct {
 	logger *l.Logger
@@ -54,6 +50,10 @@ type Walker struct {
 	skip   map[string]bool // the directories not entered
 	db     Store
 }
+
+// page: how many files a walk sends at once, their rows written in one transaction
+// first
+const page = 256
 
 // New: the chain's entry — out gets every file of a walk, then the gone ones
 // skipped: directories not entered (the libraries' own, without their media); the
@@ -105,6 +105,26 @@ func (m *Walker) Start(ctx context.Context, emit func(dto.WalkedFile) bool) erro
 		m.logger.Info("Walk complete", l.Int("files", r.Files), l.Int("unreadable", len(r.Unreadable)), l.Int("gone", len(missing)))
 	}
 	return nil
+}
+
+// Missing: of the rows a walk did not see (stale), the ones it says are deleted —
+// only after a complete walk that found files, only under its root (another root:
+// the config changed, not ours to judge), never under an unreadable directory
+func Missing(r Result, stale []*dto.FileDto) []*dto.FileDto {
+	if !r.Complete || r.Files == 0 {
+		return nil // an empty root (an unmounted drive's mount point) must not delete the library
+	}
+	var gone []*dto.FileDto
+	for _, f := range stale {
+		if !isUnder(f.Path, r.Root) {
+			continue
+		}
+		if slices.ContainsFunc(r.Unreadable, func(dir string) bool { return f.Path == dir || isUnder(f.Path, dir) }) {
+			continue
+		}
+		gone = append(gone, f)
+	}
+	return gone
 }
 
 // seen: a page of the walk as rows, in its order — a new file's row created, a
@@ -227,26 +247,6 @@ func (m *Walker) walk(ctx context.Context, emit func(dto.ItemEntry) bool) Result
 	}
 	result.Complete = true
 	return result
-}
-
-// Missing: of the rows a walk did not see (stale), the ones it says are deleted —
-// only after a complete walk that found files, only under its root (another root:
-// the config changed, not ours to judge), never under an unreadable directory
-func Missing(r Result, stale []*dto.FileDto) []*dto.FileDto {
-	if !r.Complete || r.Files == 0 {
-		return nil // an empty root (an unmounted drive's mount point) must not delete the library
-	}
-	var gone []*dto.FileDto
-	for _, f := range stale {
-		if !isUnder(f.Path, r.Root) {
-			continue
-		}
-		if slices.ContainsFunc(r.Unreadable, func(dir string) bool { return f.Path == dir || isUnder(f.Path, dir) }) {
-			continue
-		}
-		gone = append(gone, f)
-	}
-	return gone
 }
 
 func isUnder(path, dir string) bool {

@@ -10,6 +10,14 @@ import (
 	l "github.com/eggs-gd/go-zap-decor"
 )
 
+// HashStore: what the fingerprint's version needs — the meta table (the version
+// the items were fingerprinted with) and the items' fingerprints it clears
+type HashStore interface {
+	GetMeta(key string) (string, error)
+	SetMeta(key, value string) error
+	ClearHashes() (int64, error)
+}
+
 // The fingerprint changes: a new hashVersion makes every item forget its old one
 // (the gate sends each group once more, validate gives it the new one — the same
 // path keeps its GUID). Without it an untouched file keeps the old fingerprint and
@@ -50,14 +58,6 @@ func fingerprint(path string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
-// HashStore: what the fingerprint's version needs — the meta table (the version
-// the items were fingerprinted with) and the items' fingerprints it clears
-type HashStore interface {
-	GetMeta(key string) (string, error)
-	SetMeta(key, value string) error
-	ClearHashes() (int64, error)
 }
 
 // forgetOldHashes runs at start: a new hashVersion clears every item's fingerprint

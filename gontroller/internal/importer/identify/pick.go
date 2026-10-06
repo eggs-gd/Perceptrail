@@ -12,6 +12,15 @@ import (
 // Embedded previews, the biggest kind first
 var embeddedPreviews = []string{"JpgFromRaw", "PreviewImage", "ThumbnailImage"}
 
+// Browser-viewable images; HEIC/HEIF (Safari only) and RAW are not
+var viewableImage = map[string]bool{
+	"image/jpeg": true, "image/png": true, "image/gif": true,
+	"image/webp": true, "image/avif": true, "image/bmp": true,
+}
+
+// H.264 plays everywhere; HEVC only in Safari — it waits for the transcode
+var viewableVideoCodec = map[string]bool{"avc1": true, "avc3": true}
+
 // preview: what the asset shows right now, without a transcode. Any size counts —
 // the expensive stage brings the quality later. In order:
 //  1. what the source said to show first (an Apple asset: the edit, the original,
@@ -40,15 +49,6 @@ func preview(it *draft, tool Exiftool, dir string, logger *l.Logger) (path, mime
 	}
 	return "", ""
 }
-
-// Browser-viewable images; HEIC/HEIF (Safari only) and RAW are not
-var viewableImage = map[string]bool{
-	"image/jpeg": true, "image/png": true, "image/gif": true,
-	"image/webp": true, "image/avif": true, "image/bmp": true,
-}
-
-// H.264 plays everywhere; HEVC only in Safari — it waits for the transcode
-var viewableVideoCodec = map[string]bool{"avc1": true, "avc3": true}
 
 // viewableFile: a file of the group the browser shows (1–3 above), or none
 func viewableFile(it *draft) (path, mime string) {

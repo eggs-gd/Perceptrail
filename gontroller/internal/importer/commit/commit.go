@@ -15,12 +15,12 @@ type Store interface {
 	Publish(item *dto.ItemDto) (*dto.ItemDto, error)
 }
 
+type publish struct{ db Store }
+
 // New: in — the perceived items (their values kept)
 func New(db Store, in <-chan *identify.Item) chain.Processor {
 	return chain.NewEnd(in, publish{db})
 }
-
-type publish struct{ db Store }
 
 func (p publish) Consume(in *identify.Item) error {
 	if in == nil || in.Item == nil {

@@ -72,18 +72,6 @@ func (p *Provider) Skipped(root string) []string {
 	return skipped
 }
 
-// dirsBut: the directories in dir, but the kept ones
-func dirsBut(dir string, kept ...string) []string {
-	entries, _ := os.ReadDir(dir)
-	var out []string
-	for _, e := range entries {
-		if e.IsDir() && !slices.Contains(kept, e.Name()) {
-			out = append(out, filepath.Join(dir, e.Name()))
-		}
-	}
-	return out
-}
-
 // Owns: an item whose main file is in a Photos library (its GUID is the asset UUID)
 func (p *Provider) Owns(item *dto.ItemDto) bool { return BundleRoot(item.Path) != "" }
 
@@ -100,6 +88,18 @@ func (p *Provider) Start(ctx context.Context) {
 		p.logger.Info("Photos: renditions on demand")
 		p.hydrateWaiting(ctx)
 	}()
+}
+
+// dirsBut: the directories in dir, but the kept ones
+func dirsBut(dir string, kept ...string) []string {
+	entries, _ := os.ReadDir(dir)
+	var out []string
+	for _, e := range entries {
+		if e.IsDir() && !slices.Contains(kept, e.Name()) {
+			out = append(out, filepath.Join(dir, e.Name()))
+		}
+	}
+	return out
 }
 
 // refresh: Photos made a file of the asset local (or drew from what was local) —

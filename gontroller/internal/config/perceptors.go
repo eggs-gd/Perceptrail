@@ -17,6 +17,15 @@ type Perceptor struct {
 	Client *bool `yaml:"client"`
 }
 
+// Providers: the `providers` section, by name; a provider not listed is enabled
+//
+//	providers:
+//	  apple:
+//	    enabled: false   # not in the chain: a Photos library is a plain folder then
+type Providers map[string]struct {
+	Enabled *bool `yaml:"enabled"`
+}
+
 func (s Perceptors) Enabled(name string) bool {
 	p, ok := s[name]
 	return !ok || p.Enabled == nil || *p.Enabled
@@ -26,15 +35,6 @@ func (s Perceptors) Enabled(name string) bool {
 func (s Perceptors) Client(name string) bool {
 	p, ok := s[name]
 	return s.Enabled(name) && (!ok || p.Client == nil || *p.Client)
-}
-
-// Providers: the `providers` section, by name; a provider not listed is enabled
-//
-//	providers:
-//	  apple:
-//	    enabled: false   # not in the chain: a Photos library is a plain folder then
-type Providers map[string]struct {
-	Enabled *bool `yaml:"enabled"`
 }
 
 func (p Providers) Enabled(name string) bool {

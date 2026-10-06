@@ -7,25 +7,6 @@ import (
 	l "github.com/eggs-gd/go-zap-decor"
 )
 
-// DataProviderType defines the source of data for the perceptor
-type DataProviderType int
-
-const (
-	ExifDataProvider DataProviderType = iota
-	RawDataProvider
-	MetadataProvider
-	// Will be extended later with other providers...
-)
-
-// ProcessingMode defines how perceptor handles items
-type ProcessingMode int
-
-const (
-	SingleItem ProcessingMode = iota
-	ItemGroup
-	// Potentially more modes in future...
-)
-
 // Perceptor interface defines the core methods for plugins. Every perceptor
 // navigates (see navigation.go): its view and its order of the sheet.
 type Perceptor interface {
@@ -63,3 +44,22 @@ type ExifPerceptor interface {
 	// go to its Store); the core runs it as a step. nil: nothing to do on import.
 	Decorator(logger *l.Logger) chain.Decorator[RawItemR, RawItemR]
 }
+
+// DataProviderType defines the source of data for the perceptor
+type DataProviderType int
+
+const (
+	ExifDataProvider DataProviderType = iota
+	RawDataProvider
+	MetadataProvider
+	// Will be extended later with other providers...
+)
+
+// ProcessingMode defines how perceptor handles items
+type ProcessingMode int
+
+const (
+	SingleItem ProcessingMode = iota
+	ItemGroup
+	// Potentially more modes in future...
+)

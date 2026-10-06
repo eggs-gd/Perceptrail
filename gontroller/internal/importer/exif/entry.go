@@ -25,6 +25,19 @@ var (
 	_ api.RawItemR = (*identify.Item)(nil)
 )
 
+// perceive: a perceptor's logic over the item the steps carry, seen as T (read-write
+// for a built-in one, read-only for a plugin)
+type perceive[T any] struct {
+	name  string
+	logic chain.Decorator[T, T]
+}
+
+// keep: the values the perceptors put on the item, a row in each one's storage (its
+// value, or "processed, nothing found"). Before the item is published: an item
+// published without them would be taken as done; a crash between the two leaves an
+// item that is not, the next walk sends it again.
+type keep struct{}
+
 // New: in — the identified items; out — the same, perceived, their values kept.
 // Its errors go to the chain it runs in.
 func New(logger *l.Logger, in <-chan *identify.Item, out chan<- *identify.Item) chain.Processor {
@@ -55,13 +68,6 @@ func New(logger *l.Logger, in <-chan *identify.Item, out chan<- *identify.Item) 
 	return c
 }
 
-// perceive: a perceptor's logic over the item the steps carry, seen as T (read-write
-// for a built-in one, read-only for a plugin)
-type perceive[T any] struct {
-	name  string
-	logic chain.Decorator[T, T]
-}
-
 func (p perceive[T]) Decorate(in *identify.Item) (*identify.Item, error) {
 	view, _ := any(in).(T)
 	out, err := p.logic.Decorate(view)
@@ -80,12 +86,6 @@ func (p perceive[T]) Stop() {
 		s.Stop()
 	}
 }
-
-// keep: the values the perceptors put on the item, a row in each one's storage (its
-// value, or "processed, nothing found"). Before the item is published: an item
-// published without them would be taken as done; a crash between the two leaves an
-// item that is not, the next walk sends it again.
-type keep struct{}
 
 func (keep) Decorate(it *identify.Item) (*identify.Item, error) {
 	if it.Item == nil {

@@ -16,10 +16,6 @@ type show struct {
 	logger *l.Logger
 }
 
-func newShow(db SizesStore, tool Exiftool, cacheDir string, logger *l.Logger) *show {
-	return &show{db: db, tool: tool, dir: filepath.Join(cacheDir, "previews"), logger: logger}
-}
-
 func (s *show) Decorate(d *draft) (*Item, error) {
 	setSizes(d)
 	if _, err := s.db.UpdateFiles(d.Files); err != nil {
@@ -30,3 +26,7 @@ func (s *show) Decorate(d *draft) (*Item, error) {
 }
 
 func (s *show) Stop() { s.tool.Close() }
+
+func newShow(db SizesStore, tool Exiftool, cacheDir string, logger *l.Logger) *show {
+	return &show{db: db, tool: tool, dir: filepath.Join(cacheDir, "previews"), logger: logger}
+}

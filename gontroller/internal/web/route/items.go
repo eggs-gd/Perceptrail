@@ -54,6 +54,12 @@ type endLine struct {
 // URLs carry the version (?v=); 6: asset.full (the full size of what is seen).
 const contractVersion = "6"
 
+// removedItem: a tombstone in a delta
+type removedItem struct {
+	Guid    string `json:"guid"`
+	Removed bool   `json:"removed"`
+}
+
 func (r *routes) registerItems(segment string, e *echo.Echo) {
 	r.epoch, _ = r.db.GetMeta(epochKey)
 	if r.epoch == "" {
@@ -90,12 +96,6 @@ func (r *routes) getItems(c echo.Context) error {
 		return err
 	}
 	return r.streamClientItems(c.Response().Writer, since, endLine{Cursor: cursor, Total: total})
-}
-
-// removedItem: a tombstone in a delta
-type removedItem struct {
-	Guid    string `json:"guid"`
-	Removed bool   `json:"removed"`
 }
 
 func (r *routes) toClientItem(dbItem *dto.ItemDto, files []*dto.FileDto) clientItem {

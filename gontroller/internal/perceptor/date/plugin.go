@@ -9,11 +9,16 @@ import (
 	"github.com/eggs-gd/perceplib/exif"
 )
 
+var Perceptor api.Perceptor = &datePerceptor{}
+
 type datePerceptor struct{}
 
-func (p *datePerceptor) Name() string                       { return "exif_date" }
+func (p *datePerceptor) Name() string { return "exif_date" }
+
 func (p *datePerceptor) DataProvider() api.DataProviderType { return api.ExifDataProvider }
+
 func (p *datePerceptor) ProcessingMode() api.ProcessingMode { return api.SingleItem }
+
 func (p *datePerceptor) Decorator(logger *l.Logger) chain.Decorator[builtin.Item, builtin.Item] {
 	return &datesExtractor{logger}
 }
@@ -29,5 +34,3 @@ func (p *datePerceptor) ExifTags() []string {
 		"GPSDateTime", "GPSDateStamp", "GPSTimeStamp", "FileModifyDate",
 	}, exif.CoordinateTags...)
 }
-
-var Perceptor api.Perceptor = &datePerceptor{}

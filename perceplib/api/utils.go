@@ -4,13 +4,6 @@ import (
 	"slices"
 )
 
-func gcd(a, b int) int {
-	for b != 0 {
-		a, b = b, a%b
-	}
-	return a
-}
-
 func GetRatio(size Size) Size {
 	if size.W <= 0 || size.H <= 0 {
 		return Size{}
@@ -28,4 +21,11 @@ func AppendUniq[T comparable](slice []T, elem T) []T {
 	}
 
 	return slice
+}
+
+func gcd(a, b int) int {
+	for b != 0 {
+		a, b = b, a%b
+	}
+	return a
 }

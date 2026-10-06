@@ -17,10 +17,6 @@ import (
 	"unsafe"
 )
 
-// main runs on the main thread (RunMain turns its run loop): Live Photo results are
-// delivered on the main queue
-func init() { runtime.LockOSThread() }
-
 const authorized, limited = 3, 4
 
 var allowed atomic.Bool
@@ -48,6 +44,10 @@ func RunMain(done <-chan struct{}) {
 		}
 	}
 }
+
+// main runs on the main thread (RunMain turns its run loop): Live Photo results are
+// delivered on the main queue
+func init() { runtime.LockOSThread() }
 
 func image(uuid string, size int) ([]byte, error) {
 	var buf unsafe.Pointer

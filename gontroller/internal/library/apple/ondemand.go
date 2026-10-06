@@ -60,6 +60,8 @@ type fetching struct {
 	err  error
 }
 
+type askFunc func(Photos, string) ([]byte, error)
+
 // Levels: the viewer's medium and the Original — always: the biggest of what the
 // user sees is Photos' current version (the edit), not a local unedited original
 // (edits and their history are Photos' business, not ours); a hover for what moves
@@ -134,8 +136,6 @@ func (p *Provider) original(item *dto.ItemDto) (provider.Rendition, error) {
 	p.refresh(item.Guid)
 	return provider.Rendition{Data: data, Mime: "image/jpeg"}, nil
 }
-
-type askFunc func(Photos, string) ([]byte, error)
 
 func noData(_ string, err error) ([]byte, error) { return nil, err }
 

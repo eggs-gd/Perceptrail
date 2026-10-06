@@ -27,6 +27,8 @@ type Config interface {
 
 var enabled []provider.Provider
 
+type service struct{}
+
 // Enable: the libraries of this run, from the config, in the order of the chain:
 // Apple Photos (its library's DB and files; PhotoKit on demand, macOS), the plain
 // folder last (it takes what nobody claimed). Once, at start.
@@ -66,8 +68,6 @@ func Of(item *dto.ItemDto) provider.Provider {
 // Service: the libraries' background work (access, what nothing shows yet), run
 // with the server's services until they stop
 func Service() app.Service { return service{} }
-
-type service struct{}
 
 func (service) Start(ctx context.Context) {
 	for _, lib := range enabled {

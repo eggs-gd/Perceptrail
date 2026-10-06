@@ -32,6 +32,13 @@ type dateInfo struct {
 // serverZone is the last resort for a local time without any zone information
 var serverZone = time.Local
 
+const exifLayout = "2006:01:02 15:04:05"
+
+var (
+	finderOnce sync.Once
+	finder     tzf.F
+)
+
 // resolveDate picks the best date of an item and its zone. Photos carry a local
 // wall-clock time (DateTimeOriginal) and maybe its offset; QuickTime videos carry
 // UTC (CreateDate) and maybe a zoned CreationDate; everything has FileModifyDate.
@@ -126,8 +133,6 @@ func inLocation(wall time.Time, loc *time.Location) time.Time {
 		wall.Hour(), wall.Minute(), wall.Second(), wall.Nanosecond(), loc)
 }
 
-const exifLayout = "2006:01:02 15:04:05"
-
 // parseWall parses "2006:01:02 15:04:05[.frac]" as a wall-clock time (in UTC).
 // An all-zero value is not a date.
 func parseWall(s string) (time.Time, bool) {
@@ -218,11 +223,6 @@ func gpsTime(exif api.ExifProvider) (time.Time, bool) {
 	t, ok := parseWall(date + " " + clock)
 	return t, ok
 }
-
-var (
-	finderOnce sync.Once
-	finder     tzf.F
-)
 
 // coordsZone is the IANA zone at the GPS coordinates, nil if unknown. The zone
 // dictionary is loaded on first use.

@@ -2,13 +2,6 @@ package api
 
 import "time"
 
-type RawExif map[string][]byte
-
-type Size struct {
-	W int
-	H int
-}
-
 type ExifProvider interface {
 	//returns exifdata with given key from main file
 	//todo add support for sidecars
@@ -29,4 +22,11 @@ type ItemDataProvider interface {
 type RawItemR interface {
 	ItemDataProvider
 	ExifProvider
+}
+
+type RawExif map[string][]byte
+
+type Size struct {
+	W int
+	H int
 }

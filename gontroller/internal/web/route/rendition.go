@@ -20,6 +20,12 @@ import (
 // Nothing to serve (not a provider's item, nothing there, no access): 404, the
 // client keeps what it shows.
 
+type onDemand struct {
+	Medium   string `json:"medium"`             // relative to the API
+	Hover    string `json:"hover,omitempty"`    // a video or a Live Photo
+	Original string `json:"original,omitempty"` // the biggest of what is seen (a video: its file)
+}
+
 func (r *routes) registerRenditions(e *echo.Echo) {
 	e.GET("/items/:guid/rendition/:level", r.getRendition)
 }
@@ -67,10 +73,4 @@ func onDemandOf(item *dto.ItemDto, lib Library) *onDemand {
 		}
 	}
 	return od
-}
-
-type onDemand struct {
-	Medium   string `json:"medium"`             // relative to the API
-	Hover    string `json:"hover,omitempty"`    // a video or a Live Photo
-	Original string `json:"original,omitempty"` // the biggest of what is seen (a video: its file)
 }

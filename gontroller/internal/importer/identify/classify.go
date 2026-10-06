@@ -15,6 +15,14 @@ import (
 // type comes from the content (exiftool), then an own extension table, then a
 // content sniff — no system MIME tables (a minimal Docker image has none).
 
+// KindsStore: what the kinds' table version needs — the meta table (the version
+// the files were judged by) and the "ignored" marks it clears
+type KindsStore interface {
+	GetMeta(key string) (string, error)
+	SetMeta(key, value string) error
+	UnignoreFiles() (int64, error)
+}
+
 // The main file is always the source: RAW, then video, then an image. The JPEG of
 // RAW+JPEG and the photo of a Live Photo are derivatives — later they can serve as
 // ready previews and save a transcode, but the item is the source.
@@ -46,6 +54,13 @@ var extTable = map[string]extInfo{
 
 	".xmp": {kindSidecar, "application/rdf+xml"}, ".aae": {kindSidecar, "application/xml"},
 }
+
+// mimeVersion changes whenever the kind detection changes. Groups ignored by an
+// older detection are classified once more (the system MIME tables lost HEIC,
+// MOV, RAW in a minimal Docker image: those groups were ignored for good).
+const mimeVersion = "2"
+
+const mimeVersionKey = "mime_version"
 
 // classify fills Kinds (and every file's MimeType) and puts the main file first
 func classify(g *draft) {
@@ -154,21 +169,6 @@ func sniff(path string) string {
 		return ""
 	}
 	return http.DetectContentType(buf[:n])
-}
-
-// mimeVersion changes whenever the kind detection changes. Groups ignored by an
-// older detection are classified once more (the system MIME tables lost HEIC,
-// MOV, RAW in a minimal Docker image: those groups were ignored for good).
-const mimeVersion = "2"
-
-const mimeVersionKey = "mime_version"
-
-// KindsStore: what the kinds' table version needs — the meta table (the version
-// the files were judged by) and the "ignored" marks it clears
-type KindsStore interface {
-	GetMeta(key string) (string, error)
-	SetMeta(key, value string) error
-	UnignoreFiles() (int64, error)
 }
 
 // reclassifyIgnored runs at start: a new mimeVersion clears every "ignored" mark,

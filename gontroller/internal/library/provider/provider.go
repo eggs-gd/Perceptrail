@@ -20,12 +20,6 @@ import (
 	chain "github.com/eggs-gd/go-chain"
 )
 
-// Grouper: the logic of a provider's step — the walk's files in, whole assets out
-// (chain.Decorator is a step's logic, not the step: no channels, no goroutine). The
-// importer runs it between its channels (chain.NewDecorator); when the walk ends (its
-// input closes) it gives what it holds (chain.Flusher: the last group).
-type Grouper = chain.Decorator[dto.WalkedFile, dto.Asset]
-
 // Provider: what a library implements. Its consumers declare the part they use
 // (the import's grouping: Claims, Grouper; the routes: Levels, Rendition).
 type Provider interface {
@@ -49,6 +43,12 @@ type Provider interface {
 	// Start: its own work in the background (access, assets nothing shows yet)
 	Start(ctx context.Context)
 }
+
+// Grouper: the logic of a provider's step — the walk's files in, whole assets out
+// (chain.Decorator is a step's logic, not the step: no channels, no goroutine). The
+// importer runs it between its channels (chain.NewDecorator); when the walk ends (its
+// input closes) it gives what it holds (chain.Flusher: the last group).
+type Grouper = chain.Decorator[dto.WalkedFile, dto.Asset]
 
 // Options of a rendition request
 type Options struct {

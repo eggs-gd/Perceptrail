@@ -24,6 +24,12 @@ type Config struct {
 	file file
 }
 
+// Modes (Mode)
+const (
+	ModeDebug   = "debug"
+	ModeRelease = "release"
+)
+
 // file: the YAML document (see config.example.yml)
 type file struct {
 	// debug (development: SQL and every request logged, debug marks in the
@@ -50,12 +56,6 @@ type file struct {
 	// Behind GORM: sqlite, postgres (not implemented yet)
 	Database Database `yaml:"database"`
 }
-
-// Modes (Mode)
-const (
-	ModeDebug   = "debug"
-	ModeRelease = "release"
-)
 
 const (
 	defaultRescan   = time.Minute
@@ -93,6 +93,53 @@ func Read(path string) (*Config, error) {
 	}
 	return c, nil
 }
+
+// File: the config file read
+func (c *Config) File() string { return c.path }
+
+// Mode: debug or release
+func (c *Config) Mode() string { return c.file.Mode }
+
+// Debug: development — SQL and every request logged, debug marks in the gallery
+func (c *Config) Debug() bool { return c.file.Mode == ModeDebug }
+
+// LogLevel: debug logs everything; release from Info up
+func (c *Config) LogLevel() l.LogLevel {
+	if c.Debug() {
+		return l.DebugLevel
+	}
+	return l.InfoLevel
+}
+
+// LibraryRoot: the photos to import
+func (c *Config) LibraryRoot() string { return c.file.Path }
+
+// DataDir: runtime data — the database, the perceptors' storages, the caches
+func (c *Config) DataDir() string { return c.file.DataDir }
+
+// CacheDir: generated files (previews, …) inside DataDir
+func (c *Config) CacheDir() string { return filepath.Join(c.file.DataDir, "cache") }
+
+// Plugins: the external perceptors' files (.so)
+func (c *Config) Plugins() []string { return c.file.Plugins }
+
+// Perceptors: which perceptors run, which the client is given
+func (c *Config) Perceptors() Perceptors { return c.file.Perceptors }
+
+// Providers: which libraries take their files in the import
+func (c *Config) Providers() Providers { return c.file.Providers }
+
+// Exiftool: the executable (a bare name is looked up in PATH)
+func (c *Config) Exiftool() string { return c.file.Exiftool }
+
+// Rescan: the pause between the end of one pass of the import and the next
+func (c *Config) Rescan() time.Duration { return c.file.Rescan }
+
+// Server: the HTTP service's address and CORS
+func (c *Config) Server() Server { return c.file.Server }
+
+// Database: where the model keeps its data
+func (c *Config) Database() Database { return c.file.Database }
 
 func configPath() string {
 	if !flag.Parsed() {
@@ -152,50 +199,3 @@ func (f *file) resolve(base string) error {
 	}
 	return f.Server.resolve()
 }
-
-// File: the config file read
-func (c *Config) File() string { return c.path }
-
-// Mode: debug or release
-func (c *Config) Mode() string { return c.file.Mode }
-
-// Debug: development — SQL and every request logged, debug marks in the gallery
-func (c *Config) Debug() bool { return c.file.Mode == ModeDebug }
-
-// LogLevel: debug logs everything; release from Info up
-func (c *Config) LogLevel() l.LogLevel {
-	if c.Debug() {
-		return l.DebugLevel
-	}
-	return l.InfoLevel
-}
-
-// LibraryRoot: the photos to import
-func (c *Config) LibraryRoot() string { return c.file.Path }
-
-// DataDir: runtime data — the database, the perceptors' storages, the caches
-func (c *Config) DataDir() string { return c.file.DataDir }
-
-// CacheDir: generated files (previews, …) inside DataDir
-func (c *Config) CacheDir() string { return filepath.Join(c.file.DataDir, "cache") }
-
-// Plugins: the external perceptors' files (.so)
-func (c *Config) Plugins() []string { return c.file.Plugins }
-
-// Perceptors: which perceptors run, which the client is given
-func (c *Config) Perceptors() Perceptors { return c.file.Perceptors }
-
-// Providers: which libraries take their files in the import
-func (c *Config) Providers() Providers { return c.file.Providers }
-
-// Exiftool: the executable (a bare name is looked up in PATH)
-func (c *Config) Exiftool() string { return c.file.Exiftool }
-
-// Rescan: the pause between the end of one pass of the import and the next
-func (c *Config) Rescan() time.Duration { return c.file.Rescan }
-
-// Server: the HTTP service's address and CORS
-func (c *Config) Server() Server { return c.file.Server }
-
-// Database: where the model keeps its data
-func (c *Config) Database() Database { return c.file.Database }
