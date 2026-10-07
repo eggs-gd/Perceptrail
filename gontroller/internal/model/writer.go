@@ -30,7 +30,7 @@ const maxBatch = 512
 //     instead.
 type writer struct {
 	db    *gorm.DB
-	lanes [3]chan pubsub.Job[*gorm.DB] // by class: Now, Frame, Idle
+	lanes [3]chan pubsub.Job[*batch] // by class: Now, Frame, Idle
 	quit  chan struct{}                // closed: no job is taken any more (closed())
 	done  chan struct{}
 
@@ -39,7 +39,7 @@ type writer struct {
 
 // Enqueue: the job into its class's lane (waiting for room when it is full); once
 // closed, the job fails
-func (w *writer) Enqueue(job pubsub.Job[*gorm.DB]) {
+func (w *writer) Enqueue(job pubsub.Job[*batch]) {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	if w.closed() {
@@ -52,7 +52,7 @@ func (w *writer) Enqueue(job pubsub.Job[*gorm.DB]) {
 func newWriter(db *gorm.DB) *writer {
 	w := &writer{db: db, quit: make(chan struct{}), done: make(chan struct{})}
 	for i := range w.lanes {
-		w.lanes[i] = make(chan pubsub.Job[*gorm.DB], maxBatch)
+		w.lanes[i] = make(chan pubsub.Job[*batch], maxBatch)
 	}
 	go w.loop()
 	return w
@@ -86,21 +86,26 @@ func (w *writer) loop() {
 		if !ok {
 			return
 		}
-		batch := w.gather(first)
+		jobs := w.gather(first)
+		var b *batch
 		err := w.db.Transaction(func(tx *gorm.DB) error {
-			for _, job := range batch {
-				job.Run(tx) // an operation's error rolls back to its own savepoint
+			b = &batch{db: tx}
+			for _, job := range jobs {
+				job.Run(b) // an operation's error rolls back to its own savepoint
 			}
 			return nil
 		})
-		for _, job := range batch {
+		if err == nil {
+			b.send() // the events, then the results: both after the commit
+		}
+		for _, job := range jobs {
 			job.Done(err)
 		}
 	}
 }
 
 // next: the next job, Now first; false once closed with nothing left
-func (w *writer) next() (pubsub.Job[*gorm.DB], bool) {
+func (w *writer) next() (pubsub.Job[*batch], bool) {
 	if job, ok := w.queued(); ok {
 		return job, true
 	}
@@ -117,20 +122,20 @@ func (w *writer) next() (pubsub.Job[*gorm.DB], bool) {
 }
 
 // gather: first and what is queued already, Now first, up to maxBatch
-func (w *writer) gather(first pubsub.Job[*gorm.DB]) []pubsub.Job[*gorm.DB] {
-	batch := []pubsub.Job[*gorm.DB]{first}
-	for len(batch) < maxBatch {
+func (w *writer) gather(first pubsub.Job[*batch]) []pubsub.Job[*batch] {
+	jobs := []pubsub.Job[*batch]{first}
+	for len(jobs) < maxBatch {
 		job, ok := w.queued()
 		if !ok {
 			break
 		}
-		batch = append(batch, job)
+		jobs = append(jobs, job)
 	}
-	return batch
+	return jobs
 }
 
 // queued: a job already waiting, the most urgent lane first
-func (w *writer) queued() (pubsub.Job[*gorm.DB], bool) {
+func (w *writer) queued() (pubsub.Job[*batch], bool) {
 	for _, l := range w.lanes {
 		select {
 		case job := <-l:

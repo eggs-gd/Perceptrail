@@ -193,7 +193,11 @@ func (t *tx) publish(item *dto.ItemDto) (*dto.ItemDto, error) {
 	if item.PreviewPath != "" {
 		item.State = dto.Visible
 	}
-	return t.updateItem(item)
+	if _, err := t.updateItem(item); err != nil {
+		return item, err
+	}
+	emit(t, &t.events.published, ItemPublished{item.GUID, item.State})
+	return item, nil
 }
 
 // markRework: these items are processed again on the next walk (NeedsWork), their
