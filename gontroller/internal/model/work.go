@@ -25,36 +25,10 @@ import (
 //   - Failures back off (1 min, 10 min, 1 h, 1 day); after maxAttempts the item
 //     waits for a new version or input.
 
-// Cursor: where a pass over the due items is; the zero value starts one
-type Cursor struct {
-	phase int // 0: Waiting items; 1: the shown ones (Visible, Ready); 2: the pass is over
-	date  time.Time
-	id    uint // the last item of the page; 0: the phase starts
-}
-
 // TakeArgs: items to take into a slug's work
 type TakeArgs struct {
 	Slug  string
 	GUIDs []api.GUID
-}
-
-// FinishArgs: a slug's work done for an item — with what, for which input, what it
-// made
-type FinishArgs struct {
-	Slug       string
-	GUID       api.GUID
-	Version    string
-	Input      string
-	Renditions []dto.RenditionDto
-}
-
-// FailArgs: a slug's work failed for an item
-type FailArgs struct {
-	Slug    string
-	GUID    api.GUID
-	Version string
-	Input   string
-	Err     string
 }
 
 const (
@@ -68,18 +42,15 @@ var backoff = []time.Duration{time.Minute, 10 * time.Minute, time.Hour, 24 * tim
 // workCommands: the queue's writes as commands
 type workCommands struct {
 	take   op[TakeArgs, []api.GUID]
-	finish op[FinishArgs, bool]
-	fail   op[FailArgs, pubsub.None]
+	finish op[dto.WorkDone, bool]
+	fail   op[dto.WorkFailed, pubsub.None]
 }
-
-// Over: the pass has no more pages
-func (c Cursor) Over() bool { return c.phase > 1 }
 
 // Due: the next page of items that need the slug's work done with this version,
 // after the cursor; an empty page and an Over cursor end the pass
-func (q query) Due(slug, version string, after Cursor, n int) ([]*dto.ItemDto, Cursor, error) {
+func (q query) Due(slug, version string, after dto.Cursor, n int) ([]*dto.ItemDto, dto.Cursor, error) {
 	now := time.Now().Unix()
-	for phase := after.phase; phase <= 1; phase++ {
+	for phase := after.Phase; phase <= 1; phase++ {
 		states := []dto.ItemState{dto.Waiting}
 		if phase == 1 {
 			states = []dto.ItemState{dto.Visible, dto.Ready}
@@ -90,8 +61,8 @@ func (q query) Due(slug, version string, after Cursor, n int) ([]*dto.ItemDto, C
 			Where(`(work.guid IS NULL OR work.version <> ? OR work.input <> items.hash_short
 				OR (work.done_at = 0 AND work.next_try <= ? AND work.attempts < ?))`, version, now, maxAttempts).
 			Where("(work.guid IS NULL OR work.lease_until <= ?)", now)
-		if phase == after.phase && after.id != 0 {
-			page = page.Where("(items.date < ? OR (items.date = ? AND items.id < ?))", after.date, after.date, after.id)
+		if phase == after.Phase && after.ID != 0 {
+			page = page.Where("(items.date < ? OR (items.date = ? AND items.id < ?))", after.Date, after.Date, after.ID)
 		}
 		var items []*dto.ItemDto
 		if err := page.Order("items.date DESC, items.id DESC").Limit(n).Find(&items).Error; err != nil {
@@ -99,10 +70,10 @@ func (q query) Due(slug, version string, after Cursor, n int) ([]*dto.ItemDto, C
 		}
 		if len(items) > 0 {
 			last := items[len(items)-1]
-			return items, Cursor{phase, last.Date, last.ID}, nil
+			return items, dto.Cursor{Phase: phase, Date: last.Date, ID: last.ID}, nil
 		}
 	}
-	return nil, Cursor{phase: 2}, nil
+	return nil, dto.Cursor{Phase: 2}, nil
 }
 
 func (p *Proxy) Take(slug string, guids []api.GUID) ([]api.GUID, error) {
@@ -114,20 +85,20 @@ func (p *Proxy) TakeCommand() pubsub.Command[TakeArgs, []api.GUID] {
 }
 
 // Finish: false when the result was dropped (the item changed or went meanwhile)
-func (p *Proxy) Finish(args FinishArgs) (bool, error) {
-	return p.finish.Do(args)
+func (p *Proxy) Finish(done dto.WorkDone) (bool, error) {
+	return p.finish.Do(done)
 }
 
-func (p *Proxy) FinishCommand() pubsub.Command[FinishArgs, bool] {
+func (p *Proxy) FinishCommand() pubsub.Command[dto.WorkDone, bool] {
 	return p.finish
 }
 
-func (p *Proxy) Fail(args FailArgs) error {
-	_, err := p.fail.Do(args)
+func (p *Proxy) Fail(failed dto.WorkFailed) error {
+	_, err := p.fail.Do(failed)
 	return err
 }
 
-func (p *Proxy) FailCommand() pubsub.Message[FailArgs] {
+func (p *Proxy) FailCommand() pubsub.Message[dto.WorkFailed] {
 	return pubsub.MessageOf(p.fail)
 }
 
@@ -164,7 +135,7 @@ func (t *tx) take(a TakeArgs) ([]api.GUID, error) {
 
 // finish: the work done — its row and its renditions — unless the item changed or
 // went meanwhile: then the lease goes and the item stays due
-func (t *tx) finish(a FinishArgs) (bool, error) {
+func (t *tx) finish(a dto.WorkDone) (bool, error) {
 	item, err := t.GetItemByGUID(a.GUID)
 	if errors.Is(err, ErrNotFound) || (err == nil && item.HashShort != a.Input) {
 		return false, t.release(a.Slug, a.GUID)
@@ -189,7 +160,7 @@ func (t *tx) finish(a FinishArgs) (bool, error) {
 
 // fail: the failure kept, the item back off; failures count in a row for the same
 // version and input
-func (t *tx) fail(a FailArgs) (pubsub.None, error) {
+func (t *tx) fail(a dto.WorkFailed) (pubsub.None, error) {
 	var rows []dto.WorkDto
 	if err := t.db.Where("guid = ? AND slug = ?", a.GUID, a.Slug).Limit(1).Find(&rows).Error; err != nil {
 		return pubsub.None{}, err

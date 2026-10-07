@@ -80,6 +80,13 @@ type ItemDto struct {
 	// Objects []Object `gorm:"foreignKey:ItemID"`
 }
 
+// ItemPublished: an item went through the cheap stage (Visible or Waiting) — the
+// expensive stage may have work for it (the model's event, after the commit)
+type ItemPublished struct {
+	GUID  api.GUID
+	State ItemState
+}
+
 func (ItemDto) TableName() string {
 	return "items"
 }

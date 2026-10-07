@@ -4,7 +4,6 @@ import (
 	"perceptrail/gontroller/internal/model/dto"
 
 	pubsub "github.com/eggs-gd/go-pub-sub"
-	"github.com/eggs-gd/perceplib/api"
 	"gorm.io/gorm"
 )
 
@@ -19,16 +18,9 @@ import (
 //   - Listeners are called on the writer's goroutine: they hand the work off and
 //     return (the database is the truth, an event only says "look").
 
-// ItemPublished: an item went through the cheap stage (Visible or Waiting) — the
-// expensive stage may have work for it
-type ItemPublished struct {
-	GUID  api.GUID
-	State dto.ItemState
-}
-
 // events: the model's topics
 type events struct {
-	published pubsub.Topic[ItemPublished]
+	published pubsub.Topic[dto.ItemPublished]
 }
 
 // batch: what one transaction of the writer carries — its connection and the events
@@ -39,7 +31,7 @@ type batch struct {
 }
 
 // Published: items through the cheap stage, after the commit
-func (p *Proxy) Published() *pubsub.Topic[ItemPublished] { return &p.events.published }
+func (p *Proxy) Published() *pubsub.Topic[dto.ItemPublished] { return &p.events.published }
 
 // send: the batch's events, once it is committed
 func (b *batch) send() {

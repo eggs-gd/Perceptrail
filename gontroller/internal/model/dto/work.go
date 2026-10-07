@@ -1,6 +1,10 @@
 package dto
 
-import "github.com/eggs-gd/perceplib/api"
+import (
+	"time"
+
+	"github.com/eggs-gd/perceplib/api"
+)
 
 // WorkDto: one kind of work for an item — a slug ("render"; later a pixel
 // perceptor), what it was last done or tried with, and its state in the queue.
@@ -30,6 +34,36 @@ type RenditionDto struct {
 	Path    string // in the cache: r/<guid>/<version>-<size>.<format>
 }
 
+// WorkDone: a slug's work done for an item — with what, for which input, what it
+// made
+type WorkDone struct {
+	Slug       string
+	GUID       api.GUID
+	Version    string
+	Input      string
+	Renditions []RenditionDto
+}
+
+// WorkFailed: a slug's work failed for an item
+type WorkFailed struct {
+	Slug    string
+	GUID    api.GUID
+	Version string
+	Input   string
+	Err     string
+}
+
+// Cursor: where a pass over the items due for some work is; the zero value starts
+// one (the model's Due moves it)
+type Cursor struct {
+	Phase int // 0: Waiting items; 1: the shown ones (Visible, Ready); 2: the pass is over
+	Date  time.Time
+	ID    uint // the last item of the page; 0: the phase starts
+}
+
 func (WorkDto) TableName() string { return "work" }
 
 func (RenditionDto) TableName() string { return "renditions" }
+
+// Over: the pass has no more pages
+func (c Cursor) Over() bool { return c.Phase > 1 }

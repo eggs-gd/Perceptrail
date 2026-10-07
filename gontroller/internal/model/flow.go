@@ -196,7 +196,7 @@ func (t *tx) publish(item *dto.ItemDto) (*dto.ItemDto, error) {
 	if _, err := t.updateItem(item); err != nil {
 		return item, err
 	}
-	emit(t, &t.events.published, ItemPublished{item.GUID, item.State})
+	emit(t, &t.events.published, dto.ItemPublished{GUID: item.GUID, State: item.State})
 	return item, nil
 }
 

@@ -19,9 +19,9 @@ func TestPublishedAfterCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var heard []ItemPublished
+	var heard []dto.ItemPublished
 	var seen dto.ItemState
-	db.Published().Subscribe(func(e ItemPublished) {
+	db.Published().Subscribe(func(e dto.ItemPublished) {
 		heard = append(heard, e)
 		if it, err := db.GetItemByGUID(e.GUID); err == nil {
 			seen = it.State
@@ -42,18 +42,18 @@ func TestPublishedAfterCommit(t *testing.T) {
 // writes keep theirs
 func TestRolledBackWriteEmitsNothing(t *testing.T) {
 	db := openTest(t)
-	var heard []ItemPublished
-	db.Published().Subscribe(func(e ItemPublished) { heard = append(heard, e) })
+	var heard []dto.ItemPublished
+	db.Published().Subscribe(func(e dto.ItemPublished) { heard = append(heard, e) })
 
 	_, err := testWrite(db, func(in *tx) error {
-		emit(in, &in.events.published, ItemPublished{GUID: "gone"})
+		emit(in, &in.events.published, dto.ItemPublished{GUID: "gone"})
 		return errors.New("the write fails after its event")
 	})
 	if err == nil {
 		t.Fatal("the write's error got lost")
 	}
 	if _, err := testWrite(db, func(in *tx) error {
-		emit(in, &in.events.published, ItemPublished{GUID: "kept"})
+		emit(in, &in.events.published, dto.ItemPublished{GUID: "kept"})
 		return nil
 	}); err != nil {
 		t.Fatal(err)

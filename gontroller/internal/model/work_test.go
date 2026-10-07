@@ -32,7 +32,7 @@ func workItem(t *testing.T, db *Proxy, name string, state dto.ItemState, date ti
 func pass(t *testing.T, db *Proxy, version string, n int) []api.GUID {
 	t.Helper()
 	var got []api.GUID
-	var cursor Cursor
+	var cursor dto.Cursor
 	for !cursor.Over() {
 		page, next, err := db.Due("render", version, cursor, n)
 		if err != nil {
@@ -91,7 +91,7 @@ func TestFinish(t *testing.T) {
 	db := openTest(t)
 	a := workItem(t, db, "a.jpg", dto.Visible, time.Now(), "h1")
 	db.Take("render", []api.GUID{a.GUID})
-	done, err := db.Finish(FinishArgs{Slug: "render", GUID: a.GUID, Version: "v1", Input: "h1",
+	done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: a.GUID, Version: "v1", Input: "h1",
 		Renditions: []dto.RenditionDto{{GUID: a.GUID, Version: "v1", Size: 400, Format: "webp", Path: "r/a/v1-400.webp"}}})
 	if err != nil || !done {
 		t.Fatalf("finish: %v %v", done, err)
@@ -111,7 +111,7 @@ func TestFinish(t *testing.T) {
 	a.HashShort = "h2" // the file changed while it was rendered
 	db.UpdateItem(a)
 	db.Take("render", []api.GUID{a.GUID})
-	if done, err := db.Finish(FinishArgs{Slug: "render", GUID: a.GUID, Version: "v1", Input: "h1"}); err != nil || done {
+	if done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: a.GUID, Version: "v1", Input: "h1"}); err != nil || done {
 		t.Errorf("a stale result kept: %v %v", done, err)
 	}
 	if got := pass(t, db, "v1", 10); len(got) != 1 {
@@ -128,7 +128,7 @@ func TestFail(t *testing.T) {
 		db.writer.db.Model(&dto.WorkDto{}).Where("guid = ?", a.GUID).Update("next_try", 0)
 	}
 	for i := 1; i <= maxAttempts; i++ {
-		if err := db.Fail(FailArgs{Slug: "render", GUID: a.GUID, Version: "v1", Input: "h1", Err: "broken"}); err != nil {
+		if err := db.Fail(dto.WorkFailed{Slug: "render", GUID: a.GUID, Version: "v1", Input: "h1", Err: "broken"}); err != nil {
 			t.Fatal(err)
 		}
 		if got := pass(t, db, "v1", 10); len(got) != 0 {
