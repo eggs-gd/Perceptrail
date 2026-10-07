@@ -38,7 +38,9 @@ One line each; the details are in the READMEs and the PRs.
   write and its command, not a rule), interfaces at their consumers; public first
   in every file; the design of entities, components, systems · #33 every Go file
   public first · #34 `api.GUID`: one type for an item's identity from the core
-  through the perceptors (perceplib v0.0.7), the nil GUID instead of `"-"`.
+  through the perceptors (perceplib v0.0.7), the nil GUID instead of `"-"` · #35 the
+  owner's corrections as skills (`pr-flow`, `review-reply`, `self-review`, `smoke`),
+  hard limits in AGENTS.md, the declaration order checked in CI.
 
 ## Releases
 

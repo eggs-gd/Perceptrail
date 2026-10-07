@@ -29,6 +29,21 @@ No symlinks (Windows).
   `gontroller/internal/model/README.md`,
   `perceplib/README.md`, `perceptors/readme.md`, `svebapp/README.md`.
 
+### Hard limits
+
+- The owner's running gontroller (:1323) and Vite (:5173) are never stopped,
+  restarted or written to — read them at most. To run things, a test pair on other
+  ports over a copy of the data (the `smoke` skill).
+- The Apple Photos library is read only, always.
+
+### Procedures — skills
+
+How to do the recurring work is in [`.agents/skills/`](.agents/skills/) (canonical;
+`.claude/skills/` only points there): `pr-flow` (branch → commit → push → PR → after
+merge), `review-reply` (answering a review), `self-review` (the owner's corrections
+as a checklist, before "done"), `smoke` (a test pair). This file holds the rules;
+the skills hold the order of the hands and link back here.
+
 ### Documentation contract — one fact, one place
 
 A fact is written once, by its owner; everywhere else it is a link, never a
@@ -106,6 +121,10 @@ retelling (a retold fact goes stale on the next change and widens every PR).
 
 ## Code Style
 
+The rules in this section are for any code, in any language; the language
+sections below hold only what is about that language itself. A rule found while
+working on Go is general unless it is about a Go feature.
+
 Before writing new code, read the neighbouring files of the package and follow
 them: their naming, comment density, error handling, how they declare their
 dependencies. Comments: one line per step (what it means for the product), plus a
@@ -123,7 +142,8 @@ input option (`hevc` from a request).
 **A file reads top-down, public first** — in any language: public interfaces,
 then public declarations (types, constants, variables), private declarations,
 public implementations (functions and methods of exported names), private
-implementations. A reader sees what the file offers before how.
+implementations. A reader sees what the file offers before how. CI checks it in
+every Go module (`scripts/declorder`; tests, `testdata` and generated files aside).
 
 ### Go — write it like Go
 
