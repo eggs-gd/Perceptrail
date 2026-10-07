@@ -12,7 +12,7 @@ step only gathers facts (see the [importer README](../importer/README.md#the-mod
 
 | type | what | over |
 |---|---|---|
-| `query` | the reads (`GetItemByGuid`, `NeedsWork`, `StreamItemsSince`…), written once | a connection: the readers' pool, or a write's transaction |
+| `query` | the reads (`GetItemByGUID`, `NeedsWork`, `StreamItemsSince`…), written once | a connection: the readers' pool, or a write's transaction |
 | `tx` | what a write runs on: the reads and the writes themselves (unexported methods: `createFile`, `gone`, `validateGroup`…) — no public writes | the writer's transaction |
 | `Proxy` | the model as others see it: the reads over the pool, the public writes, their commands | the pool and the writer |
 

@@ -21,7 +21,7 @@ type pf struct {
 func pick(t *testing.T, files ...pf) (string, string, []string) {
 	t.Helper()
 	tool := &fakeTool{}
-	it := &draft{Item: &dto.ItemDto{Guid: "g"}}
+	it := &draft{Item: &dto.ItemDto{GUID: "g"}}
 	for _, f := range files {
 		it.Files = append(it.Files, &dto.FileDto{ItemEntry: dto.ItemEntry{Path: "/lib/" + f.name, Name: f.name, MimeType: f.mime}})
 		it.Kinds = append(it.Kinds, f.kind)

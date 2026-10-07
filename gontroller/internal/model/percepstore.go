@@ -57,7 +57,7 @@ func OpenPerceptorStore(driver, dir string, s api.Schema) (*PerceptorStore, erro
 func (s *PerceptorStore) Name() string { return s.schema.Store }
 
 // Save: the item's values; nil records "processed, nothing found"
-func (s *PerceptorStore) Save(guid string, v api.Values) error {
+func (s *PerceptorStore) Save(guid api.GUID, v api.Values) error {
 	names := []string{"guid", "has"}
 	args := []any{guid, v != nil}
 	for _, f := range s.schema.Fields {
@@ -69,8 +69,8 @@ func (s *PerceptorStore) Save(guid string, v api.Values) error {
 }
 
 // Load: the values of these items, those that have some
-func (s *PerceptorStore) Load(guids []string) (map[string]api.Values, error) {
-	out := map[string]api.Values{}
+func (s *PerceptorStore) Load(guids []api.GUID) (map[api.GUID]api.Values, error) {
+	out := map[api.GUID]api.Values{}
 	cols := []string{"guid"}
 	for _, f := range s.schema.Fields {
 		cols = append(cols, fmt.Sprintf("%q", f.Name))
@@ -83,7 +83,7 @@ func (s *PerceptorStore) Load(guids []string) (map[string]api.Values, error) {
 			return nil, err
 		}
 		for rows.Next() {
-			var guid string
+			var guid api.GUID
 			raw := make([]any, len(s.schema.Fields))
 			dest := []any{&guid}
 			for i := range raw {
@@ -109,20 +109,20 @@ func (s *PerceptorStore) Load(guids []string) (map[string]api.Values, error) {
 	return out, nil
 }
 
-// Guids: every item this perceptor has processed (a row, with or without a value)
-func (s *PerceptorStore) Guids() ([]string, error) {
-	var guids []string
+// GUIDs: every item this perceptor has processed (a row, with or without a value)
+func (s *PerceptorStore) GUIDs() ([]api.GUID, error) {
+	var guids []api.GUID
 	err := s.db.Raw(`SELECT guid FROM ` + valuesTable).Scan(&guids).Error
 	return guids, err
 }
 
 // Prune: drops the rows of items that are gone (keep says which stay)
-func (s *PerceptorStore) Prune(keep func(guid string) bool) (int, error) {
-	guids, err := s.Guids()
+func (s *PerceptorStore) Prune(keep func(guid api.GUID) bool) (int, error) {
+	guids, err := s.GUIDs()
 	if err != nil {
 		return 0, err
 	}
-	var gone []string
+	var gone []api.GUID
 	for _, g := range guids {
 		if !keep(g) {
 			gone = append(gone, g)

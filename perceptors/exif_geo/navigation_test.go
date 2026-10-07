@@ -53,11 +53,11 @@ func TestSplitZone(t *testing.T) {
 }
 
 type item struct {
-	guid string
+	guid api.GUID
 	vals map[string]api.Values
 }
 
-func (i *item) GetGuid() string      { return i.guid }
+func (i *item) GetGUID() api.GUID    { return i.guid }
 func (i *item) GetDate() time.Time   { return time.Time{} }
 func (i *item) GetSize() api.Size    { return api.Size{} }
 func (i *item) GetRatio() api.Size   { return api.Size{} }
@@ -70,7 +70,7 @@ func (i *item) SetStoreValues(s string, v api.Values) { i.vals[s] = v }
 
 // Every city in one piece, though the curve would interleave them; no place last
 func TestOrderCitiesInOnePiece(t *testing.T) {
-	at := func(guid string, lat, lon float64) api.ItemDataProvider {
+	at := func(guid api.GUID, lat, lon float64) api.ItemDataProvider {
 		it := &item{guid: guid, vals: map[string]api.Values{}}
 		places.Places.Put(it, places.Location{Lat: lat, Lon: lon})
 		return it
@@ -95,7 +95,7 @@ func TestOrderCitiesInOnePiece(t *testing.T) {
 			seen[sec.Label] = true
 			labels = append(labels, sec.Label)
 		}
-		last = e.Guid
+		last = string(e.GUID)
 	}
 	if last != "nowhere" {
 		t.Errorf("no place is not last: %s", last)

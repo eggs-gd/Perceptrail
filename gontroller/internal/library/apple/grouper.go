@@ -219,7 +219,7 @@ func bundles(root string) []string {
 }
 
 func (a *asset) group() dto.Asset {
-	g := dto.Asset{Key: a.uuid, Meta: a.meta, MetaHash: a.metaHash, Kind: a.kind}
+	g := dto.Asset{Key: api.GUID(a.uuid), Meta: a.meta, MetaHash: a.metaHash, Kind: a.kind}
 	for _, c := range a.files {
 		f := a.arrived[c.path]
 		if c.role == roleOriginal && a.files[0].role == roleLiveVideo {

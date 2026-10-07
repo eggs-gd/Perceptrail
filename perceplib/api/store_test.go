@@ -12,7 +12,7 @@ func (c *carrier) SetStoreValues(store string, v Values)   { c.v[store] = v }
 
 type testItem struct{ carrier }
 
-func (testItem) GetGuid() string      { return "g" }
+func (testItem) GetGUID() GUID        { return "g" }
 func (testItem) GetDate() time.Time   { return time.Time{} }
 func (testItem) GetSize() Size        { return Size{} }
 func (testItem) GetRatio() Size       { return Size{} }

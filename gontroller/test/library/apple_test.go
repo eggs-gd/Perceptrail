@@ -16,6 +16,7 @@ import (
 
 	l "github.com/eggs-gd/go-zap-decor"
 	"github.com/eggs-gd/go-zap-decor/tree"
+	"github.com/eggs-gd/perceplib/api"
 )
 
 var testDB *model.Proxy
@@ -50,9 +51,9 @@ func TestHydrateWaiting(t *testing.T) {
 	photos := &fake.Photos{Root: root}
 	p := apple.New(filepath.Dir(root), photos, testDB, l.NewLogger(l.FatalLevel, &tree.Decorator{}))
 	for _, it := range []*dto.ItemDto{
-		{Guid: "H1111111-WAITING", State: dto.Waiting, Kind: dto.KindPhoto, Path: filepath.Join(root, "originals/H/H1111111-WAITING.heic")},
-		{Guid: "H2222222-SHOWN", State: dto.Visible, Kind: dto.KindPhoto, Path: filepath.Join(root, "originals/H/H2222222-SHOWN.heic")},
-		{Guid: "H3333333-FOLDER", State: dto.Waiting, Kind: dto.KindPhoto, Path: "/photos/h3.heic"},
+		{GUID: "H1111111-WAITING", State: dto.Waiting, Kind: dto.KindPhoto, Path: filepath.Join(root, "originals/H/H1111111-WAITING.heic")},
+		{GUID: "H2222222-SHOWN", State: dto.Visible, Kind: dto.KindPhoto, Path: filepath.Join(root, "originals/H/H2222222-SHOWN.heic")},
+		{GUID: "H3333333-FOLDER", State: dto.Waiting, Kind: dto.KindPhoto, Path: "/photos/h3.heic"},
 	} {
 		if _, err := testDB.UpdateItem(it); err != nil {
 			t.Fatal(err)
@@ -61,8 +62,8 @@ func TestHydrateWaiting(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	p.Start(ctx)
-	marked := func(guid string) bool {
-		it, err := testDB.GetItemByGuid(guid)
+	marked := func(guid api.GUID) bool {
+		it, err := testDB.GetItemByGUID(guid)
 		return err == nil && it.Rework
 	}
 	for deadline := time.Now().Add(5 * time.Second); !marked("H1111111-WAITING"); time.Sleep(20 * time.Millisecond) {

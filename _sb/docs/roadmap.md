@@ -37,7 +37,8 @@ One line each; the details are in the READMEs and the PRs.
   (events, commands, clients), the model on it; the model a file per subject (a
   write and its command, not a rule), interfaces at their consumers; public first
   in every file; the design of entities, components, systems · #33 every Go file
-  public first.
+  public first · #34 `api.GUID`: one type for an item's identity from the core
+  through the perceptors (perceplib v0.0.7), the nil GUID instead of `"-"`.
 
 ## Releases
 
@@ -176,7 +177,6 @@ the resources differ (IO and exiftool, CPU / GPU, ML); roles later
         versions and inputs, not a mark;
       - `dto.WalkedFile.Missing` stays for now (a fact in a message).
 
-- [ ] Typed keys: GUIDs and providers' keys are plain `string`.
 - [ ] Dockerfile (with 0.2.0): CGO (sqlite, libvips), jellyfin-ffmpeg, exiftool from
       a `dist-*` release, `CMD --config /data/config.yml`, `/data` a volume. A base
       compose (software encoding) + an override per accelerator

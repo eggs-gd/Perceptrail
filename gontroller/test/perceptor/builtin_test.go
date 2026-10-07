@@ -51,8 +51,8 @@ func TestReadsDeclaredTags(t *testing.T) {
 // Largest first; a section where the coarsest changed level changes (the value,
 // then the finer one); ties in the incoming order; no value last under none
 func TestOrderByValue(t *testing.T) {
-	item := func(guid string, d float64) api.ItemDataProvider {
-		return storedItem(&dto.ItemDto{Guid: guid, Duration: d})
+	item := func(guid api.GUID, d float64) api.ItemDataProvider {
+		return storedItem(&dto.ItemDto{GUID: guid, Duration: d})
 	}
 	got := builtin.OrderByValue([]api.ItemDataProvider{
 		item("photo", 0), item("a", 125), item("b", 130), item("c", 61), item("c2", 61),
@@ -64,7 +64,7 @@ func TestOrderByValue(t *testing.T) {
 	// A new coarse section starts its finer one too (a path)
 	want := []string{"b|0:2 min|1:130 s", "a|1:125 s", "c|0:1 min|1:61 s", "c2", "photo|0:No length"}
 	for i, w := range want {
-		s := got[i].Guid
+		s := string(got[i].GUID)
 		for _, sec := range got[i].Sections {
 			s += fmt.Sprintf("|%d:%s", sec.Level, sec.Label)
 		}
@@ -94,7 +94,7 @@ func newRecorder(exif map[string]string) *recorder {
 
 func (r *recorder) GetExif(key string) string { r.Asked[key] = true; return r.Exif[key] }
 
-func (r *recorder) GetGuid() string      { return "guid" }
+func (r *recorder) GetGUID() api.GUID    { return "guid" }
 func (r *recorder) GetDate() time.Time   { return r.date }
 func (r *recorder) GetSize() api.Size    { return r.size }
 func (r *recorder) GetRatio() api.Size   { return r.ratio }
@@ -130,7 +130,7 @@ type stored struct {
 	values map[string]api.Values
 }
 
-func (s *stored) GetGuid() string      { return s.Guid }
+func (s *stored) GetGUID() api.GUID    { return s.GUID }
 func (s *stored) GetSize() api.Size    { return s.Size }
 func (s *stored) GetRatio() api.Size   { return s.Ratio }
 func (s *stored) GetDuration() float64 { return s.Duration }

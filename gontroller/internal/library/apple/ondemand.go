@@ -84,7 +84,7 @@ func (p *Provider) Rendition(item *dto.ItemDto, level string, opt provider.Optio
 	if !ok {
 		return provider.Rendition{}, provider.ErrNoRendition
 	}
-	uuid := item.Guid // an Apple item's GUID is its asset UUID
+	uuid := string(item.GUID) // an Apple item's GUID is its asset UUID
 	path := Local(root, uuid, want)
 	var drawn []byte
 	if path == "" {
@@ -96,7 +96,7 @@ func (p *Provider) Rendition(item *dto.ItemDto, level string, opt provider.Optio
 		} else {
 			// The new file reaches the item on the next walk (the client has its own
 			// guess meanwhile: the cloud goes when it got the rendition)
-			p.refresh(uuid)
+			p.refresh(item.GUID)
 		}
 		path = Local(root, uuid, want)
 	}
@@ -116,24 +116,25 @@ func (p *Provider) Rendition(item *dto.ItemDto, level string, opt provider.Optio
 func (p *Provider) original(item *dto.ItemDto) (provider.Rendition, error) {
 	p.sem <- struct{}{}
 	defer func() { <-p.sem }()
+	uuid := string(item.GUID) // an Apple item's GUID is its asset UUID
 	fail := func(err error) (provider.Rendition, error) {
-		p.logger.Debug("Original not fetched", l.String("guid", item.Guid), l.Error(err))
+		p.logger.Debug("Original not fetched", l.String("guid", uuid), l.Error(err))
 		return provider.Rendition{}, provider.ErrNoRendition
 	}
 	if item.Kind == dto.KindVideo {
-		path, err := p.photos.Video(item.Guid, videoOriginal)
+		path, err := p.photos.Video(uuid, videoOriginal)
 		if err != nil || path == "" {
 			return fail(err)
 		}
-		p.refresh(item.Guid) // the original is local now: the next walk knows it
+		p.refresh(item.GUID) // the original is local now: the next walk knows it
 		return provider.Rendition{Path: path}, nil
 	}
-	data, err := p.photos.Full(item.Guid)
+	data, err := p.photos.Full(uuid)
 	if err != nil {
 		return fail(err)
 	}
 	// Drawing it may have made Photos download the original: the next walk knows it
-	p.refresh(item.Guid)
+	p.refresh(item.GUID)
 	return provider.Rendition{Data: data, Mime: "image/jpeg"}, nil
 }
 
@@ -213,15 +214,16 @@ func (p *Provider) hydrateRound(asked map[string]bool) {
 		return
 	}
 	for _, it := range items {
-		if asked[it.Guid] || !p.Owns(it) {
+		uuid := string(it.GUID) // an Apple item's GUID is its asset UUID
+		if asked[uuid] || !p.Owns(it) {
 			continue
 		}
-		asked[it.Guid] = true
+		asked[uuid] = true
 		// The image even for a video: its poster is what the tile shows
-		if _, err := p.once(it.Guid+"/medium", func() ([]byte, error) { return p.photos.Image(it.Guid, mediumSize) }); err != nil {
-			p.logger.Debug("Waiting asset not fetched", l.String("guid", it.Guid), l.Error(err))
+		if _, err := p.once(uuid+"/medium", func() ([]byte, error) { return p.photos.Image(uuid, mediumSize) }); err != nil {
+			p.logger.Debug("Waiting asset not fetched", l.String("guid", uuid), l.Error(err))
 		} else {
-			p.refresh(it.Guid)
+			p.refresh(it.GUID)
 		}
 	}
 }

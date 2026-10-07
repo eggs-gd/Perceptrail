@@ -21,9 +21,9 @@ func TestPerceptorsRoutes(t *testing.T) {
 
 	at := func(s string) time.Time { v, _ := time.Parse(time.RFC3339, s); return v }
 	for _, it := range []*dto.ItemDto{
-		{Guid: "nav-old", State: dto.Ready, Date: at("2025-03-01T10:00:00Z"), DateSource: "tag"},
-		{Guid: "nav-new", State: dto.Visible, Date: at("2026-09-01T10:00:00Z"), DateSource: "tag"},
-		{Guid: "nav-hidden", State: dto.Waiting, Date: at("2026-09-02T10:00:00Z"), DateSource: "tag"},
+		{GUID: "nav-old", State: dto.Ready, Date: at("2025-03-01T10:00:00Z"), DateSource: "tag"},
+		{GUID: "nav-new", State: dto.Visible, Date: at("2026-09-01T10:00:00Z"), DateSource: "tag"},
+		{GUID: "nav-hidden", State: dto.Waiting, Date: at("2026-09-02T10:00:00Z"), DateSource: "tag"},
 	} {
 		if _, err := testDB.UpdateItem(it); err != nil {
 			t.Fatal(err)
@@ -50,20 +50,20 @@ func TestPerceptorsRoutes(t *testing.T) {
 	sc := bufio.NewScanner(rec.Body)
 	for sc.Scan() {
 		var en struct {
-			Guid     string
+			GUID     string
 			Sections []struct{ Label string }
 		}
 		if err := json.Unmarshal(sc.Bytes(), &en); err != nil {
 			t.Fatal(err)
 		}
-		if !strings.HasPrefix(en.Guid, "nav-") {
+		if !strings.HasPrefix(en.GUID, "nav-") {
 			continue // items of other tests
 		}
 		s := ""
 		for _, sec := range en.Sections {
 			s += "|" + sec.Label
 		}
-		got = append(got, en.Guid+s)
+		got = append(got, en.GUID+s)
 	}
 	if want := "nav-new|2026|September nav-old|2025|March"; strings.Join(got, " ") != want {
 		t.Errorf("order %q, want %q", strings.Join(got, " "), want)
@@ -95,7 +95,7 @@ func TestPerceptorsSlugTaken(t *testing.T) {
 func TestPerceptorsInfo(t *testing.T) {
 	e := server(nil, date.Perceptor, size.Perceptor)
 	at, _ := time.Parse(time.RFC3339, "2025-09-14T05:00:00Z")
-	if _, err := testDB.UpdateItem(&dto.ItemDto{Guid: "info-1", State: dto.Visible, Date: at, DateSource: "tag", DateOffset: 180}); err != nil {
+	if _, err := testDB.UpdateItem(&dto.ItemDto{GUID: "info-1", State: dto.Visible, Date: at, DateSource: "tag", DateOffset: 180}); err != nil {
 		t.Fatal(err)
 	}
 	rec := httptest.NewRecorder()

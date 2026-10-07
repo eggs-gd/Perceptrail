@@ -91,7 +91,7 @@ func (keep) Decorate(it *identify.Item) (*identify.Item, error) {
 	if it.Item == nil {
 		return nil, chain.ErrSkippedItem
 	}
-	if err := saveValues(it.Item.Guid, it.StoreValues); err != nil {
+	if err := saveValues(it.Item.GUID, it.StoreValues); err != nil {
 		return nil, err
 	}
 	return it, nil

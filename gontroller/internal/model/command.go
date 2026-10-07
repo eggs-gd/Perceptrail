@@ -1,7 +1,10 @@
 package model
 
 import (
+	"uuid"
+
 	pubsub "github.com/eggs-gd/go-pub-sub"
+	"github.com/eggs-gd/perceplib/api"
 	"gorm.io/gorm"
 )
 
@@ -27,3 +30,6 @@ func command[A, R any](p *Proxy, class pubsub.Class, fn func(t *tx, arg A) (R, e
 		return r, err
 	})
 }
+
+// newGUID: a new item's or file's identity
+func newGUID() api.GUID { return api.GUID(uuid.NewV4().String()) }

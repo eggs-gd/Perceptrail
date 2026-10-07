@@ -25,7 +25,7 @@ func (p *colorPerceptor) View() api.View {
 func (p *colorPerceptor) Order(ctx context.Context, _ string, items []api.ItemDataProvider) ([]api.Entry, error) {
 	out := make([]api.Entry, len(items))
 	for i, it := range items {
-		out[i].Guid = it.GetGuid()
+		out[i].GUID = it.GetGUID()
 	}
 	if len(out) > 0 {
 		out[0].Sections = []api.Section{{Level: 0, Label: "Not analysed yet"}}

@@ -149,10 +149,10 @@ func walk(t *testing.T, g *Grouper, root string, before func(path string)) map[s
 			groups[""] = gone
 			continue
 		}
-		if _, dup := groups[out.Key]; dup {
+		if _, dup := groups[string(out.Key)]; dup {
 			t.Fatalf("asset %s sent twice", out.Key)
 		}
-		groups[out.Key] = out
+		groups[string(out.Key)] = out
 	}
 	if held, err := g.Flush(); err != nil || len(held) != 0 {
 		t.Fatalf("the flush gave %v, %v", held, err)

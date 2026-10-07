@@ -11,13 +11,14 @@ import (
 	"time"
 
 	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/perceplib/api"
 
 	"github.com/labstack/echo/v4"
 )
 
 type clientItem struct {
 	Id       uint      `json:"id"`
-	Guid     string    `json:"guid"`
+	GUID     api.GUID  `json:"guid"`
 	Date     time.Time `json:"date"`
 	MimeType string    `json:"mimeType"`
 	// What /assets/:guid serves by default (an image or a playable video)
@@ -56,8 +57,8 @@ const contractVersion = "6"
 
 // removedItem: a tombstone in a delta
 type removedItem struct {
-	Guid    string `json:"guid"`
-	Removed bool   `json:"removed"`
+	GUID    api.GUID `json:"guid"`
+	Removed bool     `json:"removed"`
 }
 
 func (r *routes) registerItems(segment string, e *echo.Echo) {
@@ -101,7 +102,7 @@ func (r *routes) getItems(c echo.Context) error {
 func (r *routes) toClientItem(dbItem *dto.ItemDto, files []*dto.FileDto) clientItem {
 	item := clientItem{
 		Id:       dbItem.ID,
-		Guid:     dbItem.Guid,
+		GUID:     dbItem.GUID,
 		Date:     dbItem.Date,
 		MimeType: dbItem.MimeType,
 		// Items shown before the cheap stage existed have no preview: the original
@@ -150,7 +151,7 @@ func (r *routes) streamClientItems(w http.ResponseWriter, since *time.Time, end 
 		err = r.db.StreamItemsSince(*since, func(dbItem *dto.ItemDto, files []*dto.FileDto) error {
 			var out any = r.toClientItem(dbItem, files)
 			if dbItem.DeletedAt.Valid || !shown(dbItem) {
-				out = removedItem{Guid: dbItem.Guid, Removed: true}
+				out = removedItem{GUID: dbItem.GUID, Removed: true}
 			}
 			if err := encoder.Encode(out); err != nil {
 				return err

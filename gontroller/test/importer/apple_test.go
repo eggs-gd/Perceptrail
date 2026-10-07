@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"perceptrail/gontroller/internal/model/dto"
+
+	"github.com/eggs-gd/perceplib/api"
 )
 
 const (
@@ -67,9 +69,9 @@ func TestApplePhotosLibrary(t *testing.T) {
 	bundle, exec := photosLibrary(t, root)
 
 	scan(t, root)
-	check := func(guid, preview string) *dto.ItemDto {
+	check := func(guid api.GUID, preview string) *dto.ItemDto {
 		t.Helper()
-		item, err := testDB.GetItemByGuid(guid)
+		item, err := testDB.GetItemByGUID(guid)
 		if err != nil {
 			t.Fatalf("no item %s: %v", guid, err)
 		}
@@ -109,7 +111,7 @@ func TestAppleMetadataFromDB(t *testing.T) {
 	_, exec := photosLibrary(t, root)
 	scan(t, root)
 
-	item, err := testDB.GetItemByGuid(appleCloud)
+	item, err := testDB.GetItemByGUID(appleCloud)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +125,7 @@ func TestAppleMetadataFromDB(t *testing.T) {
 	if got := scan(t, root); len(got) != 1 {
 		t.Fatalf("processed %v, want the one asset whose DB metadata changed", got)
 	}
-	item, _ = testDB.GetItemByGuid(appleCloud)
+	item, _ = testDB.GetItemByGUID(appleCloud)
 	if got := item.Date.In(time.FixedZone("", item.DateOffset*60)).Format(time.RFC3339); got != "2025-01-18T17:16:09+02:00" {
 		t.Errorf("corrected date %s", got)
 	}
@@ -138,17 +140,17 @@ func TestRefreshMarksForNextWalk(t *testing.T) {
 	if got := scan(t, root); len(got) != 0 {
 		t.Fatalf("nothing changed, processed %v", got)
 	}
-	before, _ := testDB.GetItemByGuid(appleEdited)
-	if _, err := testDB.MarkRework([]string{appleEdited, "no-such-asset"}); err != nil { // as the provider does
+	before, _ := testDB.GetItemByGUID(appleEdited)
+	if _, err := testDB.MarkRework([]api.GUID{appleEdited, "no-such-asset"}); err != nil { // as the provider does
 		t.Fatal(err)
 	}
-	if marked, _ := testDB.GetItemByGuid(appleEdited); !marked.UpdatedAt.Equal(before.UpdatedAt) {
+	if marked, _ := testDB.GetItemByGUID(appleEdited); !marked.UpdatedAt.Equal(before.UpdatedAt) {
 		t.Errorf("the mark moved updated_at: %v -> %v (the client's delta would bring it)", before.UpdatedAt, marked.UpdatedAt)
 	}
 	if got := scan(t, root); len(got) != 1 {
 		t.Fatalf("the next walk processed %v, want the asset", got)
 	}
-	if item, err := testDB.GetItemByGuid(appleEdited); err != nil || item.State != dto.Visible || item.Rework {
+	if item, err := testDB.GetItemByGUID(appleEdited); err != nil || item.State != dto.Visible || item.Rework {
 		t.Errorf("after refresh: %+v", item)
 	}
 }
@@ -201,7 +203,7 @@ func TestPhotosOwnFilesNotWalked(t *testing.T) {
 			t.Errorf("a row for Photos' own %s", f)
 		}
 	}
-	if _, err := testDB.GetItemByGuid(appleEdited); err != nil {
+	if _, err := testDB.GetItemByGUID(appleEdited); err != nil {
 		t.Errorf("the library's assets: %v", err)
 	}
 }

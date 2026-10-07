@@ -35,7 +35,7 @@ type Fact struct {
 // first — a path ("2026", "January") or a single tag; none inside a section. The
 // side panel's marks.
 type Entry struct {
-	Guid     string
+	GUID     GUID
 	Sections []Section
 }
 
