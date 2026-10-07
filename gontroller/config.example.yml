@@ -42,6 +42,13 @@ plugins:
 # ExifTool executable. Default: exiftool from PATH
 # exiftool: /opt/exiftool/exiftool
 
+# The expensive stage: renditions of a plain folder's items, from the work queue,
+# beside the import. Off by default while the renderer is a stand-in (it links, or
+# copies, each original into the cache).
+# render:
+#   enabled: false
+#   workers: 4          # items at once. Default: half the CPUs
+
 server:
   host: ""      # all interfaces
   port: 1323

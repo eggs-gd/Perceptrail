@@ -386,6 +386,31 @@ transit, render bounded by its workers) — patterns go to docs and examples.
 - Kubernetes-style keyed work queues in the library: needed there because strangers
   write the handlers of a public product; here an example in the docs.
 
+## The expensive stage: the queue beside the chain (2026-10-07, #36)
+
+- **The chain stays, the queue is added** (the owner, after an ECS design): the
+  chain is how one piece of work goes through its steps, the queue which items still
+  need which work — different questions. The cheap stage is one pass with one
+  exiftool read per group; split into systems, each would read it again. ECS stays
+  a lens for where work belongs (roadmap). Rejected: the chain ending at identity
+  with a scheduler of systems for the rest.
+- **Events from an outbox per savepoint**: the writer's env became a batch (its
+  connection and the events its writes emitted); a write's events are cut back when
+  it rolls back, the batch's sent only after the commit. An event out of a rolled
+  back write would wake render for nothing — harmless (it reads the DB), but a lie.
+- **The queue's messages are `dto`**: render names `dto.Cursor`, `dto.WorkDone`,
+  `dto.WorkFailed`, `dto.ItemPublished` and its own `Store` — never `model`, as the
+  import's steps since #26.
+- **A library's items are finished with no renditions** (Apple renders itself):
+  filtered in Go (`library.Of`, no SQL for it), they would be due on every pass;
+  finished as "nothing to render" for this version they leave the queue.
+- **The stand-in links the original** (a copy across file systems) and render is
+  off by default: on a real library a copying stand-in would double the disk.
+- **Proved by breaking it**: the queue's tests fail when the lease or the input
+  condition goes, the events' test when a rolled back write keeps its events;
+  render's integration test reads the work row (`Work`) — "not due" alone is also
+  what a lease looks like.
+
 ## Apple Photos
 
 Layout, the DB's facts and PhotoKit's behaviour: the

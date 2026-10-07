@@ -76,6 +76,13 @@ func (q query) Due(slug, version string, after dto.Cursor, n int) ([]*dto.ItemDt
 	return nil, dto.Cursor{Phase: 2}, nil
 }
 
+// Work: an item's row for a slug — done, failed (its error) or taken; ErrNotFound
+// when there is none (the work was never tried)
+func (q query) Work(guid api.GUID, slug string) (*dto.WorkDto, error) {
+	var row dto.WorkDto
+	return &row, q.db.Where("guid = ? AND slug = ?", guid, slug).First(&row).Error
+}
+
 func (p *Proxy) Take(slug string, guids []api.GUID) ([]api.GUID, error) {
 	return p.take.Do(TakeArgs{slug, guids})
 }

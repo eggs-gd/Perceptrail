@@ -88,6 +88,7 @@ package's own unit tests stay next to it.
 | `internal/app` | the server as a whole: its services run together (`Services`), the version |
 | `internal/config` | the config file, read once (`Load`, `Read`); a leaf — a module declares the getters it reads as its own `Config` interface |
 | `internal/importer` | the import chain ([README](internal/importer/README.md)) |
+| `internal/render` | the expensive stage: woken by `ItemPublished`, takes what is due from the work queue, renders with N workers (a stand-in renderer for now; config `render`) |
 | `internal/transcode` | the transcoders' switch and stubs (a chain of its own later) |
 | `internal/perceptor` | the perceptors' registry (built in + `.so`, their storages); `perceptor/builtin`: the built-ins' contract (`builtin.Item`, `builtin.Perceptor`, `OrderByValue`); the built-in EXIF perceptors `perceptor/date`, `size`, `duration` |
 | `internal/model` | the library's data and its rules: one writer, a read pool, every write a command ([README](internal/model/README.md)) |

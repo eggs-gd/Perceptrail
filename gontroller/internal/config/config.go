@@ -55,6 +55,8 @@ type file struct {
 	Server Server `yaml:"server"`
 	// Behind GORM: sqlite, postgres (not implemented yet)
 	Database Database `yaml:"database"`
+	// The expensive stage: renditions from the work queue
+	Render Render `yaml:"render"`
 }
 
 const (
@@ -141,6 +143,9 @@ func (c *Config) Server() Server { return c.file.Server }
 // Database: where the model keeps its data
 func (c *Config) Database() Database { return c.file.Database }
 
+// Render: the expensive stage's settings
+func (c *Config) Render() Render { return c.file.Render }
+
 func configPath() string {
 	if !flag.Parsed() {
 		flag.Parse()
@@ -185,6 +190,7 @@ func (f *file) resolve(base string) error {
 	if filepath.Base(f.Exiftool) != f.Exiftool {
 		f.Exiftool = abs(f.Exiftool)
 	}
+	f.Render.resolve()
 	if f.Database.Driver == "" {
 		f.Database.Driver = DriverSQLite
 	}

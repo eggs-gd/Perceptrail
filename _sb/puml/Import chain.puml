@@ -89,9 +89,12 @@ Keep -> Closer: item
 Closer -> DB: Visible (a preview) or Waiting (none)
 note right of Closer
 The client gets Visible (and Ready)
-items at once. Ready comes later from
-the expensive chain (transcode, fed
-from the DB; roadmap: thumbnails)
+items at once. After the commit the
+item is announced as published: that
+only wakes render, which takes what is
+due from the DB at its own pace (the
+work queue); the import never waits
+for it. Ready comes from there.
 end note
 
 == end of walk ==
