@@ -142,8 +142,8 @@ input option (`hevc` from a request).
 **A file reads top-down, public first** — in any language: public interfaces,
 then public declarations (types, constants, variables), private declarations,
 public implementations (functions and methods of exported names), private
-implementations. A reader sees what the file offers before how. CI checks it for
-Go (`scripts/declorder`; tests and generated files aside).
+implementations. A reader sees what the file offers before how. CI checks it in
+every Go module (`scripts/declorder`; tests, `testdata` and generated files aside).
 
 ### Go — write it like Go
 

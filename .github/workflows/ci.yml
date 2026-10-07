@@ -32,11 +32,12 @@ jobs:
         diff <(git ls-files '*go.mod' | xargs -n1 dirname | sed 's|^|./|' | sort) \
              <(sed -n '/^use (/,/^)/p' gopls.work | grep -o '\./[^[:space:]]*' | sort)
 
-    # AGENTS.md "Code Style": every file public first
+    # AGENTS.md "Code Style": every file public first — in every Go module (gopls.work
+    # lists them all, checked above), the checker's own included
     - name: declaration order
       run: |
         (cd scripts/declorder && go test ./... && go build -o "$RUNNER_TEMP/declorder" .)
-        "$RUNNER_TEMP/declorder" gontroller perceplib perceptors
+        "$RUNNER_TEMP/declorder" $(sed -n '/^use (/,/^)/p' gopls.work | grep -o '\./[^[:space:]]*')
 
     - name: perceplib
       working-directory: perceplib

@@ -14,7 +14,10 @@ most. The Apple Photos library is read only, always.
      reads (a Photos library is read only anyway);
    - `server.port: 1329`;
    - the database relative to the config's directory (relative paths resolve
-     against it), so it lands in the scratch directory.
+     against it), so it lands in the scratch directory;
+   - `plugins:` as absolute paths to `gontroller/.build/plugins/*.so` — the
+     example's `../.build/plugins/…` resolves against the scratch directory, and a
+     plugin that does not open is only logged: the server runs without it.
 2. **A copy of the database**, when real data matters — through SQLite, not `cp`
    (the WAL may hold the last writes):
 
@@ -34,6 +37,7 @@ most. The Apple Photos library is read only, always.
    cd svebapp && SVEBAPP_SERVER_PORT=1329 PUBLIC_API_PATH=http://localhost:1329 npx vite dev --port 5174 --strictPort
    ```
 
-5. **Check** through the HTTP API (`gontroller/readme.md` lists it) and the
+5. **Check** the log first — `grep -i "failed to load plugin" <scratch>/server.log`
+   says nothing, and `GET /perceptors` lists the external ones — then through the HTTP API (`gontroller/readme.md` lists it) and the
    browser; numbers come from the log or a bench, with the command that made them.
 6. **Stop both** when done; the scratch directory goes with the session.

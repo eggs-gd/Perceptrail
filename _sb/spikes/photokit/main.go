@@ -32,11 +32,49 @@ import (
 	"unsafe"
 )
 
+var statuses = map[int]string{0: "not determined", 1: "restricted", 2: "denied", 3: "authorized", 4: "limited"}
+
+type result struct {
+	seconds  float64
+	w, h     int
+	inCloud  bool
+	degraded int
+	progress float64
+	err      string
+}
+
+type videoResult struct {
+	seconds, duration float64
+	w, h              int
+	inCloud           bool
+	url, codec, err   string
+}
+
+func (r result) String() string {
+	s := fmt.Sprintf("%.2fs %dx%d inCloud=%v degraded=%d", r.seconds, r.w, r.h, r.inCloud, r.degraded)
+	if r.progress >= 0 {
+		s += fmt.Sprintf(" progress=%.2f", r.progress)
+	}
+	if r.err != "" {
+		s += " ERROR " + r.err
+	}
+	return s
+}
+
+func (r videoResult) String() string {
+	s := fmt.Sprintf("%.2fs %s %dx%d %.1fs-long inCloud=%v", r.seconds, r.codec, r.w, r.h, r.duration, r.inCloud)
+	if r.url != "" {
+		s += " url=" + r.url
+	}
+	if r.err != "" {
+		s += " ERROR " + r.err
+	}
+	return s
+}
+
 // main on the main thread: some PhotoKit results (Live Photos) come on the main
 // queue, and the waits turn the main run loop for them
 func init() { runtime.LockOSThread() }
-
-var statuses = map[int]string{0: "not determined", 1: "restricted", 2: "denied", 3: "authorized", 4: "limited"}
 
 func main() {
 	home, _ := os.UserHomeDir()
@@ -85,26 +123,6 @@ func main() {
 	}
 }
 
-type result struct {
-	seconds  float64
-	w, h     int
-	inCloud  bool
-	degraded int
-	progress float64
-	err      string
-}
-
-func (r result) String() string {
-	s := fmt.Sprintf("%.2fs %dx%d inCloud=%v degraded=%d", r.seconds, r.w, r.h, r.inCloud, r.degraded)
-	if r.progress >= 0 {
-		s += fmt.Sprintf(" progress=%.2f", r.progress)
-	}
-	if r.err != "" {
-		s += " ERROR " + r.err
-	}
-	return s
-}
-
 func request(uuid string, size int, network bool) result {
 	cu := C.CString(uuid)
 	defer C.free(unsafe.Pointer(cu))
@@ -135,24 +153,6 @@ func live(uuid string, size int, network bool) result {
 		C.free(unsafe.Pointer(r.error))
 	}
 	return out
-}
-
-type videoResult struct {
-	seconds, duration float64
-	w, h              int
-	inCloud           bool
-	url, codec, err   string
-}
-
-func (r videoResult) String() string {
-	s := fmt.Sprintf("%.2fs %s %dx%d %.1fs-long inCloud=%v", r.seconds, r.codec, r.w, r.h, r.duration, r.inCloud)
-	if r.url != "" {
-		s += " url=" + r.url
-	}
-	if r.err != "" {
-		s += " ERROR " + r.err
-	}
-	return s
 }
 
 func video(uuid string, network bool, mode int) videoResult {
