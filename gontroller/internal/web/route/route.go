@@ -15,13 +15,13 @@ import (
 
 // Store: what the routes read of the model (and the delta sync's epoch they keep)
 type Store interface {
-	GetItemByGuid(guid string) (*dto.ItemDto, error)
+	GetItemByGUID(guid api.GUID) (*dto.ItemDto, error)
 	GetItemsInStates(states ...dto.ItemState) ([]*dto.ItemDto, error)
 	CountItemsInStates(states ...dto.ItemState) (int64, error)
 	StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) error
 	StreamItemsSince(since time.Time, fn func(*dto.ItemDto, []*dto.FileDto) error) error
 	GetFileByID(id uint) (*dto.FileDto, error)
-	GetLinkedFiles(guid string) ([]*dto.FileDto, error)
+	GetLinkedFiles(guid api.GUID) ([]*dto.FileDto, error)
 	GetMeta(key string) (string, error)
 	SetMeta(key, value string) error
 }

@@ -5,7 +5,7 @@ go 1.27.1
 require (
 	github.com/eggs-gd/go-chain v0.1.0
 	github.com/eggs-gd/go-zap-decor v0.1.0
-	github.com/eggs-gd/perceplib v0.0.6
+	github.com/eggs-gd/perceplib v0.0.7
 	github.com/ringsaturn/tzf v1.2.5
 )
 

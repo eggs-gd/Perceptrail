@@ -27,12 +27,12 @@ func (p *datePerceptor) View() api.View {
 
 func (p *datePerceptor) Order(ctx context.Context, _ string, items []api.ItemDataProvider) ([]api.Entry, error) {
 	type dated struct {
-		guid string
+		guid api.GUID
 		at   time.Time // in the zone of the shot
 	}
 	all := make([]dated, 0, len(items))
 	for _, it := range items {
-		all = append(all, dated{it.GetGuid(), it.GetDate()})
+		all = append(all, dated{it.GetGUID(), it.GetDate()})
 	}
 	// Newest first; no date last; ties by guid, so the order is stable
 	slices.SortStableFunc(all, func(a, b dated) int {
@@ -45,7 +45,7 @@ func (p *datePerceptor) Order(ctx context.Context, _ string, items []api.ItemDat
 		case !a.at.Equal(b.at):
 			return b.at.Compare(a.at)
 		}
-		return strings.Compare(a.guid, b.guid)
+		return strings.Compare(string(a.guid), string(b.guid))
 	})
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -55,7 +55,7 @@ func (p *datePerceptor) Order(ctx context.Context, _ string, items []api.ItemDat
 	year, month := -1, time.Month(0)
 	undated := false
 	for i, d := range all {
-		out[i].Guid = d.guid
+		out[i].GUID = d.guid
 		switch {
 		case d.at.IsZero():
 			if !undated {

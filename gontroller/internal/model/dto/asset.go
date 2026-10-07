@@ -15,7 +15,7 @@ type Asset struct {
 	// Set by a source that knows the asset (Apple Photos: the asset UUID): the item's
 	// GUID, and Files[0] is the main file as the source decided — it is not re-ranked.
 	// "" (a plain folder): the GUID of the main file, ranked by its kind.
-	Key string
+	Key api.GUID
 	// What to show first, best first (e.g. the edit before the original); nil: the
 	// import decides by itself
 	Show []*FileDto

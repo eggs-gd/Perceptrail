@@ -10,6 +10,7 @@ import (
 	"perceptrail/gontroller/internal/model/dto"
 
 	chain "github.com/eggs-gd/go-chain"
+	"github.com/eggs-gd/perceplib/api"
 
 	l "github.com/eggs-gd/go-zap-decor"
 )
@@ -17,7 +18,7 @@ import (
 // Store: what the gate asks the model — whether a group needs work, what a file gone
 // means
 type Store interface {
-	NeedsWork(files []*dto.FileDto, key, metaHash string) (needs bool, guid string, err error)
+	NeedsWork(files []*dto.FileDto, key api.GUID, metaHash string) (needs bool, guid api.GUID, err error)
 	Gone(files []*dto.FileDto) (deleted, dirty int, err error)
 }
 
@@ -66,7 +67,7 @@ func (g *Gate) gone(missing []*dto.FileDto) error {
 
 // needsWork: nothing changed on disk — the model says whether the group still needs
 // work
-func (g *Gate) needsWork(files []*dto.FileDto, key, metaHash string) bool {
+func (g *Gate) needsWork(files []*dto.FileDto, key api.GUID, metaHash string) bool {
 	needs, _, err := g.db.NeedsWork(files, key, metaHash)
 	if err != nil {
 		g.logger.Error("Gate: can't tell whether a group needs work", l.String("file", files[0].Path), l.Error(err))

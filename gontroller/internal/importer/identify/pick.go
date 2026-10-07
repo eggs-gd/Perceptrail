@@ -40,7 +40,7 @@ func preview(it *draft, tool Exiftool, dir string, logger *l.Logger) (path, mime
 		if it.Exif[0] == nil || len(it.Exif[0][tag]) == 0 {
 			continue
 		}
-		dst := filepath.Join(dir, it.Item.Guid, "embedded.jpg")
+		dst := filepath.Join(dir, string(it.Item.GUID), "embedded.jpg")
 		err := tool.Extract(tag, it.Files[0].Path, dst)
 		if err == nil {
 			return dst, "image/jpeg"

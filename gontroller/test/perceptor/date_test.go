@@ -14,7 +14,7 @@ import (
 func TestDateOrder(t *testing.T) {
 	kyiv := 120 // +02:00 in winter, minutes
 	item := func(guid, utc string, offset int) api.ItemDataProvider {
-		i := &dto.ItemDto{Guid: guid, DateOffset: offset}
+		i := &dto.ItemDto{GUID: api.GUID(guid), DateOffset: offset}
 		if utc != "" {
 			i.Date, _ = time.Parse(time.RFC3339, utc)
 			i.DateSource = "DateTimeOriginal"
@@ -57,8 +57,8 @@ func TestDateOrder(t *testing.T) {
 			}
 			s += string(rune('0'+sec.Level)) + ":" + sec.Label
 		}
-		if got[i].Guid != w.guid || s != w.section {
-			t.Errorf("%d: %s %q, want %s %q", i, got[i].Guid, s, w.guid, w.section)
+		if string(got[i].GUID) != w.guid || s != w.section {
+			t.Errorf("%d: %s %q, want %s %q", i, got[i].GUID, s, w.guid, w.section)
 		}
 	}
 }

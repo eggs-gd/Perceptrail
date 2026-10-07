@@ -63,7 +63,7 @@ func toClientAsset(item *dto.ItemDto, files []*dto.FileDto, lib Library) clientA
 		if f.IsIgnored() {
 			continue
 		}
-		r := rendition{URL: fmt.Sprintf("/assets/%s/%d", item.Guid, f.ID), Mime: f.MimeType, W: f.Width, H: f.Height, Codec: f.Codec}
+		r := rendition{URL: fmt.Sprintf("/assets/%s/%d", item.GUID, f.ID), Mime: f.MimeType, W: f.Width, H: f.Height, Codec: f.Codec}
 		previewIsFile = previewIsFile || f.Path == item.PreviewPath
 		switch f.Role {
 		case dto.RoleOriginal:
@@ -80,7 +80,7 @@ func toClientAsset(item *dto.ItemDto, files []*dto.FileDto, lib Library) clientA
 	}
 	if item.PreviewPath != "" && !previewIsFile {
 		w, h := headerSize(item.PreviewPath)
-		a.Stills = append(a.Stills, rendition{URL: fmt.Sprintf("/assets/%s/%s", item.Guid, embeddedName), Mime: item.PreviewMime, W: w, H: h})
+		a.Stills = append(a.Stills, rendition{URL: fmt.Sprintf("/assets/%s/%s", item.GUID, embeddedName), Mime: item.PreviewMime, W: w, H: h})
 	}
 	bySize := func(rs []rendition) {
 		sort.SliceStable(rs, func(i, j int) bool { return rs[i].W < rs[j].W })

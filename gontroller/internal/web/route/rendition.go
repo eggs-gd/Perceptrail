@@ -6,6 +6,7 @@ import (
 	"perceptrail/gontroller/internal/library/provider"
 	"perceptrail/gontroller/internal/model/dto"
 
+	"github.com/eggs-gd/perceplib/api"
 	"github.com/labstack/echo/v4"
 )
 
@@ -31,7 +32,7 @@ func (r *routes) registerRenditions(e *echo.Echo) {
 }
 
 func (r *routes) getRendition(c echo.Context) error {
-	item, err := r.db.GetItemByGuid(c.Param("guid"))
+	item, err := r.db.GetItemByGUID(api.GUID(c.Param("guid")))
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}
@@ -56,7 +57,7 @@ func onDemandOf(item *dto.ItemDto, lib Library) *onDemand {
 	if lib == nil {
 		return nil
 	}
-	base := "/items/" + item.Guid + "/rendition/"
+	base := "/items/" + item.GUID.String() + "/rendition/"
 	// The contract version in the URL: the browser caches these for a day, and what
 	// one answers may change with the contract (the Original was the unedited
 	// original before 4) — a new contract is a new URL

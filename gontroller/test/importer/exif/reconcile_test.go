@@ -14,6 +14,7 @@ import (
 
 	l "github.com/eggs-gd/go-zap-decor"
 	"github.com/eggs-gd/go-zap-decor/tree"
+	"github.com/eggs-gd/perceplib/api"
 )
 
 // At start the import perceptors' rows meet the items: an item a perceptor has no
@@ -47,7 +48,7 @@ func TestReconcile(t *testing.T) {
 	}
 
 	// Two items: one processed by geo, one not; and a row of an item that is gone
-	item := func(path string) string {
+	item := func(path string) api.GUID {
 		f, err := db.CreateFile(dto.ItemEntry{Path: filepath.Join(dir, path)})
 		if err != nil {
 			t.Fatal(err)
@@ -56,10 +57,10 @@ func TestReconcile(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return it.Guid
+		return it.GUID
 	}
 	done, fresh := item("done.jpg"), item("fresh.jpg")
-	for _, guid := range []string{done, "gone-item"} {
+	for _, guid := range []api.GUID{done, "gone-item"} {
 		if err := geo.Save(guid, nil); err != nil {
 			t.Fatal(err)
 		}
@@ -68,15 +69,15 @@ func TestReconcile(t *testing.T) {
 	if err := exif.Reconcile(db, logger); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := geo.Guids()
+	rows, err := geo.GUIDs()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(rows) != 1 || rows[0] != done {
 		t.Errorf("rows %v, want only the live item's %s", rows, done)
 	}
-	for guid, rework := range map[string]bool{done: false, fresh: true} {
-		if it, err := db.GetItemByGuid(guid); err != nil || it.Rework != rework {
+	for guid, rework := range map[api.GUID]bool{done: false, fresh: true} {
+		if it, err := db.GetItemByGUID(guid); err != nil || it.Rework != rework {
 			t.Errorf("%s: rework %v, want %v (%v)", guid, it.Rework, rework, err)
 		}
 	}

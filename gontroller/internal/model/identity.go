@@ -10,6 +10,7 @@ import (
 
 	pubsub "github.com/eggs-gd/go-pub-sub"
 	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/perceplib/api"
 	"gorm.io/gorm"
 )
 
@@ -27,7 +28,7 @@ type ValidateGroupArgs struct {
 
 // ValidateAssetArgs: a keyed group — its key, its files, its fingerprint
 type ValidateAssetArgs struct {
-	Key   string
+	Key   api.GUID
 	Files []*dto.FileDto
 	Hash  string
 }
@@ -46,7 +47,7 @@ func (p *Proxy) ValidateGroupCommand() pubsub.Command[ValidateGroupArgs, *dto.It
 	return p.validateGroup
 }
 
-func (p *Proxy) ValidateAsset(key string, files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
+func (p *Proxy) ValidateAsset(key api.GUID, files []*dto.FileDto, hash string) (*dto.ItemDto, error) {
 	return p.validateAsset.Do(ValidateAssetArgs{key, files, hash})
 }
 
@@ -65,7 +66,7 @@ func (t *tx) validateGroup(a ValidateGroupArgs) (*dto.ItemDto, error) {
 		f.LinkTo(main)
 	}
 	for _, f := range files[1:] {
-		if old, err := t.GetItemByGuid(f.GUID); err == nil {
+		if old, err := t.GetItemByGUID(f.GUID); err == nil {
 			if _, err := t.deleteItem(old); err != nil {
 				return nil, err
 			}
@@ -86,7 +87,7 @@ func (t *tx) validateAsset(a ValidateAssetArgs) (*dto.ItemDto, error) {
 	key, files, hash := a.Key, a.Files, a.Hash
 	for _, f := range files {
 		if f.GUID != key {
-			if old, err := t.GetItemByGuid(f.GUID); err == nil {
+			if old, err := t.GetItemByGUID(f.GUID); err == nil {
 				if _, err := t.deleteItem(old); err != nil {
 					return nil, err
 				}
@@ -106,12 +107,12 @@ func (t *tx) validateAsset(a ValidateAssetArgs) (*dto.ItemDto, error) {
 func (t *tx) validateFile(item *dto.FileDto, hashShort string) (*dto.ItemDto, error) {
 	itemByGUID, itemByPath, itemByHash := t.getItemsForValidation(item, hashShort)
 
-	if itemByGUID.Guid != itemByPath.Guid {
-		// probably panic(). Path/Guid should be stable pair on files layer
+	if itemByGUID.GUID != itemByPath.GUID {
+		// probably panic(). Path/GUID should be stable pair on files layer
 		return &dto.ItemDto{}, fmt.Errorf("there is path/guid missmatch")
 	}
 
-	if itemByGUID.Guid == "" {
+	if itemByGUID.GUID == "" {
 		// Walker.puml "found moved": same hash, the old path no longer exists
 		if moved := t.findMovedItem(item, hashShort); moved != nil {
 			return moved, t.moveItem(moved, item)
@@ -136,7 +137,7 @@ func (t *tx) validateFile(item *dto.FileDto, hashShort string) (*dto.ItemDto, er
 		}
 	}
 
-	if itemByPath.Guid == itemByHash.Guid {
+	if itemByPath.GUID == itemByHash.GUID {
 		// all three items are the same, known file
 		return itemByGUID, nil
 	}
@@ -154,7 +155,7 @@ func (t *tx) getItemsForValidation(file *dto.FileDto, hashShort string) (byGuid 
 	var itemsByHash []*dto.ItemDto
 	var err error
 
-	if itemByGUID, err = t.GetItemByGuid(file.GUID); err != nil {
+	if itemByGUID, err = t.GetItemByGUID(file.GUID); err != nil {
 		itemByGUID = &dto.ItemDto{}
 	}
 
@@ -172,7 +173,7 @@ func (t *tx) getItemsForValidation(file *dto.FileDto, hashShort string) (byGuid 
 
 	for _, item := range itemsByHash {
 		// more than one hash match, return one with our guid
-		if item.Guid == itemByGUID.Guid {
+		if item.GUID == itemByGUID.GUID {
 			return itemByGUID, itemByPath, item
 		}
 	}
@@ -210,8 +211,8 @@ func (t *tx) findMovedItem(file *dto.FileDto, hashShort string) *dto.ItemDto {
 // and client links are keyed by it), its files are the new group's now
 // (relinkGroup). A deleted item is restored.
 func (t *tx) moveItem(item *dto.ItemDto, file *dto.FileDto) error {
-	if err := t.relinkGroup(file.GUID, item.Guid); err != nil {
-		return fmt.Errorf("move %s → %s: %w", item.Guid, file.Path, err)
+	if err := t.relinkGroup(file.GUID, item.GUID); err != nil {
+		return fmt.Errorf("move %s → %s: %w", item.GUID, file.Path, err)
 	}
 	item.Path = file.Path
 	item.MimeType = file.MimeType
@@ -220,20 +221,20 @@ func (t *tx) moveItem(item *dto.ItemDto, file *dto.FileDto) error {
 		item.State = dto.Dirty
 	}
 	if err := t.db.Unscoped().Save(item).Error; err != nil {
-		return fmt.Errorf("move %s → %s: %w", item.Guid, file.Path, err)
+		return fmt.Errorf("move %s → %s: %w", item.GUID, file.Path, err)
 	}
-	file.GUID, file.LinkedTo = item.Guid, item.Guid
+	file.GUID, file.LinkedTo = item.GUID, item.GUID
 	return nil
 }
 
 // validateKeyed: the key is the item's identity (it never changes, whatever the
 // main file is): same hash -> as is; another hash -> Dirty (the main file changed,
 // e.g. a derivative replaced by the downloaded original); deleted -> restored.
-func (t *tx) validateKeyed(key string, main *dto.FileDto, hash string) (*dto.ItemDto, error) {
+func (t *tx) validateKeyed(key api.GUID, main *dto.FileDto, hash string) (*dto.ItemDto, error) {
 	var item dto.ItemDto
 	err := t.db.Unscoped().Where("guid = ?", key).First(&item).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
-		item = dto.ItemDto{Guid: key, State: dto.New, Path: main.Path, MimeType: main.MimeType, HashShort: hash}
+		item = dto.ItemDto{GUID: key, State: dto.New, Path: main.Path, MimeType: main.MimeType, HashShort: hash}
 		return &item, t.db.Create(&item).Error
 	}
 	if err != nil {

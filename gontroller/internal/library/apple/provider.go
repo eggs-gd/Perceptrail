@@ -11,6 +11,7 @@ import (
 	"perceptrail/gontroller/internal/model/dto"
 
 	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/perceplib/api"
 )
 
 // Items: what the provider asks of the library's items — the ones nothing can show
@@ -18,7 +19,7 @@ import (
 // again (Photos made a file of it local)
 type Items interface {
 	Unshown() ([]*dto.ItemDto, error)
-	MarkRework(guids []string) (int64, error)
+	MarkRework(guids []api.GUID) (int64, error)
 }
 
 // Provider: Apple Photos — the files of a *.photoslibrary grouped by its DB (the
@@ -105,8 +106,8 @@ func dirsBut(dir string, kept ...string) []string {
 // refresh: Photos made a file of the asset local (or drew from what was local) —
 // its item is processed again on the next walk, even if no file changed; the
 // client guesses meanwhile
-func (p *Provider) refresh(uuid string) {
-	if _, err := p.items.MarkRework([]string{uuid}); err != nil {
-		p.logger.Error("Photos: item not marked for the next walk", l.String("guid", uuid), l.Error(err))
+func (p *Provider) refresh(guid api.GUID) {
+	if _, err := p.items.MarkRework([]api.GUID{guid}); err != nil {
+		p.logger.Error("Photos: item not marked for the next walk", l.String("guid", guid.String()), l.Error(err))
 	}
 }

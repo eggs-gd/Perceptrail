@@ -470,6 +470,20 @@ Layout, the DB's facts and PhotoKit's behaviour: the
   echo (`acme/autocert`) and nothing imports `openpgp`. `govulncheck ./...` says so
   ("your code doesn't appear to call"); the gopls MCP lists it as a finding by the
   module alone. Nothing to bump.
+- **One GUID type, through the perceptors** (2026-10-06): `api.GUID` in perceplib —
+  an item's GUID is its main file's, an Apple asset's UUID, the key perceptors keep
+  their values by: one identity, so one type, never converted inside the core. A
+  string only at the edges: a URL parameter, a file path, PhotoKit (the Photos
+  UUID), a log. Rejected: a type of the core only (`dto.GUID`), converted at the
+  perceplib boundary — the perceptors' stores and navigation would stay untyped.
+- **The nil GUID, not `"-"`** (2026-10-06): an ignored group's files linked to
+  `"-"` — a magic string in an id field. Now `api.NilGUID`
+  (`00000000-0000-0000-0000-000000000000`): in the GUID's format, naming no item.
+  `LinkedTo` "" = not decided yet. `Open` migrates the old mark.
+- **Go 1.27 has `uuid` in the standard library**: new GUIDs come from `uuid.NewV4()`
+  (random, as `github.com/google/uuid`'s `New` was), one dependency fewer. Its `New`
+  is left alone: it picks the algorithm, and a change of how GUIDs are made is not a
+  side effect of a type. Trap: goimports resolves a bare `uuid` to it.
 - **Public first, by a script** (2026-10-06): the files were reordered by moving
   whole declarations (with their comments), so the diff is moves only. Skipped:
   cgo files (the `import "C"` preamble) by hand, a spike under `_sb`.

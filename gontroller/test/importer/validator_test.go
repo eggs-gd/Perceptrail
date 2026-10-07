@@ -17,6 +17,7 @@ import (
 
 	l "github.com/eggs-gd/go-zap-decor"
 	"github.com/eggs-gd/go-zap-decor/tree"
+	"github.com/eggs-gd/perceplib/api"
 )
 
 // One sqlite database for the package (model keeps a single connection); every test
@@ -96,9 +97,9 @@ func itemAt(t *testing.T, path string) *dto.ItemDto {
 	return item
 }
 
-func assertNoItem(t *testing.T, guid string) {
+func assertNoItem(t *testing.T, guid api.GUID) {
 	t.Helper()
-	if _, err := testDB.GetItemByGuid(guid); err == nil {
+	if _, err := testDB.GetItemByGUID(guid); err == nil {
 		t.Errorf("item %s still visible", guid)
 	}
 }
@@ -113,7 +114,7 @@ func TestValidatorLifecycle(t *testing.T) {
 	if got := scan(t, root); len(got) != 2 {
 		t.Fatalf("new: processed %v", got)
 	}
-	guidA, guidB := itemAt(t, a).Guid, itemAt(t, b).Guid
+	guidA, guidB := itemAt(t, a).GUID, itemAt(t, b).GUID
 
 	// Same: nothing to do
 	if got := scan(t, root); len(got) != 0 {
@@ -126,7 +127,7 @@ func TestValidatorLifecycle(t *testing.T) {
 	if got := scan(t, root); len(got) != 1 || got[0] != a {
 		t.Errorf("changed: processed %v", got)
 	}
-	if item := itemAt(t, a); item.Guid != guidA || item.HashShort == hashA || item.State != dto.Visible {
+	if item := itemAt(t, a); item.GUID != guidA || item.HashShort == hashA || item.State != dto.Visible {
 		t.Errorf("changed: %+v", item)
 	}
 
@@ -139,8 +140,8 @@ func TestValidatorLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	scan(t, root)
-	if item := itemAt(t, moved); item.Guid != guidB {
-		t.Errorf("moved: GUID %s, want %s", item.Guid, guidB)
+	if item := itemAt(t, moved); item.GUID != guidB {
+		t.Errorf("moved: GUID %s, want %s", item.GUID, guidB)
 	}
 	if f, err := testDB.GetFileByPath(moved); err != nil || f.GUID != guidB || f.LinkedTo != guidB {
 		t.Errorf("moved: file row %+v, %v", f, err)
@@ -153,15 +154,15 @@ func TestValidatorLifecycle(t *testing.T) {
 	dup := filepath.Join(root, "b-copy.jpg")
 	write(t, dup, "photo b")
 	scan(t, root)
-	if item := itemAt(t, dup); item.Guid == guidB {
+	if item := itemAt(t, dup); item.GUID == guidB {
 		t.Error("duplicate: took over the original's item")
 	}
-	if item := itemAt(t, moved); item.Guid != guidB {
+	if item := itemAt(t, moved); item.GUID != guidB {
 		t.Error("duplicate: the original lost its item")
 	}
 
 	// Deleted main file: the item disappears
-	dupGuid := itemAt(t, dup).Guid
+	dupGuid := itemAt(t, dup).GUID
 	if err := os.Remove(dup); err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +179,7 @@ func TestValidatorSidecarDeleted(t *testing.T) {
 	write(t, photo, "photo")
 	write(t, xmp, "sidecar")
 	scan(t, root)
-	guid := itemAt(t, photo).Guid
+	guid := itemAt(t, photo).GUID
 
 	if err := os.Remove(xmp); err != nil {
 		t.Fatal(err)
@@ -188,7 +189,7 @@ func TestValidatorSidecarDeleted(t *testing.T) {
 	if got := scan(t, root); len(got) != 1 || got[0] != photo {
 		t.Errorf("sidecar gone: processed %v", got)
 	}
-	if item := itemAt(t, photo); item.Guid != guid || item.State != dto.Visible {
+	if item := itemAt(t, photo); item.GUID != guid || item.State != dto.Visible {
 		t.Errorf("sidecar gone: %+v, want the same item, Visible", item)
 	}
 }
@@ -203,14 +204,14 @@ func TestValidatorKeepsUnreadable(t *testing.T) {
 	write(t, filepath.Join(root, "a.jpg"), "a")
 	write(t, hidden, "h")
 	scan(t, root)
-	guid := itemAt(t, hidden).Guid
+	guid := itemAt(t, hidden).GUID
 
 	if err := os.Chmod(locked, 0); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.Chmod(locked, 0o755) })
 	scan(t, root)
-	if item := itemAt(t, hidden); item.Guid != guid {
+	if item := itemAt(t, hidden); item.GUID != guid {
 		t.Error("a file in an unreadable directory was taken as deleted")
 	}
 }
@@ -221,14 +222,14 @@ func TestValidatorMissingRootDeletesNothing(t *testing.T) {
 	a := filepath.Join(root, "a.jpg")
 	write(t, a, "a")
 	scan(t, root)
-	guid := itemAt(t, a).Guid
+	guid := itemAt(t, a).GUID
 
 	// The drive is unmounted: the root is gone
 	if err := os.Rename(root, filepath.Join(parent, "elsewhere")); err != nil {
 		t.Fatal(err)
 	}
 	scan(t, root)
-	if _, err := testDB.GetItemByGuid(guid); err != nil {
+	if _, err := testDB.GetItemByGUID(guid); err != nil {
 		t.Error("a missing root deleted the library")
 	}
 }
@@ -240,7 +241,7 @@ func TestValidatorDeletedThenBack(t *testing.T) {
 	a := filepath.Join(root, "a.jpg")
 	write(t, a, "coming back")
 	scan(t, root)
-	guid := itemAt(t, a).Guid
+	guid := itemAt(t, a).GUID
 
 	parked := filepath.Join(away, "a.jpg")
 	if err := os.Rename(a, parked); err != nil {
@@ -258,7 +259,7 @@ func TestValidatorDeletedThenBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	scan(t, root)
-	if item := itemAt(t, back); item.Guid != guid || item.State != dto.Visible {
+	if item := itemAt(t, back); item.GUID != guid || item.State != dto.Visible {
 		t.Errorf("back: %+v, want GUID %s, Visible", item, guid)
 	}
 }
@@ -296,7 +297,7 @@ func TestValidatorBrokenFiles(t *testing.T) {
 	itemAt(t, corrupt)
 
 	// Corrupted later: its item goes
-	guid := itemAt(t, good).Guid
+	guid := itemAt(t, good).GUID
 	write(t, good, "BROKEN now, and longer than before")
 	scan(t, root)
 	assertNoItem(t, guid)

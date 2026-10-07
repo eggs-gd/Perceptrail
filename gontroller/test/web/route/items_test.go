@@ -27,10 +27,10 @@ func TestItemsDelta(t *testing.T) {
 		}
 		return out
 	}
-	keep := put(&dto.ItemDto{Guid: "d-keep", State: dto.Visible})
-	change := put(&dto.ItemDto{Guid: "d-change", State: dto.Visible})
-	gone := put(&dto.ItemDto{Guid: "d-gone", State: dto.Visible})
-	hide := put(&dto.ItemDto{Guid: "d-hide", State: dto.Visible})
+	keep := put(&dto.ItemDto{GUID: "d-keep", State: dto.Visible})
+	change := put(&dto.ItemDto{GUID: "d-change", State: dto.Visible})
+	gone := put(&dto.ItemDto{GUID: "d-gone", State: dto.Visible})
+	hide := put(&dto.ItemDto{GUID: "d-hide", State: dto.Visible})
 	_ = keep
 
 	get := func(query string) (map[string]bool, string, http.Header) {
@@ -48,7 +48,7 @@ func TestItemsDelta(t *testing.T) {
 				t.Fatalf("%s: a line after the cursor: %s", query, sc.Text())
 			}
 			var line struct {
-				Guid    string `json:"guid"`
+				GUID    string `json:"guid"`
 				Removed bool   `json:"removed"`
 				Cursor  string `json:"cursor"`
 				Total   *int64 `json:"total"`
@@ -63,8 +63,8 @@ func TestItemsDelta(t *testing.T) {
 				}
 			}
 			cursor = line.Cursor
-			if strings.HasPrefix(line.Guid, "d-") {
-				got[line.Guid] = line.Removed
+			if strings.HasPrefix(line.GUID, "d-") {
+				got[line.GUID] = line.Removed
 			}
 		}
 		return got, cursor, rec.Header()
@@ -87,7 +87,7 @@ func TestItemsDelta(t *testing.T) {
 	}
 	hide.State = dto.Waiting
 	put(hide)
-	put(&dto.ItemDto{Guid: "d-new", State: dto.Visible})
+	put(&dto.ItemDto{GUID: "d-new", State: dto.Visible})
 
 	delta, _, h2 := get("?since=" + url.QueryEscape(cursor))
 	want := map[string]bool{"d-change": false, "d-new": false, "d-gone": true, "d-hide": true}

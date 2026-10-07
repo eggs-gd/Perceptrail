@@ -4,11 +4,11 @@ import (
 	"errors"
 	"io/fs"
 	"os"
-	"uuid"
 
 	"perceptrail/gontroller/internal/model/dto"
 
 	pubsub "github.com/eggs-gd/go-pub-sub"
+	"github.com/eggs-gd/perceplib/api"
 )
 
 // Files: the rows of the files on disk, each linked to its item (LinkedTo) or
@@ -67,13 +67,13 @@ func (q query) GetFileByID(id uint) (*dto.FileDto, error) {
 }
 
 // GetLinkedFiles: every file of an item (its group: sidecars, derivatives…)
-func (q query) GetLinkedFiles(guid string) ([]*dto.FileDto, error) {
+func (q query) GetLinkedFiles(guid api.GUID) ([]*dto.FileDto, error) {
 	var files []*dto.FileDto
 	return files, q.db.Where("linked_to = ?", guid).Order("id").Find(&files).Error
 }
 
 // CountLinkedFiles: how many files an item still has
-func (q query) CountLinkedFiles(guid string) (int64, error) {
+func (q query) CountLinkedFiles(guid api.GUID) (int64, error) {
 	var n int64
 	err := q.db.Model(&dto.FileDto{}).Where("linked_to = ?", guid).Count(&n).Error
 	return n, err
@@ -140,7 +140,7 @@ func (p *Proxy) UnignoreFilesCommand() pubsub.Signal[int64] {
 
 func (t *tx) createFile(entry dto.ItemEntry) (*dto.FileDto, error) {
 	var file *dto.FileDto = &dto.FileDto{
-		GUID:      uuid.New().String(),
+		GUID:      newGUID(),
 		ItemEntry: entry,
 	}
 
@@ -155,7 +155,7 @@ func (t *tx) createFiles(entries []dto.ItemEntry) ([]*dto.FileDto, error) {
 	}
 	files := make([]*dto.FileDto, len(entries))
 	for i, e := range entries {
-		files[i] = &dto.FileDto{GUID: uuid.New().String(), ItemEntry: e, Changed: true}
+		files[i] = &dto.FileDto{GUID: newGUID(), ItemEntry: e, Changed: true}
 	}
 	return files, t.db.CreateInBatches(files, 200).Error
 }
@@ -193,14 +193,14 @@ func (t *tx) deleteFiles(files []*dto.FileDto) (pubsub.None, error) {
 }
 
 func (t *tx) unignoreFiles(pubsub.None) (int64, error) {
-	res := t.db.Model(&dto.FileDto{}).Where("linked_to = ?", "-").Update("linked_to", "")
+	res := t.db.Model(&dto.FileDto{}).Where("linked_to = ?", api.NilGUID).Update("linked_to", "")
 	return res.RowsAffected, res.Error
 }
 
 // relinkGroup: a moved item's files — the group of the new main file (its GUID:
 // group) takes over the item's GUID; the item's old main row goes (GUID is unique),
 // and its old sidecars that are gone as well (the ones still on disk stay linked)
-func (t *tx) relinkGroup(group, item string) error {
+func (t *tx) relinkGroup(group, item api.GUID) error {
 	if err := t.db.Where("guid = ?", item).Delete(&dto.FileDto{}).Error; err != nil {
 		return err
 	}

@@ -12,6 +12,7 @@ import (
 
 	l "github.com/eggs-gd/go-zap-decor"
 	"github.com/eggs-gd/go-zap-decor/tree"
+	"github.com/eggs-gd/perceplib/api"
 )
 
 // A JPEG imported alone is an item; when its RAW appears, the RAW is the source:
@@ -21,14 +22,14 @@ func TestSourceBecomesMain(t *testing.T) {
 	jpeg, raw := filepath.Join(root, "D.JPG"), filepath.Join(root, "D.NEF")
 	write(t, jpeg, "derivative")
 	scan(t, root)
-	oldGuid := itemAt(t, jpeg).Guid
+	oldGuid := itemAt(t, jpeg).GUID
 
 	write(t, raw, "source")
 	scan(t, root)
 	assertNoItem(t, oldGuid)
 	item := itemAt(t, raw)
-	if f, _ := testDB.GetFileByPath(jpeg); f.LinkedTo != item.Guid {
-		t.Errorf("the JPEG is not linked to the RAW: %s vs %s", f.LinkedTo, item.Guid)
+	if f, _ := testDB.GetFileByPath(jpeg); f.LinkedTo != item.GUID {
+		t.Errorf("the JPEG is not linked to the RAW: %s vs %s", f.LinkedTo, item.GUID)
 	}
 }
 
@@ -39,7 +40,7 @@ func TestMovedKeepsItemAndPreview(t *testing.T) {
 	a := filepath.Join(root, "a.jpg")
 	write(t, a, "moving")
 	scan(t, root)
-	guid := itemAt(t, a).Guid
+	guid := itemAt(t, a).GUID
 
 	moved := filepath.Join(root, "sub", "a.jpg")
 	if err := os.MkdirAll(filepath.Dir(moved), 0o755); err != nil {
@@ -49,7 +50,7 @@ func TestMovedKeepsItemAndPreview(t *testing.T) {
 		t.Fatal(err)
 	}
 	scan(t, root)
-	if item := itemAt(t, moved); item.Guid != guid || item.State != dto.Visible || item.PreviewPath != moved {
+	if item := itemAt(t, moved); item.GUID != guid || item.State != dto.Visible || item.PreviewPath != moved {
 		t.Errorf("moved: %+v", item)
 	}
 }
@@ -62,7 +63,7 @@ func TestFingerprintChangeReidentifies(t *testing.T) {
 	write(t, a, "first")
 	write(t, b, "second")
 	scan(t, root)
-	guid := itemAt(t, a).Guid
+	guid := itemAt(t, a).GUID
 
 	before := itemAt(t, a)
 	if _, err := testDB.ClearHashes(); err != nil {
@@ -74,7 +75,7 @@ func TestFingerprintChangeReidentifies(t *testing.T) {
 	if got := scan(t, root); len(got) != 2 {
 		t.Fatalf("re-identified %v, want both", got)
 	}
-	if item := itemAt(t, a); item.Guid != guid || item.HashShort == "" || item.State != dto.Visible {
+	if item := itemAt(t, a); item.GUID != guid || item.HashShort == "" || item.State != dto.Visible {
 		t.Errorf("after: %+v", item)
 	}
 	if got := scan(t, root); len(got) != 0 {
@@ -89,15 +90,15 @@ func TestReworkReprocessesOnce(t *testing.T) {
 	a := filepath.Join(root, "a.jpg")
 	write(t, a, "rework me")
 	scan(t, root)
-	guid := itemAt(t, a).Guid
+	guid := itemAt(t, a).GUID
 
-	if n, err := testDB.MarkRework([]string{guid}); err != nil || n != 1 {
+	if n, err := testDB.MarkRework([]api.GUID{guid}); err != nil || n != 1 {
 		t.Fatalf("marked %d, %v", n, err)
 	}
 	if got := scan(t, root); len(got) != 1 {
 		t.Fatalf("processed %v, want the marked one", got)
 	}
-	if item := itemAt(t, a); item.Rework || item.Guid != guid {
+	if item := itemAt(t, a); item.Rework || item.GUID != guid {
 		t.Errorf("after: %+v", item)
 	}
 	if got := scan(t, root); len(got) != 0 {
@@ -128,7 +129,7 @@ func TestFormerMainGone(t *testing.T) {
 	write(t, raw, "source")
 	write(t, jpeg, "derivative")
 	scan(t, root)
-	rawGuid := itemAt(t, raw).Guid
+	rawGuid := itemAt(t, raw).GUID
 
 	if err := os.Remove(raw); err != nil {
 		t.Fatal(err)

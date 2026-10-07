@@ -2,6 +2,9 @@ package api
 
 import "time"
 
+// NilGUID: a GUID in its format that names no item
+const NilGUID GUID = "00000000-0000-0000-0000-000000000000"
+
 type ExifProvider interface {
 	//returns exifdata with given key from main file
 	//todo add support for sidecars
@@ -9,7 +12,7 @@ type ExifProvider interface {
 }
 
 type ItemDataProvider interface {
-	GetGuid() string
+	GetGUID() GUID
 	GetDate() time.Time
 	GetSize() Size
 	GetRatio() Size
@@ -24,9 +27,15 @@ type RawItemR interface {
 	ExifProvider
 }
 
+// GUID: an item's identity, the same from the core through every perceptor; it
+// never changes (a moved file keeps its item's GUID)
+type GUID string
+
 type RawExif map[string][]byte
 
 type Size struct {
 	W int
 	H int
 }
+
+func (g GUID) String() string { return string(g) }

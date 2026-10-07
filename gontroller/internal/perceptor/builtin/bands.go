@@ -33,7 +33,7 @@ func OrderByValue(items []api.ItemDataProvider, value func(api.ItemDataProvider)
 	out := make([]api.Entry, len(all))
 	var prev []string
 	for i, m := range all {
-		out[i].Guid = m.it.GetGuid()
+		out[i].GUID = m.it.GetGUID()
 		cur := []string{none}
 		if m.v > 0 {
 			cur = labels(m.it, m.v)

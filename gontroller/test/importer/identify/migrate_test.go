@@ -53,7 +53,7 @@ func TestMigrate(t *testing.T) {
 	if f, _ := testDB.GetFileByPath(clip); f.IsIgnored() {
 		t.Error("the file is still ignored")
 	}
-	if got, _ := testDB.GetItemByGuid(item.Guid); got.HashShort != "" {
+	if got, _ := testDB.GetItemByGUID(item.GUID); got.HashShort != "" {
 		t.Errorf("fingerprint kept: %q", got.HashShort)
 	}
 	for _, key := range []string{"mime_version", "hash_version"} {
@@ -68,7 +68,7 @@ func TestMigrate(t *testing.T) {
 		t.Fatal(err)
 	}
 	identify.Migrate(testDB, logger)
-	if got, _ := testDB.GetItemByGuid(item.Guid); got.HashShort != "new-hash" {
+	if got, _ := testDB.GetItemByGUID(item.GUID); got.HashShort != "new-hash" {
 		t.Errorf("the same version cleared it: %q", got.HashShort)
 	}
 }

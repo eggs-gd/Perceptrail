@@ -18,16 +18,16 @@ import (
 // (its value, or "processed, nothing found")
 type Storage interface {
 	Name() string
-	Save(guid string, v api.Values) error
-	Guids() ([]string, error)
-	Prune(keep func(guid string) bool) (int, error)
+	Save(guid api.GUID, v api.Values) error
+	GUIDs() ([]api.GUID, error)
+	Prune(keep func(guid api.GUID) bool) (int, error)
 }
 
 // Items: what the perceptors' bookkeeping asks of the model — every item, and the
 // ones to process again
 type Items interface {
-	GetAllGuids() ([]string, error)
-	MarkRework(guids []string) (int64, error)
+	GetAllGUIDs() ([]api.GUID, error)
+	MarkRework(guids []api.GUID) (int64, error)
 }
 
 // Reconcile runs at start: the import perceptors' rows against the items. An item
@@ -37,21 +37,21 @@ type Items interface {
 // per pass: a perceptor's rows change only with the perceptors, and a row left
 // behind meanwhile harms nothing (values are read by the shown items' GUIDs).
 func Reconcile(db Items, logger *l.Logger) error {
-	guids, err := db.GetAllGuids()
+	guids, err := db.GetAllGUIDs()
 	if err != nil {
 		return err
 	}
-	live := make(map[string]bool, len(guids))
+	live := make(map[api.GUID]bool, len(guids))
 	for _, g := range guids {
 		live[g] = true
 	}
-	missing := map[string]bool{}
+	missing := map[api.GUID]bool{}
 	for _, st := range importStores() {
-		has, err := st.Guids()
+		has, err := st.GUIDs()
 		if err != nil {
 			return fmt.Errorf("perceptor %s: %w", st.Name(), err)
 		}
-		done := make(map[string]bool, len(has))
+		done := make(map[api.GUID]bool, len(has))
 		for _, g := range has {
 			done[g] = true
 		}
@@ -60,7 +60,7 @@ func Reconcile(db Items, logger *l.Logger) error {
 				missing[g] = true
 			}
 		}
-		n, err := st.Prune(func(guid string) bool { return live[guid] })
+		n, err := st.Prune(func(guid api.GUID) bool { return live[guid] })
 		if err != nil {
 			return fmt.Errorf("perceptor %s: %w", st.Name(), err)
 		}
@@ -71,7 +71,7 @@ func Reconcile(db Items, logger *l.Logger) error {
 	if len(missing) == 0 {
 		return nil
 	}
-	rework := make([]string, 0, len(missing))
+	rework := make([]api.GUID, 0, len(missing))
 	for g := range missing {
 		rework = append(rework, g)
 	}
@@ -131,7 +131,7 @@ func importStores() []Storage {
 
 // saveValues: a row in each import perceptor's storage for the item — its value, or
 // "processed, nothing found" (no GPS); values gives a storage's value (keep)
-func saveValues(guid string, values func(store string) (api.Values, bool)) error {
+func saveValues(guid api.GUID, values func(store string) (api.Values, bool)) error {
 	for _, st := range importStores() {
 		v, _ := values(st.Name())
 		if err := st.Save(guid, v); err != nil {

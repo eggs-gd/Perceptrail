@@ -36,8 +36,8 @@ type ItemDto struct {
 	UpdatedAt time.Time
 	DeletedAt gorm.DeletedAt
 	*/
-	Guid      string `gorm:"uniqueIndex"`
-	HashShort string `gorm:"index"` // Fast hash based on size, exifdata
+	GUID      api.GUID `gorm:"uniqueIndex"`
+	HashShort string   `gorm:"index"` // Fast hash based on size, exifdata
 	// HashFull  string    `gorm:"index"` // Hash of whole file, make sense only if hashfull is chiper than transode. As an option enable for CPU setups
 	MimeType string    `gorm:"index"` //
 	State    ItemState `gorm:"index"` // Current state of item

@@ -42,21 +42,21 @@ func (p *geoPerceptor) Schema() api.Schema { return places.Places.Schema() }
 
 func (p *geoPerceptor) Order(ctx context.Context, _ string, items []api.ItemDataProvider) ([]api.Entry, error) {
 	type placed struct {
-		guid         string
+		guid         api.GUID
 		d            uint64
 		region, city string
 		at           int
 	}
 	var located []placed
-	var nowhere []string
+	var nowhere []api.GUID
 	for i, it := range items {
 		loc, ok := places.Places.Get(it)
 		if !ok {
-			nowhere = append(nowhere, it.GetGuid())
+			nowhere = append(nowhere, it.GetGUID())
 			continue
 		}
 		r, c := splitZone(zoneName(loc))
-		located = append(located, placed{it.GetGuid(), hilbert(loc), r, c, i})
+		located = append(located, placed{it.GetGUID(), hilbert(loc), r, c, i})
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -90,7 +90,7 @@ func (p *geoPerceptor) Order(ctx context.Context, _ string, items []api.ItemData
 	out := make([]api.Entry, 0, len(items))
 	region, city := "", ""
 	for _, p := range located {
-		e := api.Entry{Guid: p.guid}
+		e := api.Entry{GUID: p.guid}
 		switch {
 		case p.region != region:
 			e.Sections = []api.Section{{Level: 0, Label: p.region}}
@@ -104,7 +104,7 @@ func (p *geoPerceptor) Order(ctx context.Context, _ string, items []api.ItemData
 		out = append(out, e)
 	}
 	for i, guid := range nowhere {
-		e := api.Entry{Guid: guid}
+		e := api.Entry{GUID: guid}
 		if i == 0 {
 			e.Sections = []api.Section{{Level: 0, Label: "No place"}}
 		}
