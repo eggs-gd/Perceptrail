@@ -1,0 +1,35 @@
+package dto
+
+import "github.com/eggs-gd/perceplib/api"
+
+// WorkDto: one kind of work for an item — a slug ("render"; later a pixel
+// perceptor), what it was last done or tried with, and its state in the queue.
+// What is needed is derived, never recorded: an item needs the work when it has no
+// row, or its row was done with another version or for another input. Times are unix
+// seconds (SQLite keeps times as text, and text compares lie).
+type WorkDto struct {
+	GUID       api.GUID `gorm:"primaryKey"`
+	Slug       string   `gorm:"primaryKey"`
+	Version    string   // the code or config it was done (or tried) with
+	Input      string   // the item's fingerprint it was done (or tried) for
+	DoneAt     int64    // 0: not done
+	Attempts   int      // failures in a row with this version and input
+	NextTry    int64    // after a failure: not before
+	Error      string   // the last failure, kept for the info panel
+	LeaseUntil int64    // taken into work until then; a crash lets it expire
+}
+
+// RenditionDto: one rendition of an item, made by a version of render
+type RenditionDto struct {
+	GUID    api.GUID `gorm:"primaryKey"`
+	Version string   `gorm:"primaryKey"`
+	Size    int      `gorm:"primaryKey"` // the long side, px; 0: the original's size
+	Format  string   `gorm:"primaryKey"` // the file's extension: webp, avif, jpg, mp4…
+	W, H    int      // pixels; 0: unknown
+	Bytes   int64
+	Path    string // in the cache: r/<guid>/<version>-<size>.<format>
+}
+
+func (WorkDto) TableName() string { return "work" }
+
+func (RenditionDto) TableName() string { return "renditions" }

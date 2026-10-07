@@ -40,6 +40,7 @@ type Proxy struct {
 	flowCommands
 	fileCommands
 	metaCommands
+	workCommands
 }
 
 // query: the model's reads over a connection — the readers' pool (Proxy), or a
@@ -66,7 +67,7 @@ func Open(cfg Config, logger *l.Logger) (*Proxy, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := writes.AutoMigrate(&dto.ItemDto{}, &dto.FileDto{}, &dto.MetaDto{}); err != nil {
+	if err := writes.AutoMigrate(&dto.ItemDto{}, &dto.FileDto{}, &dto.MetaDto{}, &dto.WorkDto{}, &dto.RenditionDto{}); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	// An ignored group was marked "-" before the GUID had a nil value of its own
@@ -79,7 +80,7 @@ func Open(cfg Config, logger *l.Logger) (*Proxy, error) {
 	}
 	p := &Proxy{query: query{reads}, logger: logger, writer: newWriter(writes)}
 	p.itemCommands, p.identityCommands, p.flowCommands = newItemCommands(p), newIdentityCommands(p), newFlowCommands(p)
-	p.fileCommands, p.metaCommands = newFileCommands(p), newMetaCommands(p)
+	p.fileCommands, p.metaCommands, p.workCommands = newFileCommands(p), newMetaCommands(p), newWorkCommands(p)
 	return p, nil
 }
 

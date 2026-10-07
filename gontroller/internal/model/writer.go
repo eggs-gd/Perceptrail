@@ -31,7 +31,7 @@ const maxBatch = 512
 type writer struct {
 	db    *gorm.DB
 	lanes [3]chan pubsub.Job[*batch] // by class: Now, Frame, Idle
-	quit  chan struct{}                // closed: no job is taken any more (closed())
+	quit  chan struct{}              // closed: no job is taken any more (closed())
 	done  chan struct{}
 
 	mu sync.RWMutex // senders read-lock; quit is closed under the write lock, so no job slips in after it
