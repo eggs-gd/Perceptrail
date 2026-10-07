@@ -52,7 +52,7 @@ One line each; the details are in the READMEs and the PRs.
 ## Next: the expensive stage (transcode)
 
 In steps, each its own PR (designs below: "The write bus", "Entities, components,
-systems", "The work queue", "Expensive stage"):
+systems — a lens", "The work queue", "Expensive stage"):
 
 0. [ ] **The write bus** — [go-pub-sub](https://github.com/eggs-gd/go-pub-sub) (events and commands,
    classes) and the model's writer. Done: one write connection, a read pool,
@@ -306,58 +306,41 @@ cuts the wait. Each consumer handles it its own way:
 Steps: the model's domain events (`tx.emit`); then the walk on clients; render
 wakes on `ItemPublished`.
 
-## Design: entities, components, systems
+## Design: entities, components, systems — a lens, not a migration
 
-The library is many random files becoming artifacts we can show: each file gains
-facts — a stat, a fingerprint, exif, kinds, a preview, renditions, a perceptor's
-values — and each fact is computed from others. That is an ECS: the work queue
-below is its first step, not a separate idea.
+The library is many random files becoming artifacts we can show: each item gains
+facts (a stat, a fingerprint, exif, a preview, renditions, a perceptor's values),
+each computed from others. Seen as an ECS — the item's GUID the entity, a fact a
+component that knows what it was computed from (`version`, `input`), work a system
+with a query ("lacks B, or B not from the current A") — it says where each kind of
+work belongs. It is not a plan to rebuild the import.
 
-- **Entity** — the item's GUID, nothing more.
-- **Component** — every derived fact about an item, a table keyed by the GUID; a
-  row knows what it was computed from: `(guid, version, input, …data)` — `version`
-  of the code or config that made it, `input` the versions of what it read. The
-  perceptors' stores already are components (without `input`).
-- **System** — a function and a query: "has A, lacks B or B not computed from the
-  current A". It takes a page of items, computes outside the transaction, commits
-  its component through the writer. A system declares what it reads and what it
-  writes; the order follows from that (no hand-made pipeline), systems with
-  disjoint writes run side by side (faces, colour, geo).
-- **An event is an alarm**: "component X written" wakes the systems that read X —
-  the database is the truth, the event a hint ("Events and commands").
+**The chain and the queue answer different questions** (decided, 2026-10-07): the
+chain is how one piece of work goes through its steps; the queue is which items
+still need which work. A system's body can be a chain (render: `feed → source →
+render → commit`).
 
-**What goes**: the hand-set states and marks become queries — Visible: has a
-preview; Ready: has every rendition of the current version; Dirty: an input
-changed. `State` as stored, `Rework`, `MarkRework`, `FileDto.Changed` and the
-perceptors' `Reconcile` go; a new perceptor or a new config version is a query that
-finds every item by itself (a backfill nobody enqueues).
+- **The cheap stage stays a chain**: walk → group → gate → identify → exif →
+  commit, one pass, one exiftool read per group feeding every step.
+- **The expensive stage is a queue** ("The work queue" below): render and pixel
+  work have their own pace, failures and retries; the chain never waits for them
+  and knows nothing of them — `ItemPublished` only wakes render.
 
-**What stays out**: identity — which files make an item, a move, a group — is
-relational across entities in one transaction, not work on one entity: walk →
-group → gate → identity stay a chain in the model; systems start once the entity
-exists. Group perceptors (journeys, face clusters) are systems over the whole set
-(a watermark row, as the work queue has it).
+Levels, each its own PR when it pays:
+
+| level | what | the chain |
+|---|---|---|
+| 0 (0.2.0) | the work queue and the render service, `ItemPublished` after the commit | unchanged |
+| 1 | pixel perceptors (faces, objects, colour) as slugs of `work`; their stores get `input`, their `Reconcile` goes. EXIF perceptors stay in the chain (they need its exiftool pass) | unchanged |
+| 2 | the states derived (Visible / Waiting / Ready as queries); `Rework` and `FileDto.Changed` go | `NeedsWork` simpler |
+
+**Rejected — the chain ending at identity**, a scheduler of systems doing the rest:
+the cheap stage in one pass is the efficient one; split into systems, each would
+read exiftool again. The rewrite would break what works for no gain.
 
 **The hard part — `input`**: it must cover every version a result depends on;
-wrong, it gives endless recomputation or stale data. Worth reading before:
-incremental computation (Salsa in rust-analyzer, Bazel's action keys).
-
-**Cost**: "lacks a component" over every item — measured in the work queue: 1–2 ms
-a page by the index, 143 ms a full pass at 200 k items per slug; full passes only
-at start and after a version change.
-
-**For perceptors**: a plugin declares `reads: [exif, rendition]`, `writes: faces` —
-`perceplib/api` describes a system's contract instead of the core's methods.
-
-Steps, no rewrite:
-
-1. The work queue and renditions (below), `work` read as the components' table and
-   render as the first system.
-2. The perceptors' stores get `input`: perceptors are systems; `MarkRework` and
-   `Reconcile` go.
-3. The states derived (a view or a query), not written: `Rework` and `Changed` go.
-4. The import chain ends at identity: it creates the entity and its first
-   components (stat, fingerprint); the systems' scheduler does the rest.
+wrong, it gives endless recomputation or stale data (incremental computation:
+Salsa in rust-analyzer, Bazel's action keys).
 
 ## Design: the work queue
 
@@ -407,9 +390,10 @@ write over several connections.
   panel can show it). Without it a broken video would come back every pass.
 - **Changed meanwhile**: commit compares the `input` taken with the item's now — a
   new fingerprint discards the result, the item stays due.
-- **`Rework` goes**: today a stored mark (set by `MarkRework`, cleared by
-  `Publish`) — a queue kept as a flag; with `work` the need is derived (a missing
-  row, another `version` or `input`).
+- **`Rework` goes later, not with the queue**: a stored mark (set by `MarkRework`,
+  cleared by `Publish`) — a queue kept as a flag; but what it asks for is another
+  pass of the cheap stage (a perceptor without a row, Photos made a file local),
+  not render's work. It goes with levels 1–2 ("Entities, components, systems").
 - **A config change** (sizes, format, codec) is a new `version`: re-rendering is
   lazy, maintenance prunes the old files.
 - **A slug may require another**: a pixel perceptor's query asks for `render` done
