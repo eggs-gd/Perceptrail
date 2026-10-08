@@ -485,6 +485,12 @@ transit, render bounded by its workers) — patterns go to docs and examples.
   only after a real tone mapping (review: Codex) — without `zscale` the HDR samples
   keep their own HLG/PQ tags and the browser maps them; HDR tagged BT.709 shows the
   wrong brightness.
+- **A list in the contract is never null** (#37, the owner saw a black viewer):
+  prepending our motion with `append(ours, a.Motion...)` gave nil when both were
+  empty — `"motion": null`, and the client's `[...asset.motion]` threw on every
+  item. The route test now checks every list of the asset; the contract went to 7,
+  so a client that stored the nulls syncs from nothing (a delta would never bring
+  the unchanged items back).
 - **A long encode renews its lease** (review: Codex): a video's time is three times
   its length, a lease 15 minutes — past it the safety pass took the item again, the
   first result was dropped, and a long video could never be accepted. While an item

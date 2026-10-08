@@ -129,6 +129,9 @@ func withRenditions(a *clientAsset, item *dto.ItemDto, renditions []dto.Renditio
 	}
 	sort.SliceStable(a.Stills, func(i, j int) bool { return a.Stills[i].W < a.Stills[j].W })
 	a.Motion = append(motion, a.Motion...)
+	if a.Motion == nil {
+		a.Motion = []rendition{} // a list, never null: the client spreads it
+	}
 }
 
 // renditionName: a rendition's name in its URL
