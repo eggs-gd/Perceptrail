@@ -89,17 +89,12 @@ package's own unit tests stay next to it.
 | `internal/config` | the config file, read once (`Load`, `Read`); a leaf — a module declares the getters it reads as its own `Config` interface |
 | `internal/importer` | the import chain ([README](internal/importer/README.md)) |
 | `internal/render` | the expensive stage: woken by `ItemPublished`, takes what is due from the work queue, renders with N workers (a stand-in renderer for now; config `render`) |
-| `internal/transcode` | the transcoders' switch and stubs (a chain of its own later) |
 | `internal/perceptor` | the perceptors' registry (built in + `.so`, their storages); `perceptor/builtin`: the built-ins' contract (`builtin.Item`, `builtin.Perceptor`, `OrderByValue`); the built-in EXIF perceptors `perceptor/date`, `size`, `duration` |
 | `internal/model` | the library's data and its rules: one writer, a read pool, every write a command ([README](internal/model/README.md)) |
 | `internal/web` | the HTTP service (Echo); `web/route`: `/items`, `/assets`, `/perceptors`, `/p/:view/order`, renditions |
 | `internal/library` | the libraries the import reads and the web service asks on demand: Apple Photos, the plain folder ([README](internal/library/README.md)) |
-| `internal/transcoder` | thumbnail stub (needs libvips) |
 
 ## Worth knowing
 
 - SQLite: one writer connection and a read-only pool; every write is a command — [`internal/model/README.md`](internal/model/README.md).
-- `internal/transcoder/images` does not build without libvips (`pkg-config vips`); it is
-  not imported by `main`, so the server is unaffected. Run vet/tests without it:
-  `go test $(go list ./... | grep -v transcoder/images)`.
 - Known issues and plans — [roadmap](../_sb/docs/roadmap.md).
