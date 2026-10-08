@@ -43,8 +43,8 @@ plugins:
 # exiftool: /opt/exiftool/exiftool
 
 # The expensive stage: renditions of a plain folder's items, from the work queue,
-# beside the import. Off by default while the renderer is a stand-in (it links, or
-# copies, each original into the cache).
+# beside the import. Off by default while the renderer is a stand-in (a symbolic link
+# to each original in the cache).
 # render:
 #   enabled: false
 #   workers: 4          # items at once. Default: half the CPUs

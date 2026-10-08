@@ -5,8 +5,8 @@ import "runtime"
 // Render: the `render` section — the expensive stage (renditions of a plain
 // folder's items, from the work queue)
 type Render struct {
-	// Run it. Default: off — the renderer is a stand-in for now (it links, or
-	// copies, each original into the cache)
+	// Run it. Default: off — the renderer is a stand-in for now (a symbolic
+	// link to each original in the cache)
 	Enabled bool `yaml:"enabled"`
 	// Items rendered at once. Default: half the CPUs, at least one
 	Workers int `yaml:"workers"`

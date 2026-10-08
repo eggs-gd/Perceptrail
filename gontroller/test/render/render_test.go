@@ -7,6 +7,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -120,4 +121,35 @@ func TestRenderFails(t *testing.T) {
 	if n := due(t, db); n != 0 {
 		t.Errorf("due again right after its failure: %d", n)
 	}
+}
+
+// The original is only read: no hard link to it (its link count and ctime would
+// change — a Photos library is read only, even when no provider claims it)
+func TestRenderLeavesTheOriginal(t *testing.T) {
+	db, cfg := start(t)
+	src := filepath.Join(t.TempDir(), "photo.jpg")
+	if err := os.WriteFile(src, []byte("pixels"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before := links(t, src)
+	item := publish(t, db, src)
+	eventually(t, "rendered", func() bool {
+		row, err := db.Work(item.GUID, "render")
+		return err == nil && row.DoneAt != 0
+	})
+	if after := links(t, src); after != before {
+		t.Errorf("the original's link count %d → %d", before, after)
+	}
+	if _, err := os.Stat(filepath.Join(cfg.CacheDir(), "r", item.GUID.String(), "stand-in-1-0.jpg")); err != nil {
+		t.Errorf("no rendition: %v", err)
+	}
+}
+
+func links(t *testing.T, path string) uint64 {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return uint64(info.Sys().(*syscall.Stat_t).Nlink)
 }

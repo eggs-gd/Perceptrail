@@ -404,8 +404,13 @@ transit, render bounded by its workers) — patterns go to docs and examples.
 - **A library's items are finished with no renditions** (Apple renders itself):
   filtered in Go (`library.Of`, no SQL for it), they would be due on every pass;
   finished as "nothing to render" for this version they leave the queue.
-- **The stand-in links the original** (a copy across file systems) and render is
-  off by default: on a real library a copying stand-in would double the disk.
+- **The stand-in is a symbolic link to the original**: a hard link changes the
+  original's link count and ctime — a write into a Photos library, which a disabled
+  Apple provider leaves to the plain folder (review: Codex); a copy doubles the
+  disk. Render stays off by default while it is a stand-in.
+- **A result carries its lease's token** (review: Codex): a worker that ran past its
+  lease could overwrite the result of the one that took the item next, or a late
+  failure replace a success.
 - **Proved by breaking it**: the queue's tests fail when the lease or the input
   condition goes, the events' test when a rolled back write keeps its events;
   render's integration test reads the work row (`Work`) — "not due" alone is also

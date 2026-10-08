@@ -65,8 +65,8 @@ systems — a lens", "The work queue", "Expensive stage"):
    own way). Before any new writer comes.
 1. [x] **The work queue and the render service** (#36) — the queue in the model
    ([README](../../gontroller/internal/model/README.md#the-work-queue)),
-   `internal/render` woken by `ItemPublished`, a stand-in renderer (links the
-   original): the queue's rules tested before any codec.
+   `internal/render` woken by `ItemPublished`, a stand-in renderer (a symbolic
+   link to the original): the queue's rules tested before any codec.
 2. [ ] **Photo renditions** — libvips on the CPU, the source chosen to avoid a full
    decode (Photos' JPEG, the HEIC's embedded thumbnail, a RAW's embedded JPEG),
    benchmarks on the real library.
