@@ -21,6 +21,8 @@ import (
 //     newest first, page by page after a cursor (a keyset on the date: the
 //     (state, date) index, no sort of everything).
 //   - Taken is a lease, not a mark: a crash lets it expire and the item comes back.
+//     A result counts only with the lease's token: a worker that ran past its lease,
+//     the item taken by another meanwhile, changes nothing.
 //   - A result for an input that changed meanwhile is dropped; the item stays due.
 //   - Failures back off (1 min, 10 min, 1 h, 1 day); after maxAttempts the item
 //     waits for a new version or input.
@@ -41,7 +43,7 @@ var backoff = []time.Duration{time.Minute, 10 * time.Minute, time.Hour, 24 * tim
 
 // workCommands: the queue's writes as commands
 type workCommands struct {
-	take   op[TakeArgs, []api.GUID]
+	take   op[TakeArgs, []dto.Taken]
 	finish op[dto.WorkDone, bool]
 	fail   op[dto.WorkFailed, pubsub.None]
 }
@@ -83,15 +85,16 @@ func (q query) Work(guid api.GUID, slug string) (*dto.WorkDto, error) {
 	return &row, q.db.Where("guid = ? AND slug = ?", guid, slug).First(&row).Error
 }
 
-func (p *Proxy) Take(slug string, guids []api.GUID) ([]api.GUID, error) {
+func (p *Proxy) Take(slug string, guids []api.GUID) ([]dto.Taken, error) {
 	return p.take.Do(TakeArgs{slug, guids})
 }
 
-func (p *Proxy) TakeCommand() pubsub.Command[TakeArgs, []api.GUID] {
+func (p *Proxy) TakeCommand() pubsub.Command[TakeArgs, []dto.Taken] {
 	return p.take
 }
 
-// Finish: false when the result was dropped (the item changed or went meanwhile)
+// Finish: false when the result was dropped (the lease lost, the item changed or
+// went meanwhile)
 func (p *Proxy) Finish(done dto.WorkDone) (bool, error) {
 	return p.finish.Do(done)
 }
@@ -109,8 +112,8 @@ func (p *Proxy) FailCommand() pubsub.Message[dto.WorkFailed] {
 	return pubsub.MessageOf(p.fail)
 }
 
-// take: a lease on each item no one holds; the items taken
-func (t *tx) take(a TakeArgs) ([]api.GUID, error) {
+// take: a lease on each item no one holds, under one token; the items taken
+func (t *tx) take(a TakeArgs) ([]dto.Taken, error) {
 	now := time.Now()
 	var held []api.GUID
 	err := t.db.Model(&dto.WorkDto{}).Where("slug = ? AND guid IN ? AND lease_until > ?", a.Slug, a.GUIDs, now.Unix()).
@@ -122,27 +125,32 @@ func (t *tx) take(a TakeArgs) ([]api.GUID, error) {
 	for _, g := range held {
 		busy[g] = true
 	}
-	var taken []api.GUID
+	token := now.UnixNano()
+	var taken []dto.Taken
 	for _, g := range a.GUIDs {
 		if busy[g] {
 			continue
 		}
-		row := dto.WorkDto{GUID: g, Slug: a.Slug, LeaseUntil: now.Add(lease).Unix()}
+		row := dto.WorkDto{GUID: g, Slug: a.Slug, LeaseUntil: now.Add(lease).Unix(), Lease: token}
 		err := t.db.Clauses(clause.OnConflict{
 			Columns:   []clause.Column{{Name: "guid"}, {Name: "slug"}},
-			DoUpdates: clause.AssignmentColumns([]string{"lease_until"}),
+			DoUpdates: clause.AssignmentColumns([]string{"lease_until", "lease"}),
 		}).Create(&row).Error
 		if err != nil {
 			return taken, err
 		}
-		taken = append(taken, g)
+		taken = append(taken, dto.Taken{GUID: g, Lease: token})
 	}
 	return taken, nil
 }
 
-// finish: the work done — its row and its renditions — unless the item changed or
-// went meanwhile: then the lease goes and the item stays due
+// finish: the work done — its row and its renditions — unless the lease was lost
+// (nothing changes) or the item changed or went meanwhile (the lease goes, the item
+// stays due)
 func (t *tx) finish(a dto.WorkDone) (bool, error) {
+	if held, err := t.holds(a.Slug, a.GUID, a.Lease); err != nil || !held {
+		return false, err
+	}
 	item, err := t.GetItemByGUID(a.GUID)
 	if errors.Is(err, ErrNotFound) || (err == nil && item.HashShort != a.Input) {
 		return false, t.release(a.Slug, a.GUID)
@@ -165,9 +173,12 @@ func (t *tx) finish(a dto.WorkDone) (bool, error) {
 	return true, nil
 }
 
-// fail: the failure kept, the item back off; failures count in a row for the same
-// version and input
+// fail: the failure kept, the item backs off; failures count in a row for the same
+// version and input. A lease lost: nothing changes
 func (t *tx) fail(a dto.WorkFailed) (pubsub.None, error) {
+	if held, err := t.holds(a.Slug, a.GUID, a.Lease); err != nil || !held {
+		return pubsub.None{}, err
+	}
 	var rows []dto.WorkDto
 	if err := t.db.Where("guid = ? AND slug = ?", a.GUID, a.Slug).Limit(1).Find(&rows).Error; err != nil {
 		return pubsub.None{}, err
@@ -184,7 +195,17 @@ func (t *tx) fail(a dto.WorkFailed) (pubsub.None, error) {
 
 // release: the lease goes, nothing else changes
 func (t *tx) release(slug string, guid api.GUID) error {
-	return t.db.Model(&dto.WorkDto{}).Where("guid = ? AND slug = ?", guid, slug).Update("lease_until", 0).Error
+	return t.db.Model(&dto.WorkDto{}).Where("guid = ? AND slug = ?", guid, slug).
+		Updates(map[string]any{"lease_until": 0, "lease": 0}).Error
+}
+
+// holds: the row is still this lease's (0: never taken, no one took it since)
+func (t *tx) holds(slug string, guid api.GUID, lease int64) (bool, error) {
+	var rows []dto.WorkDto
+	if err := t.db.Where("guid = ? AND slug = ?", guid, slug).Limit(1).Find(&rows).Error; err != nil {
+		return false, err
+	}
+	return len(rows) == 0 || rows[0].Lease == lease, nil
 }
 
 func newWorkCommands(p *Proxy) workCommands {

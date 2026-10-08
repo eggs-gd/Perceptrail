@@ -21,6 +21,7 @@ type WorkDto struct {
 	NextTry    int64    // after a failure: not before
 	Error      string   // the last failure, kept for the info panel
 	LeaseUntil int64    // taken into work until then; a crash lets it expire
+	Lease      int64    // the taker's token: its result counts only while it holds the row
 }
 
 // RenditionDto: one rendition of an item, made by a version of render
@@ -34,11 +35,18 @@ type RenditionDto struct {
 	Path    string // in the cache: r/<guid>/<version>-<size>.<format>
 }
 
-// WorkDone: a slug's work done for an item — with what, for which input, what it
-// made
+// Taken: an item taken into a slug's work, and the token its result must carry
+type Taken struct {
+	GUID  api.GUID
+	Lease int64
+}
+
+// WorkDone: a slug's work done for an item — under which lease, with what, for which
+// input, what it made
 type WorkDone struct {
 	Slug       string
 	GUID       api.GUID
+	Lease      int64 // from Taken; 0: never taken (nothing to render)
 	Version    string
 	Input      string
 	Renditions []RenditionDto
@@ -48,6 +56,7 @@ type WorkDone struct {
 type WorkFailed struct {
 	Slug    string
 	GUID    api.GUID
+	Lease   int64 // from Taken
 	Version string
 	Input   string
 	Err     string

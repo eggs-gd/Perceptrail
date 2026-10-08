@@ -90,8 +90,8 @@ func TestTake(t *testing.T) {
 func TestFinish(t *testing.T) {
 	db := openTest(t)
 	a := workItem(t, db, "a.jpg", dto.Visible, time.Now(), "h1")
-	db.Take("render", []api.GUID{a.GUID})
-	done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: a.GUID, Version: "v1", Input: "h1",
+	taken, _ := db.Take("render", []api.GUID{a.GUID})
+	done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: a.GUID, Lease: taken[0].Lease, Version: "v1", Input: "h1",
 		Renditions: []dto.RenditionDto{{GUID: a.GUID, Version: "v1", Size: 400, Format: "webp", Path: "r/a/v1-400.webp"}}})
 	if err != nil || !done {
 		t.Fatalf("finish: %v %v", done, err)
@@ -110,8 +110,8 @@ func TestFinish(t *testing.T) {
 
 	a.HashShort = "h2" // the file changed while it was rendered
 	db.UpdateItem(a)
-	db.Take("render", []api.GUID{a.GUID})
-	if done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: a.GUID, Version: "v1", Input: "h1"}); err != nil || done {
+	taken, _ = db.Take("render", []api.GUID{a.GUID})
+	if done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: a.GUID, Lease: taken[0].Lease, Version: "v1", Input: "h1"}); err != nil || done {
 		t.Errorf("a stale result kept: %v %v", done, err)
 	}
 	if got := pass(t, db, "v1", 10); len(got) != 1 {
@@ -146,5 +146,33 @@ func TestFail(t *testing.T) {
 	db.writer.db.Where("guid = ?", a.GUID).First(&row)
 	if row.Attempts != maxAttempts || row.Error != "broken" {
 		t.Errorf("row %+v", row)
+	}
+}
+
+// A worker whose lease ran out and whose item another worker took: its late result
+// changes nothing — the second worker's stands
+func TestLateWorkerAfterLeaseLost(t *testing.T) {
+	db := openTest(t)
+	a := workItem(t, db, "a.jpg", dto.Visible, time.Now(), "h1")
+	expire := func() { db.writer.db.Model(&dto.WorkDto{}).Where("guid = ?", a.GUID).Update("lease_until", 0) }
+
+	first, _ := db.Take("render", []api.GUID{a.GUID})
+	expire() // the first worker ran past its lease
+	time.Sleep(time.Millisecond)
+	second, _ := db.Take("render", []api.GUID{a.GUID})
+	if len(first) != 1 || len(second) != 1 || first[0].Lease == second[0].Lease {
+		t.Fatalf("leases %v %v", first, second)
+	}
+	if done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: a.GUID, Lease: second[0].Lease, Version: "v1", Input: "h1"}); err != nil || !done {
+		t.Fatalf("the second worker's finish: %v %v", done, err)
+	}
+	// The first one comes back late: neither its failure nor its result counts
+	db.Fail(dto.WorkFailed{Slug: "render", GUID: a.GUID, Lease: first[0].Lease, Version: "v1", Input: "h1", Err: "late"})
+	if done, _ := db.Finish(dto.WorkDone{Slug: "render", GUID: a.GUID, Lease: first[0].Lease, Version: "v0", Input: "h1"}); done {
+		t.Error("a late result was kept")
+	}
+	row, _ := db.Work(a.GUID, "render")
+	if row.DoneAt == 0 || row.Error != "" || row.Version != "v1" {
+		t.Errorf("the late worker changed the row: %+v", row)
 	}
 }

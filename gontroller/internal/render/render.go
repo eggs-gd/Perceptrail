@@ -35,7 +35,7 @@ type Config interface {
 // Store: what render asks of the model — the queue, and the event that wakes it
 type Store interface {
 	Due(slug, version string, after dto.Cursor, n int) ([]*dto.ItemDto, dto.Cursor, error)
-	Take(slug string, guids []api.GUID) ([]api.GUID, error)
+	Take(slug string, guids []api.GUID) ([]dto.Taken, error)
 	Finish(done dto.WorkDone) (bool, error)
 	Fail(failed dto.WorkFailed) error
 	Published() *pubsub.Topic[dto.ItemPublished]
@@ -47,6 +47,12 @@ type Service struct {
 	db     Store
 	logger *l.Logger
 	wake   chan struct{} // one pending wake-up: many events, one pass
+}
+
+// job: an item taken, with the lease its result carries
+type job struct {
+	item  *dto.ItemDto
+	lease int64
 }
 
 const (
@@ -73,22 +79,22 @@ func (s *Service) Start(ctx context.Context) {
 	})
 	defer published.Close()
 
-	items := make(chan *dto.ItemDto)
+	jobs := make(chan job)
 	var workers sync.WaitGroup
 	for range s.cfg.Render().Workers {
 		workers.Go(func() {
-			for item := range items {
-				s.render(item)
+			for j := range jobs {
+				s.render(j)
 			}
 		})
 	}
 	defer workers.Wait()
-	defer close(items)
+	defer close(jobs)
 
 	safety := time.NewTicker(recheck)
 	defer safety.Stop()
 	for {
-		s.pass(ctx, items)
+		s.pass(ctx, jobs)
 		select {
 		case <-ctx.Done():
 			return
@@ -100,7 +106,7 @@ func (s *Service) Start(ctx context.Context) {
 
 // pass: every item due now, page by page, to the workers; a library's items are
 // finished as nothing to render
-func (s *Service) pass(ctx context.Context, items chan<- *dto.ItemDto) {
+func (s *Service) pass(ctx context.Context, jobs chan<- job) {
 	var cursor dto.Cursor
 	for !cursor.Over() && ctx.Err() == nil {
 		due, next, err := s.db.Due(slug, version, cursor, page)
@@ -127,9 +133,9 @@ func (s *Service) pass(ctx context.Context, items chan<- *dto.ItemDto) {
 			s.logger.Error("Render: items not taken", l.Error(err))
 			return
 		}
-		for _, guid := range taken {
+		for _, t := range taken {
 			select {
-			case items <- ours[guid]:
+			case jobs <- job{ours[t.GUID], t.Lease}:
 			case <-ctx.Done():
 				return
 			}
@@ -137,18 +143,19 @@ func (s *Service) pass(ctx context.Context, items chan<- *dto.ItemDto) {
 	}
 }
 
-// render: one item's renditions, finished or failed
-func (s *Service) render(item *dto.ItemDto) {
+// render: one item's renditions, finished or failed under its lease
+func (s *Service) render(j job) {
+	item := j.item
 	renditions, err := standIn(s.cfg.CacheDir(), item)
 	if err != nil {
 		s.logger.Warn("Render failed", l.String("file", item.Path), l.Error(err))
-		failed := dto.WorkFailed{Slug: slug, GUID: item.GUID, Version: version, Input: item.HashShort, Err: err.Error()}
+		failed := dto.WorkFailed{Slug: slug, GUID: item.GUID, Lease: j.lease, Version: version, Input: item.HashShort, Err: err.Error()}
 		if err := s.db.Fail(failed); err != nil {
 			s.logger.Error("Render: a failure not kept", l.String("file", item.Path), l.Error(err))
 		}
 		return
 	}
-	s.finish(dto.WorkDone{Slug: slug, GUID: item.GUID, Version: version, Input: item.HashShort, Renditions: renditions})
+	s.finish(dto.WorkDone{Slug: slug, GUID: item.GUID, Lease: j.lease, Version: version, Input: item.HashShort, Renditions: renditions})
 }
 
 func (s *Service) finish(done dto.WorkDone) {
