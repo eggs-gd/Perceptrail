@@ -18,6 +18,10 @@ server:
 
 render:
   ffmpeg: /usr/lib/jellyfin-ffmpeg/ffmpeg
+  # workers × threads: render's whole load (at nice 10). Default: from the CPUs this
+  # container may use — an LXC shows the host's: set them there
+  # workers: 2
+  # threads: 3
 
 # An Immich read through its API (read only); its key in a file of its own, never
 # here — under ./data, or mounted beside the config

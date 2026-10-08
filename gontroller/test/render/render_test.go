@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -541,12 +540,12 @@ func TestRenderStopIsNoFailure(t *testing.T) {
 }
 
 // A render process runs below the server (nice 10: the gallery and the rest of the
-// host first) on its share of the CPUs (the CPUs over the workers)
+// host first) on the threads the config gives it
 func TestRenderYields(t *testing.T) {
 	bin, seen := slowVips(t)
-	db, _, _ := startConfig(t, "render:\n  workers: 1\n  vipsthumbnail: "+bin+"\n  ffmpeg: "+ffmpegBin()+"\n")
+	db, _, _ := startConfig(t, "render:\n  workers: 1\n  threads: 3\n  vipsthumbnail: "+bin+"\n  ffmpeg: "+ffmpegBin()+"\n")
 	publish(t, db, photo(t, 800, 600), "image/jpeg")
-	if got, want := waitFor(t, seen), fmt.Sprintf("10 %d", runtime.NumCPU()); got != want {
+	if got, want := waitFor(t, seen), "10 3"; got != want {
 		t.Errorf("started with %q (niceness, threads), want %q", got, want)
 	}
 }

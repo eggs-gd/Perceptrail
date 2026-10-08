@@ -109,7 +109,7 @@ func (s *Service) Start(ctx context.Context) {
 	if video.tonemap == "" {
 		s.logger.Warn("Render: this ffmpeg has no zscale — HDR videos are kept as they are", l.String("ffmpeg", cfg.FFmpeg))
 	}
-	s.proc = newProc(cfg.Workers)
+	s.proc = newProc(cfg.Threads)
 	video.proc = s.proc
 	s.ffmpeg = video
 	published := s.db.Published().Subscribe(func(dto.ItemPublished) {

@@ -2,6 +2,7 @@ package config
 
 import (
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -120,6 +121,20 @@ func TestProviders(t *testing.T) {
 	}
 	if f.Providers.Enabled("apple") || !f.Providers.Enabled("immich") || !(Providers(nil)).Enabled("apple") {
 		t.Errorf("providers %+v", f.Providers)
+	}
+}
+
+// Render's load: workers and threads as set; unset, half the CPUs this process may
+// use, and those CPUs over the workers
+func TestRenderLoad(t *testing.T) {
+	r := Render{Workers: 2, Threads: 3}
+	if err := r.resolve(func(p string) string { return p }); err != nil || r.Workers != 2 || r.Threads != 3 {
+		t.Errorf("set: %d workers, %d threads, %v", r.Workers, r.Threads, err)
+	}
+	cpus := runtime.GOMAXPROCS(0)
+	r = Render{}
+	if err := r.resolve(func(p string) string { return p }); err != nil || r.Workers != max(cpus/2, 1) || r.Threads != max(cpus/r.Workers, 1) {
+		t.Errorf("defaults on %d CPUs: %d workers, %d threads, %v", cpus, r.Workers, r.Threads, err)
 	}
 }
 

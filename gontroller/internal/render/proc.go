@@ -4,14 +4,13 @@ import (
 	"context"
 	"os"
 	"os/exec"
-	"runtime"
 	"strconv"
 )
 
 // proc: how render starts its tools — below the server and the rest of the host
 // (nice, when the host has it: the gallery, an Immich beside us answer first), each
-// on its share of the CPUs (the CPUs over the workers: N workers never ask for more
-// than the machine, a tool's own threads included)
+// on its threads (config render.threads: by default the CPUs over the workers — N
+// workers never ask for more than the machine, a tool's own threads included)
 type proc struct {
 	nice    string // the nice command; "": the tools run at the server's priority
 	threads int    // a tool's threads
@@ -20,8 +19,8 @@ type proc struct {
 // niceness: render's priority below the server's (0 the server's, 19 the lowest)
 const niceness = "10"
 
-func newProc(workers int) proc {
-	p := proc{threads: max(runtime.NumCPU()/workers, 1)}
+func newProc(threads int) proc {
+	p := proc{threads: threads}
 	if nice, err := exec.LookPath("nice"); err == nil {
 		p.nice = nice
 	}
