@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"strings"
 	"time"
 
 	"github.com/eggs-gd/perceplib/api"
@@ -93,4 +94,10 @@ func (f *FileDto) SetIgnored() {
 
 func (f *FileDto) IsIgnored() bool {
 	return f.LinkedTo == api.NilGUID
+}
+
+// Remote: the file is a library's URL, not on a disk (immich://…) — nothing reads
+// it but its provider
+func (f *FileDto) Remote() bool {
+	return strings.Contains(f.Path, "://")
 }

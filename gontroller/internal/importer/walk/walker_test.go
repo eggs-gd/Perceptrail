@@ -176,7 +176,7 @@ func TestWalkPass(t *testing.T) {
 		found := make(chan dto.WalkedFile)
 		got := &files{}
 		c := chain.NewChainProcessor(nil)
-		c.AddStep(New(db, []string{root}, nil, testLogger, found))
+		c.AddStep(New(db, []string{root}, nil, nil, testLogger, found))
 		c.AddStep(chain.NewEnd(found, got))
 		c.Process(t.Context())
 		return got.got
@@ -218,7 +218,7 @@ func TestWalkSkipped(t *testing.T) {
 	found := make(chan dto.WalkedFile)
 	got := &files{}
 	c := chain.NewChainProcessor(nil)
-	c.AddStep(New(db, []string{root}, []string{filepath.Join(root, "own")}, testLogger, found))
+	c.AddStep(New(db, []string{root}, nil, []string{filepath.Join(root, "own")}, testLogger, found))
 	c.AddStep(chain.NewEnd(found, got))
 	c.Process(t.Context())
 	if !slices.Equal(got.got, []string{"a.jpg changed", "old.db gone"}) {
@@ -239,7 +239,7 @@ func TestWalkMovedMeanwhile(t *testing.T) {
 	found := make(chan dto.WalkedFile)
 	got := &files{}
 	c := chain.NewChainProcessor(nil)
-	c.AddStep(New(db, []string{root}, nil, testLogger, found))
+	c.AddStep(New(db, []string{root}, nil, nil, testLogger, found))
 	c.AddStep(chain.NewEnd(found, got))
 	c.Process(t.Context())
 	if !slices.Equal(got.got, []string{"new.jpg changed"}) {
@@ -261,7 +261,7 @@ func TestWalkPages(t *testing.T) {
 	found := make(chan dto.WalkedFile)
 	got := &files{}
 	c := chain.NewChainProcessor(nil)
-	c.AddStep(New(db, []string{root}, nil, testLogger, found))
+	c.AddStep(New(db, []string{root}, nil, nil, testLogger, found))
 	c.AddStep(chain.NewEnd(found, got))
 	c.Process(t.Context())
 	if !slices.Equal(got.got, want) {
@@ -298,7 +298,7 @@ func TestWalkRoots(t *testing.T) {
 		found := make(chan dto.WalkedFile)
 		got := &files{}
 		c := chain.NewChainProcessor(nil)
-		c.AddStep(New(db, roots, nil, testLogger, found))
+		c.AddStep(New(db, roots, nil, nil, testLogger, found))
 		c.AddStep(chain.NewEnd(found, got))
 		c.Process(t.Context())
 		return got.got
@@ -311,5 +311,46 @@ func TestWalkRoots(t *testing.T) {
 	os.Rename(phone, unmounted)
 	if g := pass(photos, phone); !slices.Equal(g, []string{"a.jpg changed", "b.jpg gone"}) {
 		t.Errorf("phone unmounted: %v — c.jpg must not be gone", g)
+	}
+}
+
+// source: a library that lists its files itself; err — the listing breaks after them
+type source struct {
+	names []string
+	err   error
+}
+
+func (s *source) Root() string { return "test://" }
+
+func (s *source) List(ctx context.Context, emit func(dto.ItemEntry) bool) error {
+	for _, name := range s.names {
+		if !emit(dto.ItemEntry{Path: s.Root() + name, Name: name, Size: 1, ModTime: time.Unix(1, 0)}) {
+			return ctx.Err()
+		}
+	}
+	return s.err
+}
+
+// A source is walked as a root: its files sent, a file it no longer lists missing —
+// but only when its listing was complete
+func TestWalkSource(t *testing.T) {
+	db := &rows{byPath: map[string]*dto.FileDto{}}
+	pass := func(s *source) []string {
+		found := make(chan dto.WalkedFile)
+		got := &files{}
+		c := chain.NewChainProcessor(nil)
+		c.AddStep(New(db, nil, []Source{s}, nil, testLogger, found))
+		c.AddStep(chain.NewEnd(found, got))
+		c.Process(t.Context())
+		return got.got
+	}
+	if g := pass(&source{names: []string{"a.jpg", "b.jpg"}}); !slices.Equal(g, []string{"a.jpg changed", "b.jpg changed"}) {
+		t.Fatalf("first pass %v", g)
+	}
+	if g := pass(&source{names: []string{"a.jpg"}, err: fmt.Errorf("unreachable")}); !slices.Equal(g, []string{"a.jpg changed"}) {
+		t.Errorf("a broken listing: %v — b.jpg must not be gone", g)
+	}
+	if g := pass(&source{names: []string{"a.jpg"}}); !slices.Equal(g, []string{"a.jpg changed", "b.jpg gone"}) {
+		t.Errorf("a complete listing: %v", g)
 	}
 }

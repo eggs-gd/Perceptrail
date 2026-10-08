@@ -138,11 +138,23 @@ func (s *Service) importChain(errs chan<- error) chain.ChainProcessor {
 	perceived := make(chan *identify.Item)
 
 	c := chain.NewChainProcessor(errs)
-	c.AddStep(walk.New(s.db, s.cfg.LibraryRoots(), library.Skipped(s.cfg.LibraryRoots()), s.logger, found))
+	c.AddStep(walk.New(s.db, s.cfg.LibraryRoots(), sources(), library.Skipped(s.cfg.LibraryRoots()), s.logger, found))
 	c.AddStep(group.New(library.Enabled(), found, grouped))
 	c.AddStep(gate.New(s.db, s.logger, grouped, stored))
 	c.AddStep(identify.New(s.db, s.cfg.CacheDir(), s.cfg.Exiftool(), perceptor.ExifTags(), s.logger, stored, identified))
 	c.AddStep(exif.New(s.logger, identified, perceived))
 	c.AddStep(commit.New(s.db, perceived))
 	return c
+}
+
+// sources: the enabled libraries that list their files themselves (an Immich
+// through its API)
+func sources() []walk.Source {
+	var out []walk.Source
+	for _, lib := range library.Enabled() {
+		if source, ok := lib.(walk.Source); ok {
+			out = append(out, source)
+		}
+	}
+	return out
 }

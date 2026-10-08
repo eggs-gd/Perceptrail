@@ -24,6 +24,9 @@ type Asset struct {
 	// did not
 	Meta     api.RawExif
 	MetaHash string
+	// The content's fingerprint as the source knows it (Immich: the checksum), when
+	// its files are not on a disk to hash; "": the import hashes the main file
+	Fingerprint string
 	// What the asset is (Kind*), when the source says it
 	Kind string
 }
