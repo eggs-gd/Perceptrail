@@ -353,4 +353,10 @@ func TestWalkSource(t *testing.T) {
 	if g := pass(&source{names: []string{"a.jpg"}}); !slices.Equal(g, []string{"a.jpg changed", "b.jpg gone"}) {
 		t.Errorf("a complete listing: %v", g)
 	}
+	// An empty listing that ended without an error is the library emptied (its last
+	// asset trashed), not a drive not mounted (the fake keeps b.jpg's row: the gate
+	// deletes it, not the walk)
+	if g := pass(&source{}); !slices.Equal(g, []string{"a.jpg gone", "b.jpg gone"}) {
+		t.Errorf("an empty listing: %v", g)
+	}
 }

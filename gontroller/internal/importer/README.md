@@ -94,7 +94,8 @@ is (`dto.AssetKind`). A step gathers stat, exif, kinds, the fingerprint.
 - **Deletions are conservative**, root by root and source by source: only under a
   root whose walk was complete and found files (an unmounted drive's root deletes
   nothing of its own), never under an unreadable directory; a source's only after
-  a listing that ended without an error. A main file gone → the item is
+  a listing that ended without an error — an empty one too (a library emptied: no
+  mount point to miss). A main file gone → the item is
   soft-deleted; a sidecar gone → the item is `Dirty`.
 - **Moves**: a moved file's old path may be deleted before the new one is
   validated; validate restores the soft-deleted item by fingerprint, the GUID stays.

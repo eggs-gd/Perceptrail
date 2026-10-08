@@ -148,6 +148,13 @@ func TestImmichLibrary(t *testing.T) {
 	if _, err := testDB.GetItemByGUID(photoID); err != nil {
 		t.Error("the photo went with it")
 	}
+	immich.set(false) // the last assets trashed: an empty timeline is the library emptied
+	scan(t)
+	for _, id := range []string{photoID, liveID} {
+		if _, err := testDB.GetItemByGUID(api.GUID(id)); err == nil {
+			t.Errorf("%s is still an item of an empty Immich", id)
+		}
+	}
 }
 
 func (f *fakeImmich) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -166,6 +173,10 @@ func (f *fakeImmich) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(req.Cursor)
 	if f.refuses && page > 0 {
 		http.Error(w, "down", http.StatusServiceUnavailable)
+		return
+	}
+	if len(f.listed) == 0 {
+		io.WriteString(w, `{"assets":{"items":[],"nextCursor":null}}`)
 		return
 	}
 	next := "null"

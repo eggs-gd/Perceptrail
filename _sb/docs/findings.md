@@ -567,6 +567,10 @@ How it is read, the paths and the proxy: the
   unchanged; the roadmap's earlier idea (`sync → identify → exif → commit`) would
   have copied them. The cost: three places know a file may not be on a disk
   (identify's read, show and sizes; the routes) — through `dto.Remote`, nowhere else.
+- **An empty listing deletes** (Codex on #40): a disk root that found nothing may
+  be a drive not mounted, so it deletes nothing; an API's answer that ended without
+  an error is the library as it is — its last asset trashed empties ours too. A
+  refusal (a wrong key: 401) is an error, never an empty listing.
 - **A full listing every pass, not Sync v2**: the search gives the whole timeline
   1 000 assets a request with the EXIF in it — a few requests for a library of tens
   of thousands. The sync stream is made for the mobile app (acks per session, its

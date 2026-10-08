@@ -137,10 +137,11 @@ func (m *Walker) Start(ctx context.Context, emit func(dto.WalkedFile) bool) erro
 }
 
 // Missing: of the rows a walk did not see (stale), the ones it says are deleted —
-// only after a complete walk that found files, only under its root (another root:
-// the config changed, not ours to judge), never under an unreadable directory
+// only after a complete walk that found files (a source's listing may be empty: the
+// library emptied), only under its root (another root: the config changed, not ours
+// to judge), never under an unreadable directory
 func Missing(r Result, stale []*dto.FileDto) []*dto.FileDto {
-	if !r.Complete || r.Files == 0 {
+	if !r.Complete || r.empty() {
 		return nil // an empty root (an unmounted drive's mount point) must not delete the library
 	}
 	var gone []*dto.FileDto
@@ -201,7 +202,7 @@ func (m *Walker) missing(r Result, unseen map[string]*dto.FileDto) []*dto.FileDt
 	case !r.Complete:
 		m.logger.Warn("Walk incomplete: deletions are not checked")
 		return nil
-	case r.Files == 0:
+	case r.empty():
 		m.logger.Warn("Walk found no files: deletions are not checked", l.String("path", r.Root))
 		return nil
 	}
@@ -276,6 +277,13 @@ func (m *Walker) walk(ctx context.Context, root string, emit func(dto.ItemEntry)
 	}
 	result.Complete = true
 	return result
+}
+
+// empty: a disk's root where the walk found nothing — maybe a drive not mounted, so
+// it says nothing about what is gone. A source's listing that ended without an
+// error is its library as it is, empty too.
+func (r Result) empty() bool {
+	return r.Files == 0 && !dto.Remote(r.Root)
 }
 
 // list: a source's files, as walk walks a root — complete when the source listed
