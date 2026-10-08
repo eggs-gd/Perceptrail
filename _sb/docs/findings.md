@@ -606,6 +606,15 @@ How it is read, the paths and the proxy: the
 - **How others split it**: Immich — one image does API, previews and ffmpeg (workers
   by env), ML apart; PhotoPrism, Jellyfin — monoliths with ffmpeg as a subprocess.
   Common ground: previews in the core, ML apart.
+- **Render yields the host** (2026-10-08, the owner's i5: 12 CPUs at 100 %, an
+  Immich on the same box): 6 workers, each vipsthumbnail / ffmpeg wanting every CPU
+  for itself. Now each tool runs at nice 10 and on its share of the CPUs (CPUs ÷
+  workers: `VIPS_CONCURRENCY`, ffmpeg's `-threads`): `workers` bounds the whole
+  load, and what answers people comes first. The bulk was photos (libvips, CPU
+  only — QSV encodes video, not webp), so hardware alone would not have helped.
+- **A stop is not a failure**: a tool killed because the server stops (or a lease
+  was lost) was kept as the file's failure and backed off; the work just stops
+  now, its lease runs out.
 - One codec and one image format in the config, not arrays (N× disk and time).
 - **jellyfin-ffmpeg** in the image, not our own build: every hardware backend and
   HDR tone mapping.

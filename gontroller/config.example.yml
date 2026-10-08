@@ -59,7 +59,8 @@ plugins:
 # Needs vipsthumbnail (libvips: brew install vips / apt install libvips-tools).
 # render:
 #   enabled: true       # default
-#   workers: 4          # items at once. Default: half the CPUs
+#   workers: 4          # items at once, each on CPUs/workers threads at nice 10:
+#                       # the whole load render may take. Default: half the CPUs
 #   sizes: [400, 1600]  # the long side, px: a tile and the viewer (never upscaled)
 #   format: webp        # webp (default), jpg
 #   vipsthumbnail: /opt/homebrew/bin/vipsthumbnail   # default: from PATH

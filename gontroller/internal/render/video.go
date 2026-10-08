@@ -21,6 +21,7 @@ import (
 type ffmpeg struct {
 	bin, probe string
 	tonemap    string // the filters mapping HDR to SDR (%s: the input's transfer, primaries, matrix); "": no zscale
+	proc       proc   // how it runs (the service's)
 }
 
 // recipe: how an accelerator decodes, scales and encodes. The software one only for
@@ -97,11 +98,15 @@ func (f *ffmpeg) video(ctx context.Context, guid api.GUID, src string, size int,
 	filters := f.filters(in, size)
 	name := fmt.Sprintf("%d.mp4", size)
 	dst := filepath.Join(dir, name)
-	args := append([]string{"-hide_banner", "-loglevel", "error", "-y"}, software.input...)
+	threads := f.proc.threadArgs()
+	args := append([]string{"-hide_banner", "-loglevel", "error", "-y"}, threads...)
+	args = append(args, software.input...)
 	args = append(args, "-i", src, "-map", "0:v:0", "-map", "0:a:0?", "-vf", filters)
+	args = append(args, threads...)
+	args = append(args, "-filter_threads", threads[1])
 	args = append(args, software.encode...)
 	args = append(args, "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", dst)
-	if msg, err := exec.CommandContext(ctx, f.bin, args...).CombinedOutput(); err != nil {
+	if msg, err := f.proc.command(ctx, f.bin, args...).CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("ffmpeg: %w: %s", err, msg)
 	}
 	made, err := f.info(ctx, dst)
@@ -120,12 +125,12 @@ func (f *ffmpeg) video(ctx context.Context, guid api.GUID, src string, size int,
 	frame := filepath.Join(dir, "poster.png")
 	defer os.Remove(frame)
 	at := min(time.Second, in.duration/2)
-	grab := []string{"-hide_banner", "-loglevel", "error", "-y", "-ss", strconv.FormatFloat(at.Seconds(), 'f', 3, 64),
+	grab := []string{"-hide_banner", "-loglevel", "error", "-y", "-threads", threads[1], "-ss", strconv.FormatFloat(at.Seconds(), 'f', 3, 64),
 		"-i", src, "-frames:v", "1"}
 	if sdr := f.toSDR(in); sdr != "" {
 		grab = append(grab, "-vf", sdr)
 	}
-	if msg, err := exec.CommandContext(ctx, f.bin, append(grab, frame)...).CombinedOutput(); err != nil {
+	if msg, err := f.proc.command(ctx, f.bin, append(grab, frame)...).CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("ffmpeg poster: %w: %s", err, msg)
 	}
 	stills, err := still(ctx, frame)

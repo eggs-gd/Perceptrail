@@ -68,6 +68,7 @@ type Service struct {
 	logger  *l.Logger
 	version string        // what the renditions are: sizes, format, quality, the video's size
 	ffmpeg  *ffmpeg       // the video tools (found at Start)
+	proc    proc          // how the tools run: below the server, a share of the CPUs each
 	wake    chan struct{} // one pending wake-up: many events, one pass
 }
 
@@ -108,6 +109,8 @@ func (s *Service) Start(ctx context.Context) {
 	if video.tonemap == "" {
 		s.logger.Warn("Render: this ffmpeg has no zscale — HDR videos are kept as they are", l.String("ffmpeg", cfg.FFmpeg))
 	}
+	s.proc = newProc(cfg.Workers)
+	video.proc = s.proc
 	s.ffmpeg = video
 	published := s.db.Published().Subscribe(func(dto.ItemPublished) {
 		select {
@@ -193,6 +196,9 @@ func (s *Service) render(ctx context.Context, j job) {
 	defer cancel()
 	go s.keep(ctx, cancel, j)
 	renditions, err := s.renditions(ctx, item)
+	if err != nil && ctx.Err() != nil {
+		return // stopped (the server, a lease lost): not the file's failure — its lease runs out
+	}
 	if err != nil {
 		s.logger.Warn("Render failed", l.String("file", item.Path), l.Error(err))
 		failed := dto.WorkFailed{Slug: slug, GUID: item.GUID, Lease: j.lease, Version: s.version, Input: item.HashShort, Err: err.Error()}
@@ -243,7 +249,7 @@ func (s *Service) renditions(ctx context.Context, item *dto.ItemDto) ([]dto.Rend
 	still := func(ctx context.Context, src string) ([]dto.RenditionDto, error) {
 		ctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
-		return photo(ctx, cfg.Vipsthumbnail, cfg.Format, cfg.Sizes, item.GUID, src, dir, rel)
+		return photo(ctx, s.proc, cfg.Vipsthumbnail, cfg.Format, cfg.Sizes, item.GUID, src, dir, rel)
 	}
 	if moving(item) {
 		return s.ffmpeg.video(ctx, item.GUID, item.Path, cfg.Video, dir, rel, true, still)

@@ -32,7 +32,7 @@ const quality = 80
 //     original's own size, the larger ones would be the same image — not made (a
 //     srcset of two equal widths is invalid): smaller than its size, or no bigger
 //     than the one before (an original exactly as big as a size).
-func photo(ctx context.Context, vipsthumbnail, format string, sizes []int, guid api.GUID, src, dir, rel string) ([]dto.RenditionDto, error) {
+func photo(ctx context.Context, p proc, vipsthumbnail, format string, sizes []int, guid api.GUID, src, dir, rel string) ([]dto.RenditionDto, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
@@ -40,7 +40,7 @@ func photo(ctx context.Context, vipsthumbnail, format string, sizes []int, guid 
 	for _, size := range sizes {
 		name := fmt.Sprintf("%d.%s", size, format)
 		dst := filepath.Join(dir, name)
-		cmd := exec.CommandContext(ctx, vipsthumbnail, src,
+		cmd := p.command(ctx, vipsthumbnail, src,
 			"--size", fmt.Sprintf("%dx%d>", size, size), "-o", fmt.Sprintf("%s[Q=%d,strip]", dst, quality))
 		if msg, err := cmd.CombinedOutput(); err != nil {
 			return nil, fmt.Errorf("vipsthumbnail %d: %w: %s", size, err, msg)
