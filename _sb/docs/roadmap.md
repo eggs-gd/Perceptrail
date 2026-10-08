@@ -50,7 +50,8 @@ One line each; the details are in the READMEs and the PRs.
   API: its timeline listed as a source of the walk, its files served through a
   proxy, nothing rendered · #41 Docker packaged: installed from GHCR
   without a checkout (`develop` and releases published), the config decides
-  (`./config.yml` mounted), no `LIBRARY` variable.
+  (`./config.yml` mounted), no `LIBRARY` variable · #42 render yields the host:
+  nice 10, a share of the CPUs per tool; a stop is no failure.
 
 ## Releases
 
