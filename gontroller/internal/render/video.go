@@ -37,8 +37,10 @@ type stream struct {
 	transfer, primaries, matrix string // its colour, as tagged ("" untagged)
 }
 
+// software: libx264 — quality by CRF, capped at 4 Mb/s (a screen recording at CRF
+// alone came out at 14 Mb/s for 720p)
 var software = recipe{encode: []string{"-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-	"-pix_fmt", "yuv420p", "-profile:v", "high"}}
+	"-maxrate", "4M", "-bufsize", "8M", "-pix_fmt", "yuv420p", "-profile:v", "high"}}
 
 const (
 	// hdrToSDR: the tone mapping, when ffmpeg has zscale (zimg); the input's colour

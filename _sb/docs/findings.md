@@ -472,6 +472,24 @@ transit, render bounded by its workers) — patterns go to docs and examples.
   stays (a worker writes before Finish lists). Trap: removing a file touches its
   directory's time — a directory the sweep emptied goes at once, or the grace would
   keep every one (the test caught it).
+- **Videos: one rendition for the tile and the viewer** (#37): the client plays an
+  asset's `motion` on a tile's hover and in the viewer; `onDemand.hover` only when no
+  video is here (Apple, on demand). So our 720p H.264 in `motion` is both — no hover
+  clip. Rejected: our clip in `onDemand.hover` (the owner's first choice) — an
+  `onDemand` means "ask the server for the medium" to the client: the viewer would
+  prefetch an empty medium URL for Live Photos and show on-demand tools for videos.
+- **ffmpeg's colour, two traps**: the encoder takes the colour tags from the frames,
+  not from `-color_trc` (it wrote nothing) — `setparams` at the end of the chain tags
+  the output SDR; and `zscale` finds "no path between colorspaces" from untagged
+  input — the input's transfer, primaries and matrix (ffprobe) are given to it.
+- **ffmpeg is required like libvips**: without it render does not start. "Photos
+  without videos" would render a Live Photo without its motion for good (its work
+  done for that input).
+- **Smoke, videos** (2026-10-08, the owner's library, ffmpeg-full, 4 workers): the
+  12 plain-folder videos rendered (the 8 HEVC iPhone ones that were Waiting are
+  Ready), every rendition smaller than its source (HEVC 1080×1920 → H.264 720×1280,
+  rotation applied); a screen recording at CRF 23 alone came out at 14 Mb/s —
+  capped at 4 Mb/s (17.5 MB → 5.4 MB).
 - **A smoke run builds its plugins into its own directory**: `make build-plugins`
   rewrites `.build/plugins/*.so`, which the owner's running server has loaded — the
   `smoke` skill said so, and was wrong.

@@ -14,12 +14,45 @@ Design: [Import chain](../_sb/puml/Import%20chain.puml),
 
 Requirements:
 
-- Go 1.27.1 (`go` downloads the toolchain itself);
-- `exiftool` in `PATH` (or a distribution from the
-  [`eggs-gd/go-exiftool` `dist-*` releases](https://github.com/eggs-gd/go-exiftool/releases),
-  set with `exiftool:` in the config);
-- `vipsthumbnail` (libvips: `brew install vips`, `apt install libvips-tools`) for
-  render — or `render: {enabled: false}`.
+| tool | for | config |
+|---|---|---|
+| Go 1.27.1 | building (`go` downloads the toolchain itself) | |
+| `exiftool` | the import: metadata, embedded previews | `exiftool:` (default: `PATH`) |
+| `vipsthumbnail` (libvips) | render: photos' renditions | `render.vipsthumbnail:` (default: `PATH`) |
+| `ffmpeg`, `ffprobe` | render: videos' renditions, posters; HDR → SDR needs a build with `zscale` (zimg) | `render.ffmpeg:` (default: `PATH`; `ffprobe` beside it) |
+
+Render does not start without libvips or ffmpeg (the log says why; the import runs
+anyway) — or turn it off: `render: {enabled: false}`.
+
+**macOS** (Homebrew):
+
+```bash
+brew install exiftool vips ffmpeg-full
+```
+
+`ffmpeg-full` has `zscale`; it is keg-only — set
+`render.ffmpeg: /opt/homebrew/opt/ffmpeg-full/bin/ffmpeg`. The plain `ffmpeg`
+formula works too, HDR videos kept as they are.
+
+**Debian / Ubuntu**:
+
+```bash
+sudo apt install libimage-exiftool-perl libvips-tools ffmpeg
+```
+
+**Fedora**: `ffmpeg` from [RPM Fusion](https://rpmfusion.org) (Fedora's
+`ffmpeg-free` has no H.264 encoder):
+
+```bash
+sudo dnf install perl-Image-ExifTool vips-tools ffmpeg
+```
+
+**Windows**: not natively (the perceptors are Go plugins, `.so`) — WSL 2 with the
+Debian / Ubuntu line above. A Docker image with everything inside comes with 0.2.0.
+
+`exiftool` may also be a distribution from the
+[`eggs-gd/go-exiftool` `dist-*` releases](https://github.com/eggs-gd/go-exiftool/releases),
+set with `exiftool:` in the config.
 
 ```bash
 mkdir -p .var && cp config.example.yml .var/config.yml   # once, then edit path:
@@ -92,7 +125,7 @@ package's own unit tests stay next to it.
 | `internal/cache` | where an item's files live in the data's cache: a tree by the GUID (`<part>/<ab>/<cd>/<guid>`) |
 | `internal/config` | the config file, read once (`Load`, `Read`); a leaf — a module declares the getters it reads as its own `Config` interface |
 | `internal/importer` | the import chain ([README](internal/importer/README.md)) |
-| `internal/render` | the expensive stage: woken by `ItemPublished`, takes what is due from the work queue, renders photos with libvips (`vipsthumbnail`, a process each) on N workers; config `render` |
+| `internal/render` | the expensive stage: woken by `ItemPublished`, takes what is due from the work queue, on N workers renders photos with libvips (`vipsthumbnail`) and videos with ffmpeg (H.264 + a poster; Live Photos' motion), a process each; config `render` |
 | `internal/perceptor` | the perceptors' registry (built in + `.so`, their storages); `perceptor/builtin`: the built-ins' contract (`builtin.Item`, `builtin.Perceptor`, `OrderByValue`); the built-in EXIF perceptors `perceptor/date`, `size`, `duration` |
 | `internal/model` | the library's data and its rules: one writer, a read pool, every write a command ([README](internal/model/README.md)) |
 | `internal/web` | the HTTP service (Echo); `web/route`: `/items`, `/assets`, `/perceptors`, `/p/:view/order`, renditions |

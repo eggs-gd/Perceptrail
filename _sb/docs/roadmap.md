@@ -42,7 +42,8 @@ One line each; the details are in the READMEs and the PRs.
   owner's corrections as skills (`pr-flow`, `review-reply`, `self-review`, `smoke`),
   hard limits in AGENTS.md, the declaration order checked in CI · #36 the expensive stage
   beside the import: the work queue, domain events after the commit, render with
-  photo renditions (libvips) making items Ready; ECS a lens, not a migration.
+  photo renditions (libvips) making items Ready; ECS a lens, not a migration · #37 videos:
+  H.264 every browser plays, a poster, Live Photos' motion, HDR tone mapped.
 
 ## Releases
 
@@ -73,8 +74,10 @@ systems — a lens", "The work queue", "Expensive stage"):
    (Photos' JPEG, the HEIC's embedded thumbnail, a RAW's embedded JPEG), benchmarks
    on the Mac and the i5 (HEIC and RAW above all), `avif` (Go reads no AVIF header:
    its `w`/`h` from vips).
-3. [ ] **Video, software** — `libx264`, HDR → SDR, the hover clip, the poster; the
-   codec → encoder table and the probe with a software fallback from day one.
+3. [x] **Video, software** (#37) — H.264 + AAC at 1280 (`libx264`, CRF capped at
+   4 Mb/s), the poster's stills, a Live Photo's motion; HDR → SDR with `zscale`; the
+   recipe the software row of a table the hardware rows join. No hover clip: the
+   tile plays the motion (open: a clip if 720p on hover weighs too much).
 4. [ ] **Docker** — the image (jellyfin-ffmpeg), a base compose with software
    encoding; the docs say a Mac with Photos runs the native binary.
 5. [ ] **Hardware** — QSV (`hwaccel.qsv.yml`), VideoToolbox (native on a Mac),
@@ -394,8 +397,8 @@ render:           feed (the next item needing work, from the DB)
 - Perceptors run on both passes (incremental refinement): a pixel perceptor's row
   in `work` records the input it ran on.
 - Transcoders take the whole asset (group), not a file; regenerated for `Dirty`,
-  dropped for deleted. Motion previews: a short muted clip on hover, the poster
-  otherwise.
+  dropped for deleted. Motion on hover: the viewer's video (the client plays the
+  asset's motion); a short muted clip only if that weighs too much.
 
 **Photos — renditions**, libvips on the CPU; HEIC via libheif, RAW via its embedded
 preview (or libraw). The win is not decoding faster but not decoding a 12 MP HEIC at
@@ -416,6 +419,7 @@ all:
 **Video** — ffmpeg (**jellyfin-ffmpeg**: every hardware backend and HDR tone
 mapping in one build).
 
+- Built (#37), software: `render/video.go`. Open below — the hardware rows.
 - **Codec: one, in the config** (`h264` default; `hevc`, `av1`), mapped to the
   accelerator's encoder (`h264_qsv` / `_vaapi` / `_nvenc` / `_videotoolbox` /
   `libx264`).
@@ -425,7 +429,7 @@ mapping in one build).
   `scale_qsv`): no frame copies to the CPU.
 - **HDR → SDR** — iPhone video is HLG / Dolby Vision HEVC: without tone mapping an
   H.264 copy is washed out (`vpp_qsv` / `tonemap_opencl` / `libplacebo`).
-- Outputs: the viewer's video (sizes from the config), a muted hover clip, a poster.
+- Outputs: the viewer's video (its size from the config) and a poster — built.
 
 | | encode | decode | in Docker |
 |---|---|---|---|
