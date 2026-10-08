@@ -659,6 +659,12 @@ Layout, the DB's facts and PhotoKit's behaviour: the
   or libvips reads no HEIC. CI builds both images and runs the whole way through
   compose (a photo made by the image's own vips, imported, rendered, served through
   Caddy) — there was no Docker on the dev Mac.
+- **A smoke shows what it got** (review: Codex said `/` would 404 while CI was
+  green): `curl -fs … | grep -q` printed nothing, and without `pipefail` a pipe's
+  status is its last command's — the log proved nothing either way. Each check now
+  prints its status and the start of its body, under `set -euo pipefail`. The SPA's
+  fallback is `index.html` (nothing is prerendered, so it conflicts with no page):
+  `/` is served as any directory is, no `try_files` subtlety.
 - **Client config changes in a worktree**: the owner's Vite runs from the main
   checkout; changing svebapp's config or `.env` there restarts it (a hard limit). The
   Docker work went into a `git worktree` beside it.

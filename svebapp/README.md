@@ -14,7 +14,7 @@ npm run check     # svelte-check (must be 0 errors)
 npm run build     # production build: static files in build/ (adapter-static)
 ```
 
-A single-page app (`ssr = false`, `adapter-static` with the fallback `200.html`): it
+A single-page app (`ssr = false`, `adapter-static` with the fallback `index.html`): it
 all renders in the browser. In Docker, Caddy serves `build/` and sends `/api` to
 gontroller ([`docker/`](../docker)).
 

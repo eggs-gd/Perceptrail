@@ -8,8 +8,10 @@ const config = {
     kit: {
         // A single-page app: everything renders in the browser (workers, IndexedDB);
         // the web container serves these files and every other path gets the
-        // fallback page, which routes in the browser
-        adapter: adapter({fallback: '200.html'}),
+        // fallback page, which routes in the browser. index.html: nothing is
+        // prerendered, so it conflicts with no page — and / is served as any host
+        // serves a directory
+        adapter: adapter({fallback: 'index.html'}),
     },
 };
 

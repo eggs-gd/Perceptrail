@@ -12,7 +12,7 @@
 		# The built files never change under a name: cached for good
 		header /_app/immutable/* Cache-Control "public, max-age=31536000, immutable"
 		# Any other path is the app's own route: the fallback page routes it
-		try_files {path} /200.html
+		try_files {path} /index.html
 		file_server
 	}
 }
