@@ -82,6 +82,8 @@ func findFFmpeg(ctx context.Context, bin, probe string) (*ffmpeg, error) {
 //     maps it itself (never HDR samples tagged SDR: wrong brightness).
 //   - Its time is its own: a long video gets longer than a photo (three times its
 //     length, at least two minutes).
+//   - Written as <size>.part.mp4 and renamed once whole (as a photo's): the one the
+//     gallery serves is never half of a new one; a crash's part goes with the sweep.
 func (f *ffmpeg) video(ctx context.Context, guid api.GUID, src string, size int, dir, rel string,
 	poster bool, still func(ctx context.Context, src string) ([]dto.RenditionDto, error)) ([]dto.RenditionDto, error) {
 	probe, cancelProbe := context.WithTimeout(ctx, probeTimeout) // a stalled file holds no worker
@@ -98,6 +100,8 @@ func (f *ffmpeg) video(ctx context.Context, guid api.GUID, src string, size int,
 	filters := f.filters(in, size)
 	name := fmt.Sprintf("%d.mp4", size)
 	dst := filepath.Join(dir, name)
+	part := filepath.Join(dir, fmt.Sprintf("%d.part.mp4", size)) // renamed once whole
+	defer os.Remove(part)
 	threads := f.proc.threadArgs()
 	args := append([]string{"-hide_banner", "-loglevel", "error", "-y"}, threads...)
 	args = append(args, software.input...)
@@ -105,9 +109,12 @@ func (f *ffmpeg) video(ctx context.Context, guid api.GUID, src string, size int,
 	args = append(args, threads...)
 	args = append(args, "-filter_threads", threads[1])
 	args = append(args, software.encode...)
-	args = append(args, "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", dst)
+	args = append(args, "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", part)
 	if msg, err := f.proc.command(ctx, f.bin, args...).CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("ffmpeg: %w: %s", err, msg)
+	}
+	if err := os.Rename(part, dst); err != nil {
+		return nil, err
 	}
 	made, err := f.info(ctx, dst)
 	if err != nil {
