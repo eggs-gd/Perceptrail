@@ -14,8 +14,8 @@ type Render struct {
 	Enable *bool `yaml:"enabled"`
 	// Items rendered at once. Default: half the CPUs, at least one
 	Workers int `yaml:"workers"`
-	// The long side of each rendition, px (never larger than the original).
-	// Default: [400, 1600] — a tile and the viewer
+	// The long side of each rendition, px (never larger than the original), smallest
+	// first, each once. Default: [400, 1600] — a tile and the viewer
 	Sizes []int `yaml:"sizes"`
 	// One format for every rendition: webp (default), jpg
 	Format string `yaml:"format"`
@@ -47,6 +47,7 @@ func (r *Render) resolve(abs func(string) string) error {
 			return fmt.Errorf("render size %d: must be positive", size)
 		}
 	}
+	r.Sizes = slices.Compact(slices.Sorted(slices.Values(r.Sizes))) // two of one size would clash
 	if r.Format == "" {
 		r.Format = renderFormats[0]
 	}

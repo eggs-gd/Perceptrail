@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -26,8 +27,8 @@ import (
 	"github.com/eggs-gd/perceplib/api"
 )
 
-// version: what the default settings make (sizes 400 and 1600, webp)
-const version = "vips2-400_1600-webp"
+// settings: the default settings in a version (libvips' own version before them)
+const settings = "-400_1600-webp"
 
 // start: a model and a running render service over a temporary data dir
 func start(t *testing.T) (*model.Proxy, *config.Config) {
@@ -117,7 +118,7 @@ func work(t *testing.T, db *model.Proxy, item *dto.ItemDto) *dto.WorkDto {
 func TestRenderPhoto(t *testing.T) {
 	db, cfg := start(t)
 	item := publish(t, db, photo(t, 800, 600), "image/jpeg")
-	if row := work(t, db, item); row.DoneAt == 0 || row.Version != version {
+	if row := work(t, db, item); row.DoneAt == 0 || !strings.HasPrefix(row.Version, "vips") || !strings.HasSuffix(row.Version, settings) {
 		t.Fatalf("row %+v", row)
 	}
 	rs, err := db.Renditions(item.GUID)
@@ -183,7 +184,7 @@ func TestRenderFails(t *testing.T) {
 	if row.Error == "" || row.Attempts != 1 || row.DoneAt != 0 || row.LeaseUntil != 0 {
 		t.Errorf("row %+v: one attempt, its error, no lease", row)
 	}
-	if due, _, _ := db.Due("render", version, dto.Cursor{}, 10); len(due) != 0 {
+	if due, _, _ := db.Due("render", row.Version, dto.Cursor{}, 10); len(due) != 0 {
 		t.Errorf("due again right after its failure: %d", len(due))
 	}
 }
@@ -233,7 +234,7 @@ func TestSweep(t *testing.T) {
 	var stale, fresh, listed string
 	_, cfg := startAfter(t, func(db *model.Proxy, cfg *config.Config) {
 		stale = write(cfg.CacheDir(), "r/aa/bb/AABB-old/vips1-400_1600-webp/400.webp", old)
-		fresh = write(cfg.CacheDir(), "r/cc/dd/CCDD-new/"+version+"/400.webp", time.Now())
+		fresh = write(cfg.CacheDir(), "r/cc/dd/CCDD-new/vips-new"+settings+"/400.webp", time.Now())
 		f, _ := db.CreateFile(dto.ItemEntry{Path: "/x.jpg", Name: "x.jpg"})
 		item, _ := db.CreateItem(f)
 		item.HashShort = "h"
@@ -254,5 +255,51 @@ func TestSweep(t *testing.T) {
 	}
 	if gone(fresh) || gone(listed) {
 		t.Errorf("swept what stays: fresh gone %v, listed gone %v", gone(fresh), gone(listed))
+	}
+}
+
+// An original exactly as big as a size: one rendition — the next size would be the
+// same image again (two equal widths in a srcset)
+func TestRenderExactSize(t *testing.T) {
+	db, _ := start(t)
+	item := publish(t, db, photo(t, 400, 300), "image/jpeg")
+	if row := work(t, db, item); row.DoneAt == 0 {
+		t.Fatalf("row %+v", row)
+	}
+	if rs, _ := db.Renditions(item.GUID); len(rs) != 1 || rs[0].W != 400 {
+		t.Errorf("renditions %+v, want one of 400", rs)
+	}
+}
+
+// No vipsthumbnail: render does not start — no item fails for it (five failures
+// would stop an item until a new version)
+func TestRenderWithoutVips(t *testing.T) {
+	dir := t.TempDir()
+	conf := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(conf, []byte("render:\n  vipsthumbnail: /nowhere/vipsthumbnail\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Read(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := l.NewLogger(l.FatalLevel, &tree.Decorator{})
+	db, err := model.Open(cfg, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	stopped := make(chan struct{})
+	go func() { render.New(cfg, db, logger).Start(ctx); close(stopped) }()
+	item := publish(t, db, photo(t, 800, 600), "image/jpeg")
+	select {
+	case <-stopped:
+	case <-ctx.Done():
+		t.Fatal("render ran without its tool")
+	}
+	if row, err := db.Work(item.GUID, "render"); err == nil {
+		t.Errorf("the item got a row without a tool to render it: %+v", row)
 	}
 }

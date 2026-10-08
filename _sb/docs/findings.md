@@ -448,6 +448,16 @@ transit, render bounded by its workers) — patterns go to docs and examples.
   directory per item stays (its sizes and versions). The renderer's version became
   `vips2`: what `vips1` made (flat) is rendered again into the tree; previews already
   extracted keep their stored paths.
+- **A missing tool is not an item's failure** (review: Codex): without vipsthumbnail
+  every item failed five times and stayed stopped — fixing the path changed no
+  version. Render now checks `vipsthumbnail --vips-version` at start and does not run
+  without it; the version carries libvips' major.minor, so a libvips that may read
+  more retries what failed (not the patch: every `brew upgrade` would re-render all).
+- **One rendition per size, no two of one width** (review: Codex): the config sorts
+  the sizes and drops repeats (two of one size clashed in the database and the item
+  never finished); an original exactly as big as a size stops there — Codex's `<=`
+  on the requested size would also have stopped a 4000 px original shrunk to exactly
+  400, so the check is "no bigger than the rendition before".
 - **Render sweeps its cache by the database** (the owner: no deleting thousands of
   directories by hand): the model prunes the rows no one shows (`Prune`), render
   removes every file under `r/` the database no longer lists, then the empty

@@ -9,9 +9,12 @@
 //   - A library's items (Apple Photos) are rendered by their library, and videos wait
 //     for a video renderer: render finishes them with no renditions, so they are not
 //     due again for this version.
-//   - The version is the renderer and its settings (sizes, format): another config is
-//     another version, and every item is due again — lazily, page by page; the
+//   - The version is the renderer — libvips' major.minor — and its settings (sizes,
+//     format): another config or a libvips that may read more is another version,
+//     and every item is due again (failed ones too) — lazily, page by page; the
 //     sweep (sweep.go) takes the old versions' files away once replaced.
+//   - No vipsthumbnail (not found, does not run): render does not start — a tool
+//     missing is not five failures of every item.
 //   - A safety net wakes it every minute too: a missed event costs a minute, never
 //     an item (the event is a hint, not the truth).
 package render
@@ -20,7 +23,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -58,7 +60,7 @@ type Service struct {
 	cfg     Config
 	db      Store
 	logger  *l.Logger
-	version string        // what makes the renditions: the renderer and its settings
+	version string        // what makes the renditions: libvips and the settings (set at Start)
 	wake    chan struct{} // one pending wake-up: many events, one pass
 }
 
@@ -76,7 +78,7 @@ const (
 )
 
 func New(cfg Config, db Store, logger *l.Logger) *Service {
-	return &Service{cfg: cfg, db: db, logger: logger, version: versionOf(cfg.Render()), wake: make(chan struct{}, 1)}
+	return &Service{cfg: cfg, db: db, logger: logger, wake: make(chan struct{}, 1)}
 }
 
 // Start renders what is due until ctx ends: a pass, then a wait for an item
@@ -85,6 +87,12 @@ func (s *Service) Start(ctx context.Context) {
 	if !s.cfg.Render().Enabled() {
 		return
 	}
+	vips, err := vipsVersion(ctx, s.cfg.Render().Vipsthumbnail)
+	if err != nil {
+		s.logger.Error("Render off: no vipsthumbnail", l.String("vipsthumbnail", s.cfg.Render().Vipsthumbnail), l.Error(err))
+		return
+	}
+	s.version = versionOf(vips, s.cfg.Render())
 	published := s.db.Published().Subscribe(func(dto.ItemPublished) {
 		select {
 		case s.wake <- struct{}{}:
@@ -188,11 +196,12 @@ func (s *Service) finish(done dto.WorkDone) {
 	}
 }
 
-// versionOf: the renderer and its settings, as a version (a directory name too)
-func versionOf(cfg config.Render) string {
+// versionOf: libvips' major.minor and the settings, as a version (a directory name
+// too)
+func versionOf(vips string, cfg config.Render) string {
 	sizes := make([]string, len(cfg.Sizes))
-	for i, size := range slices.Sorted(slices.Values(cfg.Sizes)) {
+	for i, size := range cfg.Sizes { // sorted by the config
 		sizes[i] = strconv.Itoa(size)
 	}
-	return fmt.Sprintf("vips2-%s-%s", strings.Join(sizes, "_"), cfg.Format)
+	return fmt.Sprintf("vips%s-%s-%s", vips, strings.Join(sizes, "_"), cfg.Format)
 }
