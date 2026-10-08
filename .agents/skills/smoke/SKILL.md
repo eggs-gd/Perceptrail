@@ -15,9 +15,10 @@ most. The Apple Photos library is read only, always.
    - `server.port: 1329`;
    - the database relative to the config's directory (relative paths resolve
      against it), so it lands in the scratch directory;
-   - `plugins:` as absolute paths to `gontroller/.build/plugins/*.so` — the
-     example's `../.build/plugins/…` resolves against the scratch directory, and a
-     plugin that does not open is only logged: the server runs without it.
+   - `plugins:` as absolute paths to plugins built **into the scratch directory**
+     (step 3) — the example's `../.build/plugins/…` resolves against the scratch
+     directory, and a plugin that does not open is only logged: the server runs
+     without it.
 2. **A copy of the database**, when real data matters — through SQLite, not `cp`
    (the WAL may hold the last writes):
 
@@ -25,11 +26,17 @@ most. The Apple Photos library is read only, always.
    sqlite3 <owner's media_library.db> ".backup '<scratch>/media_library.db'"
    ```
 
-3. **The server**: `make build-plugins` once, then from `gontroller/`:
+3. **The plugins and the server, into the scratch directory** — never `make
+   build-plugins`: it rewrites `gontroller/.build/plugins/*.so`, which the owner's
+   running server has loaded:
 
    ```bash
-   go build -o <scratch>/gontroller . && <scratch>/gontroller --config <scratch>/config.yml > <scratch>/server.log 2>&1 &
+   for m in exif_geo ml_color; do (cd perceptors/$m && go build -buildmode=plugin -o <scratch>/plugins/$m.so .); done
+   (cd gontroller && go build -o <scratch>/gontroller .)
+   <scratch>/gontroller --config <scratch>/config.yml > <scratch>/server.log 2>&1 &
    ```
+
+   A perceptor's store (`perceptors/*.db`) is copied with `.backup` too.
 
 4. **The gallery**, pointed at :1329 (the variables are in `svebapp/.env`):
 
@@ -40,4 +47,6 @@ most. The Apple Photos library is read only, always.
 5. **Check** the log first — `grep -i "failed to load plugin" <scratch>/server.log`
    says nothing, and `GET /perceptors` lists the external ones — then through the HTTP API (`gontroller/readme.md` lists it) and the
    browser; numbers come from the log or a bench, with the command that made them.
-6. **Stop both** when done; the scratch directory goes with the session.
+6. **Stop both** when done — by the scratch config's path
+   (`pkill -f -- "--config <scratch>/config.yml"`), never by name: the owner's
+   server is a `gontroller` too.

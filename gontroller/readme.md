@@ -17,7 +17,9 @@ Requirements:
 - Go 1.27.1 (`go` downloads the toolchain itself);
 - `exiftool` in `PATH` (or a distribution from the
   [`eggs-gd/go-exiftool` `dist-*` releases](https://github.com/eggs-gd/go-exiftool/releases),
-  set with `exiftool:` in the config).
+  set with `exiftool:` in the config);
+- `vipsthumbnail` (libvips: `brew install vips`, `apt install libvips-tools`) for
+  render — or `render: {enabled: false}`.
 
 ```bash
 mkdir -p .var && cp config.example.yml .var/config.yml   # once, then edit path:
@@ -60,6 +62,7 @@ packages — see [findings](../_sb/docs/findings.md#go-and-the-toolchain).
 | GET | `/app` | The server's `version` and `mode` (debug / release) |
 | GET | `/p/:view/order?anchor=` | The sheet in that perceptor's order, NDJSON `{guid, sections?: [{level, label}]}` — the sections this photo starts, coarsest first (a path or one tag) |
 | GET | `/assets/:guid` | The original file of an item |
+| GET | `/assets/:guid/r/:name` | One of our renditions (`<size>.<format>`), as the asset's `stills` list them — only the ones the database lists for that item |
 
 ## Import
 
@@ -88,7 +91,7 @@ package's own unit tests stay next to it.
 | `internal/app` | the server as a whole: its services run together (`Services`), the version |
 | `internal/config` | the config file, read once (`Load`, `Read`); a leaf — a module declares the getters it reads as its own `Config` interface |
 | `internal/importer` | the import chain ([README](internal/importer/README.md)) |
-| `internal/render` | the expensive stage: woken by `ItemPublished`, takes what is due from the work queue, renders with N workers (a stand-in renderer for now; config `render`) |
+| `internal/render` | the expensive stage: woken by `ItemPublished`, takes what is due from the work queue, renders photos with libvips (`vipsthumbnail`, a process each) on N workers; config `render` |
 | `internal/perceptor` | the perceptors' registry (built in + `.so`, their storages); `perceptor/builtin`: the built-ins' contract (`builtin.Item`, `builtin.Perceptor`, `OrderByValue`); the built-in EXIF perceptors `perceptor/date`, `size`, `duration` |
 | `internal/model` | the library's data and its rules: one writer, a read pool, every write a command ([README](internal/model/README.md)) |
 | `internal/web` | the HTTP service (Echo); `web/route`: `/items`, `/assets`, `/perceptors`, `/p/:view/order`, renditions |

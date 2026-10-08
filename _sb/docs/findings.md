@@ -415,6 +415,35 @@ transit, render bounded by its workers) — patterns go to docs and examples.
   condition goes, the events' test when a rolled back write keeps its events;
   render's integration test reads the work row (`Work`) — "not due" alone is also
   what a lease looks like.
+- **The stand-in alone had no product value** (the owner): the queue, the events and
+  a renderer that shows nothing are plumbing; the PR went on to photo renditions —
+  one feature, its steps as commits (AGENTS.md), and the real renderer tested the
+  queue's design before it merged. The owner's measure: new code is added, old code
+  is not rewritten; where old code had to change, the cut was missing.
+- **`vipsthumbnail` in a process, not a cgo binding** (bimg, govips): a broken file
+  fails a child process, not the server; a timeout kills it (`CommandContext`); the
+  build gains no cgo. A process per image costs milliseconds next to the decode. It
+  shrinks while it loads where the format allows (JPEG). Never upscaled: the sizes
+  go smallest first and stop once the original is smaller (a srcset with two equal
+  widths is invalid). Metadata stripped: a rendition is pixels, no GPS.
+- **`publish` keeps an item Ready while its renditions are for its fingerprint**: a
+  second pass of the cheap stage (a perceptor's rework, Photos made a file local)
+  used to set Waiting / Visible from the preview — the item would vanish, and render
+  would never come back (its work is done for that input). `NeedsWork` counts such
+  an item through the cheap stage too, or every walk would send it again.
+- **The cut the renditions showed**: the stream of items was `fn(item, files)`; a
+  third fact meant a new parameter in every caller. Now `dto.StoredItem` — a new
+  fact is a field. The renditions come per page like the files (one query each), not
+  one query per item (50 k items, 50 k queries).
+- **Smoke on the owner's library** (2026-10-08, a copy of the DB, Mac M-series, 4
+  workers): 7 024 items in the queue, done in about a minute; 571 plain-folder
+  images rendered in 47 s (about 12 a second) — 531 PNG screenshots, 36 JPEG, a
+  HEIC, an AVIF; no failure; 85 KB an item on average (10 KB at 400, 75 KB at 1600:
+  screenshots — photos will weigh more). Apple's items were finished with nothing to
+  render; the 8 left Waiting are videos (no video renderer yet).
+- **A smoke run builds its plugins into its own directory**: `make build-plugins`
+  rewrites `.build/plugins/*.so`, which the owner's running server has loaded — the
+  `smoke` skill said so, and was wrong.
 
 ## Apple Photos
 

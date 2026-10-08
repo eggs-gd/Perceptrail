@@ -40,9 +40,9 @@ One line each; the details are in the READMEs and the PRs.
   public first · #34 `api.GUID`: one type for an item's identity from the core
   through the perceptors (perceplib v0.0.7), the nil GUID instead of `"-"` · #35 the
   owner's corrections as skills (`pr-flow`, `review-reply`, `self-review`, `smoke`),
-  hard limits in AGENTS.md, the declaration order checked in CI · #36 the work queue and
-  the render service (a stand-in renderer), domain events after the commit; ECS a
-  lens, not a migration.
+  hard limits in AGENTS.md, the declaration order checked in CI · #36 the expensive stage
+  beside the import: the work queue, domain events after the commit, render with
+  photo renditions (libvips) making items Ready; ECS a lens, not a migration.
 
 ## Releases
 
@@ -67,9 +67,12 @@ systems — a lens", "The work queue", "Expensive stage"):
    ([README](../../gontroller/internal/model/README.md#the-work-queue)),
    `internal/render` woken by `ItemPublished`, a stand-in renderer (a symbolic
    link to the original): the queue's rules tested before any codec.
-2. [ ] **Photo renditions** — libvips on the CPU, the source chosen to avoid a full
-   decode (Photos' JPEG, the HEIC's embedded thumbnail, a RAW's embedded JPEG),
-   benchmarks on the real library.
+2. [ ] **Photo renditions** — done (#36): libvips on the CPU (`vipsthumbnail`, a
+   process each), 400 and 1600 in webp, never upscaled, the item `Ready`, the
+   renditions in the asset's stills. Open: the source chosen to avoid a full decode
+   (Photos' JPEG, the HEIC's embedded thumbnail, a RAW's embedded JPEG), benchmarks
+   on the Mac and the i5 (HEIC and RAW above all), `avif` (Go reads no AVIF header:
+   its `w`/`h` from vips).
 3. [ ] **Video, software** — `libx264`, HDR → SDR, the hover clip, the poster; the
    codec → encoder table and the probe with a software fallback from day one.
 4. [ ] **Docker** — the image (jellyfin-ffmpeg), a base compose with software
@@ -354,14 +357,13 @@ measurements: findings "The write bus and the queue". SQLite first (decided):
 short transactions, indexed queries, one writer; Postgres stays the way up, not a
 rewrite. Open:
 
-- **The item's state and the client** (with photo renditions): render's commit
-  makes an item `Ready` (`updated_at` moves: the client's delta brings it, Waiting
-  photos finally show); the asset contract gets the renditions as files of their own
-  role with `w`, `h`, format (`srcset`), a new contract version. The stand-in
-  changes neither.
-- **The version from the config**: sizes, format, codec hashed into `version` —
-  re-rendering is lazy; maintenance prunes old versions' files and the rows of
-  deleted items.
+- **Maintenance**: another version re-renders lazily (the version is the renderer
+  and its settings); the old versions' files and the rows and files of deleted
+  items stay until a prune.
+- **A version that failed hides the last good one**: the renditions shown are those
+  of the version the work was last *done* with; a failed attempt at a new version
+  sets the row not done, so the old renditions (still on disk) are not listed until
+  it succeeds.
 - **Idle polling**: a pass scans every due item (143 ms at 200 k per slug); a full
   pass at start and after a version change, between them only the items changed
   since the last pass (`updated_at` is indexed).

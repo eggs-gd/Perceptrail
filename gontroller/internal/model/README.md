@@ -97,8 +97,22 @@ by the join, a new version makes everything due — nobody enqueues.
   1 h, 1 day); after five in a row with the same version and input it waits for a
   new one.
 
-Its messages (`dto.WorkDone`, `dto.WorkFailed`, `dto.Cursor`) are data in `dto`: a
-consumer (render) depends on `dto` and its own `Store`, not on the model.
+Its messages (`dto.WorkDone`, `dto.WorkFailed`, `dto.Cursor`, `dto.Taken`) are data
+in `dto`: a consumer (render) depends on `dto` and its own `Store`, not on the model.
+
+**Renditions make an item `Ready`** — what the browser shows is ours now:
+
+- `Finish` with renditions sets `Ready` (`updated_at` moves: the client's delta
+  brings it, a Waiting HEIC finally shows);
+- `publish` keeps it `Ready` while its renditions are for its fingerprint — another
+  pass of the cheap stage (a perceptor's rework) would hide it otherwise, and render
+  would not come back (its work is done); a new fingerprint sends it back to Waiting
+  or Visible, and render's work is due again;
+- `NeedsWork` counts such an item through the cheap stage, preview or not.
+
+A stream of items (`StreamAllItems`, `StreamItemsSince`) carries `dto.StoredItem` —
+the row, its files, its renditions, a query of each per page: a new fact about an
+item is a field there, not a parameter changed in every caller.
 
 ## Domain events
 
