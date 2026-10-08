@@ -1,7 +1,9 @@
 package config
 
 import (
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,7 +20,7 @@ func TestResolve(t *testing.T) {
 		t.Fatal(err)
 	}
 	checks := map[string][2]string{
-		"Path":         {f.Path, "/srv/gontroller/.var/photos"},
+		"Path":         {strings.Join(f.Paths, ","), "/srv/gontroller/.var/photos"},
 		"relative .so": {f.Plugins[0], "/srv/gontroller/.build/plugins/geo.so"},
 		"absolute .so": {f.Plugins[1], "/abs/other.so"},
 		"DataDir":      {f.DataDir, "/srv/gontroller/.var"},
@@ -129,5 +131,26 @@ func TestRenderSizes(t *testing.T) {
 	}
 	if !slices.Equal(r.Sizes, []int{400, 1600}) {
 		t.Errorf("sizes %v, want [400 1600]", r.Sizes)
+	}
+}
+
+// Library roots: paths and the older path together, absolute against the config's
+// directory, each once; one inside another refused
+func TestLibraryRoots(t *testing.T) {
+	abs := func(p string) string {
+		if filepath.IsAbs(p) {
+			return p
+		}
+		return filepath.Join("/cfg", p)
+	}
+	roots, err := libraryRoots([]string{"/photos", "phone", "/photos/", ""}, abs)
+	if err != nil || !slices.Equal(roots, []string{"/photos", "/cfg/phone"}) {
+		t.Errorf("roots %v, %v", roots, err)
+	}
+	if _, err := libraryRoots([]string{"/photos", "/photos/2024"}, abs); err == nil {
+		t.Error("a root inside another accepted")
+	}
+	if roots, err := libraryRoots(nil, abs); err != nil || len(roots) != 0 {
+		t.Errorf("no roots: %v, %v", roots, err)
 	}
 }

@@ -59,7 +59,7 @@ import (
 // Config: what the import reads of the config — the root walked, where the
 // previews go, the pause between passes, the exiftool to run
 type Config interface {
-	LibraryRoot() string
+	LibraryRoots() []string
 	CacheDir() string
 	Rescan() time.Duration
 	Exiftool() string
@@ -138,7 +138,7 @@ func (s *Service) importChain(errs chan<- error) chain.ChainProcessor {
 	perceived := make(chan *identify.Item)
 
 	c := chain.NewChainProcessor(errs)
-	c.AddStep(walk.New(s.db, s.cfg.LibraryRoot(), library.Skipped(s.cfg.LibraryRoot()), s.logger, found))
+	c.AddStep(walk.New(s.db, s.cfg.LibraryRoots(), library.Skipped(s.cfg.LibraryRoots()), s.logger, found))
 	c.AddStep(group.New(library.Enabled(), found, grouped))
 	c.AddStep(gate.New(s.db, s.logger, grouped, stored))
 	c.AddStep(identify.New(s.db, s.cfg.CacheDir(), s.cfg.Exiftool(), perceptor.ExifTags(), s.logger, stored, identified))

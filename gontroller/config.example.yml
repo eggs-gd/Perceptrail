@@ -7,8 +7,12 @@
 # console logging); release (the default): Info logs, a clean gallery
 # mode: debug
 
-# Library root: the photos to import
-path: "/Users/me/Pictures/"
+# The photos to import: directories, each walked (none inside another). The older
+# `path: <one directory>` still works. None at all: only providers (an Immich through
+# its API)
+paths:
+  - "/Users/me/Pictures/"
+  # - "/Volumes/Photos/"
 
 # External perceptors (`make build-plugins` from the repo root)
 plugins:

@@ -512,6 +512,16 @@ transit, render bounded by its workers) — patterns go to docs and examples.
   rewrites `.build/plugins/*.so`, which the owner's running server has loaded — the
   `smoke` skill said so, and was wrong.
 
+## Library roots
+
+- **Several roots, each on its own** (#39, the owner's server keeps photos in more
+  than one place): `paths` (the older `path` still read); the walk goes through each
+  in one pass and judges deletions root by root — a drive not mounted this pass
+  deletes nothing of its own while another root's gone files go. One inside another
+  is refused (its files would be walked twice). No root at all is valid: a setup of
+  providers only (an Immich through its API). In Docker a single `/library` with a
+  mount per host directory does the same.
+
 ## Apple Photos
 
 Layout, the DB's facts and PhotoKit's behaviour: the

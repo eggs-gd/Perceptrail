@@ -66,7 +66,7 @@ func TestClientAssetKind(t *testing.T) {
 // what moves
 func TestOnDemandInAsset(t *testing.T) {
 	lib := "/p/Photos Library.photoslibrary/originals/A/A1.heic"
-	photos := apple.New("/p", photokit.Library{}, nil, l.NewLogger(l.FatalLevel, &tree.Decorator{}))
+	photos := apple.New([]string{"/p"}, photokit.Library{}, nil, l.NewLogger(l.FatalLevel, &tree.Decorator{}))
 	if od := toClientAsset(&dto.ItemDto{GUID: "A1", Kind: dto.KindPhoto, Path: lib}, nil, photos).OnDemand; od == nil ||
 		od.Medium != "/items/A1/rendition/medium?v="+contractVersion || od.Hover != "" || od.Original != "/items/A1/rendition/original?v="+contractVersion {
 		t.Errorf("photo, original in iCloud: %+v", od)

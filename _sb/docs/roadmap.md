@@ -45,7 +45,8 @@ One line each; the details are in the READMEs and the PRs.
   photo renditions (libvips) making items Ready; ECS a lens, not a migration · #37 videos:
   H.264 every browser plays, a poster, Live Photos' motion, HDR tone mapped · #38 Docker:
   two images (server, web) in one compose, published to GHCR; the gallery a
-  single-page app behind Caddy.
+  single-page app behind Caddy · #39 several library
+  roots (`paths`), each judged for deletions on its own.
 
 ## Releases
 

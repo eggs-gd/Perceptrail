@@ -2,7 +2,8 @@
 # data — database, caches — at /data. To change it, mount your own over
 # /etc/perceptrail/config.yml (gontroller/config.example.yml has every field).
 mode: release
-path: /library
+paths:
+  - /library   # several host directories: mount each under /library/<name>
 data_dir: /data
 
 plugins:

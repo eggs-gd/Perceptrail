@@ -8,7 +8,7 @@ we render and store nothing it keeps.
   library implements; each consumer declares the part it uses — the import's
   grouping `group.Library` (`Claims`, `Grouper`), the routes' `route.Library`
   (`Levels`, `Rendition`); the registry uses the rest (`Owns`, `Start`, `Skipped`).
-- **What is walked**: a library lists the directories under the walked root that
+- **What is walked**: a library lists the directories under a walked root that
   hold none of its media (`Skipped(root)`: its database, caches); every pass the
   import collects every enabled library's (`library.Skipped`) and hands the list to
   the walk, which does not enter them — as it hands identify the perceptors' tags.
@@ -120,4 +120,4 @@ caches, journals, Messages backdrops in `internal/`, iCloud sharing in `scopes/`
   `photokit_darwin.m` (a Linux build refuses a bare `.m`).
 - **The permission goes to the terminal** that starts the binary (its "responsible"
   app), not to the binary: a rebuild does not drop it. Started by launchd — still
-  open (roadmap). Access is asked only when a `*.photoslibrary` is under the root.
+  open (roadmap). Access is asked only when a `*.photoslibrary` is under a root.

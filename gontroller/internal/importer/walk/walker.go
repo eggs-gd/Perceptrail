@@ -46,7 +46,7 @@ type Result struct {
 // Walker: the walk step's logic (a chain.EntryPoint)
 type Walker struct {
 	logger *l.Logger
-	root   string
+	roots  []string        // walked one after another, each judged for deletions on its own
 	skip   map[string]bool // the directories not entered
 	db     Store
 }
@@ -58,12 +58,12 @@ const page = 256
 // New: the chain's entry — out gets every file of a walk, then the gone ones
 // skipped: directories not entered (the libraries' own, without their media); the
 // rows under them are missing
-func New(db Store, root string, skipped []string, logger *l.Logger, out chan<- dto.WalkedFile) chain.Processor {
+func New(db Store, roots []string, skipped []string, logger *l.Logger, out chan<- dto.WalkedFile) chain.Processor {
 	skip := make(map[string]bool, len(skipped))
 	for _, dir := range skipped {
 		skip[filepath.Clean(dir)] = true
 	}
-	return chain.NewEntryPoint(out, &Walker{logger: logger, root: root, skip: skip, db: db})
+	return chain.NewEntryPoint(out, &Walker{logger: logger, roots: roots, skip: skip, db: db})
 }
 
 // Start: one walk — the files seen, then the missing ones
@@ -88,21 +88,30 @@ func (m *Walker) Start(ctx context.Context, emit func(dto.WalkedFile) bool) erro
 		}
 		return true
 	}
-	r := m.walk(ctx, func(e dto.ItemEntry) bool {
-		entries = append(entries, e)
-		return len(entries) < page || send()
-	})
-	if !send() {
-		return nil
-	}
-	missing := m.missing(r, unseen)
-	for _, f := range missing {
-		if !emit(dto.WalkedFile{FileDto: f, Missing: true}) {
+	var results []Result
+	for _, root := range m.roots {
+		results = append(results, m.walk(ctx, root, func(e dto.ItemEntry) bool {
+			entries = append(entries, e)
+			return len(entries) < page || send()
+		}))
+		if ctx.Err() != nil {
 			break
 		}
 	}
-	if r.Complete {
-		m.logger.Info("Walk complete", l.Int("files", r.Files), l.Int("unreadable", len(r.Unreadable)), l.Int("gone", len(missing)))
+	if !send() {
+		return nil
+	}
+	for _, r := range results { // a root unreachable or empty this pass deletes nothing of its own
+		missing := m.missing(r, unseen)
+		for _, f := range missing {
+			if !emit(dto.WalkedFile{FileDto: f, Missing: true}) {
+				return nil
+			}
+		}
+		if r.Complete {
+			m.logger.Info("Walk complete", l.String("path", r.Root), l.Int("files", r.Files),
+				l.Int("unreadable", len(r.Unreadable)), l.Int("gone", len(missing)))
+		}
 	}
 	return nil
 }
@@ -196,20 +205,20 @@ func (m *Walker) missing(r Result, unseen map[string]*dto.FileDto) []*dto.FileDt
 	return current
 }
 
-func (m *Walker) walk(ctx context.Context, emit func(dto.ItemEntry) bool) Result {
-	result := Result{Root: m.root}
+func (m *Walker) walk(ctx context.Context, root string, emit func(dto.ItemEntry) bool) Result {
+	result := Result{Root: root}
 
-	if info, err := os.Stat(m.root); err != nil || !info.IsDir() {
-		m.logger.Error("Library root is not a readable directory", l.String("path", m.root), l.Error(err))
+	if info, err := os.Stat(root); err != nil || !info.IsDir() {
+		m.logger.Error("Library root is not a readable directory", l.String("path", root), l.Error(err))
 		return result
 	}
 
-	err := filepath.WalkDir(m.root, func(path string, entry fs.DirEntry, err error) error {
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return ctxErr
 		}
 		if err != nil {
-			if path == m.root {
+			if path == root {
 				return err
 			}
 			m.logger.Warn("Unreadable, skipped", l.String("path", path), l.Error(err))
@@ -241,7 +250,7 @@ func (m *Walker) walk(ctx context.Context, emit func(dto.ItemEntry) bool) Result
 
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
-			m.logger.Error("Walk failed", l.String("path", m.root), l.Error(err))
+			m.logger.Error("Walk failed", l.String("path", root), l.Error(err))
 		}
 		return result
 	}

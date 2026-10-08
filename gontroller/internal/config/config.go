@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	l "github.com/eggs-gd/go-zap-decor"
@@ -35,8 +37,11 @@ type file struct {
 	// debug (development: SQL and every request logged, debug marks in the
 	// gallery) or release (the default)
 	Mode string `yaml:"mode"`
-	// Library root: the photos to import
-	Path string `yaml:"path"`
+	// The photos to import: directories, each walked (none inside another); path is
+	// one of them, kept for the configs that have it. None: only providers (an
+	// Immich through its API)
+	Paths []string `yaml:"paths"`
+	Path  string   `yaml:"path"`
 	// Plugin files (.so)
 	Plugins []string `yaml:"plugins"`
 	// Per perceptor (built in and plugins, by name): run it, give it to the client
@@ -113,8 +118,8 @@ func (c *Config) LogLevel() l.LogLevel {
 	return l.InfoLevel
 }
 
-// LibraryRoot: the photos to import
-func (c *Config) LibraryRoot() string { return c.file.Path }
+// LibraryRoots: the directories of photos to import, absolute, none inside another
+func (c *Config) LibraryRoots() []string { return c.file.Paths }
 
 // DataDir: runtime data — the database, the perceptors' storages, the caches
 func (c *Config) DataDir() string { return c.file.DataDir }
@@ -172,7 +177,11 @@ func (f *file) resolve(base string) error {
 	if f.Mode != ModeDebug {
 		f.Mode = ModeRelease // an unknown mode is not a debug one
 	}
-	f.Path = abs(f.Path)
+	roots, err := libraryRoots(append(f.Paths, f.Path), abs)
+	if err != nil {
+		return err
+	}
+	f.Paths, f.Path = roots, ""
 	if f.DataDir == "" {
 		f.DataDir = base
 	}
@@ -206,4 +215,27 @@ func (f *file) resolve(base string) error {
 		}
 	}
 	return f.Server.resolve()
+}
+
+// libraryRoots: the directories as given, absolute and clean, each once; one inside
+// another is an error (its files would be walked twice)
+func libraryRoots(paths []string, abs func(string) string) ([]string, error) {
+	var roots []string
+	for _, p := range paths {
+		if p == "" {
+			continue
+		}
+		root := filepath.Clean(abs(p))
+		if !slices.Contains(roots, root) {
+			roots = append(roots, root)
+		}
+	}
+	for _, a := range roots {
+		for _, b := range roots {
+			if rel, err := filepath.Rel(a, b); a != b && err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return nil, fmt.Errorf("paths: %s is inside %s (its files would be walked twice)", b, a)
+			}
+		}
+	}
+	return roots, nil
 }
