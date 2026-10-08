@@ -19,10 +19,11 @@ type SizesStore interface {
 }
 
 // setSizes: the original's size comes from its metadata (the source's first: the
-// Photos DB size is oriented); images from their header — no decoding
+// Photos DB size is oriented); images from their header — no decoding; a remote
+// file's from its source (its grouper set them)
 func setSizes(it *draft) {
 	for i, f := range it.Files {
-		if f.Role == dto.RoleMeta {
+		if f.Role == dto.RoleMeta || f.Remote() {
 			continue
 		}
 		if it.Exif[i] != nil {

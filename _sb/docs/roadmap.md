@@ -46,7 +46,9 @@ One line each; the details are in the READMEs and the PRs.
   H.264 every browser plays, a poster, Live Photos' motion, HDR tone mapped · #38 Docker:
   two images (server, web) in one compose, published to GHCR; the gallery a
   single-page app behind Caddy · #39 several library
-  roots (`paths`), each judged for deletions on its own.
+  roots (`paths`), each judged for deletions on its own · #40 Immich through its
+  API: its timeline listed as a source of the walk, its files served through a
+  proxy, nothing rendered.
 
 ## Releases
 
@@ -111,13 +113,13 @@ The mechanism is done (`internal/library`, Apple Photos first).
   albums, labels — perceptor data without an ML of our own.
 - A cloud-only original is not described (name, format, weight) until a second
   provider: the abstraction comes from two, not one.
-- An API provider has no files to walk: probably a chain of its own, `sync →
-  identify → exif → commit`, sharing the stages after the gate.
+- An API provider lists its files itself: a source of the walk (Immich, #40;
+  findings "Immich").
 
 | provider | how | what it gives | notes |
 |---|---|---|---|
 | **Apple Photos** | `Photos.sqlite` + files; PhotoKit on demand | renditions, edits, Live Photos, video renditions | done |
-| **Immich** | REST API + an API key (`asset.read`, `asset.view`; `asset.download` for originals); Sync v2 | thumbnail / preview (~1440 px) / original, transcoded playback; faces, people, albums, CLIP search | **first** — the owner uses it daily. To check: API stability, Sync v2 from a non-mobile client, its video transcode policy |
+| **Immich** | REST API + an API key (`asset.read`, `asset.view`, `asset.download`) | thumbnail / preview (~1440 px) / original, transcoded playback; faces, people, albums, CLIP search | the timeline done (#40). Open: the archive as an option; faces, people, albums as perceptor data; a delta (Sync v2) if the full listing gets slow |
 | **PhotoPrism** | REST API + an app password | thumbnails `/api/v1/t/<hash>/<token>/<size>`, H.264 video; labels, faces, places | similar to Immich |
 | **Lightroom Classic** | the catalog `.lrcat` (SQLite) + `.lrdata` previews | ratings, keywords, collections, edits; its previews | previews in Adobe's own format |
 | **digiKam** | its SQLite / MySQL DB + the files | tags, faces, ratings | no server |

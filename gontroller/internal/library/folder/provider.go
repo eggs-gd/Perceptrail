@@ -2,6 +2,7 @@ package folder
 
 import (
 	"context"
+	"net/http"
 
 	"perceptrail/gontroller/internal/library/provider"
 	"perceptrail/gontroller/internal/model/dto"
@@ -29,6 +30,8 @@ func (p *Provider) Owns(*dto.ItemDto) bool { return false }
 func (p *Provider) Levels(*dto.ItemDto) []string { return nil }
 
 func (p *Provider) Start(context.Context) {}
+
+func (p *Provider) File(string) http.Handler { return nil }
 
 func (p *Provider) Rendition(*dto.ItemDto, string, provider.Options) (provider.Rendition, error) {
 	return provider.Rendition{}, provider.ErrNoRendition

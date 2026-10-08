@@ -555,6 +555,46 @@ Layout, the DB's facts and PhotoKit's behaviour: the
   Apple files are 404 on a test server started from it; the user's server is the
   test, or a synthetic library (a copy of `Photos.sqlite` + sample files).
 
+## Immich (#40)
+
+How it is read, the paths and the proxy: the
+[library README](../../gontroller/internal/library/README.md#immich).
+
+- **The walk over URLs, not a chain of its own** (2026-10-08, the owner's call):
+  the listing is one more source of the walk, its assets files of ours with
+  `immich://` paths. The gate, the identity rules, `Missing`, the conservative
+  deletions (only after a complete listing) and the whole chain after it work
+  unchanged; the roadmap's earlier idea (`sync → identify → exif → commit`) would
+  have copied them. The cost: three places know a file may not be on a disk
+  (identify's read, show and sizes; the routes) — through `dto.Remote`, nowhere else.
+- **An empty listing deletes** (Codex on #40): a disk root that found nothing may
+  be a drive not mounted, so it deletes nothing; an API's answer that ended without
+  an error is the library as it is — its last asset trashed empties ours too. A
+  refusal (a wrong key: 401) is an error, never an empty listing.
+- **A full listing every pass, not Sync v2**: the search gives the whole timeline
+  1 000 assets a request with the EXIF in it — a few requests for a library of tens
+  of thousands. The sync stream is made for the mobile app (acks per session, its
+  own checkpoints); a delta is the next step only if the listing gets slow.
+- **The API's 3.2 filters**: `page`, `visibility`, `withDeleted` are deprecated
+  since 3.2 for `cursor` and `filter` — the listing uses the new ones (Immich 3.x
+  only).
+- **Through our server, not to Immich**: the key and Immich's address never reach
+  the browser (the providers' rule); a reverse proxy passes `Range`, so a video
+  seeks without our buffering it.
+- **Nothing rendered, nothing stored**: Immich's preview (1440) and thumbnail (250)
+  are the stills, its playback the motion — one copy, as with Photos. Render skips
+  a library's items.
+- **Its checksum is the fingerprint**, prefixed `immich:` — never equal to one of
+  ours (a SHA-256 of samples), so a disk file is never taken for a moved Immich
+  item.
+- **The date is Immich's local time**: `localDateTime` is the wall clock written as
+  UTC; its difference from the instant (`dateTimeOriginal`, else `fileCreatedAt`)
+  is the zone's offset.
+- **Assumed, not asked**: the playback is H.264 (Immich's default policy
+  "required" transcodes anything else); its stills are sized by the short side
+  (fit "outside"). A server set up otherwise shows sizes a little off and, for a
+  non-H.264 target, a video some browsers do not play.
+
 ## Transcode
 
 - **Software first, hardware as a step of its own**: the queue, sizes, outputs and

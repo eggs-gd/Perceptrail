@@ -28,7 +28,7 @@ skip is never an error.
 
 | stage | in → out | what it does |
 |---|---|---|
-| **walk** | the roots → `dto.WalkedFile` | The chain's entry: reads the files table once, walks each root (config `paths`), skips the directories a library says hold none of its media, then sends every file as its row, page by page (a new file's row created, a changed stat saved with `Changed`, one transaction a page; an unchanged file is not written); after a complete walk, the rows it did not see sent as `Missing`. |
+| **walk** | the roots, the sources → `dto.WalkedFile` | The chain's entry: reads the files table once, walks each root (config `paths`), skips the directories a library says hold none of its media, lists each source (a library that lists its files itself, `walk.Source`: Immich's API), then sends every file as its row, page by page (a new file's row created, a changed stat saved with `Changed`, one transaction a page; an unchanged file is not written); after a complete walk, the rows it did not see sent as `Missing`. |
 | **group** | `dto.WalkedFile` → `dto.Asset` | A switch sends each file to the grouper of the first library that claims it (the plain folder last); each grouper is a step. The groupers are the libraries': [library README](../library/README.md). |
 | **gate** | `dto.Asset` → `dto.Asset` | The asset's `Missing` applied by the model (`Gone`); an asset passes if a file changed or the model says it needs work (`NeedsWork`). |
 | **identify** | `dto.Asset` → `*identify.Item` | read (in parallel, no DB: one exiftool call per group, kinds and roles, the metadata package, the fingerprint) → validate (one at a time: which item it is, or ignored) → show (sizes, what the browser shows now, an embedded preview as the last resort). exiftool lives only here. |
@@ -45,7 +45,8 @@ A type belongs to the package that produces it; there is no shared bag of messag
   a fact of this pass, not stored.
 - **`dto.Asset`** (group → gate → identify): one whole asset before it is identified —
   its files' rows, `Key` (a library's identity: the item's GUID), `Show`, the
-  source's `Meta` / `MetaHash`, `Kind`, and `Missing`: the files gone for the
+  source's `Meta` / `MetaHash`, `Kind`, `Fingerprint` (the source's, when its files
+  are not on a disk), and `Missing`: the files gone for the
   library (the walk's, or the library's own say). The end of a walk is not a value:
   the walk's output closes.
 - **`identify.Item`** (identify → exif → commit): the item and its metadata package;
@@ -90,12 +91,18 @@ is (`dto.AssetKind`). A step gathers stat, exif, kinds, the fingerprint.
   it visited); nothing is stamped on the rows. Before they are sent, the missing
   rows are read again: the chain worked meanwhile (a moved file's old row may be
   gone, its item moved to the new path).
-- **Deletions are conservative**, root by root: only under a root whose walk was
-  complete and found files (an unmounted drive's root deletes nothing of its own),
-  never under an unreadable directory. A main file gone → the item is
+- **Deletions are conservative**, root by root and source by source: only under a
+  root whose walk was complete and found files (an unmounted drive's root deletes
+  nothing of its own), never under an unreadable directory; a source's only after
+  a listing that ended without an error — an empty one too (a library emptied: no
+  mount point to miss). A main file gone → the item is
   soft-deleted; a sidecar gone → the item is `Dirty`.
 - **Moves**: a moved file's old path may be deleted before the new one is
   validated; validate restores the soft-deleted item by fingerprint, the GUID stays.
+- **A remote file is its provider's alone** (a path with a scheme, `dto.Remote`:
+  `immich://…`): nothing opens it — identify takes its metadata and fingerprint
+  from the asset, its sizes from the grouper, extracts no embedded preview; the
+  routes serve it through the provider (`File`).
 - **On demand does not wait**: a library marks the item (`MarkRework`, `updated_at`
   untouched so no delta brings the old state back); the next pass processes it.
 - **The perceptors' rows** are reconciled at start (`exif.Reconcile`): an item

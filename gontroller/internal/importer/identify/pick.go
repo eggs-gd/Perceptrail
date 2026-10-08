@@ -37,6 +37,9 @@ func preview(it *draft, tool Exiftool, dir string, logger *l.Logger) (path, mime
 	if path, mime = viewableFile(it); path != "" {
 		return path, mime
 	}
+	if it.Files[0].Remote() {
+		return "", "" // only its provider reads it: nothing embedded to extract
+	}
 	for _, tag := range embeddedPreviews {
 		if it.Exif[0] == nil || len(it.Exif[0][tag]) == 0 {
 			continue

@@ -150,7 +150,7 @@ package's own unit tests stay next to it.
 | `internal/perceptor` | the perceptors' registry (built in + `.so`, their storages); `perceptor/builtin`: the built-ins' contract (`builtin.Item`, `builtin.Perceptor`, `OrderByValue`); the built-in EXIF perceptors `perceptor/date`, `size`, `duration` |
 | `internal/model` | the library's data and its rules: one writer, a read pool, every write a command ([README](internal/model/README.md)) |
 | `internal/web` | the HTTP service (Echo); `web/route`: `/items`, `/assets`, `/perceptors`, `/p/:view/order`, renditions |
-| `internal/library` | the libraries the import reads and the web service asks on demand: Apple Photos, the plain folder ([README](internal/library/README.md)) |
+| `internal/library` | the libraries the import reads and the web service asks on demand: Apple Photos, Immich (its API), the plain folder ([README](internal/library/README.md)) |
 
 ## Worth knowing
 

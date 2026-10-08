@@ -2,9 +2,12 @@ package route
 
 import (
 	"fmt"
+	"mime"
 	"net/http"
 	"path/filepath"
 	"strconv"
+
+	"perceptrail/gontroller/internal/model/dto"
 
 	"github.com/eggs-gd/perceplib/api"
 	"github.com/labstack/echo/v4"
@@ -56,9 +59,9 @@ func (r *routes) getFile(c echo.Context) error {
 	// The cheap preview until our own previews exist; items from before the cheap
 	// stage: the original
 	if item.PreviewPath != "" {
-		return c.File(item.PreviewPath)
+		return r.serve(c, item, item.PreviewPath)
 	}
-	return c.File(item.Path)
+	return r.serve(c, item, item.Path)
 }
 
 // r.getAssetFile serves a file of the asset by its id (or the extracted embedded
@@ -84,10 +87,39 @@ func (r *routes) getAssetFile(c echo.Context) error {
 	}
 	// ?download=1: saved under its own name (the download attribute does not work
 	// across origins — the API is on another port)
-	if c.QueryParam("download") == "1" {
+	download := c.QueryParam("download") == "1"
+	if f.Remote() {
+		item, err := r.db.GetItemByGUID(guid)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusNotFound)
+		}
+		if download {
+			c.Response().Header().Set(echo.HeaderContentDisposition, mime.FormatMediaType("attachment", map[string]string{"filename": f.Name}))
+		}
+		return r.serve(c, item, f.Path)
+	}
+	if download {
 		return c.Attachment(f.Path, f.Name)
 	}
 	return c.File(f.Path)
+}
+
+// r.serve: a file of the item — from the disk, or a remote one from its library
+// (Immich: through its API)
+func (r *routes) serve(c echo.Context, item *dto.ItemDto, path string) error {
+	if !dto.Remote(path) {
+		return c.File(path)
+	}
+	lib := r.of(item)
+	if lib == nil {
+		return echo.NewHTTPError(http.StatusNotFound)
+	}
+	handler := lib.File(path)
+	if handler == nil {
+		return echo.NewHTTPError(http.StatusNotFound)
+	}
+	handler.ServeHTTP(c.Response(), c.Request())
+	return nil
 }
 
 // r.getRendered serves one of the item's renditions by its name (<size>.<format>) —

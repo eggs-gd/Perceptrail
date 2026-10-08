@@ -33,9 +33,17 @@ plugins:
 # import chain; what none of them claims is a plain folder. A provider not listed is
 # enabled. apple: a *.photoslibrary under `path` — its DB, and PhotoKit on demand
 # (macOS; access is asked once, the prompt names the terminal that started us).
+# immich: a server read through its API, read only, when its url is set — the
+# timeline (not the archive, the hidden or the trash); its previews and playback are
+# served through us, nothing of it is rendered. The key (read-only: asset.read,
+# asset.view, asset.download) never goes in this file: a file of its own, or the
+# env IMMICH_API_KEY.
 # providers:
 #   apple:
 #     enabled: false   # not in the chain: the library is a plain folder then
+#   immich:
+#     url: http://immich.local:2283
+#     api_key_file: immich.key   # relative to this file
 
 # Database and caches (thumbnails). Default: the directory of this file
 # data_dir: .

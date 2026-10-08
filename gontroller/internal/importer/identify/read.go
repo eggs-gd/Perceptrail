@@ -2,6 +2,7 @@ package identify
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 
 	"perceptrail/gontroller/internal/model/dto"
@@ -39,7 +40,11 @@ func (r *reader) Decorate(g dto.Asset) (*draft, error) {
 	classify(d)
 	merge(d, r.declared)
 	if d.isMedia() { // else validate ignores it: nothing to identify
-		if d.Hash, err = fingerprint(d.Files[0].Path); err != nil {
+		d.Hash = g.Fingerprint
+		if d.Hash == "" {
+			d.Hash, err = fingerprint(d.Files[0].Path)
+		}
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -63,11 +68,19 @@ func newReader(tool Exiftool, declared []string, logger *l.Logger) *reader {
 }
 
 // read: the group's files and their metadata, every file of it at once (a keyed
-// group: only the main file — the source knows the rest). A nil Exif: exiftool
-// could not read the file.
+// group: only the main file — the source knows the rest; a remote one: nothing, its
+// source said it all). A nil Exif: exiftool could not read the file.
 func (e *reader) read(g dto.Asset) (*draft, error) {
 	files := g.Files
 	out := &draft{Asset: g, Exif: make([]api.RawExif, len(files))}
+	if files[0].Remote() {
+		out.Exif[0] = maps.Clone(g.Meta)
+		if out.Exif[0] == nil {
+			out.Exif[0] = api.RawExif{}
+		}
+		out.Exif[0]["MIMEType"] = []byte(files[0].MimeType)
+		return out, nil
+	}
 	read := files
 	if g.Key != "" {
 		read = files[:1]

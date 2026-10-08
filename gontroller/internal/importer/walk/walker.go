@@ -30,6 +30,16 @@ type Store interface {
 	SaveStats(files []*dto.FileDto) error
 }
 
+// Source: files a library lists itself, not from a disk (an Immich: its assets
+// through its API) — walked as a root is, its deletions judged the same way
+type Source interface {
+	// Root: the prefix of its files' paths ("immich://")
+	Root() string
+	// List: every file it has now, each to emit (false: stop); an error — the list is
+	// incomplete, nothing of it is gone this pass
+	List(ctx context.Context, emit func(dto.ItemEntry) bool) error
+}
+
 // Result describes a finished walk. Deletions may be derived from it only if the
 // walk was complete: a cancelled walk or an unreadable root says nothing about which
 // files are gone.
@@ -45,10 +55,11 @@ type Result struct {
 
 // Walker: the walk step's logic (a chain.EntryPoint)
 type Walker struct {
-	logger *l.Logger
-	roots  []string        // walked one after another, each judged for deletions on its own
-	skip   map[string]bool // the directories not entered
-	db     Store
+	logger  *l.Logger
+	roots   []string        // walked one after another, each judged for deletions on its own
+	sources []Source        // listed after the roots, judged the same way
+	skip    map[string]bool // the directories not entered
+	db      Store
 }
 
 // page: how many files a walk sends at once, their rows written in one transaction
@@ -58,12 +69,12 @@ const page = 256
 // New: the chain's entry — out gets every file of a walk, then the gone ones
 // skipped: directories not entered (the libraries' own, without their media); the
 // rows under them are missing
-func New(db Store, roots []string, skipped []string, logger *l.Logger, out chan<- dto.WalkedFile) chain.Processor {
+func New(db Store, roots []string, sources []Source, skipped []string, logger *l.Logger, out chan<- dto.WalkedFile) chain.Processor {
 	skip := make(map[string]bool, len(skipped))
 	for _, dir := range skipped {
 		skip[filepath.Clean(dir)] = true
 	}
-	return chain.NewEntryPoint(out, &Walker{logger: logger, roots: roots, skip: skip, db: db})
+	return chain.NewEntryPoint(out, &Walker{logger: logger, roots: roots, sources: sources, skip: skip, db: db})
 }
 
 // Start: one walk — the files seen, then the missing ones
@@ -98,6 +109,15 @@ func (m *Walker) Start(ctx context.Context, emit func(dto.WalkedFile) bool) erro
 			break
 		}
 	}
+	for _, source := range m.sources {
+		if ctx.Err() != nil {
+			break
+		}
+		results = append(results, m.list(ctx, source, func(e dto.ItemEntry) bool {
+			entries = append(entries, e)
+			return len(entries) < page || send()
+		}))
+	}
 	if !send() {
 		return nil
 	}
@@ -117,10 +137,11 @@ func (m *Walker) Start(ctx context.Context, emit func(dto.WalkedFile) bool) erro
 }
 
 // Missing: of the rows a walk did not see (stale), the ones it says are deleted —
-// only after a complete walk that found files, only under its root (another root:
-// the config changed, not ours to judge), never under an unreadable directory
+// only after a complete walk that found files (a source's listing may be empty: the
+// library emptied), only under its root (another root: the config changed, not ours
+// to judge), never under an unreadable directory
 func Missing(r Result, stale []*dto.FileDto) []*dto.FileDto {
-	if !r.Complete || r.Files == 0 {
+	if !r.Complete || r.empty() {
 		return nil // an empty root (an unmounted drive's mount point) must not delete the library
 	}
 	var gone []*dto.FileDto
@@ -181,7 +202,7 @@ func (m *Walker) missing(r Result, unseen map[string]*dto.FileDto) []*dto.FileDt
 	case !r.Complete:
 		m.logger.Warn("Walk incomplete: deletions are not checked")
 		return nil
-	case r.Files == 0:
+	case r.empty():
 		m.logger.Warn("Walk found no files: deletions are not checked", l.String("path", r.Root))
 		return nil
 	}
@@ -258,7 +279,35 @@ func (m *Walker) walk(ctx context.Context, root string, emit func(dto.ItemEntry)
 	return result
 }
 
+// empty: a disk's root where the walk found nothing — maybe a drive not mounted, so
+// it says nothing about what is gone. A source's listing that ended without an
+// error is its library as it is, empty too.
+func (r Result) empty() bool {
+	return r.Files == 0 && !dto.Remote(r.Root)
+}
+
+// list: a source's files, as walk walks a root — complete when the source listed
+// everything (a source unreachable this pass deletes nothing of its own)
+func (m *Walker) list(ctx context.Context, source Source, emit func(dto.ItemEntry) bool) Result {
+	result := Result{Root: source.Root()}
+	err := source.List(ctx, func(e dto.ItemEntry) bool {
+		result.Files++
+		return emit(e)
+	})
+	if err != nil {
+		if !errors.Is(err, context.Canceled) {
+			m.logger.Error("Source not listed: its deletions wait", l.String("source", result.Root), l.Error(err))
+		}
+		return result
+	}
+	result.Complete = ctx.Err() == nil
+	return result
+}
+
 func isUnder(path, dir string) bool {
+	if strings.Contains(dir, "://") { // a source's root: its files' paths start with it
+		return strings.HasPrefix(path, dir) && path != dir
+	}
 	rel, err := filepath.Rel(dir, path)
 	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }

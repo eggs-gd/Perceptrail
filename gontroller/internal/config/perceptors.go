@@ -18,12 +18,24 @@ type Perceptor struct {
 }
 
 // Providers: the `providers` section, by name; a provider not listed is enabled
+// (one that needs a server — Immich — only when its url is set)
 //
 //	providers:
 //	  apple:
 //	    enabled: false   # not in the chain: a Photos library is a plain folder then
-type Providers map[string]struct {
+//	  immich:
+//	    url: http://immich:2283
+//	    api_key_file: immich.key   # or the env IMMICH_API_KEY
+type Providers map[string]Provider
+
+type Provider struct {
+	// In the chain. Default: true
 	Enabled *bool `yaml:"enabled"`
+	// The server of a library read through its API (Immich)
+	URL string `yaml:"url"`
+	// A file holding its API key, relative to the config's directory; the key itself
+	// is never in the config
+	APIKeyFile string `yaml:"api_key_file"`
 }
 
 func (s Perceptors) Enabled(name string) bool {
