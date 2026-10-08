@@ -27,7 +27,7 @@ func pick(t *testing.T, files ...pf) (string, string, []string) {
 		it.Kinds = append(it.Kinds, f.kind)
 		it.Exif = append(it.Exif, f.exif)
 	}
-	path, mime := preview(it, tool, "/cache/previews", l.NewLogger(l.ErrorLevel, &tree.Decorator{}))
+	path, mime := preview(it, tool, "/cache", l.NewLogger(l.ErrorLevel, &tree.Decorator{}))
 	return path, mime, tool.extracted
 }
 
@@ -66,7 +66,7 @@ func TestCheapPreviewPick(t *testing.T) {
 			"/lib/d.jpg", "image/jpeg"},
 		{"RAW alone: its embedded preview (the next tag when one fails)",
 			[]pf{{"d.nef", "image/x-nikon-nef", kindRaw, api.RawExif{"JpgFromRaw": []byte("x"), "PreviewImage": []byte("x")}}},
-			"/cache/previews/g/embedded.jpg", "image/jpeg"},
+			"/cache/previews/_/g/embedded.jpg", "image/jpeg"},
 		{"HEIC without anything viewable: waits",
 			[]pf{{"i.heic", "image/heic", kindImage, size("4032", "3024")}},
 			"", ""},

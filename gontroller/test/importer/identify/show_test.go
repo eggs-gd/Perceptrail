@@ -27,7 +27,7 @@ func TestEmbeddedPreview(t *testing.T) {
 	if it == nil {
 		t.Fatal("no item")
 	}
-	if want := filepath.Join(cache, "previews", string(it.Item.GUID), "embedded.jpg"); it.Item.PreviewPath != want || it.Item.PreviewMime != "image/jpeg" {
+	if want := filepath.Join(cache, "previews", strings.ToLower(string(it.Item.GUID))[0:2], strings.ToLower(string(it.Item.GUID))[2:4], string(it.Item.GUID), "embedded.jpg"); it.Item.PreviewPath != want || it.Item.PreviewMime != "image/jpeg" {
 		t.Fatalf("preview %q %q, want %q", it.Item.PreviewPath, it.Item.PreviewMime, want)
 	}
 	out, err := exec.Command("exiftool", "-s3", "-n", "-Orientation", it.Item.PreviewPath).Output()

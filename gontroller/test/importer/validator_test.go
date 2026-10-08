@@ -66,7 +66,8 @@ func scan(t *testing.T, root string) []string {
 		t.Fatal(err)
 	}
 	var published []string
-	err := testDB.StreamItemsSince(start.Add(-time.Second), func(it *dto.ItemDto, _ []*dto.FileDto) error {
+	err := testDB.StreamItemsSince(start.Add(-time.Second), func(stored dto.StoredItem) error {
+		it := stored.Item
 		if !it.DeletedAt.Valid && !it.UpdatedAt.Before(start) {
 			published = append(published, it.Path)
 		}

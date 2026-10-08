@@ -83,3 +83,36 @@ func TestOpenMigratesIgnoredMark(t *testing.T) {
 		t.Errorf("linked to %q (%v), want the nil GUID", got.LinkedTo, err)
 	}
 }
+
+// Renditions kept per render version (an earlier layout): Open drops them and
+// render's work, so render makes them again
+func TestOpenDropsVersionedRenditions(t *testing.T) {
+	logger := l.NewLogger(l.ErrorLevel, &tree.Decorator{})
+	cfg := database{config.Database{Driver: config.DriverSQLite, Name: filepath.Join(t.TempDir(), "x.db")}}
+	db, err := Open(cfg, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := db.writer.db
+	w.Exec("DROP TABLE renditions")
+	w.Exec("CREATE TABLE renditions (guid TEXT, version TEXT, size INTEGER, format TEXT, path TEXT, PRIMARY KEY (guid, version, size, format))")
+	w.Exec("INSERT INTO renditions VALUES ('g', 'vips1', 400, 'webp', 'r/g/vips1/400.webp')")
+	w.Create(&dto.WorkDto{GUID: "g", Slug: "render", Version: "vips1", DoneAt: 1})
+	w.Create(&dto.WorkDto{GUID: "g", Slug: "faces", Version: "1", DoneAt: 1})
+	db.Close()
+
+	db, err = Open(cfg, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if db.writer.db.Migrator().HasColumn(&dto.RenditionDto{}, "version") {
+		t.Error("renditions still have a version")
+	}
+	if _, err := db.Work("g", "render"); err == nil {
+		t.Error("render's work kept: it would not render again")
+	}
+	if _, err := db.Work("g", "faces"); err != nil {
+		t.Errorf("another slug's work went: %v", err)
+	}
+}

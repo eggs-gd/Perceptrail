@@ -17,7 +17,9 @@ Requirements:
 - Go 1.27.1 (`go` downloads the toolchain itself);
 - `exiftool` in `PATH` (or a distribution from the
   [`eggs-gd/go-exiftool` `dist-*` releases](https://github.com/eggs-gd/go-exiftool/releases),
-  set with `exiftool:` in the config).
+  set with `exiftool:` in the config);
+- `vipsthumbnail` (libvips: `brew install vips`, `apt install libvips-tools`) for
+  render — or `render: {enabled: false}`.
 
 ```bash
 mkdir -p .var && cp config.example.yml .var/config.yml   # once, then edit path:
@@ -60,6 +62,7 @@ packages — see [findings](../_sb/docs/findings.md#go-and-the-toolchain).
 | GET | `/app` | The server's `version` and `mode` (debug / release) |
 | GET | `/p/:view/order?anchor=` | The sheet in that perceptor's order, NDJSON `{guid, sections?: [{level, label}]}` — the sections this photo starts, coarsest first (a path or one tag) |
 | GET | `/assets/:guid` | The original file of an item |
+| GET | `/assets/:guid/r/:name` | One of our renditions (`<size>.<format>`), as the asset's `stills` list them — only the ones the database lists for that item |
 
 ## Import
 
@@ -86,19 +89,16 @@ package's own unit tests stay next to it.
 | Package | What |
 |---|---|
 | `internal/app` | the server as a whole: its services run together (`Services`), the version |
+| `internal/cache` | where an item's files live in the data's cache: a tree by the GUID (`<part>/<ab>/<cd>/<guid>`) |
 | `internal/config` | the config file, read once (`Load`, `Read`); a leaf — a module declares the getters it reads as its own `Config` interface |
 | `internal/importer` | the import chain ([README](internal/importer/README.md)) |
-| `internal/transcode` | the transcoders' switch and stubs (a chain of its own later) |
+| `internal/render` | the expensive stage: woken by `ItemPublished`, takes what is due from the work queue, renders photos with libvips (`vipsthumbnail`, a process each) on N workers; config `render` |
 | `internal/perceptor` | the perceptors' registry (built in + `.so`, their storages); `perceptor/builtin`: the built-ins' contract (`builtin.Item`, `builtin.Perceptor`, `OrderByValue`); the built-in EXIF perceptors `perceptor/date`, `size`, `duration` |
 | `internal/model` | the library's data and its rules: one writer, a read pool, every write a command ([README](internal/model/README.md)) |
 | `internal/web` | the HTTP service (Echo); `web/route`: `/items`, `/assets`, `/perceptors`, `/p/:view/order`, renditions |
 | `internal/library` | the libraries the import reads and the web service asks on demand: Apple Photos, the plain folder ([README](internal/library/README.md)) |
-| `internal/transcoder` | thumbnail stub (needs libvips) |
 
 ## Worth knowing
 
 - SQLite: one writer connection and a read-only pool; every write is a command — [`internal/model/README.md`](internal/model/README.md).
-- `internal/transcoder/images` does not build without libvips (`pkg-config vips`); it is
-  not imported by `main`, so the server is unaffected. Run vet/tests without it:
-  `go test $(go list ./... | grep -v transcoder/images)`.
 - Known issues and plans — [roadmap](../_sb/docs/roadmap.md).

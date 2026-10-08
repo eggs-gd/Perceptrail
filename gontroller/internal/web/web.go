@@ -25,6 +25,7 @@ import (
 // debug logs every request
 type Config interface {
 	Server() config.Server
+	CacheDir() string
 	Debug() bool
 	Mode() string
 }
@@ -63,7 +64,7 @@ func (s *Service) Start(parentCtx context.Context) {
 		return c.String(http.StatusOK, "Hello, World!")
 	})
 
-	route.Register(e, s.db, libraryOf, route.AppInfo{Version: app.Version, Mode: s.cfg.Mode()}, perceptor.Client(), perceptor.LoadValues, s.logger)
+	route.Register(e, s.db, libraryOf, s.cfg.CacheDir(), route.AppInfo{Version: app.Version, Mode: s.cfg.Mode()}, perceptor.Client(), perceptor.LoadValues, s.logger)
 
 	go func() {
 		if err := e.Start(s.cfg.Server().Addr()); err != nil && !errors.Is(err, http.ErrServerClosed) {

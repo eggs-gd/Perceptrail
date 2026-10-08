@@ -80,6 +80,22 @@ type ItemDto struct {
 	// Objects []Object `gorm:"foreignKey:ItemID"`
 }
 
+// StoredItem: an item as the library keeps it — its row, its files, its renditions;
+// what a stream of items carries (a new fact about an item is a new field here, not
+// a new parameter everywhere)
+type StoredItem struct {
+	Item       *ItemDto
+	Files      []*FileDto
+	Renditions []RenditionDto // smallest first
+}
+
+// ItemPublished: an item went through the cheap stage (Visible or Waiting) — the
+// expensive stage may have work for it (the model's event, after the commit)
+type ItemPublished struct {
+	GUID  api.GUID
+	State ItemState
+}
+
 func (ItemDto) TableName() string {
 	return "items"
 }

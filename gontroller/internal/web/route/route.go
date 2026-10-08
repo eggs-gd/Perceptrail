@@ -18,8 +18,9 @@ type Store interface {
 	GetItemByGUID(guid api.GUID) (*dto.ItemDto, error)
 	GetItemsInStates(states ...dto.ItemState) ([]*dto.ItemDto, error)
 	CountItemsInStates(states ...dto.ItemState) (int64, error)
-	StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) error
-	StreamItemsSince(since time.Time, fn func(*dto.ItemDto, []*dto.FileDto) error) error
+	StreamAllItems(fn func(dto.StoredItem) error) error
+	StreamItemsSince(since time.Time, fn func(dto.StoredItem) error) error
+	Renditions(guid api.GUID) ([]dto.RenditionDto, error)
 	GetFileByID(id uint) (*dto.FileDto, error)
 	GetLinkedFiles(guid api.GUID) ([]*dto.FileDto, error)
 	GetMeta(key string) (string, error)
@@ -41,6 +42,7 @@ type LibraryOf func(item *dto.ItemDto) Library
 type routes struct {
 	db         Store
 	of         LibraryOf
+	cache      string // the data's cache: renditions are under it
 	logger     *l.Logger
 	perceptors []api.Perceptor // the ones the client is given, core first
 	values     ValuesLoader    // a perceptor's stored values
@@ -50,8 +52,8 @@ type routes struct {
 // Register: every route of the API — items, assets, renditions (of: the item's
 // library), the perceptors the client is given (perceptors; values loads their
 // stored values), the app's info
-func Register(e *echo.Echo, db Store, of LibraryOf, info AppInfo, perceptors []api.Perceptor, values ValuesLoader, logger *l.Logger) {
-	r := &routes{db: db, of: of, logger: logger, values: values}
+func Register(e *echo.Echo, db Store, of LibraryOf, cache string, info AppInfo, perceptors []api.Perceptor, values ValuesLoader, logger *l.Logger) {
+	r := &routes{db: db, of: of, cache: cache, logger: logger, values: values}
 	r.registerItems("/items", e)
 	r.registerAssets("/assets", e)
 	r.registerPerceptors(e, perceptors)

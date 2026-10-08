@@ -1,6 +1,7 @@
 package config
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -117,5 +118,16 @@ func TestProviders(t *testing.T) {
 	}
 	if f.Providers.Enabled("apple") || !f.Providers.Enabled("immich") || !(Providers(nil)).Enabled("apple") {
 		t.Errorf("providers %+v", f.Providers)
+	}
+}
+
+// Render sizes: sorted, a repeated one once (two renditions of one size would clash)
+func TestRenderSizes(t *testing.T) {
+	r := Render{Sizes: []int{1600, 400, 400}}
+	if err := r.resolve(func(p string) string { return p }); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(r.Sizes, []int{400, 1600}) {
+		t.Errorf("sizes %v, want [400 1600]", r.Sizes)
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"perceptrail/gontroller/internal/library/apple/photokit"
 	"perceptrail/gontroller/internal/model"
 	"perceptrail/gontroller/internal/perceptor"
+	"perceptrail/gontroller/internal/render"
 	"perceptrail/gontroller/internal/web"
 
 	l "github.com/eggs-gd/go-zap-decor"
@@ -48,6 +49,7 @@ func main() {
 	services := app.NewServices()
 	services.Add(library.Service())
 	services.Add(importer.New(cfg, db, logs.Named("importer")))
+	services.Add(render.New(cfg, db, logs.Named("render")))
 	services.Add(web.New(cfg, db, logs.Named("http")))
 
 	ctx, cancel := context.WithCancel(context.Background())

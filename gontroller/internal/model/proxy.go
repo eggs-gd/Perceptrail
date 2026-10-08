@@ -33,12 +33,14 @@ type Proxy struct {
 	logger *l.Logger
 
 	writer *writer
+	events events // domain events, published after the commit (events.go)
 	// every write as a command (command.go), each file its own
 	itemCommands
 	identityCommands
 	flowCommands
 	fileCommands
 	metaCommands
+	workCommands
 }
 
 // query: the model's reads over a connection — the readers' pool (Proxy), or a
@@ -53,6 +55,8 @@ type query struct {
 type tx struct {
 	query
 	logger *l.Logger
+	batch  *batch  // the writer's transaction: its events go out after its commit
+	events *events // the topics a write emits to
 }
 
 // Open connects to the database of the config — the writer, then the readers —
@@ -63,7 +67,17 @@ func Open(cfg Config, logger *l.Logger) (*Proxy, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := writes.AutoMigrate(&dto.ItemDto{}, &dto.FileDto{}, &dto.MetaDto{}); err != nil {
+	// Renditions were kept per render version for a while: those rows go, and render
+	// makes them again
+	if writes.Migrator().HasColumn(&dto.RenditionDto{}, "version") {
+		if err := writes.Migrator().DropTable(&dto.RenditionDto{}); err != nil {
+			return nil, fmt.Errorf("migrate: %w", err)
+		}
+		if err := writes.Where("slug = ?", "render").Delete(&dto.WorkDto{}).Error; err != nil {
+			return nil, fmt.Errorf("migrate: %w", err)
+		}
+	}
+	if err := writes.AutoMigrate(&dto.ItemDto{}, &dto.FileDto{}, &dto.MetaDto{}, &dto.WorkDto{}, &dto.RenditionDto{}); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	// An ignored group was marked "-" before the GUID had a nil value of its own
@@ -76,7 +90,7 @@ func Open(cfg Config, logger *l.Logger) (*Proxy, error) {
 	}
 	p := &Proxy{query: query{reads}, logger: logger, writer: newWriter(writes)}
 	p.itemCommands, p.identityCommands, p.flowCommands = newItemCommands(p), newIdentityCommands(p), newFlowCommands(p)
-	p.fileCommands, p.metaCommands = newFileCommands(p), newMetaCommands(p)
+	p.fileCommands, p.metaCommands, p.workCommands = newFileCommands(p), newMetaCommands(p), newWorkCommands(p)
 	return p, nil
 }
 
@@ -108,7 +122,8 @@ func connect(cfg Config, read bool, logger *l.Logger) (*gorm.DB, error) {
 
 // run: one write in the writer's transaction, under its own savepoint — a failing
 // write (an error, a panic) rolls back alone, the batch commits
-func (p *Proxy) run(db *gorm.DB, write func(*tx) error) (err error) {
+func (p *Proxy) run(b *batch, write func(*tx) error) (err error) {
+	db, emitted := b.db, len(b.outbox)
 	if err := db.SavePoint("write").Error; err != nil {
 		return err
 	}
@@ -118,10 +133,11 @@ func (p *Proxy) run(db *gorm.DB, write func(*tx) error) (err error) {
 		}
 		if err != nil {
 			db.RollbackTo("write")
+			b.outbox = b.outbox[:emitted] // its events go with it
 		}
 		db.Exec("RELEASE SAVEPOINT write")
 	}()
-	return write(&tx{query: query{db}, logger: p.logger})
+	return write(&tx{query: query{db}, logger: p.logger, batch: b, events: &p.events})
 }
 
 func closeDB(db *gorm.DB) error {

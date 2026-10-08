@@ -40,7 +40,9 @@ One line each; the details are in the READMEs and the PRs.
   public first · #34 `api.GUID`: one type for an item's identity from the core
   through the perceptors (perceplib v0.0.7), the nil GUID instead of `"-"` · #35 the
   owner's corrections as skills (`pr-flow`, `review-reply`, `self-review`, `smoke`),
-  hard limits in AGENTS.md, the declaration order checked in CI.
+  hard limits in AGENTS.md, the declaration order checked in CI · #36 the expensive stage
+  beside the import: the work queue, domain events after the commit, render with
+  photo renditions (libvips) making items Ready; ECS a lens, not a migration.
 
 ## Releases
 
@@ -52,7 +54,7 @@ One line each; the details are in the READMEs and the PRs.
 ## Next: the expensive stage (transcode)
 
 In steps, each its own PR (designs below: "The write bus", "Entities, components,
-systems", "The work queue", "Expensive stage"):
+systems — a lens", "The work queue", "Expensive stage"):
 
 0. [ ] **The write bus** — [go-pub-sub](https://github.com/eggs-gd/go-pub-sub) (events and commands,
    classes) and the model's writer. Done: one write connection, a read pool,
@@ -61,12 +63,16 @@ systems", "The work queue", "Expensive stage"):
    asynchronously (nobody uses that yet). Next: the classes' deadlines and the
    callers going asynchronous (the walk without its own pages, the steps each its
    own way). Before any new writer comes.
-1. [ ] **The work queue and the render service** — the `work` and `renditions`
-   tables, `render.New(cfg, db, logger)` with `feed → source → render → commit` and
-   a stand-in renderer (a copy): the queue's rules tested before any codec.
-2. [ ] **Photo renditions** — libvips on the CPU, the source chosen to avoid a full
-   decode (Photos' JPEG, the HEIC's embedded thumbnail, a RAW's embedded JPEG),
-   benchmarks on the real library.
+1. [x] **The work queue and the render service** (#36) — the queue in the model
+   ([README](../../gontroller/internal/model/README.md#the-work-queue)),
+   `internal/render` woken by `ItemPublished`, a stand-in renderer (a symbolic
+   link to the original): the queue's rules tested before any codec.
+2. [ ] **Photo renditions** — done (#36): libvips on the CPU (`vipsthumbnail`, a
+   process each), 400 and 1600 in webp, never upscaled, the item `Ready`, the
+   renditions in the asset's stills. Open: the source chosen to avoid a full decode
+   (Photos' JPEG, the HEIC's embedded thumbnail, a RAW's embedded JPEG), benchmarks
+   on the Mac and the i5 (HEIC and RAW above all), `avif` (Go reads no AVIF header:
+   its `w`/`h` from vips).
 3. [ ] **Video, software** — `libx264`, HDR → SDR, the hover clip, the poster; the
    codec → encoder table and the probe with a software fallback from day one.
 4. [ ] **Docker** — the image (jellyfin-ffmpeg), a base compose with software
@@ -303,126 +309,68 @@ cuts the wait. Each consumer handles it its own way:
 - **the web** — later, a push to the clients on `ItemPublished` instead of their
   polling `/items`.
 
-Steps: the model's domain events (`tx.emit`); then the walk on clients; render
-wakes on `ItemPublished`.
+Built (#36): the domain events (`ItemPublished`, [model
+README](../../gontroller/internal/model/README.md#domain-events)); render wakes on
+it. Open: `ItemGone`, the walk on clients, the web's push.
 
-## Design: entities, components, systems
+## Design: entities, components, systems — a lens, not a migration
 
-The library is many random files becoming artifacts we can show: each file gains
-facts — a stat, a fingerprint, exif, kinds, a preview, renditions, a perceptor's
-values — and each fact is computed from others. That is an ECS: the work queue
-below is its first step, not a separate idea.
+The library is many random files becoming artifacts we can show: each item gains
+facts (a stat, a fingerprint, exif, a preview, renditions, a perceptor's values),
+each computed from others. Seen as an ECS — the item's GUID the entity, a fact a
+component that knows what it was computed from (`version`, `input`), work a system
+with a query ("lacks B, or B not from the current A") — it says where each kind of
+work belongs. It is not a plan to rebuild the import.
 
-- **Entity** — the item's GUID, nothing more.
-- **Component** — every derived fact about an item, a table keyed by the GUID; a
-  row knows what it was computed from: `(guid, version, input, …data)` — `version`
-  of the code or config that made it, `input` the versions of what it read. The
-  perceptors' stores already are components (without `input`).
-- **System** — a function and a query: "has A, lacks B or B not computed from the
-  current A". It takes a page of items, computes outside the transaction, commits
-  its component through the writer. A system declares what it reads and what it
-  writes; the order follows from that (no hand-made pipeline), systems with
-  disjoint writes run side by side (faces, colour, geo).
-- **An event is an alarm**: "component X written" wakes the systems that read X —
-  the database is the truth, the event a hint ("Events and commands").
+**The chain and the queue answer different questions** (decided, 2026-10-07): the
+chain is how one piece of work goes through its steps; the queue is which items
+still need which work. A system's body can be a chain (render: `feed → source →
+render → commit`).
 
-**What goes**: the hand-set states and marks become queries — Visible: has a
-preview; Ready: has every rendition of the current version; Dirty: an input
-changed. `State` as stored, `Rework`, `MarkRework`, `FileDto.Changed` and the
-perceptors' `Reconcile` go; a new perceptor or a new config version is a query that
-finds every item by itself (a backfill nobody enqueues).
+- **The cheap stage stays a chain**: walk → group → gate → identify → exif →
+  commit, one pass, one exiftool read per group feeding every step.
+- **The expensive stage is a queue** ("The work queue" below): render and pixel
+  work have their own pace, failures and retries; the chain never waits for them
+  and knows nothing of them — `ItemPublished` only wakes render.
 
-**What stays out**: identity — which files make an item, a move, a group — is
-relational across entities in one transaction, not work on one entity: walk →
-group → gate → identity stay a chain in the model; systems start once the entity
-exists. Group perceptors (journeys, face clusters) are systems over the whole set
-(a watermark row, as the work queue has it).
+Levels, each its own PR when it pays:
+
+| level | what | the chain |
+|---|---|---|
+| 0 (0.2.0) | the work queue and the render service, `ItemPublished` after the commit | unchanged |
+| 1 | pixel perceptors (faces, objects, colour) as slugs of `work`; their stores get `input`, their `Reconcile` goes. EXIF perceptors stay in the chain (they need its exiftool pass) | unchanged |
+| 2 | the states derived (Visible / Waiting / Ready as queries); `Rework` and `FileDto.Changed` go | `NeedsWork` simpler |
+
+**Rejected — the chain ending at identity**, a scheduler of systems doing the rest:
+the cheap stage in one pass is the efficient one; split into systems, each would
+read exiftool again. The rewrite would break what works for no gain.
 
 **The hard part — `input`**: it must cover every version a result depends on;
-wrong, it gives endless recomputation or stale data. Worth reading before:
-incremental computation (Salsa in rust-analyzer, Bazel's action keys).
+wrong, it gives endless recomputation or stale data (incremental computation:
+Salsa in rust-analyzer, Bazel's action keys).
 
-**Cost**: "lacks a component" over every item — measured in the work queue: 1–2 ms
-a page by the index, 143 ms a full pass at 200 k items per slug; full passes only
-at start and after a version change.
+## Design: the work queue — what is left
 
-**For perceptors**: a plugin declares `reads: [exif, rendition]`, `writes: faces` —
-`perceplib/api` describes a system's contract instead of the core's methods.
+Built (#36): the queue's rules, in the [model
+README](../../gontroller/internal/model/README.md#the-work-queue); why and the
+measurements: findings "The write bus and the queue". SQLite first (decided):
+short transactions, indexed queries, one writer; Postgres stays the way up, not a
+rewrite. Open:
 
-Steps, no rewrite:
-
-1. The work queue and renditions (below), `work` read as the components' table and
-   render as the first system.
-2. The perceptors' stores get `input`: perceptors are systems; `MarkRework` and
-   `Reconcile` go.
-3. The states derived (a view or a query), not written: `Rework` and `Changed` go.
-4. The import chain ends at identity: it creates the entity and its first
-   components (stat, fingerprint); the systems' scheduler does the rest.
-
-## Design: the work queue
-
-SQLite first (decided): the design is tuned to what one file does well — short
-transactions, indexed queries, one writer. Postgres stays the way up, not a
-rewrite: what works on SQLite only gets better there (proper concurrent writers,
-richer indexes, real transactions across connections); the bus does not know
-there is one writer — that is the SQLite executor's business, a Postgres one may
-write over several connections.
-
-- **In the main database: the queue and the renditions** (the core's facts); a
-  perceptor's results stay in its own file.
-- **What is needed is derived, not recorded**: a query — "the item is alive and has
-  no current result for this slug". A new photo enters by itself, a deleted one
-  leaves by the join, a changed config or a new perceptor version makes the need for
-  everything; nobody has to remember to enqueue (as the perceptors' rows and
-  `Reconcile` work today).
-- **One row per item and slug** — `work(guid, slug, …)`: a slug is the render or a
-  perceptor; slugs are independent (faces, objects, colour run in any order, each at
-  its pace), not stages of a chain. A new perceptor is new rows, not a new schema.
-
-  ```sql
-  CREATE TABLE work (
-    guid        TEXT NOT NULL,     -- the item (= asset)
-    slug        TEXT NOT NULL,     -- "render", "faces", "color"…
-    version     INTEGER,           -- done with: the render config's hash / the perceptor's version
-    input       TEXT,              -- done for: the item's fingerprint
-    step        TEXT,              -- the perceptor's own stage (detect → embed…); the core never reads it
-    done_at     INTEGER,           -- unix seconds: SQLite keeps times as text, text compares lie
-    attempts    INTEGER DEFAULT 0,
-    next_try    INTEGER,           -- backoff after failures
-    error       TEXT,
-    lease_until INTEGER,           -- taken into work until then
-    PRIMARY KEY (guid, slug)
-  ) WITHOUT ROWID;
-
-  CREATE TABLE renditions (guid, version, size, format, w, h, bytes, path);  -- cache/r/<guid>/<version>-<size>.<format>
-  ```
-- **The next page** of a slug walks the items' `(state, date)` index — Waiting first,
-  then Visible newest first, a keyset by date — and looks each up by the primary
-  key: 1–2 ms for 64 at 200 k items, even with everything due. Not
-  `ORDER BY (state = Waiting)`: it sorts everything (95 ms).
-- **A lease** (`lease_until` = now + 15 min) when feed takes an item; commit clears
-  it; a crash lets it expire and the item is taken again.
-- **Failures back off**: `attempts++`, `next_try` 1 min → 10 min → 1 h → 1 day;
-  after 5 the item waits for a new `input` or `version`; the error is kept (the info
-  panel can show it). Without it a broken video would come back every pass.
-- **Changed meanwhile**: commit compares the `input` taken with the item's now — a
-  new fingerprint discards the result, the item stays due.
-- **`Rework` goes**: today a stored mark (set by `MarkRework`, cleared by
-  `Publish`) — a queue kept as a flag; with `work` the need is derived (a missing
-  row, another `version` or `input`).
-- **A config change** (sizes, format, codec) is a new `version`: re-rendering is
-  lazy, maintenance prunes the old files.
-- **A slug may require another**: a pixel perceptor's query asks for `render` done
-  with the same `input` (it works on our pixels) — a condition, not an order.
-- **Group perceptors** (journeys, face clusters) are not per item: a watermark row
-  per slug ("changed since I last ran"), in the same table with `guid = ''`.
-- **The item's state**: render's commit makes it `Ready` (`updated_at` moves: the
-  client's delta brings it, Waiting photos finally show); the asset contract gets
-  the renditions as files of their own role with `w`, `h`, format (`srcset`), a new
-  contract version.
-- **Idle polling**: when nothing is due the query scans every item (143 ms at
-  200 k per slug). A full scan at start and after a version change; between them
-  only the items changed since the last pass (`updated_at` is indexed).
+- **Maintenance — the extracted previews**: render sweeps its part of the cache
+  (`r/`: old versions, deleted items); the import's `previews/` of deleted or
+  re-extracted items stay until a sweep of their own.
+- **Idle polling**: a pass scans every due item (143 ms at 200 k per slug); a full
+  pass at start and after a version change, between them only the items changed
+  since the last pass (`updated_at` is indexed).
+- **`WITHOUT ROWID`** for `work` (GORM cannot create it: a migration of its own).
+- **Pixel perceptors** (level 1): a `step` column (the perceptor's own stage, the
+  core never reads it); a slug may require another (`render` done with the same
+  `input`) — a condition, not an order; group perceptors as a watermark row per
+  slug (`guid = ''`).
+- **`Rework` goes later, not with the queue**: it asks for another pass of the cheap
+  stage (a perceptor without a row, Photos made a file local), not render's work —
+  levels 1–2 ("Entities, components, systems").
 
 ## Design: the expensive stage
 
@@ -441,7 +389,7 @@ render:           feed (the next item needing work, from the DB)
 
 - **The queue**: "The work queue" below — what is needed is derived, only what was
   done, failed or taken is recorded. A move changes nothing (outputs live under
-  the GUID: `cache/r/<guid>/…`); long work checks between stages and is cancelled
+  the GUID: `cache/r/<ab>/<cd>/<guid>/…`, `cache.ItemDir`); long work checks between stages and is cancelled
   with its context (`exec.CommandContext`).
 - Perceptors run on both passes (incremental refinement): a pixel perceptor's row
   in `work` records the input it ran on.

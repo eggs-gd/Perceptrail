@@ -45,20 +45,19 @@ jobs:
         go vet ./...
         go test ./...
 
-    # The import tests are integration tests: a real exiftool
-    - name: exiftool
-      run: sudo apt-get update -qq && sudo apt-get install -y -qq libimage-exiftool-perl
+    # The import and render tests are integration tests: a real exiftool, a real
+    # libvips (vipsthumbnail)
+    - name: exiftool, libvips
+      run: sudo apt-get update -qq && sudo apt-get install -y -qq libimage-exiftool-perl libvips-tools
 
-    # internal/transcoder/images needs libvips (cgo) and is not used by the server yet.
     # -race: the import is a concurrent chain over a pool of exiftool processes (the
     # plugin tests build their .so with -race too)
     - name: gontroller
       working-directory: gontroller
       run: |
         go build -o /dev/null .
-        pkgs=$(go list ./... | grep -v transcoder/images)
-        go vet $pkgs
-        go test -race $pkgs
+        go vet ./...
+        go test -race ./...
 
     # Plugins must build against the same perceplib/zap versions as the host — and
     # load into it: -count=1, the test cache does not see the plugins change

@@ -386,6 +386,96 @@ transit, render bounded by its workers) — patterns go to docs and examples.
 - Kubernetes-style keyed work queues in the library: needed there because strangers
   write the handlers of a public product; here an example in the docs.
 
+## The expensive stage: the queue beside the chain (2026-10-07, #36)
+
+- **The chain stays, the queue is added** (the owner, after an ECS design): the
+  chain is how one piece of work goes through its steps, the queue which items still
+  need which work — different questions. The cheap stage is one pass with one
+  exiftool read per group; split into systems, each would read it again. ECS stays
+  a lens for where work belongs (roadmap). Rejected: the chain ending at identity
+  with a scheduler of systems for the rest.
+- **Events from an outbox per savepoint**: the writer's env became a batch (its
+  connection and the events its writes emitted); a write's events are cut back when
+  it rolls back, the batch's sent only after the commit. An event out of a rolled
+  back write would wake render for nothing — harmless (it reads the DB), but a lie.
+- **The queue's messages are `dto`**: render names `dto.Cursor`, `dto.WorkDone`,
+  `dto.WorkFailed`, `dto.ItemPublished` and its own `Store` — never `model`, as the
+  import's steps since #26.
+- **A library's items are finished with no renditions** (Apple renders itself):
+  filtered in Go (`library.Of`, no SQL for it), they would be due on every pass;
+  finished as "nothing to render" for this version they leave the queue.
+- **The stand-in is a symbolic link to the original**: a hard link changes the
+  original's link count and ctime — a write into a Photos library, which a disabled
+  Apple provider leaves to the plain folder (review: Codex); a copy doubles the
+  disk. Render stays off by default while it is a stand-in.
+- **A result carries its lease's token** (review: Codex): a worker that ran past its
+  lease could overwrite the result of the one that took the item next, or a late
+  failure replace a success.
+- **Proved by breaking it**: the queue's tests fail when the lease or the input
+  condition goes, the events' test when a rolled back write keeps its events;
+  render's integration test reads the work row (`Work`) — "not due" alone is also
+  what a lease looks like.
+- **The stand-in alone had no product value** (the owner): the queue, the events and
+  a renderer that shows nothing are plumbing; the PR went on to photo renditions —
+  one feature, its steps as commits (AGENTS.md), and the real renderer tested the
+  queue's design before it merged. The owner's measure: new code is added, old code
+  is not rewritten; where old code had to change, the cut was missing.
+- **`vipsthumbnail` in a process, not a cgo binding** (bimg, govips): a broken file
+  fails a child process, not the server; a timeout kills it (`CommandContext`); the
+  build gains no cgo. A process per image costs milliseconds next to the decode. It
+  shrinks while it loads where the format allows (JPEG). Never upscaled: the sizes
+  go smallest first and stop once the original is smaller (a srcset with two equal
+  widths is invalid). Metadata stripped: a rendition is pixels, no GPS.
+- **`publish` keeps an item Ready while its renditions are for its fingerprint**: a
+  second pass of the cheap stage (a perceptor's rework, Photos made a file local)
+  used to set Waiting / Visible from the preview — the item would vanish, and render
+  would never come back (its work is done for that input). `NeedsWork` counts such
+  an item through the cheap stage too, or every walk would send it again.
+- **The cut the renditions showed**: the stream of items was `fn(item, files)`; a
+  third fact meant a new parameter in every caller. Now `dto.StoredItem` — a new
+  fact is a field. The renditions come per page like the files (one query each), not
+  one query per item (50 k items, 50 k queries).
+- **Smoke on the owner's library** (2026-10-08, a copy of the DB, Mac M-series, 4
+  workers): 7 024 items in the queue, done in about a minute; 571 plain-folder
+  images rendered in 47 s (about 12 a second) — 531 PNG screenshots, 36 JPEG, a
+  HEIC, an AVIF; no failure; 85 KB an item on average (10 KB at 400, 75 KB at 1600:
+  screenshots — photos will weigh more). Apple's items were finished with nothing to
+  render; the 8 left Waiting are videos (no video renderer yet).
+- **The cache is a tree by the GUID** (the owner: thousands of GUID directories on
+  one level): `<part>/<ab>/<cd>/<guid>/` (`internal/cache`), as git's objects and
+  Immich's thumbnails — renditions and extracted previews alike. Two levels of two
+  hex characters: at most 256 entries a level, ~15 items a leaf at a million. A
+  directory per item stays (its sizes); previews already extracted keep their
+  stored paths.
+- **A picture is a picture: no versions in the files** (the owner, after a version
+  per libvips and a directory per version): what matters is the size, the format
+  and the quality on disk, not what made them. A rendition is a size in a format,
+  `r/<ab>/<cd>/<guid>/400.webp`, and a new render replaces them all; the queue's
+  version is what they are (`400_1600-webp-q80`) — another config re-renders, a new
+  libvips does not. Failures are not stopped for good either: after 1 min, 10 min,
+  1 h, once a day — a broken file costs a failed try a day, and one a newer libvips
+  reads comes back by itself (what the libvips version was for). The renditions an
+  earlier layout kept per version are dropped once by `Open`, and rendered again.
+- **A missing tool is not an item's failure** (review: Codex): without vipsthumbnail
+  every item failed and stayed stopped — fixing the path changed nothing. Render
+  checks `vipsthumbnail --vips-version` at start and does not run without it.
+- **One rendition per size, no two of one width** (review: Codex): the config sorts
+  the sizes and drops repeats (two of one size clashed in the database and the item
+  never finished); an original exactly as big as a size stops there — Codex's `<=`
+  on the requested size would also have stopped a 4000 px original shrunk to exactly
+  400, so the check is "no bigger than the rendition before".
+- **Render sweeps its cache by the database** (the owner: no deleting thousands of
+  directories by hand): the model prunes the rows no one shows (`Prune`), render
+  removes every file under `r/` the database no longer lists, then the empty
+  directories — at start and hourly. Mark and sweep, not "delete version X": it also
+  takes what a crash or an old layout left. A file or directory younger than an hour
+  stays (a worker writes before Finish lists). Trap: removing a file touches its
+  directory's time — a directory the sweep emptied goes at once, or the grace would
+  keep every one (the test caught it).
+- **A smoke run builds its plugins into its own directory**: `make build-plugins`
+  rewrites `.build/plugins/*.so`, which the owner's running server has loaded — the
+  `smoke` skill said so, and was wrong.
+
 ## Apple Photos
 
 Layout, the DB's facts and PhotoKit's behaviour: the
