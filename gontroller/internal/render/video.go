@@ -39,6 +39,9 @@ type stream struct {
 
 // software: libx264 — quality by CRF, capped at 4 Mb/s (a screen recording at CRF
 // alone came out at 14 Mb/s for 720p)
+// probeTimeout: ffprobe's time before the encode's is known
+const probeTimeout = time.Minute
+
 var software = recipe{encode: []string{"-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
 	"-maxrate", "4M", "-bufsize", "8M", "-pix_fmt", "yuv420p", "-profile:v", "high"}}
 
@@ -80,7 +83,9 @@ func findFFmpeg(ctx context.Context, bin, probe string) (*ffmpeg, error) {
 //     length, at least two minutes).
 func (f *ffmpeg) video(ctx context.Context, guid api.GUID, src string, size int, dir, rel string,
 	poster bool, still func(ctx context.Context, src string) ([]dto.RenditionDto, error)) ([]dto.RenditionDto, error) {
-	in, err := f.info(ctx, src)
+	probe, cancelProbe := context.WithTimeout(ctx, probeTimeout) // a stalled file holds no worker
+	in, err := f.info(probe, src)
+	cancelProbe()
 	if err != nil {
 		return nil, err
 	}

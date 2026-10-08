@@ -118,11 +118,13 @@ func (s *Service) Start(ctx context.Context) {
 	defer published.Close()
 
 	jobs := make(chan job)
+	free := make(chan struct{}, s.cfg.Render().Workers) // a place per worker at work
 	var workers sync.WaitGroup
 	for range s.cfg.Render().Workers {
 		workers.Go(func() {
 			for j := range jobs {
 				s.render(ctx, j)
+				<-free
 			}
 		})
 	}
@@ -134,7 +136,7 @@ func (s *Service) Start(ctx context.Context) {
 	defer sweeper.Stop()
 	s.sweep()
 	for {
-		s.pass(ctx, jobs)
+		s.pass(ctx, jobs, free)
 		select {
 		case <-ctx.Done():
 			return
@@ -147,8 +149,10 @@ func (s *Service) Start(ctx context.Context) {
 }
 
 // pass: every item due now, page by page, to the workers; a library's items are
-// finished as nothing to render
-func (s *Service) pass(ctx context.Context, jobs chan<- job) {
+// finished as nothing to render. An item is taken only once a worker is free for it
+// (free: a place per worker): a lease starts when its work does, never while it
+// queues behind a page of long videos.
+func (s *Service) pass(ctx context.Context, jobs chan<- job, free chan struct{}) {
 	var cursor dto.Cursor
 	for !cursor.Over() && ctx.Err() == nil {
 		due, next, err := s.db.Due(slug, s.version, cursor, page)
@@ -157,30 +161,26 @@ func (s *Service) pass(ctx context.Context, jobs chan<- job) {
 			return
 		}
 		cursor = next
-		ours := map[api.GUID]*dto.ItemDto{}
-		var guids []api.GUID
 		for _, item := range due {
 			if library.Of(item) != nil || !picture(item) && !moving(item) {
 				s.finish(dto.WorkDone{Slug: slug, GUID: item.GUID, Version: s.version, Input: item.HashShort})
 				continue
 			}
-			ours[item.GUID] = item
-			guids = append(guids, item.GUID)
-		}
-		if len(guids) == 0 {
-			continue
-		}
-		taken, err := s.db.Take(slug, guids)
-		if err != nil {
-			s.logger.Error("Render: items not taken", l.Error(err))
-			return
-		}
-		for _, t := range taken {
 			select {
-			case jobs <- job{ours[t.GUID], t.Lease}:
+			case free <- struct{}{}: // a worker is free for it
 			case <-ctx.Done():
 				return
 			}
+			taken, err := s.db.Take(slug, []api.GUID{item.GUID})
+			if err != nil || len(taken) == 0 {
+				<-free
+				if err != nil {
+					s.logger.Error("Render: an item not taken", l.Error(err))
+					return
+				}
+				continue // another holds it
+			}
+			jobs <- job{item, taken[0].Lease}
 		}
 	}
 }

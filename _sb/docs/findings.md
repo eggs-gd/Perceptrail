@@ -495,7 +495,11 @@ transit, render bounded by its workers) — patterns go to docs and examples.
   its length, a lease 15 minutes — past it the safety pass took the item again, the
   first result was dropped, and a long video could never be accepted. While an item
   renders its lease is renewed every 5 minutes, by its token; a lease lost stops the
-  work.
+  work. Two more holes (review: Codex): a page of 64 was leased at once while
+  N workers took it one by one — its tail's leases ran out in the queue; now an item
+  is taken only when a worker is free for it. And ffprobe ran without a limit (the
+  encode's own is derived from its answer) — a stalled file held a worker forever,
+  its lease renewed; ffprobe has a minute of its own.
 - **ffmpeg is required like libvips**: without it render does not start. "Photos
   without videos" would render a Live Photo without its motion for good (its work
   done for that input).
