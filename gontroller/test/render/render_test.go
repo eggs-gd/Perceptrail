@@ -6,12 +6,15 @@ package render_test
 
 import (
 	"context"
+	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -27,7 +30,7 @@ import (
 )
 
 // version: what the default settings make — sizes, format, quality
-const version = "400_1600-webp-q80"
+const version = "400_1600-webp-q80-v1280"
 
 // start: a model and a running render service over a temporary data dir
 func start(t *testing.T) (*model.Proxy, *config.Config) {
@@ -41,7 +44,7 @@ func startAfter(t *testing.T, before func(*model.Proxy, *config.Config)) (*model
 	t.Helper()
 	dir := t.TempDir()
 	conf := filepath.Join(dir, "config.yml")
-	if err := os.WriteFile(conf, []byte("render:\n  workers: 2\n"), 0o644); err != nil {
+	if err := os.WriteFile(conf, []byte("render:\n  workers: 2\n  ffmpeg: "+ffmpegBin()+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.Read(conf)
@@ -152,21 +155,6 @@ func TestRenderHEIC(t *testing.T) {
 	}
 	if rs, _ := db.Renditions(item.GUID); len(rs) != 2 || rs[0].W != 400 || rs[0].H != 300 || rs[1].W != 1200 {
 		t.Errorf("renditions %+v: 400 and its own 1200", rs)
-	}
-}
-
-// A video waits for a video renderer: done with nothing, its state as it was
-func TestRenderSkipsVideo(t *testing.T) {
-	db, _ := start(t)
-	item := publish(t, db, filepath.Join(t.TempDir(), "clip.mov"), "video/quicktime")
-	if row := work(t, db, item); row.DoneAt == 0 {
-		t.Fatalf("row %+v", row)
-	}
-	if rs, _ := db.Renditions(item.GUID); len(rs) != 0 {
-		t.Errorf("renditions %+v", rs)
-	}
-	if it, _ := db.GetItemByGUID(item.GUID); it.State != dto.Waiting {
-		t.Errorf("state %v, want Waiting", it.State)
 	}
 }
 
@@ -300,5 +288,175 @@ func TestRenderWithoutVips(t *testing.T) {
 	}
 	if row, err := db.Work(item.GUID, "render"); err == nil {
 		t.Errorf("the item got a row without a tool to render it: %+v", row)
+	}
+}
+
+// ffmpegBin: the ffmpeg the tests run (FFMPEG, e.g. one with zscale; else PATH's)
+func ffmpegBin() string {
+	if bin := os.Getenv("FFMPEG"); bin != "" {
+		return bin
+	}
+	return "ffmpeg"
+}
+
+// clip: a test video of w × h, secs long, with sound; hlg: tagged HDR (HLG)
+func clip(t *testing.T, w, h int, secs float64, hlg bool) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "clip.mov")
+	args := []string{"-hide_banner", "-loglevel", "error", "-y",
+		"-f", "lavfi", "-i", fmt.Sprintf("testsrc=size=%dx%d:rate=30", w, h),
+		"-f", "lavfi", "-i", "sine=frequency=440", "-t", strconv.FormatFloat(secs, 'f', 1, 64),
+		"-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac"}
+	if hlg { // the tags on the frames: the encoder writes those
+		args = append(args, "-vf", "setparams=color_trc=arib-std-b67:color_primaries=bt2020:colorspace=bt2020nc")
+	}
+	if out, err := exec.Command(ffmpegBin(), append(args, path)...).CombinedOutput(); err != nil {
+		t.Fatalf("a test clip: %v %s", err, out)
+	}
+	return path
+}
+
+// probed: a rendition's codecs and size as ffprobe sees them
+func probed(t *testing.T, path string) string {
+	t.Helper()
+	probe := "ffprobe"
+	if bin := os.Getenv("FFMPEG"); bin != "" {
+		probe = filepath.Join(filepath.Dir(bin), "ffprobe")
+	}
+	out, err := exec.Command(probe, "-v", "error", "-show_entries", "stream=codec_name,width,height,color_transfer",
+		"-of", "csv=p=0", path).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// byRole: renditions of a role
+func byRole(rs []dto.RenditionDto, role string) []dto.RenditionDto {
+	var out []dto.RenditionDto
+	for _, r := range rs {
+		if r.Role == role {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// A video: one every browser plays (H.264 and AAC, 1280 × 720 from 1920 × 1080) and
+// its poster's stills; the item Ready
+func TestRenderVideo(t *testing.T) {
+	db, cfg := start(t)
+	item := publish(t, db, clip(t, 1920, 1080, 2, false), "video/quicktime")
+	if row := work(t, db, item); row.DoneAt == 0 {
+		t.Fatalf("row %+v", row)
+	}
+	rs, _ := db.Renditions(item.GUID)
+	motion, stills := byRole(rs, dto.RoleMotion), byRole(rs, dto.RoleStill)
+	if len(motion) != 1 || motion[0].W != 1280 || motion[0].H != 720 || motion[0].Format != "mp4" {
+		t.Fatalf("motion %+v", motion)
+	}
+	if got := probed(t, filepath.Join(cfg.CacheDir(), motion[0].Path)); !strings.Contains(got, "h264,1280,720") || !strings.Contains(got, "aac") {
+		t.Errorf("the video: %s", got)
+	}
+	if len(stills) != 2 || stills[0].W != 400 || stills[1].W != 1600 {
+		t.Errorf("the poster's stills %+v", stills)
+	}
+	if it, _ := db.GetItemByGUID(item.GUID); it.State != dto.Ready {
+		t.Errorf("state %v, want Ready", it.State)
+	}
+}
+
+// A small video is not upscaled
+func TestRenderSmallVideo(t *testing.T) {
+	db, _ := start(t)
+	item := publish(t, db, clip(t, 640, 360, 1, false), "video/mp4")
+	work(t, db, item)
+	rs, _ := db.Renditions(item.GUID)
+	if motion := byRole(rs, dto.RoleMotion); len(motion) != 1 || motion[0].W != 640 || motion[0].H != 360 {
+		t.Errorf("motion %+v", motion)
+	}
+}
+
+// An HDR (HLG) video renders — tone mapped to SDR when this ffmpeg has zscale
+func TestRenderHDRVideo(t *testing.T) {
+	db, cfg := start(t)
+	item := publish(t, db, clip(t, 1280, 720, 1, true), "video/quicktime")
+	if row := work(t, db, item); row.DoneAt == 0 {
+		t.Fatalf("row %+v", row)
+	}
+	rs, _ := db.Renditions(item.GUID)
+	motion := byRole(rs, dto.RoleMotion)
+	if len(motion) != 1 {
+		t.Fatalf("renditions %+v", rs)
+	}
+	if got := probed(t, filepath.Join(cfg.CacheDir(), motion[0].Path)); !strings.Contains(got, "bt709") {
+		t.Errorf("the video's transfer: %s, want bt709", got)
+	}
+}
+
+// A Live Photo (a photo with a motion file in its group): its photo's stills and its
+// motion's video — no poster
+func TestRenderLivePhoto(t *testing.T) {
+	db, _ := start(t)
+	still := photo(t, 1200, 900)
+	f, err := db.CreateFile(dto.ItemEntry{Path: still, Name: "live.jpg", MimeType: "image/jpeg"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	motion, err := db.CreateFile(dto.ItemEntry{Path: clip(t, 1280, 960, 1, false), Name: "live.mov", MimeType: "video/quicktime"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, err := db.CreateItem(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.LinkToItem(item.GUID)
+	f.Role = dto.RoleOriginal
+	motion.LinkToItem(item.GUID)
+	motion.Role = dto.RoleMotion
+	db.UpdateFiles([]*dto.FileDto{f, motion})
+	item.HashShort = "fingerprint"
+	if _, err := db.Publish(item); err != nil {
+		t.Fatal(err)
+	}
+	if row := work(t, db, item); row.DoneAt == 0 {
+		t.Fatalf("row %+v", row)
+	}
+	rs, _ := db.Renditions(item.GUID)
+	if stills, moving := byRole(rs, dto.RoleStill), byRole(rs, dto.RoleMotion); len(stills) != 2 || stills[1].W != 1200 || len(moving) != 1 || moving[0].W != 1280 {
+		t.Errorf("stills %+v, motion %+v", stills, moving)
+	}
+}
+
+// No ffmpeg: render does not start — no item rendered without its video, for good
+func TestRenderWithoutFFmpeg(t *testing.T) {
+	dir := t.TempDir()
+	conf := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(conf, []byte("render:\n  ffmpeg: /nowhere/ffmpeg\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Read(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := l.NewLogger(l.FatalLevel, &tree.Decorator{})
+	db, err := model.Open(cfg, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	ctx, stop := context.WithTimeout(context.Background(), 2*time.Second)
+	defer stop()
+	stopped := make(chan struct{})
+	go func() { render.New(cfg, db, logger).Start(ctx); close(stopped) }()
+	item := publish(t, db, photo(t, 800, 600), "image/jpeg")
+	select {
+	case <-stopped:
+	case <-ctx.Done():
+		t.Fatal("render ran without ffmpeg")
+	}
+	if row, err := db.Work(item.GUID, "render"); err == nil {
+		t.Errorf("the item got a row without the tools to render it: %+v", row)
 	}
 }

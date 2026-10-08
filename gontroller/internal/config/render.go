@@ -21,9 +21,19 @@ type Render struct {
 	Format string `yaml:"format"`
 	// The vipsthumbnail executable (libvips). Default: "vipsthumbnail" from PATH
 	Vipsthumbnail string `yaml:"vipsthumbnail"`
+	// The ffmpeg executable, for videos (ffprobe beside it). Default: "ffmpeg" from
+	// PATH
+	FFmpeg string `yaml:"ffmpeg"`
+	// The long side of a video's rendition, px (never larger than the original).
+	// Default: 1280 (720p)
+	Video int `yaml:"video"`
 }
 
-const defaultVipsthumbnail = "vipsthumbnail"
+const (
+	defaultVipsthumbnail = "vipsthumbnail"
+	defaultFFmpeg        = "ffmpeg"
+	defaultVideo         = 1280
+)
 
 var (
 	defaultSizes  = []int{400, 1600}
@@ -32,6 +42,14 @@ var (
 
 // Enabled: render runs
 func (r Render) Enabled() bool { return r.Enable == nil || *r.Enable }
+
+// FFprobe: the ffprobe beside the ffmpeg (from PATH when ffmpeg is)
+func (r Render) FFprobe() string {
+	if filepath.Base(r.FFmpeg) == r.FFmpeg {
+		return "ffprobe"
+	}
+	return filepath.Join(filepath.Dir(r.FFmpeg), "ffprobe")
+}
 
 // resolve fills the unset fields and checks the rest (abs: a path against the
 // config's directory)
@@ -54,12 +72,22 @@ func (r *Render) resolve(abs func(string) string) error {
 	if !slices.Contains(renderFormats, r.Format) {
 		return fmt.Errorf("render format %q: one of %v", r.Format, renderFormats)
 	}
-	if r.Vipsthumbnail == "" {
-		r.Vipsthumbnail = defaultVipsthumbnail
+	if r.Video <= 0 {
+		r.Video = defaultVideo
 	}
-	// A bare command name is looked up in PATH; only paths are resolved
-	if filepath.Base(r.Vipsthumbnail) != r.Vipsthumbnail {
-		r.Vipsthumbnail = abs(r.Vipsthumbnail)
-	}
+	r.Vipsthumbnail = tool(r.Vipsthumbnail, defaultVipsthumbnail, abs)
+	r.FFmpeg = tool(r.FFmpeg, defaultFFmpeg, abs)
 	return nil
+}
+
+// tool: an executable as configured — its default when unset; a bare command name is
+// looked up in PATH, only a path is resolved
+func tool(path, fallback string, abs func(string) string) string {
+	if path == "" {
+		return fallback
+	}
+	if filepath.Base(path) != path {
+		return abs(path)
+	}
+	return path
 }

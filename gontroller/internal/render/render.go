@@ -5,16 +5,20 @@
 //
 //	wake → feed (Due, Take) → workers × N (render) → Finish | Fail
 //
+// A photo: its stills (photo.go, libvips). A video: a video every browser plays and
+// its poster's stills (video.go, ffmpeg). A Live Photo: its photo's stills and its
+// motion's video.
+//
 // Not obvious:
-//   - A library's items (Apple Photos) are rendered by their library, and videos wait
-//     for a video renderer: render finishes them with no renditions, so they are not
-//     due again for this version.
+//   - A library's items (Apple Photos) are rendered by their library: render finishes
+//     them with no renditions, so they are not due again for this version.
 //   - The version is what the renditions are — sizes, format, quality — not what made
 //     them: another config makes every item due again, lazily, page by page; a new
 //     libvips changes nothing. The sweep (sweep.go) takes away what is no longer
 //     listed.
-//   - No vipsthumbnail (not found, does not run): render does not start — a tool
-//     missing is not a failure of every item.
+//   - No vipsthumbnail or no ffmpeg (not found, does not run): render does not start
+//     — a tool missing is not a failure of every item, nor a Live Photo rendered
+//     without its motion for good.
 //   - A safety net wakes it every minute too: a missed event costs a minute, never
 //     an item (the event is a hint, not the truth).
 package render
@@ -51,6 +55,7 @@ type Store interface {
 	Finish(done dto.WorkDone) (bool, error)
 	Fail(failed dto.WorkFailed) error
 	Prune() (int64, error)
+	GetLinkedFiles(guid api.GUID) ([]*dto.FileDto, error)
 	RenditionPaths() ([]string, error)
 	Published() *pubsub.Topic[dto.ItemPublished]
 }
@@ -60,7 +65,8 @@ type Service struct {
 	cfg     Config
 	db      Store
 	logger  *l.Logger
-	version string        // what the renditions are: sizes, format, quality
+	version string        // what the renditions are: sizes, format, quality, the video's size
+	ffmpeg  *ffmpeg       // the video tools (found at Start)
 	wake    chan struct{} // one pending wake-up: many events, one pass
 }
 
@@ -87,10 +93,20 @@ func (s *Service) Start(ctx context.Context) {
 	if !s.cfg.Render().Enabled() {
 		return
 	}
-	if err := runs(ctx, s.cfg.Render().Vipsthumbnail); err != nil {
-		s.logger.Error("Render off: no vipsthumbnail", l.String("vipsthumbnail", s.cfg.Render().Vipsthumbnail), l.Error(err))
+	cfg := s.cfg.Render()
+	if err := runs(ctx, cfg.Vipsthumbnail); err != nil {
+		s.logger.Error("Render off: no vipsthumbnail", l.String("vipsthumbnail", cfg.Vipsthumbnail), l.Error(err))
 		return
 	}
+	video, err := findFFmpeg(ctx, cfg.FFmpeg, cfg.FFprobe())
+	if err != nil {
+		s.logger.Error("Render off: no ffmpeg", l.String("ffmpeg", cfg.FFmpeg), l.Error(err))
+		return
+	}
+	if video.tonemap == "" {
+		s.logger.Warn("Render: this ffmpeg has no zscale — HDR videos are kept as they are", l.String("ffmpeg", cfg.FFmpeg))
+	}
+	s.ffmpeg = video
 	published := s.db.Published().Subscribe(func(dto.ItemPublished) {
 		select {
 		case s.wake <- struct{}{}:
@@ -142,7 +158,7 @@ func (s *Service) pass(ctx context.Context, jobs chan<- job) {
 		ours := map[api.GUID]*dto.ItemDto{}
 		var guids []api.GUID
 		for _, item := range due {
-			if library.Of(item) != nil || !strings.HasPrefix(item.MimeType, "image/") {
+			if library.Of(item) != nil || !picture(item) && !moving(item) {
 				s.finish(dto.WorkDone{Slug: slug, GUID: item.GUID, Version: s.version, Input: item.HashShort})
 				continue
 			}
@@ -169,11 +185,8 @@ func (s *Service) pass(ctx context.Context, jobs chan<- job) {
 
 // render: one item's renditions, finished or failed under its lease
 func (s *Service) render(ctx context.Context, j job) {
-	item, cfg := j.item, s.cfg.Render()
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	rel := cache.ItemDir("r", item.GUID)
-	renditions, err := photo(ctx, cfg.Vipsthumbnail, cfg.Format, cfg.Sizes, item, filepath.Join(s.cfg.CacheDir(), rel), rel)
+	item := j.item
+	renditions, err := s.renditions(ctx, item)
 	if err != nil {
 		s.logger.Warn("Render failed", l.String("file", item.Path), l.Error(err))
 		failed := dto.WorkFailed{Slug: slug, GUID: item.GUID, Lease: j.lease, Version: s.version, Input: item.HashShort, Err: err.Error()}
@@ -191,11 +204,52 @@ func (s *Service) finish(done dto.WorkDone) {
 	}
 }
 
-// versionOf: what the renditions are — sizes, format, quality ("400_1600-webp-q80")
+// renditions: an item's renditions by what it is — a photo, a video, a Live Photo
+// (a photo with a motion file in its group)
+func (s *Service) renditions(ctx context.Context, item *dto.ItemDto) ([]dto.RenditionDto, error) {
+	cfg := s.cfg.Render()
+	rel := cache.ItemDir("r", item.GUID)
+	dir := filepath.Join(s.cfg.CacheDir(), rel)
+	still := func(ctx context.Context, src string) ([]dto.RenditionDto, error) {
+		ctx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
+		return photo(ctx, cfg.Vipsthumbnail, cfg.Format, cfg.Sizes, item.GUID, src, dir, rel)
+	}
+	if moving(item) {
+		return s.ffmpeg.video(ctx, item.GUID, item.Path, cfg.Video, dir, rel, true, still)
+	}
+	stills, err := still(ctx, item.Path)
+	if err != nil {
+		return nil, err
+	}
+	files, err := s.db.GetLinkedFiles(item.GUID)
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range files {
+		if f.Role == dto.RoleMotion { // a Live Photo: its video too
+			motion, err := s.ffmpeg.video(ctx, item.GUID, f.Path, cfg.Video, dir, rel, false, still)
+			if err != nil {
+				return nil, err
+			}
+			return append(stills, motion...), nil
+		}
+	}
+	return stills, nil
+}
+
+// versionOf: what the renditions are — sizes, format, quality, the video's size
+// ("400_1600-webp-q80-v1280")
 func versionOf(cfg config.Render) string {
 	sizes := make([]string, len(cfg.Sizes))
 	for i, size := range cfg.Sizes { // sorted by the config
 		sizes[i] = strconv.Itoa(size)
 	}
-	return fmt.Sprintf("%s-%s-q%d", strings.Join(sizes, "_"), cfg.Format, quality)
+	return fmt.Sprintf("%s-%s-q%d-v%d", strings.Join(sizes, "_"), cfg.Format, quality, cfg.Video)
 }
+
+// picture: the item's main file is a picture
+func picture(item *dto.ItemDto) bool { return strings.HasPrefix(item.MimeType, "image/") }
+
+// moving: the item's main file is a video
+func moving(item *dto.ItemDto) bool { return strings.HasPrefix(item.MimeType, "video/") }

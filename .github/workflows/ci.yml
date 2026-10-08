@@ -46,9 +46,9 @@ jobs:
         go test ./...
 
     # The import and render tests are integration tests: a real exiftool, a real
-    # libvips (vipsthumbnail)
-    - name: exiftool, libvips
-      run: sudo apt-get update -qq && sudo apt-get install -y -qq libimage-exiftool-perl libvips-tools
+    # libvips (vipsthumbnail), a real ffmpeg
+    - name: exiftool, libvips, ffmpeg
+      run: sudo apt-get update -qq && sudo apt-get install -y -qq libimage-exiftool-perl libvips-tools ffmpeg
 
     # -race: the import is a concurrent chain over a pool of exiftool processes (the
     # plugin tests build their .so with -race too)

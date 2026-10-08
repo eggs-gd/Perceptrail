@@ -51,6 +51,8 @@ plugins:
 #   sizes: [400, 1600]  # the long side, px: a tile and the viewer (never upscaled)
 #   format: webp        # webp (default), jpg
 #   vipsthumbnail: /opt/homebrew/bin/vipsthumbnail   # default: from PATH
+#   ffmpeg: /opt/homebrew/opt/ffmpeg-full/bin/ffmpeg # videos (ffprobe beside it); default: from PATH
+#   video: 1280         # a video's long side, px: the viewer's video (720p)
 
 server:
   host: ""      # all interfaces
