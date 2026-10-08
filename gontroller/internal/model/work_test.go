@@ -92,7 +92,7 @@ func TestFinish(t *testing.T) {
 	a := workItem(t, db, "a.jpg", dto.Visible, time.Now(), "h1")
 	taken, _ := db.Take("render", []api.GUID{a.GUID})
 	done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: a.GUID, Lease: taken[0].Lease, Version: "v1", Input: "h1",
-		Renditions: []dto.RenditionDto{{GUID: a.GUID, Version: "v1", Size: 400, Format: "webp", Path: "r/a/v1-400.webp"}}})
+		Renditions: []dto.RenditionDto{{GUID: a.GUID, Size: 400, Format: "webp", Path: "r/a/v1-400.webp"}}})
 	if err != nil || !done {
 		t.Fatalf("finish: %v %v", done, err)
 	}
@@ -119,33 +119,35 @@ func TestFinish(t *testing.T) {
 	}
 }
 
-// A failure backs off; maxAttempts in a row for the same version and input and the
-// item waits for a new one
+// A failure backs off — 1 min, 10 min, 1 h, then a day, again and again: never
+// stopped for good (a newer tool may read the file); due again once its wait passed
 func TestFail(t *testing.T) {
 	db := openTest(t)
 	a := workItem(t, db, "a.jpg", dto.Visible, time.Now(), "h1")
-	retry := func() { // the back-off passed
-		db.writer.db.Model(&dto.WorkDto{}).Where("guid = ?", a.GUID).Update("next_try", 0)
+	row := func() dto.WorkDto {
+		var row dto.WorkDto
+		db.writer.db.Where("guid = ?", a.GUID).First(&row)
+		return row
 	}
-	for i := 1; i <= maxAttempts; i++ {
+	waits := []time.Duration{time.Minute, 10 * time.Minute, time.Hour, 24 * time.Hour, 24 * time.Hour, 24 * time.Hour}
+	for i, wait := range waits {
 		if err := db.Fail(dto.WorkFailed{Slug: "render", GUID: a.GUID, Version: "v1", Input: "h1", Err: "broken"}); err != nil {
 			t.Fatal(err)
 		}
 		if got := pass(t, db, "v1", 10); len(got) != 0 {
-			t.Fatalf("failure %d: due right away", i)
+			t.Fatalf("failure %d: due right away", i+1)
 		}
-		retry()
-	}
-	if got := pass(t, db, "v1", 10); len(got) != 0 {
-		t.Errorf("after %d failures: still due", maxAttempts)
-	}
-	if got := pass(t, db, "v2", 10); len(got) != 1 {
-		t.Errorf("a new version: due %v, want the item", got)
-	}
-	var row dto.WorkDto
-	db.writer.db.Where("guid = ?", a.GUID).First(&row)
-	if row.Attempts != maxAttempts || row.Error != "broken" {
-		t.Errorf("row %+v", row)
+		r := row()
+		if r.Attempts != i+1 || r.Error != "broken" {
+			t.Fatalf("failure %d: row %+v", i+1, r)
+		}
+		if left := time.Until(time.Unix(r.NextTry, 0)); left < wait-time.Minute || left > wait+time.Minute {
+			t.Errorf("failure %d: next try in %v, want %v", i+1, left, wait)
+		}
+		db.writer.db.Model(&dto.WorkDto{}).Where("guid = ?", a.GUID).Update("next_try", 0) // the wait passed
+		if got := pass(t, db, "v1", 10); len(got) != 1 {
+			t.Fatalf("failure %d, its wait passed: due %v, want the item", i+1, got)
+		}
 	}
 }
 
@@ -191,8 +193,8 @@ func TestReadyStays(t *testing.T) {
 	taken, _ := db.Take("render", []api.GUID{a.GUID})
 	done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: a.GUID, Lease: taken[0].Lease, Version: "v1", Input: "h1",
 		Renditions: []dto.RenditionDto{
-			{GUID: a.GUID, Version: "v1", Size: 1600, Format: "webp", W: 1600, H: 1200, Path: "r/a/v1/1600.webp"},
-			{GUID: a.GUID, Version: "v1", Size: 400, Format: "webp", W: 400, H: 300, Path: "r/a/v1/400.webp"}}})
+			{GUID: a.GUID, Size: 1600, Format: "webp", W: 1600, H: 1200, Path: "r/a/v1/1600.webp"},
+			{GUID: a.GUID, Size: 400, Format: "webp", W: 400, H: 300, Path: "r/a/v1/400.webp"}}})
 	if err != nil || !done {
 		t.Fatalf("finish: %v %v", done, err)
 	}
@@ -224,8 +226,8 @@ func TestReadyStays(t *testing.T) {
 	}
 }
 
-// Prune: what a newer version replaced and what a deleted item had go; what is shown
-// stays
+// A new render replaces an item's renditions; Prune takes what a deleted item had;
+// what is shown stays
 func TestPrune(t *testing.T) {
 	db := openTest(t)
 	finish := func(item *dto.ItemDto, version string) {
@@ -233,7 +235,7 @@ func TestPrune(t *testing.T) {
 		taken, _ := db.Take("render", []api.GUID{item.GUID})
 		path := "r/" + string(item.GUID) + "/" + version + "/400.webp"
 		done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: item.GUID, Lease: taken[0].Lease, Version: version, Input: item.HashShort,
-			Renditions: []dto.RenditionDto{{GUID: item.GUID, Version: version, Size: 400, Format: "webp", Path: path}}})
+			Renditions: []dto.RenditionDto{{GUID: item.GUID, Size: 400, Format: "webp", Path: path}}})
 		if err != nil || !done {
 			t.Fatalf("finish %s: %v %v", version, done, err)
 		}
@@ -241,21 +243,21 @@ func TestPrune(t *testing.T) {
 	kept := workItem(t, db, "kept.jpg", dto.Visible, time.Now(), "h1")
 	gone := workItem(t, db, "gone.jpg", dto.Visible, time.Now(), "h2")
 	finish(kept, "v1")
-	finish(kept, "v2") // a new version: v1 is shown no more
+	finish(kept, "v2") // another render: it replaces v1's
 	finish(gone, "v2")
 	gone, _ = db.GetItemByGUID(gone.GUID)
 	if err := db.DeleteItem(gone); err != nil {
 		t.Fatal(err)
 	}
 
-	if n, err := db.Prune(); err != nil || n != 3 {
-		t.Errorf("pruned %d rows (%v), want 3: kept's v1, gone's rendition and its work", n, err)
+	if n, err := db.Prune(); err != nil || n != 2 {
+		t.Errorf("pruned %d rows (%v), want 2: gone's rendition and its work", n, err)
 	}
 	paths, _ := db.RenditionPaths()
 	if want := "r/" + string(kept.GUID) + "/v2/400.webp"; len(paths) != 1 || paths[0] != want {
 		t.Errorf("paths %v, want only %s", paths, want)
 	}
-	if rs, _ := db.Renditions(kept.GUID); len(rs) != 1 || rs[0].Version != "v2" {
+	if rs, _ := db.Renditions(kept.GUID); len(rs) != 1 || rs[0].Path != "r/"+string(kept.GUID)+"/v2/400.webp" {
 		t.Errorf("shown %+v", rs)
 	}
 }

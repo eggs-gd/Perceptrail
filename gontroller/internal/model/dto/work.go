@@ -14,7 +14,7 @@ import (
 type WorkDto struct {
 	GUID       api.GUID `gorm:"primaryKey"`
 	Slug       string   `gorm:"primaryKey"`
-	Version    string   // the code or config it was done (or tried) with
+	Version    string   // what the result is: render's sizes, format and quality; a perceptor's version
 	Input      string   // the item's fingerprint it was done (or tried) for
 	DoneAt     int64    // 0: not done
 	Attempts   int      // failures in a row with this version and input
@@ -24,15 +24,15 @@ type WorkDto struct {
 	Lease      int64    // the taker's token: its result counts only while it holds the row
 }
 
-// RenditionDto: one rendition of an item, made by a version of render
+// RenditionDto: one rendition of an item — a size in a format; a new render of the
+// item replaces them all
 type RenditionDto struct {
-	GUID    api.GUID `gorm:"primaryKey"`
-	Version string   `gorm:"primaryKey"`
-	Size    int      `gorm:"primaryKey"` // the long side, px; 0: the original's size
-	Format  string   `gorm:"primaryKey"` // the file's extension: webp, avif, jpg, mp4…
-	W, H    int      // pixels; 0: unknown
-	Bytes   int64
-	Path    string // relative to the cache: r/<ab>/<cd>/<guid>/<version>/<size>.<format>
+	GUID   api.GUID `gorm:"primaryKey"`
+	Size   int      `gorm:"primaryKey"` // the long side asked for, px
+	Format string   `gorm:"primaryKey"` // the file's extension: webp, jpg…
+	W, H   int      // pixels; 0: unknown
+	Bytes  int64
+	Path   string // relative to the cache: r/<ab>/<cd>/<guid>/<size>.<format>
 }
 
 // Taken: an item taken into a slug's work, and the token its result must carry

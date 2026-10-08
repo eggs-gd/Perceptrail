@@ -24,8 +24,8 @@ import (
 //     A result counts only with the lease's token: a worker that ran past its lease,
 //     the item taken by another meanwhile, changes nothing.
 //   - A result for an input that changed meanwhile is dropped; the item stays due.
-//   - Failures back off (1 min, 10 min, 1 h, 1 day); after maxAttempts the item
-//     waits for a new version or input.
+//   - Failures back off — 1 min, 10 min, 1 h, then once a day: a broken file costs
+//     a failed try a day, and one a newer tool can read comes back by itself.
 
 // TakeArgs: items to take into a slug's work
 type TakeArgs struct {
@@ -33,12 +33,10 @@ type TakeArgs struct {
 	GUIDs []api.GUID
 }
 
-const (
-	lease       = 15 * time.Minute
-	maxAttempts = 5
-)
+const lease = 15 * time.Minute
 
-// backoff: how long a failed item waits, by its failures in a row
+// backoff: how long a failed item waits, by its failures in a row (the last one
+// repeats)
 var backoff = []time.Duration{time.Minute, 10 * time.Minute, time.Hour, 24 * time.Hour}
 
 // workCommands: the queue's writes as commands
@@ -62,7 +60,7 @@ func (q query) Due(slug, version string, after dto.Cursor, n int) ([]*dto.ItemDt
 			Joins("LEFT JOIN work ON work.guid = items.guid AND work.slug = ?", slug).
 			Where("items.state IN ?", states).
 			Where(`(work.guid IS NULL OR work.version <> ? OR work.input <> items.hash_short
-				OR (work.done_at = 0 AND work.next_try <= ? AND work.attempts < ?))`, version, now, maxAttempts).
+				OR (work.done_at = 0 AND work.next_try <= ?))`, version, now).
 			Where("(work.guid IS NULL OR work.lease_until <= ?)", now)
 		if phase == after.Phase && after.ID != 0 {
 			page = page.Where("(items.date < ? OR (items.date = ? AND items.id < ?))", after.Date, after.Date, after.ID)
@@ -79,8 +77,7 @@ func (q query) Due(slug, version string, after dto.Cursor, n int) ([]*dto.ItemDt
 	return nil, dto.Cursor{Phase: 2}, nil
 }
 
-// Renditions: an item's renditions of the version its work was last done with,
-// smallest first
+// Renditions: an item's renditions, smallest first
 func (q query) Renditions(guid api.GUID) ([]dto.RenditionDto, error) {
 	rendered, err := q.renditionsOf([]api.GUID{guid})
 	return rendered[guid], err
@@ -118,9 +115,7 @@ func (p *Proxy) FinishCommand() pubsub.Command[dto.WorkDone, bool] {
 	return p.finish
 }
 
-// Prune: the renditions no one shows any more — of another version than their work
-// was last done with, or of an item gone — and the work of items gone; how many rows
-// went
+// Prune: the renditions and the work of items gone; how many rows went
 func (p *Proxy) Prune() (int64, error) {
 	return p.prune.Do(pubsub.None{})
 }
@@ -188,7 +183,7 @@ func (t *tx) finish(a dto.WorkDone) (bool, error) {
 	if err := t.db.Save(&row).Error; err != nil {
 		return false, err
 	}
-	if err := t.db.Where("guid = ? AND version = ?", a.GUID, a.Version).Delete(&dto.RenditionDto{}).Error; err != nil {
+	if err := t.db.Where("guid = ?", a.GUID).Delete(&dto.RenditionDto{}).Error; err != nil {
 		return false, err
 	}
 	if len(a.Renditions) > 0 {
@@ -225,8 +220,7 @@ func (t *tx) fail(a dto.WorkFailed) (pubsub.None, error) {
 
 // prune: see Prune
 func (t *tx) prune(pubsub.None) (int64, error) {
-	stale := t.db.Where(`NOT EXISTS (SELECT 1 FROM work JOIN items ON items.guid = work.guid AND items.deleted_at IS NULL
-		WHERE work.guid = renditions.guid AND work.version = renditions.version AND work.done_at > 0)`).
+	stale := t.db.Where("NOT EXISTS (SELECT 1 FROM items WHERE items.guid = renditions.guid AND items.deleted_at IS NULL)").
 		Delete(&dto.RenditionDto{})
 	if stale.Error != nil {
 		return 0, stale.Error
@@ -264,19 +258,16 @@ func newWorkCommands(p *Proxy) workCommands {
 func (q query) rendered(item *dto.ItemDto) bool {
 	var n int64
 	q.db.Model(&dto.RenditionDto{}).
-		Joins("JOIN work ON work.guid = renditions.guid AND work.version = renditions.version").
+		Joins("JOIN work ON work.guid = renditions.guid").
 		Where("renditions.guid = ? AND work.done_at > 0 AND work.input = ?", item.GUID, item.HashShort).
 		Count(&n)
 	return n > 0
 }
 
-// renditionsOf: the renditions of these items, each of the version its work was last
-// done with, smallest first
+// renditionsOf: the renditions of these items, smallest first
 func (q query) renditionsOf(guids []api.GUID) (map[api.GUID][]dto.RenditionDto, error) {
 	var rows []dto.RenditionDto
-	err := q.db.Model(&dto.RenditionDto{}).Select("renditions.*").
-		Joins("JOIN work ON work.guid = renditions.guid AND work.version = renditions.version AND work.done_at > 0").
-		Where("renditions.guid IN ?", guids).Order("renditions.size").Find(&rows).Error
+	err := q.db.Where("guid IN ?", guids).Order("size").Find(&rows).Error
 	out := map[api.GUID][]dto.RenditionDto{}
 	for _, r := range rows {
 		out[r.GUID] = append(out[r.GUID], r)

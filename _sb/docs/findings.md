@@ -445,14 +445,20 @@ transit, render bounded by its workers) — patterns go to docs and examples.
   one level): `<part>/<ab>/<cd>/<guid>/` (`internal/cache`), as git's objects and
   Immich's thumbnails — renditions and extracted previews alike. Two levels of two
   hex characters: at most 256 entries a level, ~15 items a leaf at a million. A
-  directory per item stays (its sizes and versions). The renderer's version became
-  `vips2`: what `vips1` made (flat) is rendered again into the tree; previews already
-  extracted keep their stored paths.
+  directory per item stays (its sizes); previews already extracted keep their
+  stored paths.
+- **A picture is a picture: no versions in the files** (the owner, after a version
+  per libvips and a directory per version): what matters is the size, the format
+  and the quality on disk, not what made them. A rendition is a size in a format,
+  `r/<ab>/<cd>/<guid>/400.webp`, and a new render replaces them all; the queue's
+  version is what they are (`400_1600-webp-q80`) — another config re-renders, a new
+  libvips does not. Failures are not stopped for good either: after 1 min, 10 min,
+  1 h, once a day — a broken file costs a failed try a day, and one a newer libvips
+  reads comes back by itself (what the libvips version was for). The renditions an
+  earlier layout kept per version are dropped once by `Open`, and rendered again.
 - **A missing tool is not an item's failure** (review: Codex): without vipsthumbnail
-  every item failed five times and stayed stopped — fixing the path changed no
-  version. Render now checks `vipsthumbnail --vips-version` at start and does not run
-  without it; the version carries libvips' major.minor, so a libvips that may read
-  more retries what failed (not the patch: every `brew upgrade` would re-render all).
+  every item failed and stayed stopped — fixing the path changed nothing. Render
+  checks `vipsthumbnail --vips-version` at start and does not run without it.
 - **One rendition per size, no two of one width** (review: Codex): the config sorts
   the sizes and drops repeats (two of one size clashed in the database and the item
   never finished); an original exactly as big as a size stops there — Codex's `<=`

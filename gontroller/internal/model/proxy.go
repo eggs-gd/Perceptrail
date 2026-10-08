@@ -67,6 +67,16 @@ func Open(cfg Config, logger *l.Logger) (*Proxy, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Renditions were kept per render version for a while: those rows go, and render
+	// makes them again
+	if writes.Migrator().HasColumn(&dto.RenditionDto{}, "version") {
+		if err := writes.Migrator().DropTable(&dto.RenditionDto{}); err != nil {
+			return nil, fmt.Errorf("migrate: %w", err)
+		}
+		if err := writes.Where("slug = ?", "render").Delete(&dto.WorkDto{}).Error; err != nil {
+			return nil, fmt.Errorf("migrate: %w", err)
+		}
+	}
 	if err := writes.AutoMigrate(&dto.ItemDto{}, &dto.FileDto{}, &dto.MetaDto{}, &dto.WorkDto{}, &dto.RenditionDto{}); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

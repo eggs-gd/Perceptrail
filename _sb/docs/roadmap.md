@@ -360,10 +360,6 @@ rewrite. Open:
 - **Maintenance — the extracted previews**: render sweeps its part of the cache
   (`r/`: old versions, deleted items); the import's `previews/` of deleted or
   re-extracted items stay until a sweep of their own.
-- **A version that failed hides the last good one**: the renditions shown are those
-  of the version the work was last *done* with; a failed attempt at a new version
-  sets the row not done, so the old renditions (still on disk) are not listed until
-  it succeeds.
 - **Idle polling**: a pass scans every due item (143 ms at 200 k per slug); a full
   pass at start and after a version change, between them only the items changed
   since the last pass (`updated_at` is indexed).

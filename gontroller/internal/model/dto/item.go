@@ -86,7 +86,7 @@ type ItemDto struct {
 type StoredItem struct {
 	Item       *ItemDto
 	Files      []*FileDto
-	Renditions []RenditionDto // of the version its render was last done with, smallest first
+	Renditions []RenditionDto // smallest first
 }
 
 // ItemPublished: an item went through the cheap stage (Visible or Waiting) — the

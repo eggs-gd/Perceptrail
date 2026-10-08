@@ -56,7 +56,7 @@ func TestRenditionsInTheAsset(t *testing.T) {
 	os.WriteFile(filepath.Join(testCache, rel), []byte("webp"), 0o644)
 	taken, _ := testDB.Take("render", []api.GUID{item.GUID})
 	done, err := testDB.Finish(dto.WorkDone{Slug: "render", GUID: item.GUID, Lease: taken[0].Lease, Version: "v1", Input: "h",
-		Renditions: []dto.RenditionDto{{GUID: item.GUID, Version: "v1", Size: 400, Format: "webp", W: 400, H: 300, Path: rel}}})
+		Renditions: []dto.RenditionDto{{GUID: item.GUID, Size: 400, Format: "webp", W: 400, H: 300, Path: rel}}})
 	if err != nil || !done {
 		t.Fatalf("finish: %v %v", done, err)
 	}

@@ -96,9 +96,11 @@ by the join, a new version makes everything due — nobody enqueues.
 - **`Prune`** (Idle): the renditions no one shows any more — of another version than
   their work was last done with, or of an item gone — and the work of items gone;
   `RenditionPaths` lists what stays (render sweeps its cache by it).
-- **`Fail`**: the error kept (`Work` reads it), the item backs off (1 min, 10 min,
-  1 h, 1 day); after five in a row with the same version and input it waits for a
-  new one.
+- **`Fail`**: the error kept (`Work` reads it), the item backs off — 1 min, 10 min,
+  1 h, then once a day, never stopped for good (a newer tool may read the file).
+- **A new render replaces an item's renditions** (a size in a format each; no
+  version of their own): the version of `work` is what they are (render: sizes,
+  format, quality), not what made them.
 
 Its messages (`dto.WorkDone`, `dto.WorkFailed`, `dto.Cursor`, `dto.Taken`) are data
 in `dto`: a consumer (render) depends on `dto` and its own `Store`, not on the model.

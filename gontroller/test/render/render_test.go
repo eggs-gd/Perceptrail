@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -27,8 +26,8 @@ import (
 	"github.com/eggs-gd/perceplib/api"
 )
 
-// settings: the default settings in a version (libvips' own version before them)
-const settings = "-400_1600-webp"
+// version: what the default settings make — sizes, format, quality
+const version = "400_1600-webp-q80"
 
 // start: a model and a running render service over a temporary data dir
 func start(t *testing.T) (*model.Proxy, *config.Config) {
@@ -118,7 +117,7 @@ func work(t *testing.T, db *model.Proxy, item *dto.ItemDto) *dto.WorkDto {
 func TestRenderPhoto(t *testing.T) {
 	db, cfg := start(t)
 	item := publish(t, db, photo(t, 800, 600), "image/jpeg")
-	if row := work(t, db, item); row.DoneAt == 0 || !strings.HasPrefix(row.Version, "vips") || !strings.HasSuffix(row.Version, settings) {
+	if row := work(t, db, item); row.DoneAt == 0 || row.Version != version {
 		t.Fatalf("row %+v", row)
 	}
 	rs, err := db.Renditions(item.GUID)
@@ -233,17 +232,17 @@ func TestSweep(t *testing.T) {
 	}
 	var stale, fresh, listed string
 	_, cfg := startAfter(t, func(db *model.Proxy, cfg *config.Config) {
-		stale = write(cfg.CacheDir(), "r/aa/bb/AABB-old/vips1-400_1600-webp/400.webp", old)
-		fresh = write(cfg.CacheDir(), "r/cc/dd/CCDD-new/vips-new"+settings+"/400.webp", time.Now())
+		stale = write(cfg.CacheDir(), "r/aa/bb/AABB-old/vips1-400_1600-webp/400.webp", old) // an old layout
+		fresh = write(cfg.CacheDir(), "r/cc/dd/CCDD-new/400.webp", time.Now())
 		f, _ := db.CreateFile(dto.ItemEntry{Path: "/x.jpg", Name: "x.jpg"})
 		item, _ := db.CreateItem(f)
 		item.HashShort = "h"
 		db.UpdateItem(item)
-		rel := filepath.Join("r", "ee", "ff", string(item.GUID), "v0", "400.webp")
+		rel := filepath.Join("r", "ee", "ff", string(item.GUID), "400.webp")
 		listed = write(cfg.CacheDir(), rel, old)
 		taken, _ := db.Take("render", []api.GUID{item.GUID})
 		if done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: item.GUID, Lease: taken[0].Lease, Version: "v0", Input: "h",
-			Renditions: []dto.RenditionDto{{GUID: item.GUID, Version: "v0", Size: 400, Format: "webp", Path: rel}}}); err != nil || !done {
+			Renditions: []dto.RenditionDto{{GUID: item.GUID, Size: 400, Format: "webp", Path: rel}}}); err != nil || !done {
 			t.Fatalf("finish: %v %v", done, err)
 		}
 	})

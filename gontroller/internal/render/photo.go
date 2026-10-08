@@ -8,17 +8,19 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"perceptrail/gontroller/internal/model/dto"
 
 	_ "golang.org/x/image/webp"
 )
 
+// quality: of every rendition (the encoder's 0–100)
+const quality = 80
+
 // photo: an image's renditions — one per size, the long side at most that size,
 // never upscaled — made by vipsthumbnail (libvips) in a process of its own: a
-// broken file fails that process, not the server, and ctx kills it. dir: the
-// version's directory in the cache; rel: the same, relative to the cache.
+// broken file fails that process, not the server, and ctx kills it. dir: the item's
+// directory in the cache; rel: the same, relative to the cache.
 //
 // Not obvious:
 //   - vipsthumbnail shrinks while it loads where the format allows (JPEG): a 12 MP
@@ -37,7 +39,7 @@ func photo(ctx context.Context, vipsthumbnail, format string, sizes []int, item 
 		name := fmt.Sprintf("%d.%s", size, format)
 		dst := filepath.Join(dir, name)
 		cmd := exec.CommandContext(ctx, vipsthumbnail, item.Path,
-			"--size", fmt.Sprintf("%dx%d>", size, size), "-o", dst+"[Q=80,strip]")
+			"--size", fmt.Sprintf("%dx%d>", size, size), "-o", fmt.Sprintf("%s[Q=%d,strip]", dst, quality))
 		if msg, err := cmd.CombinedOutput(); err != nil {
 			return nil, fmt.Errorf("vipsthumbnail %d: %w: %s", size, err, msg)
 		}
@@ -76,20 +78,7 @@ func header(path string) (w, h int, bytes int64, err error) {
 	return cfg.Width, cfg.Height, info.Size(), nil
 }
 
-// vipsVersion: the libvips behind vipsthumbnail, major.minor ("8.18") — it runs, or
-// an error
-func vipsVersion(ctx context.Context, vipsthumbnail string) (string, error) {
-	out, err := exec.CommandContext(ctx, vipsthumbnail, "--vips-version").Output()
-	if err != nil {
-		return "", err
-	}
-	fields := strings.Fields(string(out)) // "libvips 8.18.7"
-	if len(fields) < 2 {
-		return "", fmt.Errorf("no version in %q", out)
-	}
-	parts := strings.SplitN(fields[len(fields)-1], ".", 3)
-	if len(parts) < 2 {
-		return "", fmt.Errorf("no major.minor in %q", out)
-	}
-	return parts[0] + "." + parts[1], nil
+// runs: vipsthumbnail is there and runs
+func runs(ctx context.Context, vipsthumbnail string) error {
+	return exec.CommandContext(ctx, vipsthumbnail, "--vips-version").Run()
 }
