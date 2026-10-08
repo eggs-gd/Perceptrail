@@ -51,7 +51,8 @@ One line each; the details are in the READMEs and the PRs.
   proxy, nothing rendered · #41 Docker packaged: installed from GHCR
   without a checkout (`develop` and releases published), the config decides
   (`./config.yml` mounted), no `LIBRARY` variable · #42 render yields the host:
-  nice 10, a share of the CPUs per tool; a stop is no failure.
+  nice 10, `render.threads`, renditions renamed once whole; a stop is no failure ·
+  #43 a video's cover (an attached picture) is not rendered as the video.
 
 ## Releases
 
