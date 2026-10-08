@@ -78,6 +78,16 @@ func (q query) Due(slug, version string, after dto.Cursor, n int) ([]*dto.ItemDt
 	return nil, dto.Cursor{Phase: 2}, nil
 }
 
+// Renditions: an item's renditions of the version its work was last done with,
+// smallest first
+func (q query) Renditions(guid api.GUID) ([]dto.RenditionDto, error) {
+	var out []dto.RenditionDto
+	err := q.db.Model(&dto.RenditionDto{}).Select("renditions.*").
+		Joins("JOIN work ON work.guid = renditions.guid AND work.version = renditions.version AND work.done_at > 0").
+		Where("renditions.guid = ?", guid).Order("renditions.size").Find(&out).Error
+	return out, err
+}
+
 // Work: an item's row for a slug — done, failed (its error) or taken; ErrNotFound
 // when there is none (the work was never tried)
 func (q query) Work(guid api.GUID, slug string) (*dto.WorkDto, error) {
@@ -169,6 +179,10 @@ func (t *tx) finish(a dto.WorkDone) (bool, error) {
 		if err := t.db.Create(&a.Renditions).Error; err != nil {
 			return false, err
 		}
+		item.State = dto.Ready // what the browser shows is ours now
+		if _, err := t.updateItem(item); err != nil {
+			return false, err
+		}
 	}
 	return true, nil
 }
@@ -214,4 +228,14 @@ func newWorkCommands(p *Proxy) workCommands {
 		finish: command(p, pubsub.Now, (*tx).finish),
 		fail:   command(p, pubsub.Frame, (*tx).fail),
 	}
+}
+
+// rendered: the item has renditions made for its fingerprint as it is now
+func (q query) rendered(item *dto.ItemDto) bool {
+	var n int64
+	q.db.Model(&dto.RenditionDto{}).
+		Joins("JOIN work ON work.guid = renditions.guid AND work.version = renditions.version").
+		Where("renditions.guid = ? AND work.done_at > 0 AND work.input = ?", item.GUID, item.HashShort).
+		Count(&n)
+	return n > 0
 }

@@ -1,11 +1,16 @@
-// The render service over a real model and real files: an item published wakes it,
-// its rendition lands in the cache, the queue says it is done; a file that cannot
-// be rendered is kept as a failure, not retried at once
+// The render service over a real model, real files and a real vipsthumbnail: an item
+// published wakes it, its renditions land in the cache and make it Ready; a video
+// waits for a video renderer; a file that cannot be rendered is kept as a failure,
+// not retried at once; the original is never touched
 package render_test
 
 import (
 	"context"
+	"image"
+	"image/color"
+	"image/jpeg"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"syscall"
 	"testing"
@@ -20,12 +25,15 @@ import (
 	"github.com/eggs-gd/go-zap-decor/tree"
 )
 
+// version: what the default settings make (sizes 400 and 1600, webp)
+const version = "vips1-400_1600-webp"
+
 // start: a model and a running render service over a temporary data dir
 func start(t *testing.T) (*model.Proxy, *config.Config) {
 	t.Helper()
 	dir := t.TempDir()
 	conf := filepath.Join(dir, "config.yml")
-	if err := os.WriteFile(conf, []byte("render:\n  enabled: true\n  workers: 2\n"), 0o644); err != nil {
+	if err := os.WriteFile(conf, []byte("render:\n  workers: 2\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.Read(conf)
@@ -45,9 +53,9 @@ func start(t *testing.T) (*model.Proxy, *config.Config) {
 }
 
 // publish: a plain folder's item of this file, through the cheap stage
-func publish(t *testing.T, db *model.Proxy, path string) *dto.ItemDto {
+func publish(t *testing.T, db *model.Proxy, path, mime string) *dto.ItemDto {
 	t.Helper()
-	f, err := db.CreateFile(dto.ItemEntry{Path: path, Name: filepath.Base(path)})
+	f, err := db.CreateFile(dto.ItemEntry{Path: path, Name: filepath.Base(path), MimeType: mime})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,93 +63,133 @@ func publish(t *testing.T, db *model.Proxy, path string) *dto.ItemDto {
 	if err != nil {
 		t.Fatal(err)
 	}
-	item.HashShort, item.PreviewPath = "fingerprint", path
+	item.HashShort = "fingerprint"
 	if _, err := db.Publish(item); err != nil {
 		t.Fatal(err)
 	}
 	return item
 }
 
-// eventually: the condition within a few seconds (render runs on its own)
-func eventually(t *testing.T, what string, ok func() bool) {
+// photo: a JPEG of w × h
+func photo(t *testing.T, w, h int) string {
 	t.Helper()
-	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
-		if ok() {
-			return
-		}
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for x := range w {
+		img.Set(x, x*h/w, color.RGBA{200, 80, 40, 255})
 	}
-	t.Fatalf("not within 5 s: %s", what)
-}
-
-func due(t *testing.T, db *model.Proxy) int {
-	t.Helper()
-	items, _, err := db.Due("render", "stand-in-1", dto.Cursor{}, 100)
+	path := filepath.Join(t.TempDir(), "photo.jpg")
+	f, err := os.Create(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return len(items)
-}
-
-func TestRender(t *testing.T) {
-	db, cfg := start(t)
-	src := filepath.Join(t.TempDir(), "photo.jpg")
-	if err := os.WriteFile(src, []byte("not really a jpeg"), 0o644); err != nil {
+	defer f.Close()
+	if err := jpeg.Encode(f, img, nil); err != nil {
 		t.Fatal(err)
 	}
-	item := publish(t, db, src)
+	return path
+}
 
-	rendition := filepath.Join(cfg.CacheDir(), "r", item.GUID.String(), "stand-in-1-0.jpg")
-	eventually(t, "the rendition in the cache", func() bool {
-		_, err := os.Stat(rendition)
-		return err == nil
-	})
-	eventually(t, "the queue says done", func() bool {
-		row, err := db.Work(item.GUID, "render")
-		return err == nil && row.DoneAt != 0
-	})
-	if n := due(t, db); n != 0 {
-		t.Errorf("done and still due: %d", n)
+// work: the item's render row once render has written its outcome
+func work(t *testing.T, db *model.Proxy, item *dto.ItemDto) *dto.WorkDto {
+	t.Helper()
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if row, err := db.Work(item.GUID, "render"); err == nil && (row.DoneAt != 0 || row.Error != "") {
+			return row
+		}
 	}
-	if got, err := os.ReadFile(rendition); err != nil || string(got) != "not really a jpeg" {
-		t.Errorf("rendition %q, %v", got, err)
+	t.Fatal("render wrote nothing within 10 s")
+	return nil
+}
+
+// A photo: a rendition per size, never upscaled (800 × 600: 400 and its own size),
+// in the cache, and the item Ready
+func TestRenderPhoto(t *testing.T) {
+	db, cfg := start(t)
+	item := publish(t, db, photo(t, 800, 600), "image/jpeg")
+	if row := work(t, db, item); row.DoneAt == 0 || row.Version != version {
+		t.Fatalf("row %+v", row)
+	}
+	rs, err := db.Renditions(item.GUID)
+	if err != nil || len(rs) != 2 {
+		t.Fatalf("renditions %+v %v", rs, err)
+	}
+	if rs[0].W != 400 || rs[0].H != 300 || rs[1].W != 800 || rs[1].H != 600 || rs[0].Format != "webp" {
+		t.Errorf("sizes %+v", rs)
+	}
+	for _, r := range rs {
+		if info, err := os.Stat(filepath.Join(cfg.CacheDir(), r.Path)); err != nil || info.Size() != r.Bytes {
+			t.Errorf("%s: %v", r.Path, err)
+		}
+	}
+	if it, _ := db.GetItemByGUID(item.GUID); it.State != dto.Ready {
+		t.Errorf("state %v, want Ready", it.State)
 	}
 }
 
-// A file gone before its render: a failure, backed off — not due again at once
+// A HEIC (what Chrome does not show): rendered the same — when this libvips can
+// write one to test with
+func TestRenderHEIC(t *testing.T) {
+	src := photo(t, 1200, 900)
+	heic := filepath.Join(t.TempDir(), "photo.heic")
+	if out, err := exec.Command("vips", "copy", src, heic).CombinedOutput(); err != nil {
+		t.Skipf("this libvips writes no HEIC: %s", out)
+	}
+	db, _ := start(t)
+	item := publish(t, db, heic, "image/heic")
+	if row := work(t, db, item); row.DoneAt == 0 {
+		t.Fatalf("row %+v", row)
+	}
+	if rs, _ := db.Renditions(item.GUID); len(rs) != 2 || rs[0].W != 400 || rs[0].H != 300 || rs[1].W != 1200 {
+		t.Errorf("renditions %+v: 400 and its own 1200", rs)
+	}
+}
+
+// A video waits for a video renderer: done with nothing, its state as it was
+func TestRenderSkipsVideo(t *testing.T) {
+	db, _ := start(t)
+	item := publish(t, db, filepath.Join(t.TempDir(), "clip.mov"), "video/quicktime")
+	if row := work(t, db, item); row.DoneAt == 0 {
+		t.Fatalf("row %+v", row)
+	}
+	if rs, _ := db.Renditions(item.GUID); len(rs) != 0 {
+		t.Errorf("renditions %+v", rs)
+	}
+	if it, _ := db.GetItemByGUID(item.GUID); it.State != dto.Waiting {
+		t.Errorf("state %v, want Waiting", it.State)
+	}
+}
+
+// A file vipsthumbnail cannot read: a failure, one attempt, backed off — not due
+// again at once
 func TestRenderFails(t *testing.T) {
 	db, _ := start(t)
-	item := publish(t, db, filepath.Join(t.TempDir(), "gone.jpg"))
-	eventually(t, "the failure kept", func() bool {
-		row, err := db.Work(item.GUID, "render")
-		return err == nil && row.Error != ""
-	})
-	if row, _ := db.Work(item.GUID, "render"); row.Attempts != 1 || row.DoneAt != 0 || row.LeaseUntil != 0 {
-		t.Errorf("row %+v: one attempt, not done, no lease", row)
+	broken := filepath.Join(t.TempDir(), "broken.jpg")
+	if err := os.WriteFile(broken, []byte("not a jpeg"), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	if n := due(t, db); n != 0 {
-		t.Errorf("due again right after its failure: %d", n)
+	item := publish(t, db, broken, "image/jpeg")
+	row := work(t, db, item)
+	if row.Error == "" || row.Attempts != 1 || row.DoneAt != 0 || row.LeaseUntil != 0 {
+		t.Errorf("row %+v: one attempt, its error, no lease", row)
+	}
+	if due, _, _ := db.Due("render", version, dto.Cursor{}, 10); len(due) != 0 {
+		t.Errorf("due again right after its failure: %d", len(due))
 	}
 }
 
-// The original is only read: no hard link to it (its link count and ctime would
-// change — a Photos library is read only, even when no provider claims it)
+// The original is only read: no link to it, nothing written next to it
 func TestRenderLeavesTheOriginal(t *testing.T) {
-	db, cfg := start(t)
-	src := filepath.Join(t.TempDir(), "photo.jpg")
-	if err := os.WriteFile(src, []byte("pixels"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	db, _ := start(t)
+	src := photo(t, 640, 480)
 	before := links(t, src)
-	item := publish(t, db, src)
-	eventually(t, "rendered", func() bool {
-		row, err := db.Work(item.GUID, "render")
-		return err == nil && row.DoneAt != 0
-	})
+	entries, _ := os.ReadDir(filepath.Dir(src))
+	item := publish(t, db, src, "image/jpeg")
+	work(t, db, item)
 	if after := links(t, src); after != before {
 		t.Errorf("the original's link count %d → %d", before, after)
 	}
-	if _, err := os.Stat(filepath.Join(cfg.CacheDir(), "r", item.GUID.String(), "stand-in-1-0.jpg")); err != nil {
-		t.Errorf("no rendition: %v", err)
+	if now, _ := os.ReadDir(filepath.Dir(src)); len(now) != len(entries) {
+		t.Errorf("files next to the original: %d → %d", len(entries), len(now))
 	}
 }
 

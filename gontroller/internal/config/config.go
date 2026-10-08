@@ -190,7 +190,9 @@ func (f *file) resolve(base string) error {
 	if filepath.Base(f.Exiftool) != f.Exiftool {
 		f.Exiftool = abs(f.Exiftool)
 	}
-	f.Render.resolve()
+	if err := f.Render.resolve(abs); err != nil {
+		return err
+	}
 	if f.Database.Driver == "" {
 		f.Database.Driver = DriverSQLite
 	}

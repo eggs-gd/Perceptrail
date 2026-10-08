@@ -32,7 +32,7 @@ type RenditionDto struct {
 	Format  string   `gorm:"primaryKey"` // the file's extension: webp, avif, jpg, mp4…
 	W, H    int      // pixels; 0: unknown
 	Bytes   int64
-	Path    string // in the cache: r/<guid>/<version>-<size>.<format>
+	Path    string // in the cache: r/<guid>/<version>/<size>.<format>
 }
 
 // Taken: an item taken into a slug's work, and the token its result must carry

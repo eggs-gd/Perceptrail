@@ -176,3 +176,50 @@ func TestLateWorkerAfterLeaseLost(t *testing.T) {
 		t.Errorf("the late worker changed the row: %+v", row)
 	}
 }
+
+// Renditions make an item Ready; another pass of the cheap stage keeps it Ready (its
+// renditions are for this fingerprint) and NeedsWork does not send it again; a new
+// fingerprint sends it back to Waiting
+func TestReadyStays(t *testing.T) {
+	db := openTest(t)
+	a := workItem(t, db, "a.heic", dto.Waiting, time.Now(), "h1")
+	f, _ := db.GetFileByPath("/a.heic") // the file as the import leaves it: linked, a role
+	f.LinkToItem(a.GUID)
+	f.Role = dto.RoleOriginal
+	db.UpdateFile(f)
+	files := []*dto.FileDto{f}
+	taken, _ := db.Take("render", []api.GUID{a.GUID})
+	done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: a.GUID, Lease: taken[0].Lease, Version: "v1", Input: "h1",
+		Renditions: []dto.RenditionDto{
+			{GUID: a.GUID, Version: "v1", Size: 1600, Format: "webp", W: 1600, H: 1200, Path: "r/a/v1/1600.webp"},
+			{GUID: a.GUID, Version: "v1", Size: 400, Format: "webp", W: 400, H: 300, Path: "r/a/v1/400.webp"}}})
+	if err != nil || !done {
+		t.Fatalf("finish: %v %v", done, err)
+	}
+	state := func() dto.ItemState { it, _ := db.GetItemByGUID(a.GUID); return it.State }
+	if state() != dto.Ready {
+		t.Fatalf("state %v, want Ready", state())
+	}
+	if rs, err := db.Renditions(a.GUID); err != nil || len(rs) != 2 || rs[0].Size != 400 {
+		t.Errorf("renditions %+v %v, smallest first", rs, err)
+	}
+
+	it, _ := db.GetItemByGUID(a.GUID)
+	if needs, _, err := db.NeedsWork(files, "", it.MetaHash); err != nil || needs {
+		t.Errorf("a rendered item sent to the cheap stage again: %v %v", needs, err)
+	}
+	if _, err := db.Publish(it); err != nil { // another pass (a perceptor's rework)
+		t.Fatal(err)
+	}
+	if state() != dto.Ready {
+		t.Errorf("another pass: state %v, want Ready", state())
+	}
+
+	it, _ = db.GetItemByGUID(a.GUID)
+	it.HashShort = "h2" // the file changed
+	db.UpdateItem(it)
+	db.Publish(it)
+	if state() != dto.Waiting {
+		t.Errorf("a new fingerprint: state %v, want Waiting", state())
+	}
+}

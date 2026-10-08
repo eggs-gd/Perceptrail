@@ -42,12 +42,15 @@ plugins:
 # ExifTool executable. Default: exiftool from PATH
 # exiftool: /opt/exiftool/exiftool
 
-# The expensive stage: renditions of a plain folder's items, from the work queue,
-# beside the import. Off by default while the renderer is a stand-in (a symbolic link
-# to each original in the cache).
+# The expensive stage: renditions of a plain folder's items (libvips), from the work
+# queue, beside the import; a library's items are rendered by their library.
+# Needs vipsthumbnail (libvips: brew install vips / apt install libvips-tools).
 # render:
-#   enabled: false
+#   enabled: true       # default
 #   workers: 4          # items at once. Default: half the CPUs
+#   sizes: [400, 1600]  # the long side, px: a tile and the viewer (never upscaled)
+#   format: webp        # webp (default), jpg
+#   vipsthumbnail: /opt/homebrew/bin/vipsthumbnail   # default: from PATH
 
 server:
   host: ""      # all interfaces

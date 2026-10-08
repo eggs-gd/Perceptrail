@@ -64,7 +64,7 @@ func (q query) NeedsWork(files []*dto.FileDto, key api.GUID, metaHash string) (n
 	if err != nil {
 		return false, guid, err
 	}
-	return !cheapStageDone(item) || item.HashShort == "" || item.MetaHash != metaHash || item.Rework, guid, nil
+	return !q.cheapStageDone(item) || item.HashShort == "" || item.MetaHash != metaHash || item.Rework, guid, nil
 }
 
 // Unshown: the items nothing can show yet (no file the browser shows, no preview:
@@ -108,12 +108,14 @@ func (p *Proxy) MarkReworkCommand() pubsub.Command[[]api.GUID, int64] {
 }
 
 // cheapStageDone: the item went through the cheap stage (Visible, Waiting) or is
-// fully done (Ready). An item shown without a preview is from before the cheap
-// stage existed: it goes through once more.
-func cheapStageDone(item *dto.ItemDto) bool {
+// fully done (Ready). An item shown without a preview or renditions is from before
+// the cheap stage existed: it goes through once more.
+func (q query) cheapStageDone(item *dto.ItemDto) bool {
 	switch item.State {
-	case dto.Visible, dto.Ready:
+	case dto.Visible:
 		return item.PreviewPath != ""
+	case dto.Ready:
+		return item.PreviewPath != "" || q.rendered(item)
 	case dto.Waiting:
 		return true
 	}
@@ -185,13 +187,18 @@ func (t *tx) ignore(files []*dto.FileDto) (pubsub.None, error) {
 	return pubsub.None{}, err
 }
 
-// publish: the item at the end of the import's cheap stage — Visible when it has
+// publish: the item at the end of the import's cheap stage — Ready when its
+// renditions are there already (made for this fingerprint), else Visible when it has
 // something the browser shows (a preview), else Waiting (the expensive stage later)
 func (t *tx) publish(item *dto.ItemDto) (*dto.ItemDto, error) {
 	item.Rework = false
-	item.State = dto.Waiting
-	if item.PreviewPath != "" {
+	switch {
+	case t.rendered(item):
+		item.State = dto.Ready
+	case item.PreviewPath != "":
 		item.State = dto.Visible
+	default:
+		item.State = dto.Waiting
 	}
 	if _, err := t.updateItem(item); err != nil {
 		return item, err
