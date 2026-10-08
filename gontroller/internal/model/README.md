@@ -93,6 +93,9 @@ by the join, a new version makes everything due — nobody enqueues.
 - **`Take`**: a lease of 15 minutes, not a mark — a crash lets it expire.
 - **`Finish`**: the row done and the version's renditions replaced — unless the
   item's fingerprint changed meanwhile: the result is dropped, the item stays due.
+- **`Prune`** (Idle): the renditions no one shows any more — of another version than
+  their work was last done with, or of an item gone — and the work of items gone;
+  `RenditionPaths` lists what stays (render sweeps its cache by it).
 - **`Fail`**: the error kept (`Work` reads it), the item backs off (1 min, 10 min,
   1 h, 1 day); after five in a row with the same version and input it waits for a
   new one.

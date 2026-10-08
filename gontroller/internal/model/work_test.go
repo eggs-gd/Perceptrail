@@ -223,3 +223,39 @@ func TestReadyStays(t *testing.T) {
 		t.Errorf("a new fingerprint: state %v, want Waiting", state())
 	}
 }
+
+// Prune: what a newer version replaced and what a deleted item had go; what is shown
+// stays
+func TestPrune(t *testing.T) {
+	db := openTest(t)
+	finish := func(item *dto.ItemDto, version string) {
+		t.Helper()
+		taken, _ := db.Take("render", []api.GUID{item.GUID})
+		path := "r/" + string(item.GUID) + "/" + version + "/400.webp"
+		done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: item.GUID, Lease: taken[0].Lease, Version: version, Input: item.HashShort,
+			Renditions: []dto.RenditionDto{{GUID: item.GUID, Version: version, Size: 400, Format: "webp", Path: path}}})
+		if err != nil || !done {
+			t.Fatalf("finish %s: %v %v", version, done, err)
+		}
+	}
+	kept := workItem(t, db, "kept.jpg", dto.Visible, time.Now(), "h1")
+	gone := workItem(t, db, "gone.jpg", dto.Visible, time.Now(), "h2")
+	finish(kept, "v1")
+	finish(kept, "v2") // a new version: v1 is shown no more
+	finish(gone, "v2")
+	gone, _ = db.GetItemByGUID(gone.GUID)
+	if err := db.DeleteItem(gone); err != nil {
+		t.Fatal(err)
+	}
+
+	if n, err := db.Prune(); err != nil || n != 3 {
+		t.Errorf("pruned %d rows (%v), want 3: kept's v1, gone's rendition and its work", n, err)
+	}
+	paths, _ := db.RenditionPaths()
+	if want := "r/" + string(kept.GUID) + "/v2/400.webp"; len(paths) != 1 || paths[0] != want {
+		t.Errorf("paths %v, want only %s", paths, want)
+	}
+	if rs, _ := db.Renditions(kept.GUID); len(rs) != 1 || rs[0].Version != "v2" {
+		t.Errorf("shown %+v", rs)
+	}
+}

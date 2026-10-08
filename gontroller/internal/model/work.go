@@ -46,6 +46,7 @@ type workCommands struct {
 	take   op[TakeArgs, []dto.Taken]
 	finish op[dto.WorkDone, bool]
 	fail   op[dto.WorkFailed, pubsub.None]
+	prune  op[pubsub.None, int64]
 }
 
 // Due: the next page of items that need the slug's work done with this version,
@@ -85,6 +86,13 @@ func (q query) Renditions(guid api.GUID) ([]dto.RenditionDto, error) {
 	return rendered[guid], err
 }
 
+// RenditionPaths: every rendition the database still lists, relative to the cache —
+// what a sweep of the cache keeps
+func (q query) RenditionPaths() ([]string, error) {
+	var paths []string
+	return paths, q.db.Model(&dto.RenditionDto{}).Pluck("path", &paths).Error
+}
+
 // Work: an item's row for a slug — done, failed (its error) or taken; ErrNotFound
 // when there is none (the work was never tried)
 func (q query) Work(guid api.GUID, slug string) (*dto.WorkDto, error) {
@@ -108,6 +116,17 @@ func (p *Proxy) Finish(done dto.WorkDone) (bool, error) {
 
 func (p *Proxy) FinishCommand() pubsub.Command[dto.WorkDone, bool] {
 	return p.finish
+}
+
+// Prune: the renditions no one shows any more — of another version than their work
+// was last done with, or of an item gone — and the work of items gone; how many rows
+// went
+func (p *Proxy) Prune() (int64, error) {
+	return p.prune.Do(pubsub.None{})
+}
+
+func (p *Proxy) PruneCommand() pubsub.Signal[int64] {
+	return pubsub.SignalOf(p.prune)
 }
 
 func (p *Proxy) Fail(failed dto.WorkFailed) error {
@@ -204,6 +223,19 @@ func (t *tx) fail(a dto.WorkFailed) (pubsub.None, error) {
 	return pubsub.None{}, t.db.Save(&row).Error
 }
 
+// prune: see Prune
+func (t *tx) prune(pubsub.None) (int64, error) {
+	stale := t.db.Where(`NOT EXISTS (SELECT 1 FROM work JOIN items ON items.guid = work.guid AND items.deleted_at IS NULL
+		WHERE work.guid = renditions.guid AND work.version = renditions.version AND work.done_at > 0)`).
+		Delete(&dto.RenditionDto{})
+	if stale.Error != nil {
+		return 0, stale.Error
+	}
+	orphans := t.db.Where("NOT EXISTS (SELECT 1 FROM items WHERE items.guid = work.guid AND items.deleted_at IS NULL)").
+		Delete(&dto.WorkDto{})
+	return stale.RowsAffected + orphans.RowsAffected, orphans.Error
+}
+
 // release: the lease goes, nothing else changes
 func (t *tx) release(slug string, guid api.GUID) error {
 	return t.db.Model(&dto.WorkDto{}).Where("guid = ? AND slug = ?", guid, slug).
@@ -224,6 +256,7 @@ func newWorkCommands(p *Proxy) workCommands {
 		take:   command(p, pubsub.Frame, (*tx).take),
 		finish: command(p, pubsub.Now, (*tx).finish),
 		fail:   command(p, pubsub.Frame, (*tx).fail),
+		prune:  command(p, pubsub.Idle, (*tx).prune),
 	}
 }
 

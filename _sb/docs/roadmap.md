@@ -357,9 +357,9 @@ measurements: findings "The write bus and the queue". SQLite first (decided):
 short transactions, indexed queries, one writer; Postgres stays the way up, not a
 rewrite. Open:
 
-- **Maintenance**: another version re-renders lazily (the version is the renderer
-  and its settings); the old versions' files and the rows and files of deleted
-  items stay until a prune.
+- **Maintenance — the extracted previews**: render sweeps its part of the cache
+  (`r/`: old versions, deleted items); the import's `previews/` of deleted or
+  re-extracted items stay until a sweep of their own.
 - **A version that failed hides the last good one**: the renditions shown are those
   of the version the work was last *done* with; a failed attempt at a new version
   sets the row not done, so the old renditions (still on disk) are not listed until

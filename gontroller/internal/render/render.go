@@ -10,7 +10,8 @@
 //     for a video renderer: render finishes them with no renditions, so they are not
 //     due again for this version.
 //   - The version is the renderer and its settings (sizes, format): another config is
-//     another version, and every item is due again — lazily, page by page.
+//     another version, and every item is due again — lazily, page by page; the
+//     sweep (sweep.go) takes the old versions' files away once replaced.
 //   - A safety net wakes it every minute too: a missed event costs a minute, never
 //     an item (the event is a hint, not the truth).
 package render
@@ -47,6 +48,8 @@ type Store interface {
 	Take(slug string, guids []api.GUID) ([]dto.Taken, error)
 	Finish(done dto.WorkDone) (bool, error)
 	Fail(failed dto.WorkFailed) error
+	Prune() (int64, error)
+	RenditionPaths() ([]string, error)
 	Published() *pubsub.Topic[dto.ItemPublished]
 }
 
@@ -102,8 +105,10 @@ func (s *Service) Start(ctx context.Context) {
 	defer workers.Wait()
 	defer close(jobs)
 
-	safety := time.NewTicker(recheck)
+	safety, sweeper := time.NewTicker(recheck), time.NewTicker(sweepEvery)
 	defer safety.Stop()
+	defer sweeper.Stop()
+	s.sweep()
 	for {
 		s.pass(ctx, jobs)
 		select {
@@ -111,6 +116,8 @@ func (s *Service) Start(ctx context.Context) {
 			return
 		case <-s.wake:
 		case <-safety.C:
+		case <-sweeper.C:
+			s.sweep()
 		}
 	}
 }

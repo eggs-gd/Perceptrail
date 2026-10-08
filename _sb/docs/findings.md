@@ -448,6 +448,14 @@ transit, render bounded by its workers) — patterns go to docs and examples.
   directory per item stays (its sizes and versions). The renderer's version became
   `vips2`: what `vips1` made (flat) is rendered again into the tree; previews already
   extracted keep their stored paths.
+- **Render sweeps its cache by the database** (the owner: no deleting thousands of
+  directories by hand): the model prunes the rows no one shows (`Prune`), render
+  removes every file under `r/` the database no longer lists, then the empty
+  directories — at start and hourly. Mark and sweep, not "delete version X": it also
+  takes what a crash or an old layout left. A file or directory younger than an hour
+  stays (a worker writes before Finish lists). Trap: removing a file touches its
+  directory's time — a directory the sweep emptied goes at once, or the grace would
+  keep every one (the test caught it).
 - **A smoke run builds its plugins into its own directory**: `make build-plugins`
   rewrites `.build/plugins/*.so`, which the owner's running server has loaded — the
   `smoke` skill said so, and was wrong.

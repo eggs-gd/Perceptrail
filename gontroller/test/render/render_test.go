@@ -23,6 +23,7 @@ import (
 
 	l "github.com/eggs-gd/go-zap-decor"
 	"github.com/eggs-gd/go-zap-decor/tree"
+	"github.com/eggs-gd/perceplib/api"
 )
 
 // version: what the default settings make (sizes 400 and 1600, webp)
@@ -30,6 +31,13 @@ const version = "vips2-400_1600-webp"
 
 // start: a model and a running render service over a temporary data dir
 func start(t *testing.T) (*model.Proxy, *config.Config) {
+	t.Helper()
+	return startAfter(t, nil)
+}
+
+// startAfter: start, with before run on the model and the config first (what the
+// service finds at its start)
+func startAfter(t *testing.T, before func(*model.Proxy, *config.Config)) (*model.Proxy, *config.Config) {
 	t.Helper()
 	dir := t.TempDir()
 	conf := filepath.Join(dir, "config.yml")
@@ -44,6 +52,9 @@ func start(t *testing.T) (*model.Proxy, *config.Config) {
 	db, err := model.Open(cfg, logger)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if before != nil {
+		before(db, cfg)
 	}
 	ctx, stop := context.WithCancel(context.Background())
 	stopped := make(chan struct{})
@@ -200,4 +211,48 @@ func links(t *testing.T, path string) uint64 {
 		t.Fatal(err)
 	}
 	return uint64(info.Sys().(*syscall.Stat_t).Nlink)
+}
+
+// The sweep at start: a file the database no longer lists goes, with the directories
+// it leaves empty; a file it lists stays, and so does a fresh one (a worker may be
+// writing it)
+func TestSweep(t *testing.T) {
+	old := time.Now().Add(-2 * time.Hour)
+	write := func(cache, rel string, at time.Time) string {
+		t.Helper()
+		path := filepath.Join(cache, rel)
+		os.MkdirAll(filepath.Dir(path), 0o755)
+		if err := os.WriteFile(path, []byte("webp"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		for p := path; p != cache; p = filepath.Dir(p) {
+			os.Chtimes(p, at, at)
+		}
+		return path
+	}
+	var stale, fresh, listed string
+	_, cfg := startAfter(t, func(db *model.Proxy, cfg *config.Config) {
+		stale = write(cfg.CacheDir(), "r/aa/bb/AABB-old/vips1-400_1600-webp/400.webp", old)
+		fresh = write(cfg.CacheDir(), "r/cc/dd/CCDD-new/"+version+"/400.webp", time.Now())
+		f, _ := db.CreateFile(dto.ItemEntry{Path: "/x.jpg", Name: "x.jpg"})
+		item, _ := db.CreateItem(f)
+		item.HashShort = "h"
+		db.UpdateItem(item)
+		rel := filepath.Join("r", "ee", "ff", string(item.GUID), "v0", "400.webp")
+		listed = write(cfg.CacheDir(), rel, old)
+		taken, _ := db.Take("render", []api.GUID{item.GUID})
+		if done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: item.GUID, Lease: taken[0].Lease, Version: "v0", Input: "h",
+			Renditions: []dto.RenditionDto{{GUID: item.GUID, Version: "v0", Size: 400, Format: "webp", Path: rel}}}); err != nil || !done {
+			t.Fatalf("finish: %v %v", done, err)
+		}
+	})
+	gone := func(path string) bool { _, err := os.Stat(path); return os.IsNotExist(err) }
+	for deadline := time.Now().Add(5 * time.Second); !gone(stale) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+	}
+	if !gone(stale) || !gone(filepath.Join(cfg.CacheDir(), "r", "aa")) {
+		t.Error("the stale rendition or its directories stayed")
+	}
+	if gone(fresh) || gone(listed) {
+		t.Errorf("swept what stays: fresh gone %v, listed gone %v", gone(fresh), gone(listed))
+	}
 }
