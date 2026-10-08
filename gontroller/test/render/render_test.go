@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -500,14 +501,7 @@ func startConfig(t *testing.T, yml string) (db *model.Proxy, stop func()) {
 	ctx, cancel := context.WithCancel(context.Background())
 	stopped := make(chan struct{})
 	go func() { render.New(cfg, db, logger).Start(ctx); close(stopped) }()
-	var once bool
-	stop = func() {
-		if !once {
-			once = true
-			cancel()
-			<-stopped
-		}
-	}
+	stop = sync.OnceFunc(func() { cancel(); <-stopped })
 	t.Cleanup(func() { stop(); db.Close() })
 	return db, stop
 }
