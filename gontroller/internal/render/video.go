@@ -4,10 +4,12 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -31,8 +33,21 @@ type recipe struct {
 	encode []string // the encoder and its quality
 }
 
+// probedStream: a video stream as ffprobe's JSON gives it
+type probedStream struct {
+	Index         int
+	Width, Height int
+	Transfer      string `json:"color_transfer"`
+	Primaries     string `json:"color_primaries"`
+	Matrix        string `json:"color_space"`
+	Disposition   struct {
+		AttachedPic int `json:"attached_pic"` // a cover, not the video
+	}
+}
+
 // stream: what ffprobe says of a video
 type stream struct {
+	index                       int // the video stream's index in its file (-map 0:<index>)
 	w, h                        int
 	duration                    time.Duration
 	transfer, primaries, matrix string // its colour, as tagged ("" untagged)
@@ -105,7 +120,7 @@ func (f *ffmpeg) video(ctx context.Context, guid api.GUID, src string, size int,
 	threads := f.proc.threadArgs()
 	args := append([]string{"-hide_banner", "-loglevel", "error", "-y"}, threads...)
 	args = append(args, software.input...)
-	args = append(args, "-i", src, "-map", "0:v:0", "-map", "0:a:0?", "-vf", filters)
+	args = append(args, "-i", src, "-map", in.mapping(), "-map", "0:a:0?", "-vf", filters)
 	args = append(args, threads...)
 	args = append(args, "-filter_threads", threads[1])
 	args = append(args, software.encode...)
@@ -133,7 +148,7 @@ func (f *ffmpeg) video(ctx context.Context, guid api.GUID, src string, size int,
 	defer os.Remove(frame)
 	at := min(time.Second, in.duration/2)
 	grab := []string{"-hide_banner", "-loglevel", "error", "-y", "-threads", threads[1], "-ss", strconv.FormatFloat(at.Seconds(), 'f', 3, 64),
-		"-i", src, "-frames:v", "1"}
+		"-i", src, "-map", in.mapping(), "-frames:v", "1"}
 	if sdr := f.toSDR(in); sdr != "" {
 		grab = append(grab, "-vf", sdr)
 	}
@@ -177,35 +192,48 @@ func (f *ffmpeg) toSDR(in stream) string {
 	return fmt.Sprintf(f.tonemap, in.transfer, cmp.Or(in.primaries, "bt2020"), cmp.Or(in.matrix, "bt2020nc"))
 }
 
-// info: a video's first video stream as ffprobe sees it
+// mapping: ffmpeg's -map of this stream
+func (in stream) mapping() string { return "0:" + strconv.Itoa(in.index) }
+
+// info: a video's video stream as ffprobe sees it (probed)
 func (f *ffmpeg) info(ctx context.Context, src string) (stream, error) {
-	out, err := exec.CommandContext(ctx, f.probe, "-v", "error", "-select_streams", "v:0",
-		"-show_entries", "stream=width,height,color_transfer,color_primaries,color_space:format=duration", "-of", "json", src).Output()
+	out, err := exec.CommandContext(ctx, f.probe, "-v", "error", "-select_streams", "v",
+		"-show_entries", "stream=index,width,height,color_transfer,color_primaries,color_space:stream_disposition=attached_pic:format=duration",
+		"-of", "json", src).Output()
 	if err != nil {
 		return stream{}, fmt.Errorf("ffprobe: %w", err)
 	}
-	var probed struct {
-		Streams []struct {
-			Width, Height int
-			Transfer      string `json:"color_transfer"`
-			Primaries     string `json:"color_primaries"`
-			Matrix        string `json:"color_space"`
-		}
-		Format struct {
+	in, err := probed(out)
+	if err != nil {
+		return stream{}, fmt.Errorf("ffprobe: %s: %w", src, err)
+	}
+	return in, nil
+}
+
+// probed: of ffprobe's video streams, the first that is no cover (an attached
+// picture: a Movie Maker WMV's screenshot comes before its video)
+func probed(out []byte) (stream, error) {
+	var probe struct {
+		Streams []probedStream
+		Format  struct {
 			Duration string
 		}
 	}
-	if err := json.Unmarshal(out, &probed); err != nil || len(probed.Streams) == 0 {
-		return stream{}, fmt.Errorf("ffprobe: no video stream in %s", src)
+	if err := json.Unmarshal(out, &probe); err != nil {
+		return stream{}, err
 	}
-	seconds, _ := strconv.ParseFloat(probed.Format.Duration, 64)
-	s := probed.Streams[0]
+	i := slices.IndexFunc(probe.Streams, func(s probedStream) bool { return s.Disposition.AttachedPic == 0 })
+	if i < 0 {
+		return stream{}, errors.New("no video stream")
+	}
+	seconds, _ := strconv.ParseFloat(probe.Format.Duration, 64)
+	s := probe.Streams[i]
 	untagged := func(v string) string { // ffprobe's word for none
 		if v == "unknown" {
 			return ""
 		}
 		return v
 	}
-	return stream{w: s.Width, h: s.Height, duration: time.Duration(seconds * float64(time.Second)),
+	return stream{index: s.Index, w: s.Width, h: s.Height, duration: time.Duration(seconds * float64(time.Second)),
 		transfer: untagged(s.Transfer), primaries: untagged(s.Primaries), matrix: untagged(s.Matrix)}, nil
 }

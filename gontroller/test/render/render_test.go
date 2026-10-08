@@ -368,6 +368,35 @@ func TestRenderVideo(t *testing.T) {
 	}
 }
 
+// A video with a cover (an attached picture): the video is rendered, not the cover —
+// its size, its poster. (A Movie Maker WMV lists its cover first; ffmpeg's muxers
+// cannot write that, mp4 puts it last: the choice itself is TestProbedSkipsCover's.)
+func TestRenderVideoWithCover(t *testing.T) {
+	video := clip(t, 1920, 1080, 2, false)
+	withCover := filepath.Join(t.TempDir(), "cover.mp4")
+	args := []string{"-hide_banner", "-loglevel", "error", "-y", "-i", photo(t, 640, 480), "-i", video,
+		"-map", "0:v", "-map", "1:v", "-map", "1:a", "-c", "copy", "-c:v:0", "mjpeg", "-disposition:v:0", "attached_pic", withCover}
+	if out, err := exec.Command(ffmpegBin(), args...).CombinedOutput(); err != nil {
+		t.Fatalf("a clip with a cover: %v %s", err, out)
+	}
+	db, cfg := start(t)
+	item := publish(t, db, withCover, "video/mp4")
+	if row := work(t, db, item); row.DoneAt == 0 {
+		t.Fatalf("row %+v", row)
+	}
+	rs, _ := db.Renditions(item.GUID)
+	motion, stills := byRole(rs, dto.RoleMotion), byRole(rs, dto.RoleStill)
+	if len(motion) != 1 || motion[0].W != 1280 || motion[0].H != 720 {
+		t.Fatalf("motion %+v: the video's 1280 × 720, not the cover's", motion)
+	}
+	if got := probed(t, filepath.Join(cfg.CacheDir(), motion[0].Path)); !strings.Contains(got, "h264,1280,720") {
+		t.Errorf("the video: %s", got)
+	}
+	if len(stills) != 2 || stills[1].W != 1600 {
+		t.Errorf("the poster's stills %+v: of the video, not the 640 px cover", stills)
+	}
+}
+
 // A small video is not upscaled
 func TestRenderSmallVideo(t *testing.T) {
 	db, _ := start(t)

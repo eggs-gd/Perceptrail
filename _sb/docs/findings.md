@@ -615,6 +615,13 @@ How it is read, the paths and the proxy: the
   share; the defaults count what this process may use (`GOMAXPROCS`: a cgroup's
   CPU quota), not `NumCPU`. The bulk was photos (libvips, CPU
   only — QSV encodes video, not webp), so hardware alone would not have helped.
+- **The video is the first stream that is no cover** (the owner's Movie Maker WMV:
+  its screenshot, an attached picture, is stream 0): `-map 0:v:0` encoded the
+  cover and mp4 refused it as cover art. ffprobe lists the video streams with
+  their disposition and render maps the first that is not `attached_pic` — for
+  the size, the length and the poster too. ffmpeg's muxers cannot write a leading
+  cover (mp4 moves it last; asf, mkv, nut drop the flag): the choice is tested on
+  ffprobe's JSON.
 - **A stop is not a failure**: a tool killed because the server stops (or a lease
   was lost) was kept as the file's failure and backed off; the work just stops
   now, its lease runs out.
