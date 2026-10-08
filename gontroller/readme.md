@@ -89,6 +89,7 @@ package's own unit tests stay next to it.
 | Package | What |
 |---|---|
 | `internal/app` | the server as a whole: its services run together (`Services`), the version |
+| `internal/cache` | where an item's files live in the data's cache: a tree by the GUID (`<part>/<ab>/<cd>/<guid>`) |
 | `internal/config` | the config file, read once (`Load`, `Read`); a leaf — a module declares the getters it reads as its own `Config` interface |
 | `internal/importer` | the import chain ([README](internal/importer/README.md)) |
 | `internal/render` | the expensive stage: woken by `ItemPublished`, takes what is due from the work queue, renders photos with libvips (`vipsthumbnail`, a process each) on N workers; config `render` |
