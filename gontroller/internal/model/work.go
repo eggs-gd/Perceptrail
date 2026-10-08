@@ -81,11 +81,8 @@ func (q query) Due(slug, version string, after dto.Cursor, n int) ([]*dto.ItemDt
 // Renditions: an item's renditions of the version its work was last done with,
 // smallest first
 func (q query) Renditions(guid api.GUID) ([]dto.RenditionDto, error) {
-	var out []dto.RenditionDto
-	err := q.db.Model(&dto.RenditionDto{}).Select("renditions.*").
-		Joins("JOIN work ON work.guid = renditions.guid AND work.version = renditions.version AND work.done_at > 0").
-		Where("renditions.guid = ?", guid).Order("renditions.size").Find(&out).Error
-	return out, err
+	rendered, err := q.renditionsOf([]api.GUID{guid})
+	return rendered[guid], err
 }
 
 // Work: an item's row for a slug — done, failed (its error) or taken; ErrNotFound
@@ -238,4 +235,18 @@ func (q query) rendered(item *dto.ItemDto) bool {
 		Where("renditions.guid = ? AND work.done_at > 0 AND work.input = ?", item.GUID, item.HashShort).
 		Count(&n)
 	return n > 0
+}
+
+// renditionsOf: the renditions of these items, each of the version its work was last
+// done with, smallest first
+func (q query) renditionsOf(guids []api.GUID) (map[api.GUID][]dto.RenditionDto, error) {
+	var rows []dto.RenditionDto
+	err := q.db.Model(&dto.RenditionDto{}).Select("renditions.*").
+		Joins("JOIN work ON work.guid = renditions.guid AND work.version = renditions.version AND work.done_at > 0").
+		Where("renditions.guid IN ?", guids).Order("renditions.size").Find(&rows).Error
+	out := map[api.GUID][]dto.RenditionDto{}
+	for _, r := range rows {
+		out[r.GUID] = append(out[r.GUID], r)
+	}
+	return out, err
 }

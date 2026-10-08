@@ -34,7 +34,7 @@ func (q query) GetAllGUIDs() ([]api.GUID, error) {
 // StreamAllItems walks items newest first (the default sheet: date) without
 // loading the full table into memory; every item comes with its files (one query
 // per page)
-func (q query) StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) error {
+func (q query) StreamAllItems(fn func(dto.StoredItem) error) error {
 	// The ids in sheet order first (cheap), then the items page by page: a stable
 	// order while the import writes, without paging by a date
 	var ids []uint
@@ -46,7 +46,7 @@ func (q query) StreamAllItems(fn func(*dto.ItemDto, []*dto.FileDto) error) error
 
 // StreamItemsSince: the items changed or deleted since then (deleted ones too:
 // DeletedAt is set), for the client's delta sync
-func (q query) StreamItemsSince(since time.Time, fn func(*dto.ItemDto, []*dto.FileDto) error) error {
+func (q query) StreamItemsSince(since time.Time, fn func(dto.StoredItem) error) error {
 	// SQLite keeps times as text with the writer's offset ("…+03:00", across DST
 	// changes too): compared as julian days, not as text
 	var ids []uint
@@ -127,8 +127,9 @@ func (p *Proxy) ClearHashesCommand() pubsub.Signal[int64] {
 	return pubsub.SignalOf(p.clearHashes)
 }
 
-// streamIDs: the items of ids in that order, each with its files (one query per page)
-func (q query) streamIDs(db *gorm.DB, ids []uint, fn func(*dto.ItemDto, []*dto.FileDto) error) error {
+// streamIDs: the items of ids in that order, each with its files and renditions (a
+// query of each per page)
+func (q query) streamIDs(db *gorm.DB, ids []uint, fn func(dto.StoredItem) error) error {
 	const pageSize = 32
 	for start := 0; start < len(ids); start += pageSize {
 		page := ids[start:min(start+pageSize, len(ids))]
@@ -150,13 +151,17 @@ func (q query) streamIDs(db *gorm.DB, ids []uint, fn func(*dto.ItemDto, []*dto.F
 		for _, f := range files {
 			byItem[f.LinkedTo] = append(byItem[f.LinkedTo], f)
 		}
+		rendered, err := q.renditionsOf(guids)
+		if err != nil {
+			return err
+		}
 
 		for _, id := range page {
 			it, ok := byID[id]
 			if !ok {
 				continue // deleted meanwhile
 			}
-			if err := fn(it, byItem[it.GUID]); err != nil {
+			if err := fn(dto.StoredItem{Item: it, Files: byItem[it.GUID], Renditions: rendered[it.GUID]}); err != nil {
 				return err
 			}
 		}

@@ -3,6 +3,7 @@ package route
 import (
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strconv"
 
 	"github.com/eggs-gd/perceplib/api"
@@ -22,8 +23,9 @@ type itemFile struct {
 
 func (r *routes) registerAssets(segment string, e *echo.Echo) {
 	userGroup := e.Group(segment)
-	userGroup.GET("/:item", r.getFile)            // the default preview
-	userGroup.GET("/:item/:file", r.getAssetFile) // any file of the asset (the asset contract)
+	userGroup.GET("/:item", r.getFile)             // the default preview
+	userGroup.GET("/:item/:file", r.getAssetFile)  // any file of the asset (the asset contract)
+	userGroup.GET("/:item/r/:name", r.getRendered) // a rendition of ours (the asset contract's stills)
 	e.GET("/items/:guid/files", r.getItemFiles)
 }
 
@@ -86,4 +88,20 @@ func (r *routes) getAssetFile(c echo.Context) error {
 		return c.Attachment(f.Path, f.Name)
 	}
 	return c.File(f.Path)
+}
+
+// r.getRendered serves one of the item's renditions by its name (<size>.<format>) —
+// only one the database lists for it, never an arbitrary path
+func (r *routes) getRendered(c echo.Context) error {
+	guid, name := api.GUID(c.Param("item")), c.Param("name")
+	renditions, err := r.db.Renditions(guid)
+	if err != nil {
+		return err
+	}
+	for _, rendition := range renditions {
+		if renditionName(rendition) == name {
+			return c.File(filepath.Join(r.cache, rendition.Path))
+		}
+	}
+	return echo.NewHTTPError(http.StatusNotFound)
 }

@@ -6,6 +6,7 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+	"mime"
 	"os"
 	"sort"
 
@@ -107,3 +108,16 @@ func headerSize(path string) (int, int) {
 	}
 	return cfg.Width, cfg.Height
 }
+
+// withRenditions: our renditions join the asset's stills (the client's srcset picks
+// the one of the width it needs), smallest first
+func withRenditions(a *clientAsset, item *dto.ItemDto, renditions []dto.RenditionDto) {
+	for _, r := range renditions {
+		a.Stills = append(a.Stills, rendition{URL: fmt.Sprintf("/assets/%s/r/%s", item.GUID, renditionName(r)),
+			Mime: mime.TypeByExtension("." + r.Format), W: r.W, H: r.H})
+	}
+	sort.SliceStable(a.Stills, func(i, j int) bool { return a.Stills[i].W < a.Stills[j].W })
+}
+
+// renditionName: a rendition's name in its URL
+func renditionName(r dto.RenditionDto) string { return fmt.Sprintf("%d.%s", r.Size, r.Format) }

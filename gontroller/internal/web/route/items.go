@@ -99,7 +99,10 @@ func (r *routes) getItems(c echo.Context) error {
 	return r.streamClientItems(c.Response().Writer, since, endLine{Cursor: cursor, Total: total})
 }
 
-func (r *routes) toClientItem(dbItem *dto.ItemDto, files []*dto.FileDto) clientItem {
+func (r *routes) toClientItem(stored dto.StoredItem) clientItem {
+	dbItem := stored.Item
+	asset := toClientAsset(dbItem, stored.Files, r.of(dbItem))
+	withRenditions(&asset, dbItem, stored.Renditions)
 	item := clientItem{
 		Id:       dbItem.ID,
 		GUID:     dbItem.GUID,
@@ -107,7 +110,7 @@ func (r *routes) toClientItem(dbItem *dto.ItemDto, files []*dto.FileDto) clientI
 		MimeType: dbItem.MimeType,
 		// Items shown before the cheap stage existed have no preview: the original
 		PreviewMime: dbItem.PreviewMime,
-		Asset:       toClientAsset(dbItem, files, r.of(dbItem)),
+		Asset:       asset,
 	}
 	if item.PreviewMime == "" {
 		item.PreviewMime = dbItem.MimeType
@@ -137,21 +140,21 @@ func (r *routes) streamClientItems(w http.ResponseWriter, since *time.Time, end 
 	encoder := json.NewEncoder(w)
 	var err error
 	if since == nil {
-		err = r.db.StreamAllItems(func(dbItem *dto.ItemDto, files []*dto.FileDto) error {
-			if !shown(dbItem) {
+		err = r.db.StreamAllItems(func(stored dto.StoredItem) error {
+			if !shown(stored.Item) {
 				return nil
 			}
-			if err := encoder.Encode(r.toClientItem(dbItem, files)); err != nil {
+			if err := encoder.Encode(r.toClientItem(stored)); err != nil {
 				return err
 			}
 			flusher.Flush()
 			return nil
 		})
 	} else {
-		err = r.db.StreamItemsSince(*since, func(dbItem *dto.ItemDto, files []*dto.FileDto) error {
-			var out any = r.toClientItem(dbItem, files)
-			if dbItem.DeletedAt.Valid || !shown(dbItem) {
-				out = removedItem{GUID: dbItem.GUID, Removed: true}
+		err = r.db.StreamItemsSince(*since, func(stored dto.StoredItem) error {
+			var out any = r.toClientItem(stored)
+			if stored.Item.DeletedAt.Valid || !shown(stored.Item) {
+				out = removedItem{GUID: stored.Item.GUID, Removed: true}
 			}
 			if err := encoder.Encode(out); err != nil {
 				return err

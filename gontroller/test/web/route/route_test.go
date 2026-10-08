@@ -21,8 +21,12 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// One sqlite database for the package (the model keeps a single connection)
-var testDB *model.Proxy
+// One sqlite database for the package (the model keeps a single connection), and its
+// cache
+var (
+	testDB    *model.Proxy
+	testCache string
+)
 
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "route-test")
@@ -39,6 +43,7 @@ func TestMain(m *testing.M) {
 	if testDB, err = model.Open(cfg, l.NewLogger(l.ErrorLevel, &tree.Decorator{})); err != nil {
 		panic(err)
 	}
+	testCache = cfg.CacheDir()
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
@@ -51,7 +56,7 @@ func server(of route.LibraryOf, perceptors ...api.Perceptor) *echo.Echo {
 		of = func(*dto.ItemDto) route.Library { return nil }
 	}
 	e := echo.New()
-	route.Register(e, testDB, of, route.AppInfo{}, perceptors, nil, l.NewLogger(l.FatalLevel, &tree.Decorator{}))
+	route.Register(e, testDB, of, testCache, route.AppInfo{}, perceptors, nil, l.NewLogger(l.FatalLevel, &tree.Decorator{}))
 	return e
 }
 
