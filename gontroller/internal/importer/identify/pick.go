@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"perceptrail/gontroller/internal/cache"
 	"perceptrail/gontroller/internal/model/dto"
 
 	l "github.com/eggs-gd/go-zap-decor"
@@ -28,8 +29,8 @@ var viewableVideoCodec = map[string]bool{"avc1": true, "avc3": true}
 //  2. the main file itself, if the browser shows it (JPEG, PNG, …; H.264 video);
 //  3. the biggest browser-viewable derivative of the group (the JPEG of a RAW);
 //  4. the preview embedded in the main file (JpgFromRaw, PreviewImage,
-//     ThumbnailImage — the biggest first), extracted by exiftool into
-//     <dir>/<guid>/embedded.jpg.
+//     ThumbnailImage — the biggest first), extracted by exiftool into the item's
+//     directory under the cache's previews/ (cache.ItemDir).
 //
 // Nothing found: the item waits for the expensive stage (Waiting).
 func preview(it *draft, tool Exiftool, dir string, logger *l.Logger) (path, mime string) {
@@ -40,7 +41,7 @@ func preview(it *draft, tool Exiftool, dir string, logger *l.Logger) (path, mime
 		if it.Exif[0] == nil || len(it.Exif[0][tag]) == 0 {
 			continue
 		}
-		dst := filepath.Join(dir, string(it.Item.GUID), "embedded.jpg")
+		dst := filepath.Join(dir, cache.ItemDir("previews", it.Item.GUID), "embedded.jpg")
 		err := tool.Extract(tag, it.Files[0].Path, dst)
 		if err == nil {
 			return dst, "image/jpeg"

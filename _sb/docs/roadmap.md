@@ -393,7 +393,7 @@ render:           feed (the next item needing work, from the DB)
 
 - **The queue**: "The work queue" below — what is needed is derived, only what was
   done, failed or taken is recorded. A move changes nothing (outputs live under
-  the GUID: `cache/r/<guid>/…`); long work checks between stages and is cancelled
+  the GUID: `cache/r/<ab>/<cd>/<guid>/…`, `cache.ItemDir`); long work checks between stages and is cancelled
   with its context (`exec.CommandContext`).
 - Perceptors run on both passes (incremental refinement): a pixel perceptor's row
   in `work` records the input it ran on.

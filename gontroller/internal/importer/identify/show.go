@@ -1,8 +1,6 @@
 package identify
 
 import (
-	"path/filepath"
-
 	l "github.com/eggs-gd/go-zap-decor"
 )
 
@@ -12,7 +10,7 @@ import (
 type show struct {
 	db     SizesStore
 	tool   Exiftool
-	dir    string // extracted previews: <dir>/<guid>/embedded.jpg
+	dir    string // the data's cache: extracted previews go under previews/ (cache.ItemDir)
 	logger *l.Logger
 }
 
@@ -28,5 +26,5 @@ func (s *show) Decorate(d *draft) (*Item, error) {
 func (s *show) Stop() { s.tool.Close() }
 
 func newShow(db SizesStore, tool Exiftool, cacheDir string, logger *l.Logger) *show {
-	return &show{db: db, tool: tool, dir: filepath.Join(cacheDir, "previews"), logger: logger}
+	return &show{db: db, tool: tool, dir: cacheDir, logger: logger}
 }

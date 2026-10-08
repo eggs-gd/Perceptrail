@@ -441,6 +441,13 @@ transit, render bounded by its workers) — patterns go to docs and examples.
   HEIC, an AVIF; no failure; 85 KB an item on average (10 KB at 400, 75 KB at 1600:
   screenshots — photos will weigh more). Apple's items were finished with nothing to
   render; the 8 left Waiting are videos (no video renderer yet).
+- **The cache is a tree by the GUID** (the owner: thousands of GUID directories on
+  one level): `<part>/<ab>/<cd>/<guid>/` (`internal/cache`), as git's objects and
+  Immich's thumbnails — renditions and extracted previews alike. Two levels of two
+  hex characters: at most 256 entries a level, ~15 items a leaf at a million. A
+  directory per item stays (its sizes and versions). The renderer's version became
+  `vips2`: what `vips1` made (flat) is rendered again into the tree; previews already
+  extracted keep their stored paths.
 - **A smoke run builds its plugins into its own directory**: `make build-plugins`
   rewrites `.build/plugins/*.so`, which the owner's running server has loaded — the
   `smoke` skill said so, and was wrong.

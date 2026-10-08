@@ -25,6 +25,7 @@ import (
 	"sync"
 	"time"
 
+	"perceptrail/gontroller/internal/cache"
 	"perceptrail/gontroller/internal/config"
 	"perceptrail/gontroller/internal/library"
 	"perceptrail/gontroller/internal/model/dto"
@@ -158,7 +159,7 @@ func (s *Service) render(ctx context.Context, j job) {
 	item, cfg := j.item, s.cfg.Render()
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	rel := filepath.Join("r", item.GUID.String(), s.version)
+	rel := filepath.Join(cache.ItemDir("r", item.GUID), s.version)
 	renditions, err := photo(ctx, cfg.Vipsthumbnail, cfg.Format, cfg.Sizes, item, filepath.Join(s.cfg.CacheDir(), rel), rel)
 	if err != nil {
 		s.logger.Warn("Render failed", l.String("file", item.Path), l.Error(err))
@@ -186,5 +187,5 @@ func versionOf(cfg config.Render) string {
 	for i, size := range slices.Sorted(slices.Values(cfg.Sizes)) {
 		sizes[i] = strconv.Itoa(size)
 	}
-	return fmt.Sprintf("vips1-%s-%s", strings.Join(sizes, "_"), cfg.Format)
+	return fmt.Sprintf("vips2-%s-%s", strings.Join(sizes, "_"), cfg.Format)
 }

@@ -26,7 +26,7 @@ import (
 )
 
 // version: what the default settings make (sizes 400 and 1600, webp)
-const version = "vips1-400_1600-webp"
+const version = "vips2-400_1600-webp"
 
 // start: a model and a running render service over a temporary data dir
 func start(t *testing.T) (*model.Proxy, *config.Config) {
