@@ -43,7 +43,9 @@ One line each; the details are in the READMEs and the PRs.
   hard limits in AGENTS.md, the declaration order checked in CI · #36 the expensive stage
   beside the import: the work queue, domain events after the commit, render with
   photo renditions (libvips) making items Ready; ECS a lens, not a migration · #37 videos:
-  H.264 every browser plays, a poster, Live Photos' motion, HDR tone mapped.
+  H.264 every browser plays, a poster, Live Photos' motion, HDR tone mapped · #38 Docker:
+  two images (server, web) in one compose, published to GHCR; the gallery a
+  single-page app behind Caddy.
 
 ## Releases
 
@@ -78,9 +80,12 @@ systems — a lens", "The work queue", "Expensive stage"):
    4 Mb/s), the poster's stills, a Live Photo's motion; HDR → SDR with `zscale`; the
    recipe the software row of a table the hardware rows join. No hover clip: the
    tile plays the motion (open: a clip if 720p on hover weighs too much).
-4. [ ] **Docker** — the image (jellyfin-ffmpeg), a base compose with software
-   encoding; the docs say a Mac with Photos runs the native binary.
-5. [ ] **Hardware** — QSV (`hwaccel.qsv.yml`), VideoToolbox (native on a Mac),
+4. [x] **Docker** (#38) — two images (the server: jellyfin-ffmpeg, libvips,
+   exiftool, the plugins; the web: Caddy, `/api` to the server), one compose with
+   software encoding, GHCR on every release; a Mac with Photos runs the native
+   binary. Open: the server as a non-root user, arm64 images.
+5. [ ] **Hardware** — QSV (a compose override `hwaccel.qsv.yml`: `/dev/dri`, the
+   `render` group; `hwaccel.nvenc.yml`), VideoToolbox (native on a Mac),
    NVENC when there is one to test on; a macOS ImageIO HEIC decoder only if the
    benchmarks show HEIC is the bottleneck.
 
@@ -188,10 +193,6 @@ the resources differ (IO and exiftool, CPU / GPU, ML); roles later
         versions and inputs, not a mark;
       - `dto.WalkedFile.Missing` stays for now (a fact in a message).
 
-- [ ] Dockerfile (with 0.2.0): CGO (sqlite, libvips), jellyfin-ffmpeg, exiftool from
-      a `dist-*` release, `CMD --config /data/config.yml`, `/data` a volume. A base
-      compose (software encoding) + an override per accelerator
-      (`hwaccel.qsv.yml`: `/dev/dri` and the `render` group; `hwaccel.nvenc.yml`).
 - [ ] **Zoom in the viewer** — the wheel zoom worked badly and is gone. Look at
       Immich and Google Photos (they differ): around the pointer, pan, pinch,
       double-click, the original's pixels past the preview.

@@ -18,6 +18,11 @@ git checkout -b feature/<name>
 One feature = one branch = one PR. Another open PR touching the same files: wait for
 its merge rather than stack a branch on it.
 
+The owner's servers run from the main checkout (AGENTS.md "Hard limits"): a change
+to svebapp's config or `.env` there restarts their Vite. Such work goes into a
+worktree beside it — `git worktree add -b feature/<name> ../Perceptrail-<name>
+develop` — removed after the merge (`git worktree remove`).
+
 ## Before every commit
 
 1. `git status --short` — only the files you meant. A plain `go build` inside a
