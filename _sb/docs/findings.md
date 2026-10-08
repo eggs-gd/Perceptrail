@@ -644,6 +644,25 @@ Layout, the DB's facts and PhotoKit's behaviour: the
 
 ## Repository
 
+- **Docker: two containers, one address** (#38, the owner: ML and Postgres will be
+  services of the same compose — no point squeezing into one process): the server,
+  and the web — Caddy serving the gallery as a single-page app and sending `/api`
+  to the server over the compose network. The browser cannot reach a container by
+  name, and the API's address was baked into the client at build time
+  (`$env/static/public`): now it is `/api`, wherever the image runs, no CORS. Caddy
+  rather than a proxy of our own in SvelteKit's Node server: the `/items` stream
+  (`flush_interval -1`) and video ranges work as they are. The client never used
+  server rendering — `adapter-static` (3.x: 4.x wants SvelteKit 3) with `ssr = false`.
+- **The server image**: trixie (Debian's stable) and `jellyfin-ffmpeg8` (Jellyfin
+  builds 8 for trixie, not for bookworm); the plugins built in the same stage as the
+  host (a plugin loads only into a host built the same way); `libheif-plugin-libde265`
+  or libvips reads no HEIC. CI builds both images and runs the whole way through
+  compose (a photo made by the image's own vips, imported, rendered, served through
+  Caddy) — there was no Docker on the dev Mac.
+- **Client config changes in a worktree**: the owner's Vite runs from the main
+  checkout; changing svebapp's config or `.env` there restarts it (a hard limit). The
+  Docker work went into a `git worktree` beside it.
+
 - **Corrections become skills and checks** (2026-10-06): over one long session the
   owner kept re-teaching the same things — the push and PR order, answering a
   review, the smoke pair, and a taste (state held twice, hand-set booleans, names,

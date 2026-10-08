@@ -72,8 +72,9 @@ jobs:
       run:
         working-directory: svebapp
     env:
-      # svebapp/.env is not committed; $env/static/public needs it at build time
-      PUBLIC_API_PATH: http://localhost:1323
+      # svebapp/.env is not committed; $env/static/public needs it at build time — the
+      # API as the web container serves it
+      PUBLIC_API_PATH: /api
     steps:
     - uses: actions/checkout@v7
       with:

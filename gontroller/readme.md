@@ -82,6 +82,26 @@ same config gives the same database and caches from any working directory. See
 Host and plugins must be built with the same Go and the same versions of shared
 packages — see [findings](../_sb/docs/findings.md#go-and-the-toolchain).
 
+### Docker
+
+Two images, one [`compose.yml`](../compose.yml) at the repository root:
+`ghcr.io/eggs-gd/perceptrail-server` (gontroller, its plugins, jellyfin-ffmpeg,
+libvips, exiftool) and `ghcr.io/eggs-gd/perceptrail-web` (the gallery, served by
+Caddy, which sends `/api` to the server — one address for the browser).
+
+```bash
+LIBRARY=/path/to/photos docker compose up -d    # then http://<host>:8080
+```
+
+- The library is mounted read only at `/library`; the data (database, caches) is
+  `./data` → `/data`. `PORT` changes the published port.
+- The server's config in the image is [`docker/config.yml`](../docker/config.yml);
+  mount your own over `/etc/perceptrail/config.yml` to change it.
+- Published to GHCR on every release (`latest` and the version); `docker compose
+  build` builds them from the checkout.
+- A Mac with Apple Photos runs the native binary: PhotoKit (on demand) and
+  VideoToolbox are not in Docker.
+
 ## HTTP API
 
 | Method | Path | Returns |

@@ -11,11 +11,16 @@ Design: [Workers](../_sb/puml/Workers.puml), [Protocol](../_sb/puml/Protocol.pum
 npm install
 npm run dev       # dev server
 npm run check     # svelte-check (must be 0 errors)
-npm run build     # production build (adapter-node)
+npm run build     # production build: static files in build/ (adapter-static)
 ```
 
-`.env`: `PUBLIC_API_PATH` — gontroller address (`http://localhost:1323` in the repo).
-Variables prefixed with `SVEBAPP_` are read by adapter-node.
+A single-page app (`ssr = false`, `adapter-static` with the fallback `200.html`): it
+all renders in the browser. In Docker, Caddy serves `build/` and sends `/api` to
+gontroller ([`docker/`](../docker)).
+
+`.env` (not committed): `PUBLIC_API_PATH` — where the API is. `/api` works as in
+Docker: the dev server sends `/api` to gontroller (`SVEBAPP_API`, default
+`http://localhost:1323`); an absolute address (`http://localhost:1323`) works too.
 
 ## Architecture
 

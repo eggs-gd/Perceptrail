@@ -1,0 +1,73 @@
+name: Docker
+
+# The two images (docker/): built and smoke-tested through compose on a PR that
+# touches what goes into them; published to GHCR on every release (master).
+on:
+  pull_request:
+    paths:
+      - docker/**
+      - compose.yml
+      - .dockerignore
+      - gontroller/**
+      - perceplib/**
+      - perceptors/**
+      - svebapp/**
+      - .github/workflows/docker.yml
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0  # the version is derived from history
+
+    - name: Version
+      id: version
+      run: echo "version=$(scripts/version.sh)" >> "$GITHUB_OUTPUT"
+
+    - name: Build
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
+      run: |
+        docker build -f docker/server.Dockerfile --build-arg VERSION="$VERSION" -t ghcr.io/eggs-gd/perceptrail-server:latest .
+        docker build -f docker/web.Dockerfile --build-arg VERSION="$VERSION" -t ghcr.io/eggs-gd/perceptrail-web:latest .
+
+    # The whole way: a photo in a library, the server imports and renders it, the web
+    # container serves the app and sends /api to the server
+    - name: Smoke
+      run: |
+        mkdir -p library data
+        docker run --rm -v "$PWD/library:/library" --entrypoint vips \
+          ghcr.io/eggs-gd/perceptrail-server:latest black /library/photo.jpg 1200 900 --bands 3
+        LIBRARY="$PWD/library" docker compose up -d --no-build
+        for i in $(seq 60); do curl -fs localhost:8080/api/app && break; sleep 2; done
+        curl -fs localhost:8080/api/app | grep -q '"version"'
+        curl -fs localhost:8080/ | grep -q '<html'
+        curl -fs localhost:8080/v/date | grep -q '<html'   # an app route: the fallback page
+        for i in $(seq 60); do curl -fs localhost:8080/api/items | grep -q '/r/400.webp' && break; sleep 2; done
+        url=$(curl -fs localhost:8080/api/items | grep -o '/assets/[^"]*/r/400.webp' | head -1)
+        test -n "$url"
+        curl -fs -o /dev/null -w '%{content_type}\n' "localhost:8080/api$url" | grep -q image/webp
+
+    - name: Logs
+      if: failure()
+      run: LIBRARY="$PWD/library" docker compose logs
+
+    - name: Publish
+      if: github.ref == 'refs/heads/master'
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
+      run: |
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        for image in perceptrail-server perceptrail-web; do
+          docker tag "ghcr.io/eggs-gd/$image:latest" "ghcr.io/eggs-gd/$image:$VERSION"
+          docker push "ghcr.io/eggs-gd/$image:$VERSION"
+          docker push "ghcr.io/eggs-gd/$image:latest"
+        done

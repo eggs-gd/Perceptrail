@@ -1,0 +1,16 @@
+# The server's config in its image: the library at /library (mounted read only), the
+# data — database, caches — at /data. To change it, mount your own over
+# /etc/perceptrail/config.yml (gontroller/config.example.yml has every field).
+mode: release
+path: /library
+data_dir: /data
+
+plugins:
+  - /usr/lib/perceptrail/plugins/exif_geo.so
+  - /usr/lib/perceptrail/plugins/ml_color.so
+
+server:
+  port: 1323
+
+render:
+  ffmpeg: /usr/lib/jellyfin-ffmpeg/ffmpeg
