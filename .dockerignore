@@ -7,3 +7,5 @@
 svebapp/build
 _sb
 data
+config.yml
+library

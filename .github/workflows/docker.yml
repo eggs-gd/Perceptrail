@@ -53,9 +53,15 @@ jobs:
           [ "$code" = 200 ] && grep -q -- "$2" body.txt
         }
         mkdir -p library data
+        # no config.yml: compose refuses (not an empty directory in its place)
+        if docker compose create --no-build server 2>create.txt; then echo "created without config.yml"; exit 1; fi
+        cat create.txt
+        docker compose rm -f
+        test ! -e config.yml
+        cp docker/config.yml config.yml   # as an owner starts: the template as it is
         docker run --rm -v "$PWD/library:/library" --entrypoint vips \
           ghcr.io/eggs-gd/perceptrail-server:latest black /library/photo.jpg 1200 900 --bands 3
-        LIBRARY="$PWD/library" docker compose up -d --no-build
+        docker compose up -d --no-build
         for i in $(seq 60); do curl -fs localhost:8080/api/app >/dev/null && break; sleep 2; done
         expect /api/app '"version"'
         expect / '<html'
@@ -70,7 +76,7 @@ jobs:
 
     - name: Logs
       if: failure()
-      run: LIBRARY="$PWD/library" docker compose logs
+      run: docker compose logs
 
     - name: Publish
       if: github.ref == 'refs/heads/master'

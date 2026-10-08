@@ -709,6 +709,13 @@ How it is read, the paths and the proxy: the
   or libvips reads no HEIC. CI builds both images and runs the whole way through
   compose (a photo made by the image's own vips, imported, rendered, served through
   Caddy) — there was no Docker on the dev Mac.
+- **The config decides, not an env variable** (2026-10-08, the owner): #38 had
+  `LIBRARY=… docker compose up`, required (`:?`) — a second place saying what the
+  library is, and an Immich-only setup had to give it an empty directory. Now
+  compose mounts the owner's `./config.yml` (the template is `docker/config.yml`)
+  and the host directories it reads; `paths` says what is walked. A missing
+  `config.yml` is an error (`create_host_path: false`), not a directory Docker makes
+  in its place.
 - **A smoke shows what it got** (review: Codex said `/` would 404 while CI was
   green): `curl -fs … | grep -q` printed nothing, and without `pipefail` a pipe's
   status is its last command's — the log proved nothing either way. Each check now

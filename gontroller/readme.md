@@ -91,13 +91,18 @@ libvips, exiftool) and `ghcr.io/eggs-gd/perceptrail-web` (the gallery, served by
 Caddy, which sends `/api` to the server — one address for the browser).
 
 ```bash
-LIBRARY=/path/to/photos docker compose up -d    # then http://<host>:8080
+cp docker/config.yml config.yml    # once: your libraries, providers, render
+docker compose up -d               # then http://<host>:8080
 ```
 
-- The library is mounted read only at `/library`; the data (database, caches) is
-  `./data` → `/data`. `PORT` changes the published port.
-- The server's config in the image is [`docker/config.yml`](../docker/config.yml);
-  mount your own over `/etc/perceptrail/config.yml` to change it.
+- **The config decides**: compose mounts `./config.yml` over the image's own
+  ([`docker/config.yml`](../docker/config.yml), the template); without it compose
+  stops with an error. Its paths are the container's.
+- **The libraries are mounts** in `compose.yml`, read only, one per host directory
+  (`./library` → `/library` by default; `/mnt/photos:/library/photos:ro` for more);
+  `paths` in the config says which are walked — `paths: []` for providers only
+  (an Immich). The data (database, caches) is `./data` → `/data`. `PORT` changes
+  the published port.
 - Published to GHCR on every release (`latest` and the version); `docker compose
   build` builds them from the checkout.
 - A Mac with Apple Photos runs the native binary: PhotoKit (on demand) and
