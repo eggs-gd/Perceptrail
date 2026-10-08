@@ -11,6 +11,7 @@ end box
 box "group: whole assets (a sub-chain)" #LightCyan
 control "switch\n(first that claims)" as Groups
 control "Apple Photos\ngrouper" as Photos
+control "Immich\ngrouper" as Immich
 control "plain folder\ngrouper (last)" as Generic
 end box
 
@@ -52,12 +53,20 @@ loop every root (config paths), every file under it
     skipped, recorded (V1)
     end note
 end
+loop every source (a library that lists its files itself: Immich's API), every file it lists
+    Walker -> DB: the same: page by page, rows of URLs (immich://...)
+    Walker -> Groups: the file (its row)
+end
 
 alt Apple claims it (inside *.photoslibrary)
     Groups -> Photos: file
     Photos -> Photos: first file: asset links from Photos.sqlite\n(original, render, Live Photo video); buffer of open\ngroups, a group goes out when all its files arrived
     Photos -> Gate: a whole asset (keyed by its UUID); the files of an\nasset trashed / hidden in Photos: missing
-else nobody else claims it (other providers: Immich, ... later)
+else Immich claims it (immich://...)
+    Groups -> Immich: file
+    Immich -> Immich: the asset from the listing; a group goes out\nwhen all its files arrived
+    Immich -> Gate: a whole asset (keyed by its id), Immich's metadata\nand checksum; nothing of it is read from a disk
+else nobody else claims it (other providers ... later)
     Groups -> Generic: file
     Generic -> Generic: sidecars by name, next to each other\n(buffer: one open group; a complete group goes out)
     Generic -> Gate: a whole asset
@@ -99,14 +108,16 @@ end note
 
 == end of walk ==
 
-loop every row the walk did not see that it says is missing - root by root: only under\na root whose walk was complete and found files (an unmounted drive deletes nothing of\nits own; the other roots go on), not under unreadable directories
+loop every row the walk did not see that it says is missing - root by root: only under\na root whose walk was complete and found files (an unmounted drive deletes nothing of\nits own; the other roots go on), not under unreadable directories; a source's only\nafter a listing that ended without an error
     Walker -> Groups: the file, missing: to its library's grouper,\nwhich passes it through or makes something of it
 end
 Walker -> Groups: the walk returns: its channel CLOSES
 Groups -> Photos: the switch returns: every grouper's input closes
+& Groups -> Immich: closed
 & Groups -> Generic: closed
 Generic -> Gate: what it holds (last group); returns
 Photos -> Gate: returns (an incomplete group waits for the next walk)
+Immich -> Gate: returns (the same)
 note over Gate: the gate's input closes once every grouper has returned\n(a WaitGroup per channel); so on, step by step, to the end
 Closer --> Top: Process returns: every step has;\nevery group of the walk went through every step
 Top -> Top: rescan pause (1 min), then the next pass

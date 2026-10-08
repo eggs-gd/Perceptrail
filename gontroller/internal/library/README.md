@@ -1,18 +1,23 @@
 # library
 
-The libraries of this run, read through their own means — Apple Photos now, Immich and others later
+The libraries of this run, read through their own means — Apple Photos, Immich, others later
 (roadmap "Providers"). A library that keeps renditions of its own is asked for them:
 we render and store nothing it keeps.
 
 - **The contract** ([`provider.go`](provider/provider.go)): `Provider` is what a
   library implements; each consumer declares the part it uses — the import's
   grouping `group.Library` (`Claims`, `Grouper`), the routes' `route.Library`
-  (`Levels`, `Rendition`); the registry uses the rest (`Owns`, `Start`, `Skipped`).
+  (`Levels`, `Rendition`, `File`); the registry uses the rest (`Owns`, `Start`,
+  `Skipped`). A library that lists its files itself also is a `walk.Source`
+  (`Root`, `List`).
 - **What is walked**: a library lists the directories under a walked root that
   hold none of its media (`Skipped(root)`: its database, caches); every pass the
   import collects every enabled library's (`library.Skipped`) and hands the list to
   the walk, which does not enter them — as it hands identify the perceptors' tags.
-  Rows an older walk wrote there are missing, and go.
+  Rows an older walk wrote there are missing, and go. A library with no disk to walk
+  (Immich) lists its files itself: the import hands the enabled sources to the walk,
+  which lists them after the roots — their paths URLs of their own (`immich://…`,
+  `dto.Remote`) — and judges their deletions as a root's.
 - **Grouping**: the import's switch asks the enabled libraries in order and a file
   goes to the grouper of the first that claims it; the plain folder
   (`library/folder`) is last and claims the rest. A library not enabled is not
@@ -27,13 +32,14 @@ we render and store nothing it keeps.
   level (`Levels`: medium, hover, original) and serves what it gets — a file, or
   bytes it drew (`Rendition`). After its library made a file local, the provider
   marks the item for the next pass (`MarkRework`); it does not wait —
-  the client guesses meanwhile.
+  the client guesses meanwhile. A remote file (any of an item's files, its preview
+  too) the routes serve through its provider (`File`: an `http.Handler`).
 - **Background**: `Start` — access to the library, assets nothing shows yet; run
   with the server's services (`library.Service()`).
 
 `library.Enable(cfg, db, logger)` (in `main`) builds them from the config
-(`providers: {apple: {enabled: …}}`, enabled when not listed); the plain folder
-always, last. `Enabled` gives them in order, `Of` the item's (the web service
+(`providers: {apple: {enabled: …}}`, enabled when not listed; Immich only with its
+`url`, and a key or the start fails); the plain folder always, last. `Enabled` gives them in order, `Of` the item's (the web service
 passes it to the routes: they do not reach the registry).
 
 | package | what |
@@ -42,6 +48,7 @@ passes it to the routes: they do not reach the registry).
 | `library/provider` | the contract a library implements (`Provider`, `Grouper`, `Rendition`, `Options`) |
 | `library/apple` | Apple Photos: the grouper (the library's DB, the naming layout), on demand (`ondemand.go`) |
 | `library/apple/photokit` | PhotoKit through cgo (macOS; a stub elsewhere) |
+| `library/immich` | Immich through its API: the listing (a walk source), the grouper, its files served through a proxy |
 | `library/folder` | the plain folder: sidecars by name; nothing on demand (the transcode renders for it) |
 
 ## Apple Photos
@@ -121,3 +128,37 @@ caches, journals, Messages backdrops in `internal/`, iCloud sharing in `scopes/`
 - **The permission goes to the terminal** that starts the binary (its "responsible"
   app), not to the binary: a rebuild does not drop it. Started by launchd — still
   open (roadmap). Access is asked only when a `*.photoslibrary` is under a root.
+
+## Immich
+
+Read through its API only (3.x; a read-only key: `asset.read`, `asset.view`,
+`asset.download`), never written to. The key comes from `api_key_file` or the env
+`IMMICH_API_KEY`, never from the config itself; the browser never sees it or
+Immich's address — the routes proxy the bytes.
+
+**The listing** (`List`, the walk's source): `POST /search/metadata` with the EXIF,
+1 000 assets a page by its cursor, filtered to the timeline (`visibility: timeline`
+— not the archive, not hidden) and out of the trash (`trashedAt: null`); audio,
+offline and trashed assets are left out on our side too. Each asset is a few files
+of ours (their stat: the asset's `updatedAt` — a change in Immich is a changed
+file):
+
+| path | role | served from |
+|---|---|---|
+| `immich://<id>/original/<name>` | original (the main file) | `/assets/<id>/original` |
+| `immich://<id>/preview.jpg` | still, the short side ~1440 px | `/assets/<id>/thumbnail?size=preview` |
+| `immich://<id>/thumbnail.webp` | still, ~250 px | `/assets/<id>/thumbnail?size=thumbnail` |
+| `immich://<id>/playback.mp4` | motion (a video) | `/assets/<id>/video/playback` |
+| `immich://<id>/motion/<video id>.mp4` | motion (a Live Photo) | `/assets/<video id>/video/playback` |
+
+**The grouper.** The listing keeps what it found by id; a group goes out when its
+last file has arrived (as Apple's). The key is the asset's id; `Show` the preview,
+then the thumbnail — an item is `Visible` at once, nothing is rendered for it
+(render skips a library's items). `Meta`: Immich's date (the local time and its
+offset: `localDateTime` minus the instant), oriented size, GPS, length, camera, as
+exiftool tags; `Fingerprint`: its checksum. A Live Photo's video is an asset of its
+own, hidden from the timeline: its photo's path carries its id.
+
+**Serving** (`File`): a reverse proxy to the API's URL of the path — the key added,
+the browser's `Range` passed on (videos seek), its cookies and Immich's not. Only a
+path of an Immich id (a UUID) maps to a URL.
