@@ -18,10 +18,10 @@ import (
 	l "github.com/eggs-gd/go-zap-decor"
 )
 
-// Config: what the libraries read of the config — the root walked, which providers
+// Config: what the libraries read of the config — the roots walked, which providers
 // are enabled
 type Config interface {
-	LibraryRoot() string
+	LibraryRoots() []string
 	Providers() config.Providers
 }
 
@@ -35,7 +35,7 @@ type service struct{}
 func Enable(cfg Config, db apple.Items, logger *l.Logger) error {
 	var libraries []provider.Provider
 	if cfg.Providers().Enabled("apple") {
-		libraries = append(libraries, apple.New(cfg.LibraryRoot(), photokit.Library{}, db, logger.Named("apple")))
+		libraries = append(libraries, apple.New(cfg.LibraryRoots(), photokit.Library{}, db, logger.Named("apple")))
 	}
 	libraries = append(libraries, folder.New())
 	enabled = libraries
@@ -45,12 +45,14 @@ func Enable(cfg Config, db apple.Items, logger *l.Logger) error {
 // Enabled: the libraries in the chain, in order
 func Enabled() []provider.Provider { return enabled }
 
-// Skipped: the directories under root no enabled library wants walked (they hold
-// none of their media), every library's
-func Skipped(root string) []string {
+// Skipped: the directories under the roots no enabled library wants walked (they
+// hold none of their media), every library's
+func Skipped(roots []string) []string {
 	var skipped []string
-	for _, lib := range enabled {
-		skipped = append(skipped, lib.Skipped(root)...)
+	for _, root := range roots {
+		for _, lib := range enabled {
+			skipped = append(skipped, lib.Skipped(root)...)
+		}
 	}
 	return skipped
 }

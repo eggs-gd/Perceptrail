@@ -49,7 +49,7 @@ func TestHydrateWaiting(t *testing.T) {
 		t.Fatal(err)
 	}
 	photos := &fake.Photos{Root: root}
-	p := apple.New(filepath.Dir(root), photos, testDB, l.NewLogger(l.FatalLevel, &tree.Decorator{}))
+	p := apple.New([]string{filepath.Dir(root)}, photos, testDB, l.NewLogger(l.FatalLevel, &tree.Decorator{}))
 	for _, it := range []*dto.ItemDto{
 		{GUID: "H1111111-WAITING", State: dto.Waiting, Kind: dto.KindPhoto, Path: filepath.Join(root, "originals/H/H1111111-WAITING.heic")},
 		{GUID: "H2222222-SHOWN", State: dto.Visible, Kind: dto.KindPhoto, Path: filepath.Join(root, "originals/H/H2222222-SHOWN.heic")},

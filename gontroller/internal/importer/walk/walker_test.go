@@ -18,13 +18,13 @@ import (
 var testLogger = l.NewLogger(l.ErrorLevel, &tree.Decorator{})
 
 func newTestWalker(root string) *Walker {
-	return &Walker{logger: testLogger, root: root}
+	return &Walker{logger: testLogger, roots: []string{root}}
 }
 
 // runWalk collects what walk sends and returns it with the result
 func runWalk(m *Walker) (Result, []string) {
 	var paths []string
-	result := m.walk(context.Background(), func(e dto.ItemEntry) bool {
+	result := m.walk(context.Background(), m.roots[0], func(e dto.ItemEntry) bool {
 		paths = append(paths, e.Path)
 		return true
 	})
@@ -90,7 +90,7 @@ func TestWalkCancelled(t *testing.T) {
 	writeFile(t, filepath.Join(root, "b.jpg"))
 
 	ctx, cancel := context.WithCancel(t.Context())
-	result := newTestWalker(root).walk(ctx, func(dto.ItemEntry) bool {
+	result := newTestWalker(root).walk(ctx, root, func(dto.ItemEntry) bool {
 		cancel() // take one file, then cancel
 		return true
 	})
@@ -176,7 +176,7 @@ func TestWalkPass(t *testing.T) {
 		found := make(chan dto.WalkedFile)
 		got := &files{}
 		c := chain.NewChainProcessor(nil)
-		c.AddStep(New(db, root, nil, testLogger, found))
+		c.AddStep(New(db, []string{root}, nil, testLogger, found))
 		c.AddStep(chain.NewEnd(found, got))
 		c.Process(t.Context())
 		return got.got
@@ -218,7 +218,7 @@ func TestWalkSkipped(t *testing.T) {
 	found := make(chan dto.WalkedFile)
 	got := &files{}
 	c := chain.NewChainProcessor(nil)
-	c.AddStep(New(db, root, []string{filepath.Join(root, "own")}, testLogger, found))
+	c.AddStep(New(db, []string{root}, []string{filepath.Join(root, "own")}, testLogger, found))
 	c.AddStep(chain.NewEnd(found, got))
 	c.Process(t.Context())
 	if !slices.Equal(got.got, []string{"a.jpg changed", "old.db gone"}) {
@@ -239,7 +239,7 @@ func TestWalkMovedMeanwhile(t *testing.T) {
 	found := make(chan dto.WalkedFile)
 	got := &files{}
 	c := chain.NewChainProcessor(nil)
-	c.AddStep(New(db, root, nil, testLogger, found))
+	c.AddStep(New(db, []string{root}, nil, testLogger, found))
 	c.AddStep(chain.NewEnd(found, got))
 	c.Process(t.Context())
 	if !slices.Equal(got.got, []string{"new.jpg changed"}) {
@@ -261,7 +261,7 @@ func TestWalkPages(t *testing.T) {
 	found := make(chan dto.WalkedFile)
 	got := &files{}
 	c := chain.NewChainProcessor(nil)
-	c.AddStep(New(db, root, nil, testLogger, found))
+	c.AddStep(New(db, []string{root}, nil, testLogger, found))
 	c.AddStep(chain.NewEnd(found, got))
 	c.Process(t.Context())
 	if !slices.Equal(got.got, want) {
@@ -283,5 +283,33 @@ func TestMissing(t *testing.T) {
 	}
 	if g := Missing(Result{Root: "/lib", Complete: true}, stale); g != nil {
 		t.Error("a walk that found nothing deleted files")
+	}
+}
+
+// Two roots in one pass: both walked; a file gone under one is missing, while a root
+// that is not there this pass (an unmounted drive) deletes nothing of its own
+func TestWalkRoots(t *testing.T) {
+	photos, phone := t.TempDir(), t.TempDir()
+	writeFile(t, filepath.Join(photos, "a.jpg"))
+	writeFile(t, filepath.Join(photos, "b.jpg"))
+	writeFile(t, filepath.Join(phone, "c.jpg"))
+	db := &rows{byPath: map[string]*dto.FileDto{}}
+	pass := func(roots ...string) []string {
+		found := make(chan dto.WalkedFile)
+		got := &files{}
+		c := chain.NewChainProcessor(nil)
+		c.AddStep(New(db, roots, nil, testLogger, found))
+		c.AddStep(chain.NewEnd(found, got))
+		c.Process(t.Context())
+		return got.got
+	}
+	if g := pass(photos, phone); !slices.Equal(g, []string{"a.jpg changed", "b.jpg changed", "c.jpg changed"}) {
+		t.Fatalf("first pass %v", g)
+	}
+	os.Remove(filepath.Join(photos, "b.jpg"))
+	unmounted := phone + "-unmounted"
+	os.Rename(phone, unmounted)
+	if g := pass(photos, phone); !slices.Equal(g, []string{"a.jpg changed", "b.jpg gone"}) {
+		t.Errorf("phone unmounted: %v — c.jpg must not be gone", g)
 	}
 }

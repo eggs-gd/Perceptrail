@@ -70,7 +70,7 @@ func TestRenditionsInTheAsset(t *testing.T) {
 	sc := bufio.NewScanner(get(e, "/items").Body)
 	for sc.Scan() {
 		var line struct {
-			GUID  string `json:"guid"`
+			GUID  string                     `json:"guid"`
 			Asset map[string]json.RawMessage `json:"asset"`
 		}
 		if json.Unmarshal(sc.Bytes(), &line) != nil || line.GUID != "R1" {
