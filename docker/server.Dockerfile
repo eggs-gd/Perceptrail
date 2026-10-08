@@ -19,6 +19,8 @@ RUN for plugin in exif_geo ml_color; do \
     done
 
 FROM debian:trixie-slim
+LABEL org.opencontainers.image.source=https://github.com/eggs-gd/Perceptrail \
+      org.opencontainers.image.description="Perceptrail: the server (gontroller, its plugins, ffmpeg, libvips, exiftool)"
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
  && curl -fsSL https://repo.jellyfin.org/jellyfin_team.gpg.key | gpg --dearmor -o /usr/share/keyrings/jellyfin.gpg \

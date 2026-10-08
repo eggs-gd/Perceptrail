@@ -48,7 +48,9 @@ One line each; the details are in the READMEs and the PRs.
   single-page app behind Caddy · #39 several library
   roots (`paths`), each judged for deletions on its own · #40 Immich through its
   API: its timeline listed as a source of the walk, its files served through a
-  proxy, nothing rendered.
+  proxy, nothing rendered · #41 Docker packaged: installed from GHCR
+  without a checkout (`develop` and releases published), the config decides
+  (`./config.yml` mounted), no `LIBRARY` variable.
 
 ## Releases
 

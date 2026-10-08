@@ -1,23 +1,32 @@
-# Perceptrail: the server and the web gallery. LIBRARY: your photos (mounted read
-# only); the data stays in ./data. Then open http://<this host>:8080 (PORT changes it).
+# Perceptrail: the server and the web gallery, from their images on GHCR. To install,
+# in a directory of its own (no checkout needed):
 #
-#   LIBRARY=/path/to/photos docker compose up -d
+#   curl -fsSLO https://raw.githubusercontent.com/eggs-gd/Perceptrail/master/compose.yml
+#   docker run --rm --entrypoint cat ghcr.io/eggs-gd/perceptrail-server /etc/perceptrail/config.yml > config.yml
+#   docker compose up -d     # then http://<this host>:8080 (PORT changes it)
+#
+# The server reads ./config.yml (your libraries, providers, render). Every host
+# directory it reads is mounted here, read only; the data — database, caches — stays
+# in ./data. Your own settings (more mounts, a user, /dev/dri) go in a
+# compose.override.yml beside it: an update replaces this file, not that one.
+# Images: latest (a release), develop (what is being tested), or a version.
 services:
   server:
     image: ghcr.io/eggs-gd/perceptrail-server:latest
-    build:
-      context: .
-      dockerfile: docker/server.Dockerfile
     volumes:
-      - ${LIBRARY:?set LIBRARY to your photos' directory}:/library:ro
+      - type: bind
+        source: ./config.yml
+        target: /etc/perceptrail/config.yml
+        read_only: true
+        bind:
+          create_host_path: false   # no config.yml: an error, not an empty directory
       - ./data:/data
+      # Your photos, where the config's paths say (one mount a host directory):
+      - ./library:/library:ro
     restart: unless-stopped
 
   web:
     image: ghcr.io/eggs-gd/perceptrail-web:latest
-    build:
-      context: .
-      dockerfile: docker/web.Dockerfile
     ports:
       - "${PORT:-8080}:80"
     depends_on:

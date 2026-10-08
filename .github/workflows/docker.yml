@@ -1,12 +1,15 @@
 name: Docker
 
 # The two images (docker/): built and smoke-tested through compose on a PR that
-# touches what goes into them; published to GHCR on every release (master).
+# touches what goes into them; published to GHCR — develop: `develop` and the
+# version (what is being tested), master: `latest`, the version and `MAJOR.MINOR`
+# (a release: the same commits, fast-forwarded).
 on:
   pull_request:
     paths:
       - docker/**
       - compose.yml
+      - compose.build.yml
       - .dockerignore
       - gontroller/**
       - perceplib/**
@@ -14,7 +17,7 @@ on:
       - svebapp/**
       - .github/workflows/docker.yml
   push:
-    branches: [master]
+    branches: [master, develop]
   workflow_dispatch:
 
 jobs:
@@ -53,9 +56,16 @@ jobs:
           [ "$code" = 200 ] && grep -q -- "$2" body.txt
         }
         mkdir -p library data
+        # no config.yml: compose refuses (not an empty directory in its place)
+        if docker compose create --no-build server 2>create.txt; then echo "created without config.yml"; exit 1; fi
+        cat create.txt
+        docker compose rm -f
+        test ! -e config.yml
+        # as an owner installs: the template out of the image, as it is
+        docker run --rm --entrypoint cat ghcr.io/eggs-gd/perceptrail-server:latest /etc/perceptrail/config.yml > config.yml
         docker run --rm -v "$PWD/library:/library" --entrypoint vips \
           ghcr.io/eggs-gd/perceptrail-server:latest black /library/photo.jpg 1200 900 --bands 3
-        LIBRARY="$PWD/library" docker compose up -d --no-build
+        docker compose up -d --no-build
         for i in $(seq 60); do curl -fs localhost:8080/api/app >/dev/null && break; sleep 2; done
         expect /api/app '"version"'
         expect / '<html'
@@ -70,16 +80,19 @@ jobs:
 
     - name: Logs
       if: failure()
-      run: LIBRARY="$PWD/library" docker compose logs
+      run: docker compose logs
 
     - name: Publish
-      if: github.ref == 'refs/heads/master'
+      if: github.event_name == 'push'
       env:
         VERSION: ${{ steps.version.outputs.version }}
+        BRANCH: ${{ github.ref_name }}
       run: |
         echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        if [ "$BRANCH" = master ]; then tags="$VERSION ${VERSION%.*} latest"; else tags="$VERSION develop"; fi
         for image in perceptrail-server perceptrail-web; do
-          docker tag "ghcr.io/eggs-gd/$image:latest" "ghcr.io/eggs-gd/$image:$VERSION"
-          docker push "ghcr.io/eggs-gd/$image:$VERSION"
-          docker push "ghcr.io/eggs-gd/$image:latest"
+          for tag in $tags; do
+            docker tag "ghcr.io/eggs-gd/$image:latest" "ghcr.io/eggs-gd/$image:$tag"
+            docker push "ghcr.io/eggs-gd/$image:$tag"
+          done
         done

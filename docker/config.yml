@@ -1,10 +1,13 @@
-# The server's config in its image: the library at /library (mounted read only), the
-# data — database, caches — at /data. To change it, mount your own over
-# /etc/perceptrail/config.yml (gontroller/config.example.yml has every field).
+# The server's config: the one in the image, and the template of yours — compose
+# mounts ./config.yml over it (cp docker/config.yml config.yml). Paths are the
+# container's: what compose.yml mounts. Every field: gontroller/config.example.yml.
 mode: release
+
+# The libraries on a disk, each mounted read only in compose.yml. None: providers
+# only (paths: [])
 paths:
-  - /library   # several host directories: mount each under /library/<name>
-data_dir: /data
+  - /library
+data_dir: /data   # database, caches: ./data
 
 plugins:
   - /usr/lib/perceptrail/plugins/exif_geo.so
@@ -15,3 +18,10 @@ server:
 
 render:
   ffmpeg: /usr/lib/jellyfin-ffmpeg/ffmpeg
+
+# An Immich read through its API (read only); its key in a file of its own, never
+# here — under ./data, or mounted beside the config
+# providers:
+#   immich:
+#     url: http://immich.local:2283
+#     api_key_file: /data/immich.key

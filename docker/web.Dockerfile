@@ -14,6 +14,8 @@ ENV PUBLIC_API_PATH=/api APP_VERSION=${VERSION}
 RUN npm run build
 
 FROM caddy:2-alpine
+LABEL org.opencontainers.image.source=https://github.com/eggs-gd/Perceptrail \
+      org.opencontainers.image.description="Perceptrail: the web gallery (Caddy; /api to the server)"
 COPY --from=build /src/build /srv
 COPY docker/Caddyfile /etc/caddy/Caddyfile
 EXPOSE 80

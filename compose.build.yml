@@ -1,0 +1,11 @@
+# The images built from this checkout instead of pulled (development):
+#   docker compose -f compose.yml -f compose.build.yml up -d --build
+services:
+  server:
+    build:
+      context: .
+      dockerfile: docker/server.Dockerfile
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
