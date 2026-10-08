@@ -716,6 +716,12 @@ How it is read, the paths and the proxy: the
   and the host directories it reads; `paths` says what is walked. A missing
   `config.yml` is an error (`create_host_path: false`), not a directory Docker makes
   in its place.
+- **Installed from GHCR, no checkout** (2026-10-08, the owner: no git on the server):
+  `compose.yml` names images only (the build is `compose.build.yml`), the config's
+  template comes out of the image; the owner's settings live in
+  `compose.override.yml`, which an update does not touch. `develop` is published
+  too: the owner tests on their server before a release. The same version tag from
+  develop and master is the same commit (master only fast-forwards).
 - **A smoke shows what it got** (review: Codex said `/` would 404 while CI was
   green): `curl -fs … | grep -q` printed nothing, and without `pipefail` a pipe's
   status is its last command's — the log proved nothing either way. Each check now

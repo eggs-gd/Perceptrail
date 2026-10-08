@@ -85,26 +85,34 @@ packages — see [findings](../_sb/docs/findings.md#go-and-the-toolchain).
 
 ### Docker
 
-Two images, one [`compose.yml`](../compose.yml) at the repository root:
+Two images on GHCR, one [`compose.yml`](../compose.yml):
 `ghcr.io/eggs-gd/perceptrail-server` (gontroller, its plugins, jellyfin-ffmpeg,
 libvips, exiftool) and `ghcr.io/eggs-gd/perceptrail-web` (the gallery, served by
-Caddy, which sends `/api` to the server — one address for the browser).
+Caddy, which sends `/api` to the server — one address for the browser). No
+checkout on the host:
 
 ```bash
-cp docker/config.yml config.yml    # once: your libraries, providers, render
-docker compose up -d               # then http://<host>:8080
+curl -fsSLO https://raw.githubusercontent.com/eggs-gd/Perceptrail/master/compose.yml
+docker run --rm --entrypoint cat ghcr.io/eggs-gd/perceptrail-server /etc/perceptrail/config.yml > config.yml
+docker compose up -d    # then http://<host>:8080
 ```
 
-- **The config decides**: compose mounts `./config.yml` over the image's own
-  ([`docker/config.yml`](../docker/config.yml), the template); without it compose
-  stops with an error. Its paths are the container's.
-- **The libraries are mounts** in `compose.yml`, read only, one per host directory
-  (`./library` → `/library` by default; `/mnt/photos:/library/photos:ro` for more);
-  `paths` in the config says which are walked — `paths: []` for providers only
-  (an Immich). The data (database, caches) is `./data` → `/data`. `PORT` changes
-  the published port.
-- Published to GHCR on every release (`latest` and the version); `docker compose
-  build` builds them from the checkout.
+- **The config decides**: compose mounts `./config.yml` over the image's own (the
+  template, [`docker/config.yml`](../docker/config.yml)); without it compose stops
+  with an error. Its paths are the container's.
+- **The libraries are mounts**, read only, one per host directory (`./library` →
+  `/library` by default); `paths` in the config says which are walked — `paths: []`
+  for providers only (an Immich, its key a file under `./data`). The data
+  (database, caches) is `./data` → `/data`. `PORT` changes the published port.
+- **Your own settings in `compose.override.yml`** beside it (compose reads it by
+  itself; an update replaces `compose.yml`, not that): more mounts, a user
+  (`user: 1000:1000` — `./data` must be theirs), `/dev/dri` with the `render`
+  group for Intel QSV.
+- **Tags**: `latest` and `MAJOR.MINOR` (releases), `develop` (every merge, what is
+  being tested), the version (`0.1.35`). Updating: `docker compose pull && docker
+  compose up -d`.
+- From a checkout: `docker compose -f compose.yml -f compose.build.yml up -d
+  --build` ([`compose.build.yml`](../compose.build.yml)).
 - A Mac with Apple Photos runs the native binary: PhotoKit (on demand) and
   VideoToolbox are not in Docker.
 
