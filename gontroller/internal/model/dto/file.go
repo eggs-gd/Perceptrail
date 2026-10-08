@@ -99,5 +99,10 @@ func (f *FileDto) IsIgnored() bool {
 // Remote: the file is a library's URL, not on a disk (immich://…) — nothing reads
 // it but its provider
 func (f *FileDto) Remote() bool {
-	return strings.Contains(f.Path, "://")
+	return Remote(f.Path)
+}
+
+// Remote: path is a library's URL (immich://…), not a file on a disk
+func Remote(path string) bool {
+	return strings.Contains(path, "://")
 }

@@ -8,12 +8,14 @@
 // else did. A provider not enabled is not asked — its files are a plain folder's.
 //
 // On demand the web service asks the item's provider for a rendition (the viewer's
-// medium, a hover, the original) and serves what it gets: a file or bytes.
+// medium, a hover, the original) and serves what it gets: a file or bytes. A
+// library that lists its files itself (Immich: URLs, not a disk) serves them too.
 package provider
 
 import (
 	"context"
 	"errors"
+	"net/http"
 
 	"perceptrail/gontroller/internal/model/dto"
 
@@ -39,6 +41,9 @@ type Provider interface {
 	// Rendition: a level of the item — a file, or bytes when the library drew it;
 	// ErrNoRendition when there is nothing to serve
 	Rendition(item *dto.ItemDto, level string, opt Options) (Rendition, error)
+	// File: a remote file of this library (dto.FileDto.Remote: a path it listed) as
+	// it serves it; nil when the path is not its
+	File(path string) http.Handler
 
 	// Start: its own work in the background (access, assets nothing shows yet)
 	Start(ctx context.Context)

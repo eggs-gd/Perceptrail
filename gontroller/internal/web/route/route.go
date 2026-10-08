@@ -3,6 +3,7 @@
 package route
 
 import (
+	"net/http"
 	"time"
 
 	"perceptrail/gontroller/internal/library/provider"
@@ -32,6 +33,7 @@ type Store interface {
 type Library interface {
 	Levels(item *dto.ItemDto) []string
 	Rendition(item *dto.ItemDto, level string, opt provider.Options) (provider.Rendition, error)
+	File(path string) http.Handler
 }
 
 // LibraryOf: the library an item belongs to, nil for a plain folder's (the server

@@ -2,6 +2,7 @@ package apple
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"path/filepath"
 	"slices"
@@ -75,6 +76,9 @@ func (p *Provider) Skipped(root string) []string {
 
 // Owns: an item whose main file is in a Photos library (its GUID is the asset UUID)
 func (p *Provider) Owns(item *dto.ItemDto) bool { return BundleRoot(item.Path) != "" }
+
+// File: none — its files are on the disk
+func (p *Provider) File(string) http.Handler { return nil }
 
 // Start: access to Photos (asked once — the prompt names the app that started us,
 // the terminal), then the assets nothing shows yet, in the background

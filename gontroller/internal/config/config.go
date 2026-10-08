@@ -199,6 +199,10 @@ func (f *file) resolve(base string) error {
 	if filepath.Base(f.Exiftool) != f.Exiftool {
 		f.Exiftool = abs(f.Exiftool)
 	}
+	for name, p := range f.Providers {
+		p.APIKeyFile = abs(p.APIKeyFile)
+		f.Providers[name] = p
+	}
 	if err := f.Render.resolve(abs); err != nil {
 		return err
 	}

@@ -12,6 +12,7 @@ import (
 	"perceptrail/gontroller/internal/library/apple"
 	"perceptrail/gontroller/internal/library/apple/photokit"
 	"perceptrail/gontroller/internal/library/folder"
+	"perceptrail/gontroller/internal/library/immich"
 	"perceptrail/gontroller/internal/library/provider"
 	"perceptrail/gontroller/internal/model/dto"
 
@@ -30,12 +31,24 @@ var enabled []provider.Provider
 type service struct{}
 
 // Enable: the libraries of this run, from the config, in the order of the chain:
-// Apple Photos (its library's DB and files; PhotoKit on demand, macOS), the plain
-// folder last (it takes what nobody claimed). Once, at start.
+// Apple Photos (its library's DB and files; PhotoKit on demand, macOS), an Immich
+// server (its API: when its url is set), the plain folder last (it takes what
+// nobody claimed). Once, at start: an Immich set up without a key stops the start.
 func Enable(cfg Config, db apple.Items, logger *l.Logger) error {
 	var libraries []provider.Provider
 	if cfg.Providers().Enabled("apple") {
 		libraries = append(libraries, apple.New(cfg.LibraryRoots(), photokit.Library{}, db, logger.Named("apple")))
+	}
+	if server := cfg.Providers()["immich"]; server.URL != "" && cfg.Providers().Enabled("immich") {
+		key, err := immich.Key(server.APIKeyFile)
+		if err != nil {
+			return err
+		}
+		lib, err := immich.New(server.URL, key, logger.Named("immich"))
+		if err != nil {
+			return err
+		}
+		libraries = append(libraries, lib)
 	}
 	libraries = append(libraries, folder.New())
 	enabled = libraries
