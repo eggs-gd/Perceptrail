@@ -28,8 +28,9 @@ type WorkDto struct {
 // item replaces them all
 type RenditionDto struct {
 	GUID   api.GUID `gorm:"primaryKey"`
-	Size   int      `gorm:"primaryKey"` // the long side asked for, px
-	Format string   `gorm:"primaryKey"` // the file's extension: webp, jpg…
+	Size   int      `gorm:"primaryKey"`    // the long side asked for, px
+	Format string   `gorm:"primaryKey"`    // the file's extension: webp, jpg, mp4…
+	Role   string   `gorm:"default:still"` // what it is to the asset: still or motion (Role*)
 	W, H   int      // pixels; 0: unknown
 	Bytes  int64
 	Path   string // relative to the cache: r/<ab>/<cd>/<guid>/<size>.<format>

@@ -27,6 +27,9 @@ The core concept is to provide an infinite way to explore content. By navigating
 
 ## Development
 
+Running the server and what it needs on each platform (exiftool, libvips, ffmpeg):
+[`gontroller/readme.md`](gontroller/readme.md#running).
+
 Git hooks (fast local checks before CI) — enable once per clone:
 
 ```bash

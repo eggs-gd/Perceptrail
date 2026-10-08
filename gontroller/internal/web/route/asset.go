@@ -6,7 +6,6 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
-	"mime"
 	"os"
 	"sort"
 
@@ -54,6 +53,10 @@ type dims struct {
 
 // embeddedName: the extracted embedded preview (not a file of the asset)
 const embeddedName = "embedded"
+
+// renditionMimes: our renditions' formats (not the system's tables: they differ, and
+// some have no mp4)
+var renditionMimes = map[string]string{"webp": "image/webp", "jpg": "image/jpeg", "mp4": "video/mp4"}
 
 // toClientAsset: every file of the asset by role, for the client; lib: the item's
 // library (nil: a plain folder's), which says what can be asked for on demand
@@ -109,14 +112,26 @@ func headerSize(path string) (int, int) {
 	return cfg.Width, cfg.Height
 }
 
-// withRenditions: our renditions join the asset's stills (the client's srcset picks
-// the one of the width it needs), smallest first
+// withRenditions: our renditions join the asset — stills (the client's srcset picks
+// the one of the width it needs, smallest first) and motion (ours first: H.264 that
+// every browser plays, before an original it may not)
 func withRenditions(a *clientAsset, item *dto.ItemDto, renditions []dto.RenditionDto) {
+	var motion []rendition
 	for _, r := range renditions {
-		a.Stills = append(a.Stills, rendition{URL: fmt.Sprintf("/assets/%s/r/%s", item.GUID, renditionName(r)),
-			Mime: mime.TypeByExtension("." + r.Format), W: r.W, H: r.H})
+		out := rendition{URL: fmt.Sprintf("/assets/%s/r/%s", item.GUID, renditionName(r)),
+			Mime: renditionMimes[r.Format], W: r.W, H: r.H}
+		if r.Role == dto.RoleMotion {
+			out.Codec = "avc1"
+			motion = append(motion, out)
+			continue
+		}
+		a.Stills = append(a.Stills, out)
 	}
 	sort.SliceStable(a.Stills, func(i, j int) bool { return a.Stills[i].W < a.Stills[j].W })
+	a.Motion = append(motion, a.Motion...)
+	if a.Motion == nil {
+		a.Motion = []rendition{} // a list, never null: the client spreads it
+	}
 }
 
 // renditionName: a rendition's name in its URL

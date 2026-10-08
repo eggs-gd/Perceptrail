@@ -100,7 +100,8 @@ by the join, a new version makes everything due — nobody enqueues.
   1 h, then once a day, never stopped for good (a newer tool may read the file).
 - **A new render replaces an item's renditions** (a size in a format each; no
   version of their own): the version of `work` is what they are (render: sizes,
-  format, quality), not what made them.
+  format, quality, the video's size), not what made them. A rendition has a role:
+  a still, or motion (a video, a Live Photo's motion) — the asset puts it there.
 
 Its messages (`dto.WorkDone`, `dto.WorkFailed`, `dto.Cursor`, `dto.Taken`) are data
 in `dto`: a consumer (render) depends on `dto` and its own `Store`, not on the model.

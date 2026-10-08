@@ -15,6 +15,8 @@ most. The Apple Photos library is read only, always.
    - `server.port: 1329`;
    - the database relative to the config's directory (relative paths resolve
      against it), so it lands in the scratch directory;
+   - `render.ffmpeg:` an ffmpeg with `zscale` for HDR videos (macOS:
+     `/opt/homebrew/opt/ffmpeg-full/bin/ffmpeg`, keg-only);
    - `plugins:` as absolute paths to plugins built **into the scratch directory**
      (step 3) — the example's `../.build/plugins/…` resolves against the scratch
      directory, and a plugin that does not open is only logged: the server runs

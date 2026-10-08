@@ -71,12 +71,17 @@ func TestRenditionsInTheAsset(t *testing.T) {
 	for sc.Scan() {
 		var line struct {
 			GUID  string `json:"guid"`
-			Asset struct {
-				Stills json.RawMessage `json:"stills"`
-			} `json:"asset"`
+			Asset map[string]json.RawMessage `json:"asset"`
 		}
-		if json.Unmarshal(sc.Bytes(), &line) == nil && line.GUID == "R1" {
-			json.Unmarshal(line.Asset.Stills, &stills)
+		if json.Unmarshal(sc.Bytes(), &line) != nil || line.GUID != "R1" {
+			continue
+		}
+		json.Unmarshal(line.Asset["stills"], &stills)
+		// Every list is a list, never null: the client spreads them
+		for _, list := range []string{"edit", "stills", "motion", "frames"} {
+			if string(line.Asset[list]) == "null" || len(line.Asset[list]) == 0 {
+				t.Errorf("asset.%s: %q, want a list", list, line.Asset[list])
+			}
 		}
 	}
 	if len(stills) != 1 || stills[0].URL != "/assets/R1/r/400.webp" || stills[0].W != 400 || stills[0].Mime != "image/webp" {

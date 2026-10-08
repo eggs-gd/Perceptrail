@@ -472,6 +472,42 @@ transit, render bounded by its workers) — patterns go to docs and examples.
   stays (a worker writes before Finish lists). Trap: removing a file touches its
   directory's time — a directory the sweep emptied goes at once, or the grace would
   keep every one (the test caught it).
+- **Videos: one rendition for the tile and the viewer** (#37): the client plays an
+  asset's `motion` on a tile's hover and in the viewer; `onDemand.hover` only when no
+  video is here (Apple, on demand). So our 720p H.264 in `motion` is both — no hover
+  clip. Rejected: our clip in `onDemand.hover` (the owner's first choice) — an
+  `onDemand` means "ask the server for the medium" to the client: the viewer would
+  prefetch an empty medium URL for Live Photos and show on-demand tools for videos.
+- **ffmpeg's colour, three traps**: the encoder takes the colour tags from the
+  frames, not from `-color_trc` (it wrote nothing) — `setparams` at the end of the
+  chain; `zscale` finds "no path between colorspaces" from untagged input — the
+  input's transfer, primaries and matrix (ffprobe) are given to it; and SDR tags
+  only after a real tone mapping (review: Codex) — without `zscale` the HDR samples
+  keep their own HLG/PQ tags and the browser maps them; HDR tagged BT.709 shows the
+  wrong brightness.
+- **A list in the contract is never null** (#37, the owner saw a black viewer):
+  prepending our motion with `append(ours, a.Motion...)` gave nil when both were
+  empty — `"motion": null`, and the client's `[...asset.motion]` threw on every
+  item. The route test now checks every list of the asset; the contract went to 7,
+  so a client that stored the nulls syncs from nothing (a delta would never bring
+  the unchanged items back).
+- **A long encode renews its lease** (review: Codex): a video's time is three times
+  its length, a lease 15 minutes — past it the safety pass took the item again, the
+  first result was dropped, and a long video could never be accepted. While an item
+  renders its lease is renewed every 5 minutes, by its token; a lease lost stops the
+  work. Two more holes (review: Codex): a page of 64 was leased at once while
+  N workers took it one by one — its tail's leases ran out in the queue; now an item
+  is taken only when a worker is free for it. And ffprobe ran without a limit (the
+  encode's own is derived from its answer) — a stalled file held a worker forever,
+  its lease renewed; ffprobe has a minute of its own.
+- **ffmpeg is required like libvips**: without it render does not start. "Photos
+  without videos" would render a Live Photo without its motion for good (its work
+  done for that input).
+- **Smoke, videos** (2026-10-08, the owner's library, ffmpeg-full, 4 workers): the
+  12 plain-folder videos rendered (the 8 HEVC iPhone ones that were Waiting are
+  Ready), every rendition smaller than its source (HEVC 1080×1920 → H.264 720×1280,
+  rotation applied); a screen recording at CRF 23 alone came out at 14 Mb/s —
+  capped at 4 Mb/s (17.5 MB → 5.4 MB).
 - **A smoke run builds its plugins into its own directory**: `make build-plugins`
   rewrites `.build/plugins/*.so`, which the owner's running server has loaded — the
   `smoke` skill said so, and was wrong.
