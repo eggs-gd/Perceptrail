@@ -14,6 +14,10 @@ type Render struct {
 	Enable *bool `yaml:"enabled"`
 	// Items rendered at once. Default: half the CPUs, at least one
 	Workers int `yaml:"workers"`
+	// Threads of each tool (libvips, ffmpeg). Default: the CPUs over the workers.
+	// "The CPUs" are what this process may use (a container's CPU limit) — a
+	// container that limits nothing (an LXC) sees the whole host: set both here.
+	Threads int `yaml:"threads"`
 	// The long side of each rendition, px (never larger than the original), smallest
 	// first, each once. Default: [400, 1600] — a tile and the viewer
 	Sizes []int `yaml:"sizes"`
@@ -54,8 +58,12 @@ func (r Render) FFprobe() string {
 // resolve fills the unset fields and checks the rest (abs: a path against the
 // config's directory)
 func (r *Render) resolve(abs func(string) string) error {
+	cpus := runtime.GOMAXPROCS(0) // the CPUs this process may use (a cgroup's quota too)
 	if r.Workers <= 0 {
-		r.Workers = max(runtime.NumCPU()/2, 1)
+		r.Workers = max(cpus/2, 1)
+	}
+	if r.Threads <= 0 {
+		r.Threads = max(cpus/r.Workers, 1)
 	}
 	if len(r.Sizes) == 0 {
 		r.Sizes = defaultSizes

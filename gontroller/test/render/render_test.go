@@ -15,10 +15,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 
+	"perceptrail/gontroller/internal/cache"
 	"perceptrail/gontroller/internal/config"
 	"perceptrail/gontroller/internal/model"
 	"perceptrail/gontroller/internal/model/dto"
@@ -464,5 +466,86 @@ func TestRenderWithoutFFmpeg(t *testing.T) {
 	}
 	if row, err := db.Work(item.GUID, "render"); err == nil {
 		t.Errorf("the item got a row without the tools to render it: %+v", row)
+	}
+}
+
+// slowVips: a vipsthumbnail that writes how it was started (its niceness, its
+// threads) to seen, starts its output (a few bytes at -o) and then works for a long
+// while
+func slowVips(t *testing.T) (bin, seen string) {
+	t.Helper()
+	dir := t.TempDir()
+	bin, seen = filepath.Join(dir, "vipsthumbnail"), filepath.Join(dir, "seen")
+	script := "#!/bin/sh\n[ \"$1\" = --vips-version ] && exit 0\n" +
+		"for a; do [ \"$prev\" = -o ] && echo partial > \"${a%%[*}\"; prev=$a; done\necho \"$(ps -o nice= -p $$ | tr -d ' ') $VIPS_CONCURRENCY\" > " + seen + "\nexec sleep 30\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return bin, seen
+}
+
+// startConfig: a model and a render service with this config, stopped by stop
+func startConfig(t *testing.T, yml string) (db *model.Proxy, cfg *config.Config, stop func()) {
+	t.Helper()
+	dir := t.TempDir()
+	conf := filepath.Join(dir, "config.yml")
+	if err := os.WriteFile(conf, []byte(yml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Read(conf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logger := l.NewLogger(l.FatalLevel, &tree.Decorator{})
+	if db, err = model.Open(cfg, logger); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	stopped := make(chan struct{})
+	go func() { render.New(cfg, db, logger).Start(ctx); close(stopped) }()
+	stop = sync.OnceFunc(func() { cancel(); <-stopped })
+	t.Cleanup(func() { stop(); db.Close() })
+	return db, cfg, stop
+}
+
+// waitFor: the file's content once it has some
+func waitFor(t *testing.T, path string) string {
+	t.Helper()
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		if b, err := os.ReadFile(path); err == nil && len(b) > 0 {
+			return strings.TrimSpace(string(b))
+		}
+	}
+	t.Fatalf("%s: nothing within 10 s", path)
+	return ""
+}
+
+// The server stopping mid-render is no failure of the file: the item keeps no error
+// and no attempt (it would wait its back-off for nothing); and nothing is left at a
+// rendition's name — a rendition the gallery serves there stays whole until a new
+// one is complete
+func TestRenderStopIsNoFailure(t *testing.T) {
+	bin, seen := slowVips(t)
+	db, cfg, stop := startConfig(t, "render:\n  workers: 1\n  vipsthumbnail: "+bin+"\n  ffmpeg: "+ffmpegBin()+"\n")
+	item := publish(t, db, photo(t, 800, 600), "image/jpeg")
+	waitFor(t, seen)
+	stop()
+	if row, err := db.Work(item.GUID, "render"); err == nil && (row.Error != "" || row.Attempts != 0) {
+		t.Errorf("stopped mid-render, kept as a failure: %+v", row)
+	}
+	left, _ := filepath.Glob(filepath.Join(cfg.CacheDir(), cache.ItemDir("r", item.GUID), "*"))
+	if len(left) != 0 {
+		t.Errorf("an interrupted render left %v", left)
+	}
+}
+
+// A render process runs below the server (nice 10: the gallery and the rest of the
+// host first) on the threads the config gives it
+func TestRenderYields(t *testing.T) {
+	bin, seen := slowVips(t)
+	db, _, _ := startConfig(t, "render:\n  workers: 1\n  threads: 3\n  vipsthumbnail: "+bin+"\n  ffmpeg: "+ffmpegBin()+"\n")
+	publish(t, db, photo(t, 800, 600), "image/jpeg")
+	if got, want := waitFor(t, seen), "10 3"; got != want {
+		t.Errorf("started with %q (niceness, threads), want %q", got, want)
 	}
 }

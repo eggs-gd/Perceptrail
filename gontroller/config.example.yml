@@ -59,7 +59,10 @@ plugins:
 # Needs vipsthumbnail (libvips: brew install vips / apt install libvips-tools).
 # render:
 #   enabled: true       # default
-#   workers: 4          # items at once. Default: half the CPUs
+#   workers: 2          # items at once (nice 10: below the server). Default: half the CPUs
+#   threads: 3          # threads of each (libvips, ffmpeg). Default: the CPUs over the workers.
+#                       # workers × threads is render's whole load. An LXC shows the host's
+#                       # CPUs, not its share: set both there
 #   sizes: [400, 1600]  # the long side, px: a tile and the viewer (never upscaled)
 #   format: webp        # webp (default), jpg
 #   vipsthumbnail: /opt/homebrew/bin/vipsthumbnail   # default: from PATH
