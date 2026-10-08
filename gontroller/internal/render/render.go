@@ -52,6 +52,7 @@ type Config interface {
 type Store interface {
 	Due(slug, version string, after dto.Cursor, n int) ([]*dto.ItemDto, dto.Cursor, error)
 	Take(slug string, guids []api.GUID) ([]dto.Taken, error)
+	Renew(slug string, guid api.GUID, lease int64) (bool, error)
 	Finish(done dto.WorkDone) (bool, error)
 	Fail(failed dto.WorkFailed) error
 	Prune() (int64, error)
@@ -80,7 +81,8 @@ const (
 	slug    = "render"
 	page    = 64              // items asked of the queue at once
 	recheck = time.Minute     // the safety net between wake-ups
-	timeout = 2 * time.Minute // one item's renditions at most
+	timeout = 2 * time.Minute // a photo's renditions at most
+	renew   = 5 * time.Minute // a lease renewed this often while an item renders
 )
 
 func New(cfg Config, db Store, logger *l.Logger) *Service {
@@ -183,9 +185,13 @@ func (s *Service) pass(ctx context.Context, jobs chan<- job) {
 	}
 }
 
-// render: one item's renditions, finished or failed under its lease
+// render: one item's renditions, finished or failed under its lease — renewed while
+// it works (a video may take longer than a lease); a lease lost stops it
 func (s *Service) render(ctx context.Context, j job) {
 	item := j.item
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	go s.keep(ctx, cancel, j)
 	renditions, err := s.renditions(ctx, item)
 	if err != nil {
 		s.logger.Warn("Render failed", l.String("file", item.Path), l.Error(err))
@@ -201,6 +207,30 @@ func (s *Service) render(ctx context.Context, j job) {
 func (s *Service) finish(done dto.WorkDone) {
 	if _, err := s.db.Finish(done); err != nil {
 		s.logger.Error("Render: a result not kept", l.String("guid", done.GUID.String()), l.Error(err))
+	}
+}
+
+// keep: the job's lease renewed until ctx ends; lost — cancel stops the work (its
+// result would be dropped anyway)
+func (s *Service) keep(ctx context.Context, cancel context.CancelFunc, j job) {
+	tick := time.NewTicker(renew)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			held, err := s.db.Renew(slug, j.item.GUID, j.lease)
+			if err != nil {
+				s.logger.Error("Render: a lease not renewed", l.String("file", j.item.Path), l.Error(err))
+				continue
+			}
+			if !held {
+				s.logger.Warn("Render: a lease lost, the work stops", l.String("file", j.item.Path))
+				cancel()
+				return
+			}
+		}
 	}
 }
 

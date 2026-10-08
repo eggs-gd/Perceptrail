@@ -261,3 +261,22 @@ func TestPrune(t *testing.T) {
 		t.Errorf("shown %+v", rs)
 	}
 }
+
+// Renew: the holder's lease goes on (a long encode keeps its item); another token's
+// does not
+func TestRenew(t *testing.T) {
+	db := openTest(t)
+	a := workItem(t, db, "a.mov", dto.Visible, time.Now(), "h")
+	taken, _ := db.Take("render", []api.GUID{a.GUID})
+	db.writer.db.Model(&dto.WorkDto{}).Where("guid = ?", a.GUID).Update("lease_until", time.Now().Add(time.Second).Unix())
+	if held, err := db.Renew("render", a.GUID, taken[0].Lease+1); err != nil || held {
+		t.Errorf("another token renewed: %v %v", held, err)
+	}
+	if held, err := db.Renew("render", a.GUID, taken[0].Lease); err != nil || !held {
+		t.Fatalf("the holder's renew: %v %v", held, err)
+	}
+	row, _ := db.Work(a.GUID, "render")
+	if until := time.Until(time.Unix(row.LeaseUntil, 0)); until < lease-time.Minute {
+		t.Errorf("lease left %v, want about %v", until, lease)
+	}
+}

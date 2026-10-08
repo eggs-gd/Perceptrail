@@ -377,7 +377,8 @@ func TestRenderSmallVideo(t *testing.T) {
 	}
 }
 
-// An HDR (HLG) video renders — tone mapped to SDR when this ffmpeg has zscale
+// An HDR (HLG) video renders — tone mapped to SDR and tagged so when this ffmpeg has
+// zscale; without, it stays HLG and says so (never HDR samples tagged SDR)
 func TestRenderHDRVideo(t *testing.T) {
 	db, cfg := start(t)
 	item := publish(t, db, clip(t, 1280, 720, 1, true), "video/quicktime")
@@ -389,8 +390,13 @@ func TestRenderHDRVideo(t *testing.T) {
 	if len(motion) != 1 {
 		t.Fatalf("renditions %+v", rs)
 	}
-	if got := probed(t, filepath.Join(cfg.CacheDir(), motion[0].Path)); !strings.Contains(got, "bt709") {
-		t.Errorf("the video's transfer: %s, want bt709", got)
+	filters, _ := exec.Command(ffmpegBin(), "-hide_banner", "-filters").Output()
+	want := "arib-std-b67"
+	if strings.Contains(string(filters), " zscale ") {
+		want = "bt709"
+	}
+	if got := probed(t, filepath.Join(cfg.CacheDir(), motion[0].Path)); !strings.Contains(got, want) {
+		t.Errorf("the video's transfer: %s, want %s", got, want)
 	}
 }
 

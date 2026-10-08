@@ -74,7 +74,8 @@ func findFFmpeg(ctx context.Context, bin, probe string) (*ffmpeg, error) {
 //
 // Not obvious:
 //   - HDR (an iPhone's HLG, Dolby Vision) is tone mapped to SDR when this ffmpeg can
-//     (zscale); without, it is kept as it is — HLG is made to look acceptable on SDR.
+//     (zscale) and tagged SDR; without, it stays HDR with its own tags — a browser
+//     maps it itself (never HDR samples tagged SDR: wrong brightness).
 //   - Its time is its own: a long video gets longer than a photo (three times its
 //     length, at least two minutes).
 func (f *ffmpeg) video(ctx context.Context, guid api.GUID, src string, size int, dir, rel string,
@@ -130,10 +131,13 @@ func (f *ffmpeg) video(ctx context.Context, guid api.GUID, src string, size int,
 }
 
 // filters: tone mapping when it is HDR and this ffmpeg can, then the size — shrunk to
-// the long side, or only made even (H.264 wants even sides) — and the SDR tags
+// the long side, or only made even (H.264 wants even sides) — and, tone mapped, the
+// SDR tags; otherwise the input's own tags stay on the frames (HDR left HDR: a
+// browser maps it itself)
 func (f *ffmpeg) filters(in stream, size int) string {
 	var chain []string
-	if sdr := f.toSDR(in); sdr != "" {
+	sdr := f.toSDR(in)
+	if sdr != "" {
 		chain = append(chain, sdr)
 	}
 	if max(in.w, in.h) > size {
@@ -141,11 +145,14 @@ func (f *ffmpeg) filters(in stream, size int) string {
 	} else {
 		chain = append(chain, "scale=trunc(iw/2)*2:trunc(ih/2)*2")
 	}
-	return strings.Join(append(chain, sdrTags), ",")
+	if sdr != "" {
+		chain = append(chain, sdrTags)
+	}
+	return strings.Join(chain, ",")
 }
 
 // toSDR: the tone mapping of an HDR input (PQ, HLG), when this ffmpeg has it; ""
-// for SDR, or without zscale (HLG is made to look acceptable as it is)
+// for SDR, or without zscale
 func (f *ffmpeg) toSDR(in stream) string {
 	if f.tonemap == "" || in.transfer != "smpte2084" && in.transfer != "arib-std-b67" {
 		return ""

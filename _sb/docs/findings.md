@@ -478,10 +478,18 @@ transit, render bounded by its workers) — patterns go to docs and examples.
   clip. Rejected: our clip in `onDemand.hover` (the owner's first choice) — an
   `onDemand` means "ask the server for the medium" to the client: the viewer would
   prefetch an empty medium URL for Live Photos and show on-demand tools for videos.
-- **ffmpeg's colour, two traps**: the encoder takes the colour tags from the frames,
-  not from `-color_trc` (it wrote nothing) — `setparams` at the end of the chain tags
-  the output SDR; and `zscale` finds "no path between colorspaces" from untagged
-  input — the input's transfer, primaries and matrix (ffprobe) are given to it.
+- **ffmpeg's colour, three traps**: the encoder takes the colour tags from the
+  frames, not from `-color_trc` (it wrote nothing) — `setparams` at the end of the
+  chain; `zscale` finds "no path between colorspaces" from untagged input — the
+  input's transfer, primaries and matrix (ffprobe) are given to it; and SDR tags
+  only after a real tone mapping (review: Codex) — without `zscale` the HDR samples
+  keep their own HLG/PQ tags and the browser maps them; HDR tagged BT.709 shows the
+  wrong brightness.
+- **A long encode renews its lease** (review: Codex): a video's time is three times
+  its length, a lease 15 minutes — past it the safety pass took the item again, the
+  first result was dropped, and a long video could never be accepted. While an item
+  renders its lease is renewed every 5 minutes, by its token; a lease lost stops the
+  work.
 - **ffmpeg is required like libvips**: without it render does not start. "Photos
   without videos" would render a Live Photo without its motion for good (its work
   done for that input).

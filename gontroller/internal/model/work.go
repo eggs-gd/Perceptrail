@@ -33,6 +33,13 @@ type TakeArgs struct {
 	GUIDs []api.GUID
 }
 
+// RenewArgs: a lease to go on with
+type RenewArgs struct {
+	Slug  string
+	GUID  api.GUID
+	Lease int64
+}
+
 const lease = 15 * time.Minute
 
 // backoff: how long a failed item waits, by its failures in a row (the last one
@@ -42,6 +49,7 @@ var backoff = []time.Duration{time.Minute, 10 * time.Minute, time.Hour, 24 * tim
 // workCommands: the queue's writes as commands
 type workCommands struct {
 	take   op[TakeArgs, []dto.Taken]
+	renew  op[RenewArgs, bool]
 	finish op[dto.WorkDone, bool]
 	fail   op[dto.WorkFailed, pubsub.None]
 	prune  op[pubsub.None, int64]
@@ -103,6 +111,16 @@ func (p *Proxy) Take(slug string, guids []api.GUID) ([]dto.Taken, error) {
 
 func (p *Proxy) TakeCommand() pubsub.Command[TakeArgs, []dto.Taken] {
 	return p.take
+}
+
+// Renew: the lease goes on for another term while its holder still works (a long
+// encode); false when it was lost meanwhile — the holder stops
+func (p *Proxy) Renew(slug string, guid api.GUID, lease int64) (bool, error) {
+	return p.renew.Do(RenewArgs{slug, guid, lease})
+}
+
+func (p *Proxy) RenewCommand() pubsub.Command[RenewArgs, bool] {
+	return p.renew
 }
 
 // Finish: false when the result was dropped (the lease lost, the item changed or
@@ -218,6 +236,13 @@ func (t *tx) fail(a dto.WorkFailed) (pubsub.None, error) {
 	return pubsub.None{}, t.db.Save(&row).Error
 }
 
+// renew: see Renew
+func (t *tx) renew(a RenewArgs) (bool, error) {
+	res := t.db.Model(&dto.WorkDto{}).Where("guid = ? AND slug = ? AND lease = ? AND lease_until > 0", a.GUID, a.Slug, a.Lease).
+		Update("lease_until", time.Now().Add(lease).Unix())
+	return res.RowsAffected == 1, res.Error
+}
+
 // prune: see Prune
 func (t *tx) prune(pubsub.None) (int64, error) {
 	stale := t.db.Where("NOT EXISTS (SELECT 1 FROM items WHERE items.guid = renditions.guid AND items.deleted_at IS NULL)").
@@ -248,6 +273,7 @@ func (t *tx) holds(slug string, guid api.GUID, lease int64) (bool, error) {
 func newWorkCommands(p *Proxy) workCommands {
 	return workCommands{
 		take:   command(p, pubsub.Frame, (*tx).take),
+		renew:  command(p, pubsub.Now, (*tx).renew),
 		finish: command(p, pubsub.Now, (*tx).finish),
 		fail:   command(p, pubsub.Frame, (*tx).fail),
 		prune:  command(p, pubsub.Idle, (*tx).prune),
