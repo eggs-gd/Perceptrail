@@ -113,13 +113,20 @@ func (p *Proxy) MarkReworkCommand() pubsub.Command[[]api.GUID, int64] {
 func (q query) cheapStageDone(item *dto.ItemDto) bool {
 	switch item.State {
 	case dto.Visible:
-		return item.PreviewPath != ""
+		return previewReady(item)
 	case dto.Ready:
-		return item.PreviewPath != "" || q.rendered(item)
+		return previewReady(item) || q.rendered(item)
 	case dto.Waiting:
 		return true
 	}
 	return false
+}
+
+func previewReady(item *dto.ItemDto) bool {
+	if item.PreviewPath == "" {
+		return false
+	}
+	return item.PreviewColor != ""
 }
 
 // gone: these files are gone for the library (the walk found them missing, or

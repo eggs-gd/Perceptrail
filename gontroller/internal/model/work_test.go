@@ -226,6 +226,35 @@ func TestReadyStays(t *testing.T) {
 	}
 }
 
+func TestShownPreviewNeedsColor(t *testing.T) {
+	db := openTest(t)
+	item := workItem(t, db, "a.mov", dto.Visible, time.Now(), "h1")
+	file, _ := db.GetFileByPath("/a.mov")
+	file.LinkToItem(item.GUID)
+	file.Role = dto.RoleOriginal
+	if _, err := db.UpdateFile(file); err != nil {
+		t.Fatal(err)
+	}
+	files := []*dto.FileDto{file}
+
+	item.PreviewPath = "/a.mov"
+	item.PreviewMime = "video/quicktime"
+	if _, err := db.UpdateItem(item); err != nil {
+		t.Fatal(err)
+	}
+	if needs, _, err := db.NeedsWork(files, "", item.MetaHash); err != nil || !needs {
+		t.Fatalf("preview without color: needs work %v %v, want true", needs, err)
+	}
+
+	item.PreviewColor = "#123456"
+	if _, err := db.UpdateItem(item); err != nil {
+		t.Fatal(err)
+	}
+	if needs, _, err := db.NeedsWork(files, "", item.MetaHash); err != nil || needs {
+		t.Fatalf("preview with color: needs work %v %v, want false", needs, err)
+	}
+}
+
 // A new render replaces an item's renditions; Prune takes what a deleted item had;
 // what is shown stays
 func TestPrune(t *testing.T) {

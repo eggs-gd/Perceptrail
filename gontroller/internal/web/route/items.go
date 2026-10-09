@@ -22,10 +22,11 @@ type clientItem struct {
 	Date     time.Time `json:"date"`
 	MimeType string    `json:"mimeType"`
 	// What /assets/:guid serves by default (an image or a playable video)
-	PreviewMime string      `json:"previewMime"`
-	Width       int16       `json:"width"`
-	Height      int16       `json:"height"`
-	Asset       clientAsset `json:"asset"` // every file of the asset, by role
+	PreviewMime  string      `json:"previewMime"`
+	PreviewColor string      `json:"previewColor,omitempty"`
+	Width        int16       `json:"width"`
+	Height       int16       `json:"height"`
+	Asset        clientAsset `json:"asset"` // every file of the asset, by role
 }
 
 // The client keeps its items between visits and asks only for what changed:
@@ -54,8 +55,9 @@ type endLine struct {
 // for every Photos item (the biggest of what is seen, the edit); 5: the on-demand
 // URLs carry the version (?v=); 6: asset.full (the full size of what is seen); 7:
 // our renditions in stills and motion — and a client that kept an asset.motion of
-// null (a build of #37 sent one) gets a clean copy.
-const contractVersion = "7"
+// null (a build of #37 sent one) gets a clean copy; 8: previewColor; 9:
+// previewColor for video previews too.
+const contractVersion = "9"
 
 // removedItem: a tombstone in a delta
 type removedItem struct {
@@ -111,8 +113,9 @@ func (r *routes) toClientItem(stored dto.StoredItem) clientItem {
 		Date:     dbItem.Date,
 		MimeType: dbItem.MimeType,
 		// Items shown before the cheap stage existed have no preview: the original
-		PreviewMime: dbItem.PreviewMime,
-		Asset:       asset,
+		PreviewMime:  dbItem.PreviewMime,
+		PreviewColor: dbItem.PreviewColor,
+		Asset:        asset,
 	}
 	if item.PreviewMime == "" {
 		item.PreviewMime = dbItem.MimeType

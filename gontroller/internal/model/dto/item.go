@@ -47,6 +47,8 @@ type ItemDto struct {
 	// preview in the cache. "" = nothing (Waiting)
 	PreviewPath string
 	PreviewMime string
+	// PreviewColor: a quiet placeholder while the preview image decodes, as #rrggbb.
+	PreviewColor string
 	// Hash of the source's own metadata (Apple Photos DB) this item was built from
 	MetaHash string
 	// Rework: something outside the item's files wants it processed again (a perceptor

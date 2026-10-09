@@ -12,6 +12,7 @@
     import {debug} from "$lib/app.svelte";
     import {goto, replaceState} from "$app/navigation";
     import {page} from "$app/state";
+    import {galleryRowHeight} from "./metrics";
     import type {Anchor} from "./layoutWindow";
     import type {LayoutSize} from "$lib/stores";
     import {layoutDb} from "$lib/stores";
@@ -19,8 +20,6 @@
 
     interface Props {
         gutter?: number;
-        /** Target row height, px */
-        rowHeight?: number;
         openItem: (item: LayoutItem) => void,
         /** The view the URL asks for (/v/<slug>); undefined: none yet */
         view?: string;
@@ -30,7 +29,6 @@
 
     let {
         gutter = 8,
-        rowHeight = 220,
         openItem,
         view,
         viewing,
@@ -42,6 +40,8 @@
     let containerEl: HTMLDivElement | undefined = $state();
     let scrollY = $state(0);
     let innerHeight = $state(800);
+    let pixelRatio = $state(1);
+    let rowHeight = $derived(galleryRowHeight(screenWidth, pixelRatio));
 
     /** Visible items (plus overscan) from layoutDb, and the total height */
     let images: LayoutItem[] = $state([]);
@@ -71,6 +71,13 @@
             if (!anchorState.pending) anchorState.pending = anchorOnScreen(width);
             updateLayout(width, targetRowHeight, anchorState.pending?.guid);
         });
+    });
+
+    onMount(() => {
+        const update = () => (pixelRatio = window.devicePixelRatio || 1);
+        update();
+        window.addEventListener('resize', update);
+        return () => window.removeEventListener('resize', update);
     });
 
     /** What to keep in place: the page's edge at an edge, else the photo in the middle */
@@ -428,6 +435,7 @@
             <div class="image"
                  data-guid={itm.guid}
                  in:fade={{ duration: fadeMs }}
+                 style:background-color={itm.previewColor || undefined}
                  style={tileStyle(itm)}
                  onclick={() => {
                      openItem(itm);

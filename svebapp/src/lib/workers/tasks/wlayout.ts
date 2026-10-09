@@ -28,6 +28,8 @@ const logger = getLogger()
 
 // Must match Gallery.svelte gutter (gap between items and rows)
 const GUTTER = 8;
+const MAX_SINGLE_ROW_SCALE = 1.25;
+const MAX_ROW_SCALE = 1.45;
 // Window-edge drag sends a resize per frame; lay out at most this often (~30 fps)
 const RELAYOUT_THROTTLE_MS = 33;
 // Streamed photos are written in batches: one transaction per frame, not per photo
@@ -387,6 +389,20 @@ function naturalWidth(itm: Item, rowHeight: number): number {
     return itm.width * rowHeight / itm.height;
 }
 
+function fullRowHeight(row: LayoutItem[], vp: UpdateLayoutPayload): number {
+    const natural = row.reduce((sum, itm) => sum + naturalWidth(itm, vp.rowHeight), 0);
+    return vp.rowHeight * (vp.screenWidth - gapsForRow(row.length)) / natural;
+}
+
+function maxRowHeight(row: LayoutItem[], vp: UpdateLayoutPayload): number {
+    const scale = row.length === 1 ? MAX_SINGLE_ROW_SCALE : MAX_ROW_SCALE;
+    return vp.rowHeight * scale;
+}
+
+function rowCanFillScreen(row: LayoutItem[], vp: UpdateLayoutPayload): boolean {
+    return fullRowHeight(row, vp) <= maxRowHeight(row, vp);
+}
+
 /**
  * Adds an item to the open row. Returns the items of a row that got closed
  * (stretched to the full width, final positions) — or nothing.
@@ -410,7 +426,7 @@ function place(item: Item, order: number, vp: UpdateLayoutPayload): LayoutItem[]
         return [];
     }
 
-    if (row.length > 0 && -deltaWidth < newItemWidth * 0.5) {
+    if (row.length > 0 && -deltaWidth < newItemWidth * 0.5 && rowCanFillScreen(row, vp)) {
         // Overflows by less than half of itself: stretch the row without it, start a new one
         const closed = closeRow(row, vp);
         lItem.row = state.rowNum;
@@ -425,10 +441,11 @@ function place(item: Item, order: number, vp: UpdateLayoutPayload): LayoutItem[]
     return closed;
 }
 
-/** Stretches the row to exactly screenWidth and moves layout to the next row */
+/** Stretches the row to screenWidth, unless doing so would make it too tall */
 function closeRow(row: LayoutItem[], vp: UpdateLayoutPayload): LayoutItem[] {
-    const natural = row.reduce((sum, itm) => sum + naturalWidth(itm, vp.rowHeight), 0);
-    const height = vp.rowHeight * (vp.screenWidth - gapsForRow(row.length)) / natural;
+    const fullHeight = fullRowHeight(row, vp);
+    const maxHeight = maxRowHeight(row, vp);
+    const height = Math.min(fullHeight, maxHeight);
 
     let x = 0;
     for (const itm of row) {
@@ -440,9 +457,11 @@ function closeRow(row: LayoutItem[], vp: UpdateLayoutPayload): LayoutItem[] {
         itm.scale = height / itm.height;
         x += itm.w + GUTTER;
     }
-    // Rounding: the last item absorbs the remainder so the row is exactly full
-    const last = row[row.length - 1];
-    last.w = vp.screenWidth - last.x;
+    if (height === fullHeight) {
+        // Rounding: the last item absorbs the remainder so the row is exactly full
+        const last = row[row.length - 1];
+        last.w = vp.screenWidth - last.x;
+    }
 
     state.y += height + GUTTER;
     state.rowNum++;
