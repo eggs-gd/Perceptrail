@@ -7,7 +7,7 @@
     import SidePanel from "./components/SidePanel.svelte";
     import type {LayoutItem} from "$lib/stores";
     import {onSynced, setOrder, updateLayout} from "$lib/workers";
-    import {onMount} from "svelte";
+    import {onDestroy, onMount} from "svelte";
     import {nextRequest, orderApplied, perceptors, viewHref} from "./perceptors.svelte";
     import {debug} from "$lib/app.svelte";
     import {goto, replaceState} from "$app/navigation";
@@ -197,19 +197,50 @@
         window.scrollTo({top: programmaticScrollY, behavior: 'instant'});
     }
 
-    let jumpSeq = 0;
-    async function jumpTo(sheetY: number) {
-        const seq = ++jumpSeq;
-        anchorState.pending = undefined;
-        const top = Math.max(0, sheetY - innerHeight * 4);
-        const snapshot = await readWindow({top, bottom: sheetY + innerHeight * 8, viewport: innerHeight}, anchorState);
-        if (seq !== jumpSeq) return;
-        latestWindow = snapshot;
-        await applySnapshot(snapshot);
-        if (seq !== jumpSeq) return;
-        programmaticScrollY = Math.max(0, containerTop + sheetY - innerHeight / 2);
-        window.scrollTo({top: programmaticScrollY, behavior: 'instant'});
+    interface PendingJump {
+        version: number;
+        sheetY: number;
+        snapshot: WindowSnapshot;
     }
+
+    let jumpVersion = 0;
+    let requestedJump: {version: number, sheetY: number} | undefined;
+    let pendingJump: PendingJump | undefined;
+    let jumpRead: Promise<void> | undefined;
+
+    function cancelJump() {
+        jumpVersion++;
+        requestedJump = undefined;
+        pendingJump = undefined;
+    }
+
+    function jumpTo(sheetY: number) {
+        requestedJump = {version: ++jumpVersion, sheetY};
+        anchorState.pending = undefined;
+        jumpRead ??= readJumpWindow();
+    }
+
+    async function readJumpWindow() {
+        try {
+            while (requestedJump) {
+                const request = requestedJump;
+                requestedJump = undefined;
+                const top = Math.max(0, request.sheetY - innerHeight * 4);
+                const snapshot = await readWindow(
+                    {top, bottom: request.sheetY + innerHeight * 8, viewport: innerHeight},
+                    anchorState,
+                );
+                if (request.version !== jumpVersion) continue;
+                pendingJump = {...request, snapshot};
+                schedule();
+            }
+        } finally {
+            jumpRead = undefined;
+            if (requestedJump) jumpRead = readJumpWindow();
+        }
+    }
+
+    onDestroy(cancelJump);
 
     function onScroll() {
         keepPlace();
@@ -217,6 +248,7 @@
         // entry's scroll), not the user's — the anchor must survive it
         if (switching) return;
         if (programmaticScrollY !== undefined && Math.abs(window.scrollY - programmaticScrollY) <= 2) return;
+        cancelJump();
         programmaticScrollY = undefined;
         anchorState.pending = undefined;
     }
@@ -254,7 +286,7 @@
     async function apply() {
         if (!scheduled) return; // the other trigger already ran
         scheduled = false;
-        await applySnapshot(latestWindow);
+        await applySnapshot(pendingJump?.snapshot ?? latestWindow);
     }
 
     async function applySnapshot(snapshot: WindowSnapshot | undefined) {
@@ -284,7 +316,14 @@
         await tick();
 
         let delta = 0;
-        if (snapshot?.scrollTo !== undefined && meta && meta.rev !== anchorState.appliedRev) {
+        const jump = pendingJump;
+        if (jump && jump.version === jumpVersion) {
+            pendingJump = undefined;
+            const before = window.scrollY;
+            programmaticScrollY = Math.max(0, containerTop + jump.sheetY - window.innerHeight / 2);
+            window.scrollTo({top: programmaticScrollY, behavior: 'instant'});
+            delta = window.scrollY - before;
+        } else if (snapshot?.scrollTo !== undefined && meta && meta.rev !== anchorState.appliedRev) {
             anchorState.appliedRev = meta.rev;
             const before = window.scrollY;
             programmaticScrollY = snapshot.toEnd
