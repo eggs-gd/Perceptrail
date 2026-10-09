@@ -16,7 +16,7 @@
     import type {Anchor} from "./layoutWindow";
     import type {LayoutSize} from "$lib/stores";
     import {layoutDb} from "$lib/stores";
-    import {type AnchorState, findAnchor, watchSize, watchWindow, type WindowSnapshot} from "./layoutWindow";
+    import {type AnchorState, findAnchor, readWindow, watchSize, watchWindow, type WindowSnapshot} from "./layoutWindow";
 
     interface Props {
         gutter?: number;
@@ -53,10 +53,17 @@
     const anchorState: AnchorState = {appliedRev: -1};
 
     // The window moves in steps of half a viewport: scrolling inside a step does not
-    // re-create the subscription; the overscan (1 viewport above, 2 below) covers it.
+    // re-create the subscription; the overscan gives fast scrolls room while the
+    // IndexedDB query and the next frame catch up.
+    const OVERSCAN_ABOVE_STEPS = 8; // 4 viewports
+    const OVERSCAN_BELOW_STEPS = 16; // 8 viewports
     let step = $derived(Math.max(200, Math.round(innerHeight / 2)));
     let bucket = $derived(Math.floor(Math.max(0, scrollY - containerTop) / step));
-    let range = $derived({top: (bucket - 2) * step, bottom: (bucket + 4) * step, viewport: innerHeight});
+    let range = $derived({
+        top: (bucket - OVERSCAN_ABOVE_STEPS) * step,
+        bottom: (bucket + OVERSCAN_BELOW_STEPS) * step,
+        viewport: innerHeight,
+    });
 
     // Width or row height changed: ask for a relayout that reports where the anchor
     // (the item at the top of the viewport) ends up. The anchor is taken once and kept
@@ -190,6 +197,20 @@
         window.scrollTo({top: programmaticScrollY, behavior: 'instant'});
     }
 
+    let jumpSeq = 0;
+    async function jumpTo(sheetY: number) {
+        const seq = ++jumpSeq;
+        anchorState.pending = undefined;
+        const top = Math.max(0, sheetY - innerHeight * 4);
+        const snapshot = await readWindow({top, bottom: sheetY + innerHeight * 8, viewport: innerHeight}, anchorState);
+        if (seq !== jumpSeq) return;
+        latestWindow = snapshot;
+        await applySnapshot(snapshot);
+        if (seq !== jumpSeq) return;
+        programmaticScrollY = Math.max(0, containerTop + sheetY - innerHeight / 2);
+        window.scrollTo({top: programmaticScrollY, behavior: 'instant'});
+    }
+
     function onScroll() {
         keepPlace();
         // A switch is on its way: a scroll now is the router's (Back restores the old
@@ -233,7 +254,10 @@
     async function apply() {
         if (!scheduled) return; // the other trigger already ran
         scheduled = false;
-        const snapshot = latestWindow;
+        await applySnapshot(latestWindow);
+    }
+
+    async function applySnapshot(snapshot: WindowSnapshot | undefined) {
         const meta = snapshot?.meta;
         const relayout = meta !== undefined && meta.rev !== lastRev;
         // The relayout of a perceptor switch: the new photos come in with the wave too
@@ -447,7 +471,7 @@
 </div>
 {#if viewing === undefined}
     <GalleryTools onpick={switchView}/>
-    <SidePanel {height} {count} top={containerTop} {scrollY} {innerHeight} pinned={perceptors.pinned}/>
+    <SidePanel {height} {count} top={containerTop} {scrollY} {innerHeight} pinned={perceptors.pinned} onjump={jumpTo}/>
 {/if}
 
 <style>

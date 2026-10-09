@@ -57,16 +57,8 @@ export interface WindowSnapshot {
     toEnd?: boolean;
 }
 
-/**
- * One liveQuery over the visible window. The 'layout' meta record and the items are
- * read in ONE read transaction, so every emission is a consistent snapshot. When
- * meta carries a new relayout of the pending anchor, the window is taken around the
- * anchor's new position and returned with scrollTo — items and scroll change in the
- * same update. It does not read 'size' (changes per streamed batch), and writes
- * outside the window do not re-run it.
- */
-export function watchWindow(range: WindowRange, anchor: AnchorState) {
-    return liveQuery(() => layoutDb.transaction('r', layoutDb.items, layoutDb.meta, async (): Promise<WindowSnapshot> => {
+export async function readWindow(range: WindowRange, anchor: AnchorState): Promise<WindowSnapshot> {
+    return layoutDb.transaction('r', layoutDb.items, layoutDb.meta, async (): Promise<WindowSnapshot> => {
         const meta = await layoutDb.meta.get(LAYOUT_META_KEY) as LayoutMeta | undefined;
 
         let {top, bottom} = range;
@@ -88,7 +80,19 @@ export function watchWindow(range: WindowRange, anchor: AnchorState) {
 
         const items = await itemsInRange(top, bottom);
         return {meta, items, scrollTo, toEnd: a?.mode === 'bottom' && scrollTo !== undefined};
-    }));
+    });
+}
+
+/**
+ * One liveQuery over the visible window. The 'layout' meta record and the items are
+ * read in ONE read transaction, so every emission is a consistent snapshot. When
+ * meta carries a new relayout of the pending anchor, the window is taken around the
+ * anchor's new position and returned with scrollTo — items and scroll change in the
+ * same update. It does not read 'size' (changes per streamed batch), and writes
+ * outside the window do not re-run it.
+ */
+export function watchWindow(range: WindowRange, anchor: AnchorState) {
+    return liveQuery(() => readWindow(range, anchor));
 }
 
 /**
