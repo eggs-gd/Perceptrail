@@ -120,7 +120,7 @@ docker compose up -d    # then http://<host>:8080
 
 | Method | Path | Returns |
 |---|---|---|
-| GET | `/items` | All shown items as an NDJSON stream, newest first (`id, guid, date, mimeType, width, height, asset`; `width/height` is the reduced aspect ratio). Header `X-Sync-Epoch` (this database); the last line is `{cursor, total}` — only a complete stream has it, `total` = shown items (the client checks its copy against it); `?since=<cursor>`: only the changes, a removed item as `{guid, removed}` |
+| GET | `/items` | All shown items as an NDJSON stream, newest first (`id, guid, date, mimeType, previewMime, previewColor, width, height, asset`; `width/height` is the reduced aspect ratio). Header `X-Sync-Epoch` (this database); the last line is `{cursor, total}` — only a complete stream has it, `total` = shown items (the client checks its copy against it); `?since=<cursor>`: only the changes, a removed item as `{guid, removed}` |
 | GET | `/items?since=<cursor>` | The delta: changed shown items as above, `{guid, removed: true}` for deleted or hidden ones |
 | GET | `/perceptors` | The perceptors given to the client (config `perceptors.<name>.client`): `slug (the view in URLs), title, icon (SVG), help, relative` — a button each |
 | GET | `/items/:guid/rendition/:level` | Apple Photos on demand: `medium` (the viewer: the image ~2048 px or the edit; a video's 720p, `?hevc=0` H.264 only), `hover` (a video's 360p, a Live Photo's motion), `original` (the biggest of what is seen: a photo's current version — the edit — at full resolution as JPEG; a video's original file). Serves the file from the library; asks Photos (PhotoKit, macOS) when it is not local; 404 when nothing is there |

@@ -44,6 +44,8 @@ export interface Item {
     mimeType: string;
     /** What /assets/:guid serves (an image, or a playable video): picks <img> or <video> */
     previewMime: string;
+    /** A quiet tile placeholder while the preview image decodes */
+    previewColor?: string;
     /** Every file of the asset; absent from an older server */
     asset?: Asset;
     width: number;

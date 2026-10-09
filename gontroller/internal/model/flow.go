@@ -107,19 +107,26 @@ func (p *Proxy) MarkReworkCommand() pubsub.Command[[]api.GUID, int64] {
 	return p.markRework
 }
 
-// cheapStageDone: the item went through the cheap stage (Visible, Waiting) or is
-// fully done (Ready). An item shown without a preview or renditions is from before
-// the cheap stage existed: it goes through once more.
+// cheapStageDone: the item went through the cheap stage and got the client-facing
+// placeholder color. An old item without one goes through once more, even when it
+// already has renditions.
 func (q query) cheapStageDone(item *dto.ItemDto) bool {
 	switch item.State {
 	case dto.Visible:
-		return item.PreviewPath != ""
+		return previewReady(item)
 	case dto.Ready:
-		return item.PreviewPath != "" || q.rendered(item)
+		return item.PreviewColor != "" && (item.PreviewPath != "" || q.rendered(item))
 	case dto.Waiting:
-		return true
+		return item.PreviewColor != ""
 	}
 	return false
+}
+
+func previewReady(item *dto.ItemDto) bool {
+	if item.PreviewPath == "" {
+		return false
+	}
+	return item.PreviewColor != ""
 }
 
 // gone: these files are gone for the library (the walk found them missing, or

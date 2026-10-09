@@ -89,10 +89,13 @@ keeps in place.
   order (`itemsDb.orders` `order:<view>`, shared by the tabs), so the sheet shows without the network; a
   change that keeps an item's size patches its row in place.
 - `lib/workers/tasks/wlayout.ts` — row layout (greedy: fits → into the row;
-  overflow < ½ of the photo → close the row without it; otherwise add it and shrink
-  the row; the last row stays at the target height). All layoutDb writes go through
-  one ordered queue; at most one full relayout waits in it; streamed photos are
-  batched per ~16 ms.
+  overflow < ½ of the photo closes the row without it only when that row can fill
+  the width without exceeding its height cap; otherwise the photo joins the row and
+  the row shrinks. The last row stays at the target height. The target height comes
+  from `lib/gallery/metrics.ts`: viewport width, with a small DPR bias; sparse rows
+  are capped so one tall photo does not become a poster). All layoutDb writes go
+  through one ordered queue; at most one full relayout waits in it; streamed photos
+  are batched per ~16 ms.
 - `lib/gallery/layoutWindow.ts` — `watchWindow()`: one `liveQuery` that reads the
   `layout` record and the window's items in one read transaction (a consistent
   snapshot); `watchSize()`; `findAnchor()`.
