@@ -22,11 +22,10 @@ type GoneResult struct {
 
 // flowCommands: the flow's writes as commands
 type flowCommands struct {
-	gone          op[[]*dto.FileDto, GoneResult]
-	ignore        op[[]*dto.FileDto, pubsub.None]
-	publish       op[*dto.ItemDto, *dto.ItemDto]
-	markRework    op[[]api.GUID, int64]
-	markAllRework op[pubsub.None, int64]
+	gone       op[[]*dto.FileDto, GoneResult]
+	ignore     op[[]*dto.FileDto, pubsub.None]
+	publish    op[*dto.ItemDto, *dto.ItemDto]
+	markRework op[[]api.GUID, int64]
 }
 
 // NeedsWork: the group's files are stored and unchanged on disk — does it still
@@ -106,16 +105,6 @@ func (p *Proxy) MarkRework(guids []api.GUID) (int64, error) {
 
 func (p *Proxy) MarkReworkCommand() pubsub.Command[[]api.GUID, int64] {
 	return p.markRework
-}
-
-// MarkAllRework sends every item through the cheap stage once more. It is for
-// identify migrations whose output changed without a file change.
-func (p *Proxy) MarkAllRework() (int64, error) {
-	return p.markAllRework.Do(pubsub.None{})
-}
-
-func (p *Proxy) MarkAllReworkCommand() pubsub.Signal[int64] {
-	return pubsub.SignalOf(p.markAllRework)
 }
 
 // cheapStageDone: the item went through the cheap stage and got the client-facing
@@ -242,17 +231,11 @@ func (t *tx) markRework(guids []api.GUID) (int64, error) {
 	return n, nil
 }
 
-func (t *tx) markAllRework(pubsub.None) (int64, error) {
-	res := t.db.Model(&dto.ItemDto{}).Where("rework = ?", false).UpdateColumn("rework", true)
-	return res.RowsAffected, res.Error
-}
-
 func newFlowCommands(p *Proxy) flowCommands {
 	return flowCommands{
-		gone:          command(p, pubsub.Frame, (*tx).gone),
-		ignore:        command(p, pubsub.Frame, (*tx).ignore),
-		publish:       command(p, pubsub.Frame, (*tx).publish),
-		markRework:    command(p, pubsub.Frame, (*tx).markRework),
-		markAllRework: command(p, pubsub.Frame, (*tx).markAllRework),
+		gone:       command(p, pubsub.Frame, (*tx).gone),
+		ignore:     command(p, pubsub.Frame, (*tx).ignore),
+		publish:    command(p, pubsub.Frame, (*tx).publish),
+		markRework: command(p, pubsub.Frame, (*tx).markRework),
 	}
 }

@@ -13,9 +13,8 @@ import (
 )
 
 // At start, what changed in identify since the last run (the versions kept in the
-// meta table): a new kinds' table makes the ignored files judged again, a new
-// identify version marks every item for rework, a new fingerprint makes every item
-// forget its old one. The same versions change nothing.
+// meta table): a new kinds' table makes the ignored files judged again; a new
+// fingerprint makes every item forget its old one. The same versions change nothing.
 func TestMigrate(t *testing.T) {
 	logger := l.NewLogger(l.ErrorLevel, &tree.Decorator{})
 	clip := filepath.Join(t.TempDir(), "clip.mov")
@@ -44,7 +43,7 @@ func TestMigrate(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The versions an older run kept (the meta table's keys are the DB's contract)
-	for key := range map[string]bool{"mime_version": true, "identify_version": true, "hash_version": true} {
+	for key := range map[string]bool{"mime_version": true, "hash_version": true} {
 		if err := testDB.SetMeta(key, "1"); err != nil {
 			t.Fatal(err)
 		}
@@ -57,10 +56,7 @@ func TestMigrate(t *testing.T) {
 	if got, _ := testDB.GetItemByGUID(item.GUID); got.HashShort != "" {
 		t.Errorf("fingerprint kept: %q", got.HashShort)
 	}
-	if got, _ := testDB.GetItemByGUID(item.GUID); !got.Rework {
-		t.Error("the item was not marked for identify rework")
-	}
-	for _, key := range []string{"mime_version", "identify_version", "hash_version"} {
+	for _, key := range []string{"mime_version", "hash_version"} {
 		if v, _ := testDB.GetMeta(key); v == "1" {
 			t.Errorf("%s still %q", key, v)
 		}
@@ -68,15 +64,11 @@ func TestMigrate(t *testing.T) {
 
 	// The same versions: nothing changes
 	item.HashShort = "new-hash"
-	item.Rework = false
 	if _, err := testDB.UpdateItem(item); err != nil {
 		t.Fatal(err)
 	}
 	identify.Migrate(testDB, logger)
 	if got, _ := testDB.GetItemByGUID(item.GUID); got.HashShort != "new-hash" {
 		t.Errorf("the same version cleared it: %q", got.HashShort)
-	}
-	if got, _ := testDB.GetItemByGUID(item.GUID); got.Rework {
-		t.Error("the same version marked it for rework")
 	}
 }

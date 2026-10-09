@@ -207,10 +207,6 @@ content is for when a second provider exists).
 - **The fingerprint is the file's bytes** (size + sha256 of the first and last
   64 KB), not the tags read: a change to the declared tags must not make every
   file new.
-- **Cheap-stage output needs its own version** (2026-10-09): changing size/ratio
-  rules (EXIF Orientation/Rotation) or preview/color output does not change the
-  file stat or fingerprint, so old rows stay wrong unless identify marks every item
-  for rework. Do not piggyback on `hashVersion`: the fingerprint did not change.
 - **The walk writes only what changed** (2026-10-04): it used to read and write
   every file's row every pass (a `SELECT` + an `UPDATE` stamping `CheckTime`, a WAL
   commit each) — an idle pass over 10 000 files took 5.8 s, now 0.1 s. The rows are
