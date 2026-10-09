@@ -13,9 +13,11 @@
         innerHeight: number;
         /** Always shown (and the photos make room); else it shows up while scrolling */
         pinned: boolean;
+        /** Scroll the gallery after the target window has been warmed */
+        onjump?: (sheetY: number) => void | Promise<void>;
     }
 
-    let {height, count, top, scrollY, innerHeight, pinned}: Props = $props();
+    let {height, count, top, scrollY, innerHeight, pinned, onjump}: Props = $props();
 
     // The side panel: the active perceptor's sections along the whole sheet (years and
     // months for the date), where the view is, and a scrubber — press or drag to jump
@@ -98,7 +100,12 @@
     function jump(clientY: number, track: HTMLElement) {
         const p = Math.min(trackHeight, Math.max(0, clientY - track.getBoundingClientRect().top));
         // The pointed place in the middle of the screen
-        window.scrollTo({top: Math.max(0, top + toSheet(p) - innerHeight / 2), behavior: 'instant'});
+        const y = toSheet(p);
+        if (onjump) {
+            onjump(y);
+        } else {
+            window.scrollTo({top: Math.max(0, top + y - innerHeight / 2), behavior: 'instant'});
+        }
     }
 </script>
 
