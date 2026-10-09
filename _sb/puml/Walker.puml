@@ -1,87 +1,104 @@
 @startuml Walker and validating
 
-control fp.Walk
-collections fileCh
+!pragma teoz true
 
-control exifreader #LightCoral
-collections exifCh #LightCoral
+title Files gate and validator (details of the Import chain diagram)
 
-box GateKeeper #LightSkyBlue
-control validator
-control gorm
-control decorator
+control "groups\n(any source)" as Groups
+control "gate" as Gate
+box identify #LightSkyBlue
+control "read\n(exiftool, classify,\nmerge, fingerprint)" as Exif
+control "validate" as Validator
+control "show\n(sizes, cheap preview)" as Transcode
 end box
-collections itemCh
+database "DB (gorm)" as DB
 
+== gate ==
 
-activate fp.Walk
-note over fp.Walk, fileCh #LightGreen
-Make group of files by name <b>[]FileEntry,
-First element is main file, others sidecars
-Sends only new/changed
-end note
-fp.Walk -> fileCh: new group
-deactivate fp.Walk
-activate fileCh
-fileCh -> exifreader: new group
-deactivate fileCh
-activate exifreader #LightCoral
-exifreader -> exifCh: exif...
-note over fileCh, exifCh #LightCoral
-As soon as it takes list of files
-Better to merge exifreader with validator
-To be able to check whole group in a row
-end note
-deactivate exifreader
-activate exifCh #LightCoral
-exifCh -> validator: exif...
-deactivate exifCh
-activate validator
+note over Groups: the walk wrote the rows (new? size/mtime changed?)\nbefore the groupers; unchanged rows are not written
+Groups -> Gate: a whole asset: its files (changed?) and\nthe files gone for the library; no main file yet
+activate Gate
+opt Missing
+    Gate -> DB: the model's Gone (see the end of the walk)
+end
+alt changed (stat, role)
+    Gate -> Exif: group
+else unchanged
+    Gate -> DB: item of the group done?\n(Visible, Waiting, Ready; Rework)
+    alt done
+        Gate ->x Gate: drop (no exif, no work)
+    else not done (New, Dirty, Rework, interrupted)
+        Gate -> Exif: group
+    end
+end
+deactivate Gate
 
-validator -> gorm: hash(path,\nexif...\nbytesize)
-deactivate validator
-activate gorm
+Exif -> Validator: ranked group: main file + sidecars,\nexif, fingerprint
+activate Validator
+
+== validator ==
+
+Validator -> DB: the main file's fingerprint\n(size + sha256 of its ends)
+activate DB
 
 alt found the same
-    note over validator, gorm: same path and same hash\ndo nothing
-    gorm ->x validator: <font color=red><b>nil
+    note over Validator, DB
+    same path and same hash:
+    only reached when the item is not done
+    (the gate drops the rest)
+    end note
+    DB -> Validator: <font color=blue><b>existing guid
 
 else found moved
-    note over validator, gorm
+    note over Validator, DB
     same hash, different path,
     old path <b><font color=red>not exists
+    The item may be deleted already (deletions ran
+    first: the chain is async) -> restored
     end note
-    gorm <- gorm: update path
-    gorm ->x validator: <font color=red><b>nil
+    DB <- DB: update path, new file rows\ntake the item's GUID
+    DB -> Validator: <font color=blue><b>existing guid
+    note over Validator: goes on: the cheap stage refreshes\nthe preview path (it moved too)
 
 else don't found
-    note over validator, gorm
+    note over Validator, DB
     path and hash not found
     create new item
     end note
-    note over validator, gorm
+    note over Validator, DB
     same hash, different path,
     old path <b><font color=red>also exists
     create new one (duplicate)
     end note
-    gorm <- gorm: create
-    gorm -> validator: <font color=green><b>new guid
-    activate validator
+    DB <- DB: create
+    DB -> Validator: <font color=green><b>new guid
 
 else found changed
-    note over validator, gorm
+    note over Validator, DB
     same path, different hash
     <b>have to regenerate thumbs
     end note
-    gorm -> validator: <font color=blue><b>existing guid
-    deactivate gorm
-
+    DB -> Validator: <font color=blue><b>existing guid</b></font>, Dirty
+    deactivate DB
 end
 
-validator -> decorator: guid, exif...
-deactivate validator
-activate decorator
-decorator -> itemCh: exif{} 
-deactivate decorator
+Validator -> Transcode: item (guid), group, exif
+deactivate Validator
+note over Transcode #LightGreen: then the exif step (perceptors); commit sets <b>Visible</b> or <b>Waiting</b>
+
+== end of walk: the missing files ==
+
+note over Groups, DB #LightGreen
+The walk sends missing files only after a <b>complete</b> walk with files found
+(not on cancel, missing root, empty root), after the files it saw.
+Rows the walk did not see (read at its start), under the root,
+not under an unreadable directory, are missing; their provider decides what is
+gone for the library (Apple also counts the files of assets
+trashed or hidden in Photos).
+The gate has the model apply it:
+- main file gone -> item <b>Deleted</b> (soft delete, hidden from /items)
+- sidecar gone -> item <b>Dirty</b> (its group passes the gate again)
+- file rows deleted
+end note
 
 @enduml

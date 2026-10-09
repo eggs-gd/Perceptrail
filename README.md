@@ -25,6 +25,23 @@ The core concept is to provide an infinite way to explore content. By navigating
 - Filtering based on various criteria depending on installed **Perceptors**.
 - Support for batch operations for bulk metadata editing.
 
+## Development
+
+Running the server and what it needs on each platform (exiftool, libvips, ffmpeg):
+[`gontroller/readme.md`](gontroller/readme.md#running).
+
+Git hooks (fast local checks before CI) — enable once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+- `pre-commit`: refuses commits on `master`/`develop`, requires `gofmt` for staged Go files.
+- `pre-push`: runs the CI checks (Go vet/tests + plugin build, `svelte-check`) for the
+  parts changed since `develop`.
+
+Skip in an emergency with `--no-verify`.
+
 ## Documentation
 
 - [Roadmap](_sb/docs/roadmap.md) and [findings & decisions](_sb/docs/findings.md)
@@ -32,14 +49,14 @@ The core concept is to provide an infinite way to explore content. By navigating
 - Modules: [gontroller](gontroller/readme.md) · [perceplib](perceplib/README.md) ·
   [perceptors](perceptors/readme.md) · [svebapp](svebapp/README.md)
 
-## Big Flow
+## Import chain
 
-![Alt text](./_sb/diagrams/Item%20Flow.svg)
+![Import chain](./_sb/diagrams/Import%20chain.svg)
 
-## Items watching and validating process
+## Files gate and validator
 
-![Alt text](./_sb/diagrams/Walker%20and%20validating.svg)
+![Files gate and validator](./_sb/diagrams/Walker%20and%20validating.svg)
 
 ## ML Flow
 
-![Alt text](./_sb/diagrams/ML%20Flow.svg)
+![ML Flow](./_sb/diagrams/ML%20Flow.svg)

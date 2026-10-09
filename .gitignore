@@ -132,3 +132,11 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# gopls workspace checksums (gopls.work is for gopls only)
+gopls.work.sum
+
+# Docker: the owner's own config, data and library next to compose.yml
+/config.yml
+/data/
+/library/

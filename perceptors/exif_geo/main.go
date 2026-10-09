@@ -1,20 +1,27 @@
 package main
 
 import (
+	chain "github.com/eggs-gd/go-chain"
+	l "github.com/eggs-gd/go-zap-decor"
 	"github.com/eggs-gd/perceplib/api"
-	"github.com/eggs-gd/perceplib/chain"
-	l "github.com/eggs-gd/perceplib/logger"
+	"github.com/eggs-gd/perceplib/exif"
 )
+
+var Perceptor api.Perceptor = &geoPerceptor{}
 
 type geoPerceptor struct{}
 
-func (p *geoPerceptor) Name() string                       { return "exif_geo" }
+func (p *geoPerceptor) Name() string { return "exif_geo" }
+
 func (p *geoPerceptor) DataProvider() api.DataProviderType { return api.ExifDataProvider }
+
 func (p *geoPerceptor) ProcessingMode() api.ProcessingMode { return api.SingleItem }
-func (p *geoPerceptor) NewProcessor(chin <-chan api.RawItemR, chout chan<- api.RawItemR, logger *l.Logger) chain.Processor {
-	return NewGeotagsProcessor(chin, chout, logger)
+
+func (p *geoPerceptor) Decorator(logger *l.Logger) chain.Decorator[api.RawItemR, api.RawItemR] {
+	return &geotagsExtractor{logger}
 }
 
-var Perceptor api.Perceptor = &geoPerceptor{}
+// ExifTags: the coordinates (exif.Coordinates)
+func (p *geoPerceptor) ExifTags() []string { return exif.CoordinateTags }
 
 func main() {}

@@ -1,0 +1,131 @@
+@startuml Import chain
+
+!pragma teoz true
+
+title Import chain (gontroller): walk -> group -> gate -> identify -> exif -> commit;\nevery participant is a step (own goroutine), every arrow is a channel (closed when its writers are done)
+
+box "walk: the files" #LightCyan
+control "walk\n(the entry)" as Walker
+end box
+
+box "group: whole assets (a sub-chain)" #LightCyan
+control "switch\n(first that claims)" as Groups
+control "Apple Photos\ngrouper" as Photos
+control "Immich\ngrouper" as Immich
+control "plain folder\ngrouper (last)" as Generic
+end box
+
+box "gate: the files table" #LightGreen
+control "gate" as Gate
+end box
+
+box "identify: the item known (exiftool lives here)" #Lavender
+control "read\n(N in parallel, no DB)" as Exif
+control "validate\n(one at a time)" as Validator #LightGreen
+control "show\n(cheap preview)" as Preview #LightYellow
+end box
+
+box "exif: the EXIF perceptors, their values kept" #Honeydew
+control "built in\n(date, size, length)" as Core
+control "external\n(.so)" as Plugins
+control "keep\n(the perceptors' values)" as Keep
+end box
+
+box "commit: the item published" #MistyRose
+control "close" as Closer
+end box
+
+box "importer (the top)" #WhiteSmoke
+control "the service:\nthe passes" as Top
+end box
+
+database "DB" as DB
+
+== files flow in; groups flow out one by one, steps run concurrently ==
+
+Top -> Walker: a new chain, Process: a pass starts the entry
+
+loop every root (config paths), every file under it
+    Walker -> DB: page by page: new rows created, changed stats saved\n(an unchanged file is not written)
+    Walker -> Groups: the file (its row)
+    note left of Walker
+    Unreadable directory:
+    skipped, recorded (V1)
+    end note
+end
+loop every source (a library that lists its files itself: Immich's API), every file it lists
+    Walker -> DB: the same: page by page, rows of URLs (immich://...)
+    Walker -> Groups: the file (its row)
+end
+
+alt Apple claims it (inside *.photoslibrary)
+    Groups -> Photos: file
+    Photos -> Photos: first file: asset links from Photos.sqlite\n(original, render, Live Photo video); buffer of open\ngroups, a group goes out when all its files arrived
+    Photos -> Gate: a whole asset (keyed by its UUID); the files of an\nasset trashed / hidden in Photos: missing
+else Immich claims it (immich://...)
+    Groups -> Immich: file
+    Immich -> Immich: the asset from the listing; a group goes out\nwhen all its files arrived
+    Immich -> Gate: a whole asset (keyed by its id), Immich's metadata\nand checksum; nothing of it is read from a disk
+else nobody else claims it (other providers ... later)
+    Groups -> Generic: file
+    Generic -> Generic: sidecars by name, next to each other\n(buffer: one open group; a complete group goes out)
+    Generic -> Gate: a whole asset
+end
+note over Groups: a provider not enabled is not asked:\nits files are a plain folder's
+
+opt the asset's Missing
+    Gate -> DB: the model's Gone: a main file's item deleted,\na sidecar's item Dirty
+end
+alt unchanged, the model says no work
+    Gate ->x Gate: drop
+else changed (stat, a role the grouper gave) / needs work (Rework, ...)
+    Gate -> Exif: the asset
+end
+
+Exif -> Exif: ONE exiftool -j call for the group (only the declared tags);\nkind of every file (exif MIMEType, own extension table, sniff),\nthe main file first, roles; the metadata package (the source >\n.xmp > main > derivatives; only the perceptors' tags);\nthe main file's fingerprint: size + sha256(first, last 64 KB)
+Exif -> Validator: what was read (stays inside identify)
+
+Validator -> DB: not media / broken: ignored; else by path and\nfingerprint: same / changed / moved / duplicate
+Validator -> Preview: + the item (its GUID)
+
+Preview -> DB: pixels, codec of every file
+Preview -> Preview: what the browser shows now, no transcode:\nShow / the main file (JPEG, PNG, ...; H.264 video) /\nthe biggest viewable derivative / the main file's embedded\npreview (exiftool -b into the cache); any size counts
+Preview -> Core: the item + its metadata package
+Core -> Plugins: + date, size, length (written into the item)
+Plugins -> Keep: + the external perceptors' values (read-only)
+Keep -> DB: a row in every import perceptor's storage
+Keep -> Closer: item
+Closer -> DB: Visible (a preview) or Waiting (none)
+note right of Closer
+The client gets Visible (and Ready)
+items at once. After the commit the
+item is announced as published: that
+only wakes render, which takes what is
+due from the DB at its own pace (the
+work queue); the import never waits
+for it. Ready comes from there.
+end note
+
+== end of walk ==
+
+loop every row the walk did not see that it says is missing - root by root: only under\na root whose walk was complete and found files (an unmounted drive deletes nothing of\nits own; the other roots go on), not under unreadable directories; a source's only\nafter a listing that ended without an error
+    Walker -> Groups: the file, missing: to its library's grouper,\nwhich passes it through or makes something of it
+end
+Walker -> Groups: the walk returns: its channel CLOSES
+Groups -> Photos: the switch returns: every grouper's input closes
+& Groups -> Immich: closed
+& Groups -> Generic: closed
+Generic -> Gate: what it holds (last group); returns
+Photos -> Gate: returns (an incomplete group waits for the next walk)
+Immich -> Gate: returns (the same)
+note over Gate: the gate's input closes once every grouper has returned\n(a WaitGroup per channel); so on, step by step, to the end
+Closer --> Top: Process returns: every step has;\nevery group of the walk went through every step
+Top -> Top: rescan pause (1 min), then the next pass
+
+== One asset again (Apple Photos on demand) ==
+note over Photos: Photos made a file of an asset local\n(the viewer asked for it: PhotoKit)
+Photos -> DB: the Apple library marks the item for rework\n(updated_at untouched: no delta brings the item back)
+Top -> Top: the next pass processes it
+note over Top: no waiting: the client guesses meanwhile\n(the tile's cloud goes once it got the original)
+
+@enduml
