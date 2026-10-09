@@ -109,12 +109,14 @@ keeps in place.
 
 ### Visible window and resize anchoring
 
-- Window = `y` range `[scroll − 1 viewport, scroll + 2 viewports]` (layout
-  coordinates), moving in steps of half a viewport — scrolling inside a step does not
-  re-create the subscription. The query finds the first row reaching into the window
-  by the indexed `bottom` (rows can be taller than the window), then takes the rows
-  starting before its end. All ranges are bounded: writes outside the window do not
-  re-run it.
+- Window = `y` range with overscan around the viewport (layout coordinates), moving
+  in steps of half a viewport — scrolling inside a step does not re-create the
+  subscription. The overscan is several viewports on both sides so fast scrolls stay
+  inside already mounted colored placeholders while the next Dexie query catches up.
+  A side-panel jump first reads the target window and mounts it, then scrolls there.
+  The query finds the first row reaching into the window by the indexed `bottom`
+  (rows can be taller than the window), then takes the rows starting before its end.
+  All ranges are bounded: writes outside the window do not re-run it.
 - Tiles keep `loading="lazy"`: it limits how many images are decoded at once
   (without it blank tiles get much more frequent). It holds as long as tiles get
   previews, not full-size originals (findings). `overflow-anchor: none` — we anchor
