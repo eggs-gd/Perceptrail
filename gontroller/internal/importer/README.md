@@ -112,7 +112,9 @@ is (`dto.AssetKind`). A step gathers stat, exif, kinds, the fingerprint.
   choice). **A link outside the group** (its main file gone) makes the gate pass the
   group, so the survivor becomes the item in the same pass.
 - **Changing the kind detection** (`identify/classify.go`) needs a new
-  `mimeVersion` (on start every "ignored" mark is cleared). **Changing the
+  `mimeVersion` (on start every "ignored" mark is cleared). **Changing identify's
+  item output** (size/ratio, preview choice or preview color) needs a new
+  `identifyVersion` (on start every item is marked for rework). **Changing the
   fingerprint** (`identify/fingerprint.go`) needs a new `hashVersion` (on start
   every item forgets its fingerprint; not `Dirty`, or the library would vanish from
   the client for the pass).
