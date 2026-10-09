@@ -27,3 +27,16 @@ func TestPreviewColorFallsBackForVideo(t *testing.T) {
 		t.Fatal("previewColor() returned no fallback for video")
 	}
 }
+
+func TestPreviewColorFallsBackWithoutPath(t *testing.T) {
+	if got := previewColor("guid-1", "", "", nil); got == "" {
+		t.Fatal("previewColor() returned no fallback without a path")
+	}
+}
+
+func TestPreviewColorRejectsTooManyPixels(t *testing.T) {
+	cfg := image.Config{Width: previewColorMaxPixels + 1, Height: 1}
+	if !tooManyPreviewColorPixels(cfg) {
+		t.Fatal("tooManyPreviewColorPixels() returned false for an oversized image")
+	}
+}

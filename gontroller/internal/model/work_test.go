@@ -207,6 +207,10 @@ func TestReadyStays(t *testing.T) {
 	}
 
 	it, _ := db.GetItemByGUID(a.GUID)
+	it.PreviewColor = "#123456"
+	if _, err := db.UpdateItem(it); err != nil {
+		t.Fatal(err)
+	}
 	if needs, _, err := db.NeedsWork(files, "", it.MetaHash); err != nil || needs {
 		t.Errorf("a rendered item sent to the cheap stage again: %v %v", needs, err)
 	}
@@ -252,6 +256,38 @@ func TestShownPreviewNeedsColor(t *testing.T) {
 	}
 	if needs, _, err := db.NeedsWork(files, "", item.MetaHash); err != nil || needs {
 		t.Fatalf("preview with color: needs work %v %v, want false", needs, err)
+	}
+}
+
+func TestRenderedItemNeedsColor(t *testing.T) {
+	db := openTest(t)
+	item := workItem(t, db, "a.heic", dto.Ready, time.Now(), "h1")
+	file, _ := db.GetFileByPath("/a.heic")
+	file.LinkToItem(item.GUID)
+	file.Role = dto.RoleOriginal
+	if _, err := db.UpdateFile(file); err != nil {
+		t.Fatal(err)
+	}
+	files := []*dto.FileDto{file}
+	taken, _ := db.Take("render", []api.GUID{item.GUID})
+	if done, err := db.Finish(dto.WorkDone{
+		Slug: "render", GUID: item.GUID, Lease: taken[0].Lease, Version: "v1", Input: "h1",
+		Renditions: []dto.RenditionDto{{GUID: item.GUID, Size: 400, Format: "webp", Path: "r/a/v1/400.webp"}},
+	}); err != nil || !done {
+		t.Fatalf("finish: %v %v", done, err)
+	}
+
+	item, _ = db.GetItemByGUID(item.GUID)
+	if needs, _, err := db.NeedsWork(files, "", item.MetaHash); err != nil || !needs {
+		t.Fatalf("rendered without color: needs work %v %v, want true", needs, err)
+	}
+
+	item.PreviewColor = "#123456"
+	if _, err := db.UpdateItem(item); err != nil {
+		t.Fatal(err)
+	}
+	if needs, _, err := db.NeedsWork(files, "", item.MetaHash); err != nil || needs {
+		t.Fatalf("rendered with color: needs work %v %v, want false", needs, err)
 	}
 }
 

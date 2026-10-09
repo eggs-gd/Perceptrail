@@ -17,12 +17,13 @@ import (
 // Large originals must not turn the cheap stage into image rendering. When a color
 // cannot be sampled cheaply, the placeholder falls back to a stable muted color.
 const previewColorMaxBytes = 4 << 20
+const previewColorMaxPixels = 24_000_000
 
 func previewColor(seed, path, mime string, logger *l.Logger) string {
-	if path == "" {
-		return ""
-	}
 	fallback := fallbackColor(seed)
+	if path == "" {
+		return fallback
+	}
 	if !strings.HasPrefix(mime, "image/") {
 		return fallback
 	}
@@ -38,6 +39,19 @@ func previewColor(seed, path, mime string, logger *l.Logger) string {
 		return fallback
 	}
 	defer file.Close()
+	cfg, _, err := image.DecodeConfig(file)
+	if err != nil {
+		if logger != nil {
+			logger.Debug("Preview color config not decoded", l.String("file", path), l.Error(err))
+		}
+		return fallback
+	}
+	if tooManyPreviewColorPixels(cfg) {
+		return fallback
+	}
+	if _, err := file.Seek(0, 0); err != nil {
+		return fallback
+	}
 	img, _, err := image.Decode(file)
 	if err != nil {
 		if logger != nil {
@@ -49,6 +63,13 @@ func previewColor(seed, path, mime string, logger *l.Logger) string {
 		return color
 	}
 	return fallback
+}
+
+func tooManyPreviewColorPixels(cfg image.Config) bool {
+	if cfg.Width <= 0 || cfg.Height <= 0 {
+		return true
+	}
+	return int64(cfg.Width)*int64(cfg.Height) > previewColorMaxPixels
 }
 
 func fallbackColor(seed string) string {
