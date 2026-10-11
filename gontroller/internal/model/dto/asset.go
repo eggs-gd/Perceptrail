@@ -27,6 +27,10 @@ type Asset struct {
 	// The content's fingerprint as the source knows it (Immich: the checksum), when
 	// its files are not on a disk to hash; "": the import hashes the main file
 	Fingerprint string
+	// The gallery's placeholder colour as the source knows it (Immich: its
+	// thumbhash's mean), when its preview is not on a disk to sample; "": the
+	// import samples the preview
+	PreviewColor string
 	// What the asset is (Kind*), when the source says it
 	Kind string
 }

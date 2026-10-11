@@ -67,10 +67,12 @@ func newGrouper(index *index) *Grouper {
 func group(a *asset, files []file, rows map[string]*dto.FileDto) dto.Asset {
 	kind := a.kind()
 	g := dto.Asset{
-		Key: api.GUID(a.ID), Meta: a.meta(), Kind: kind, Fingerprint: "immich:" + a.Checksum,
+		Key: api.GUID(a.ID), Meta: a.meta(), Kind: kind, Fingerprint: "immich:" + a.Checksum, PreviewColor: a.color(),
 		// The rows' stat is the asset's updatedAt: a change in Immich is a changed
-		// file already; this only tells the gate the kind changed with it
-		MetaHash: kind + "@" + a.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000000Z"),
+		// file already; this tells the gate what we take from Immich besides the
+		// files changed (the kind, the placeholder colour: an item from before it
+		// goes through once)
+		MetaHash: kind + "@" + a.UpdatedAt.UTC().Format("2006-01-02T15:04:05.000000Z") + "/" + a.color(),
 	}
 	for _, file := range files {
 		row := rows[file.path]

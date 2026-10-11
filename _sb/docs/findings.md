@@ -28,6 +28,19 @@ Rewritten 2026-10-04 (PR #25) from the full log — the history is in git.
 
 ## Gallery (svebapp)
 
+- **A tile waits in its photo's colour, not black** (#44, the owner after
+  home-gallery's coloured rectangles): `previewColor` on the item — the cheap
+  preview's mean, sampled in identify only when that is cheap (≤ 4 MB, ≤ 24 MP
+  decoded; else a stable muted colour from the GUID); a library's own when it has
+  one (Immich: its thumbhash's mean, its header's L, P, Q — no pixel read; #46).
+- **The row height follows the viewport** (#44): one 220 px target gave a phone one
+  or two photos a row, and a lone portrait closed its row stretched to the full
+  width — a poster. The target comes from the width (a small DPR bias), and a
+  sparse row is capped: the next photo joins it and the row shrinks instead.
+- **A big jump warms its window first** (#45): a side-panel jump reads and mounts
+  the target window before it moves the scroll, so placeholders are there on
+  arrival; one jump in flight, the latest wins, a user's scroll cancels it.
+
 **Rejected:**
 
 - One worker message per photo: every message is its own event-loop task — a sort,

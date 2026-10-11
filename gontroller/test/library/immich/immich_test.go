@@ -41,7 +41,7 @@ const (
 var assets = map[string]string{
 	photoID: `{"id":"` + photoID + `","type":"IMAGE","checksum":"c1","originalFileName":"IMG_1.HEIC","originalMimeType":"image/heic",
 	  "width":3024,"height":4032,"fileCreatedAt":"2024-07-01T10:00:00Z","localDateTime":"2024-07-01T13:00:00Z",
-	  "updatedAt":"2024-07-02T00:00:00Z","exifInfo":{"dateTimeOriginal":"2024-07-01T10:00:00Z","latitude":50.45,"longitude":30.52}}`,
+	  "updatedAt":"2024-07-02T00:00:00Z","thumbhash":"ICoDAAA=","exifInfo":{"dateTimeOriginal":"2024-07-01T10:00:00Z","latitude":50.45,"longitude":30.52}}`,
 	liveID: `{"id":"` + liveID + `","type":"IMAGE","checksum":"c2","originalFileName":"IMG_2.HEIC","originalMimeType":"image/heic",
 	  "livePhotoVideoId":"` + motionID + `","width":4032,"height":3024,"fileCreatedAt":"2024-07-01T11:00:00Z",
 	  "localDateTime":"2024-07-01T14:00:00Z","updatedAt":"2024-07-02T00:00:00Z"}`,
@@ -113,6 +113,20 @@ func TestImmichLibrary(t *testing.T) {
 	photo, _ := testDB.GetItemByGUID(photoID)
 	if got := photo.GetDate().Format(time.RFC3339); got != "2024-07-01T13:00:00+03:00" {
 		t.Errorf("photo's date %s", got)
+	}
+	// Its placeholder: its thumbhash's colour (nothing of Immich's is read to sample)
+	if photo.PreviewColor != "#e34e54" {
+		t.Errorf("photo's placeholder %q, want its thumbhash's #e34e54", photo.PreviewColor)
+	}
+	// An item from before (#40's MetaHash, a sampled fallback): the next pass
+	// gives it its colour, though nothing changed in Immich
+	photo.MetaHash, photo.PreviewColor = "photo@2024-07-02T00:00:00.000000Z", "#513d35" // #40's MetaHash
+	if _, err := testDB.UpdateItem(photo); err != nil {
+		t.Fatal(err)
+	}
+	scan(t)
+	if again, _ := testDB.GetItemByGUID(photoID); again.PreviewColor != "#e34e54" {
+		t.Errorf("an item from before kept %q", again.PreviewColor)
 	}
 
 	e := echo.New()
