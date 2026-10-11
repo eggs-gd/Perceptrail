@@ -2,6 +2,7 @@ package immich
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -231,5 +232,24 @@ func TestDurationClock(t *testing.T) {
 	a := asset{Duration: json.RawMessage(`"0:01:02.500000"`)}
 	if d := a.duration(); d != 62.5 {
 		t.Errorf("duration %v", d)
+	}
+}
+
+// The placeholder colour from Immich's thumbhash: its header's means (L, P, Q) as
+// RGB — a light grey, a red; none without a thumbhash
+func TestColor(t *testing.T) {
+	header := func(l, p, q uint32) string { // ThumbHash's first 24 bits, the rest zero
+		v := l | p<<6 | q<<12
+		return base64.StdEncoding.EncodeToString([]byte{byte(v), byte(v >> 8), byte(v >> 16), 0, 0})
+	}
+	for _, c := range []struct{ hash, want string }{
+		{header(48, 31, 31), "#bfc3c5"}, // L 0.76, no chroma: grey
+		{header(32, 40, 50), "#e34e54"}, // P and Q up: red
+		{"", ""},
+		{"not base64!", ""},
+	} {
+		if got := (&asset{Thumbhash: c.hash}).color(); got != c.want {
+			t.Errorf("%q: %q, want %q", c.hash, got, c.want)
+		}
 	}
 }

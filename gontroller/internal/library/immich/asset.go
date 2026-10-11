@@ -1,8 +1,10 @@
 package immich
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -44,6 +46,7 @@ type asset struct {
 	UpdatedAt        time.Time       `json:"updatedAt"`
 	IsTrashed        bool            `json:"isTrashed"`
 	IsOffline        bool            `json:"isOffline"`
+	Thumbhash        string          `json:"thumbhash"` // base64: a tiny blurred stand-in, its mean colour first
 	Exif             *exif           `json:"exifInfo"`
 }
 
@@ -113,6 +116,25 @@ func (a *asset) files() []file {
 		out = append(out, file{path: dir + "motion/" + a.LivePhotoVideoID + ".mp4", role: dto.RoleMotion, mime: "video/mp4", codec: "avc1"})
 	}
 	return out
+}
+
+// color: the asset's mean colour from its thumbhash — the gallery's placeholder,
+// with no pixel read. ThumbHash starts with the means of L, P, Q (6 bits each);
+// their RGB as its reference decoder computes it; "" without a thumbhash
+func (a *asset) color() string {
+	hash, err := base64.StdEncoding.DecodeString(a.Thumbhash)
+	if err != nil || len(hash) < 3 {
+		return ""
+	}
+	header := uint32(hash[0]) | uint32(hash[1])<<8 | uint32(hash[2])<<16
+	l := float64(header&63) / 63
+	p := float64(header>>6&63)/31.5 - 1
+	q := float64(header>>12&63)/31.5 - 1
+	b := l - 2.0/3*p
+	r := (3*l - b + q) / 2
+	g := r - q
+	channel := func(v float64) byte { return byte(math.Round(max(0, min(1, v)) * 255)) }
+	return fmt.Sprintf("#%02x%02x%02x", channel(r), channel(g), channel(b))
 }
 
 // kind: what the asset is (dto.Kind*)
