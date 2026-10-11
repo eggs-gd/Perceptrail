@@ -52,7 +52,10 @@ One line each; the details are in the READMEs and the PRs.
   without a checkout (`develop` and releases published), the config decides
   (`./config.yml` mounted), no `LIBRARY` variable · #42 render yields the host:
   nice 10, `render.threads`, renditions renamed once whole; a stop is no failure ·
-  #43 a video's cover (an attached picture) is not rendered as the video.
+  #43 a video's cover (an attached picture) is not rendered as the video · #44
+  tiles wait in their photo's colour, the row height from the viewport (no lone
+  portrait as a poster) · #45 a big jump warms its window first · #46 Immich's
+  placeholders from its thumbhash.
 
 ## Releases
 
