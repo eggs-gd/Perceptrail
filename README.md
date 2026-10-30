@@ -51,7 +51,9 @@ runs every Go module's tests with coverage, the scan
 a non-zero exit); `pre-commit` runs it when code it covers is staged. Without them
 nothing runs. Needs `sonar-scanner` (`brew install sonar-scanner`); the issues:
 `sonar list issues -p perceptrail --format table` (`sonar` CLI). `.svelte` is not
-analysed — `svelte-check` guards it.
+analysed — `svelte-check` guards it. A scan failing in blame with
+`MissingObjectException` (the scanner's JGit cannot read git 2.5x's
+multi-pack-index): `git config core.multiPackIndex false` in that checkout.
 
 ## Documentation
 

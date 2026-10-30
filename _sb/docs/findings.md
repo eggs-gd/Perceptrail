@@ -713,6 +713,15 @@ How it is read, the paths and the proxy: the
 
 ## Repository
 
+- **SonarQube, locally** (#47, the owner's LAN server, no CI): the first scan hung
+  ten minutes in "Preprocessing files" — the scanner walks a listed directory
+  whole, exclusions or not, and `gontroller/` held the dev checkout's data (`.var`:
+  19 441 files): gontroller is listed by its code (`gontroller.go`, `internal`,
+  `test`). Then blame failed: JGit misses objects behind git 2.54's
+  multi-pack-index (`git fsck` clean) — `core.multiPackIndex false` in the
+  checkout. Coverage runs `-short`: a test binary built for coverage loads no
+  plugin, built with `-cover` or not; the plugin tests run in `go test` as ever.
+
 - **Docker: two containers, one address** (#38, the owner: ML and Postgres will be
   services of the same compose — no point squeezing into one process): the server,
   and the web — Caddy serving the gallery as a single-page app and sending `/api`
