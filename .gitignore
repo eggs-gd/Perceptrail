@@ -144,3 +144,4 @@ gopls.work.sum
 # SonarQube: the scanner's work directory, the Go coverage profiles (make sonar)
 .scannerwork/
 coverage.out
+golangci-lint.xml

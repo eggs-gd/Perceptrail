@@ -46,14 +46,18 @@ Skip in an emergency with `--no-verify`.
 
 The owner's server is on a LAN: a local analysis, no CI. With `SONAR_HOST_URL` and
 `SONAR_TOKEN` in the environment or a git-ignored `.env` (mode 600), `make sonar`
-runs every Go module's tests with coverage, the scan
+runs every Go module's tests with coverage and golangci-lint
+([`.golangci.yml`](.golangci.yml)), svebapp's unit tests with coverage, the scan
 ([`sonar-project.properties`](sonar-project.properties)) and the quality gate (red:
-a non-zero exit); `pre-commit` runs it when code it covers is staged. Without them
-nothing runs. Needs `sonar-scanner` (`brew install sonar-scanner`); the issues:
+a non-zero exit — on new code: no new issue, coverage ≥ 80 %); `pre-commit` runs it
+when code it covers is staged. Without them nothing runs. Needs `sonar-scanner` and
+`golangci-lint` (`brew install sonar-scanner golangci-lint`); the issues:
 `sonar list issues -p perceptrail --format table` (`sonar` CLI). `.svelte` is not
 analysed — `svelte-check` guards it. A scan failing in blame with
 `MissingObjectException` (the scanner's JGit cannot read git 2.5x's
 multi-pack-index): `git config core.multiPackIndex false` in that checkout.
+A rule that is wrong for a line is answered on that line — `// NOSONAR` or
+`//nolint:<linter>` with the reason — never by closing the issue on the server.
 
 ## Documentation
 

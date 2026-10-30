@@ -43,8 +43,9 @@ test:
 	)
 
 # SonarQube on the owner's LAN server: every Go module's tests with coverage (an
-# integration test counts for the packages it runs: -coverpkg), the scan, the
-# quality gate (red: a non-zero exit). SONAR_HOST_URL and SONAR_TOKEN from the
+# integration test counts for the packages it runs: -coverpkg) and golangci-lint's
+# findings (.golangci.yml: a report, not a stop — the gate decides), svebapp's unit
+# tests with coverage (lcov), the scan, the quality gate (red: a non-zero exit). SONAR_HOST_URL and SONAR_TOKEN from the
 # environment or a git-ignored .env; never printed.
 # -short: the tests that load the perceptors as plugins skip (pluginbuild) — a host
 # built for coverage loads no plugin, built with -cover or not; go test runs them
@@ -57,5 +58,9 @@ sonar:
 	for module in $(SONAR_GOMODULES); do \
 		echo "Coverage: $$module"; \
 		(cd $$module && go test -short -coverpkg=./... -coverprofile=coverage.out ./... > /dev/null) || exit 1; \
+		(cd $$module && golangci-lint run --issues-exit-code=0 --output.text.path=stderr \
+			--output.checkstyle.path=$(CURDIR)/$$module/golangci-lint.xml ./... 2> /dev/null) || exit 1; \
 	done; \
+	echo "Coverage: svebapp"; \
+	(cd svebapp && npx vitest run --coverage > /dev/null) || exit 1; \
 	sonar-scanner -Dsonar.qualitygate.wait=true

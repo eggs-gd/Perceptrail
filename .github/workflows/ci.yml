@@ -89,6 +89,7 @@ jobs:
 
     - run: npm ci
     - run: npm run check
+    - run: npm test
     - run: npm run build
 
   # Every push to develop is one squash merge = one version. Tag it once checks pass.

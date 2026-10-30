@@ -43,5 +43,5 @@ fi
 
 if touches '^svebapp/'; then
   echo "pre-push: svebapp checks"
-  (cd svebapp && npm run check --silent)
+  (cd svebapp && npm run check --silent && npm test --silent)
 fi
