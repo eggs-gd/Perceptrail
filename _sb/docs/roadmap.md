@@ -53,7 +53,8 @@ One line each; the details are in the READMEs and the PRs.
   (`./config.yml` mounted), no `LIBRARY` variable · #42 render yields the host:
   nice 10, `render.threads`, renditions renamed once whole; a stop is no failure ·
   #43 a video's cover (an attached picture) is not rendered as the video · #47
-  SonarQube locally (`make sonar`, pre-commit; the owner's LAN server, no CI).
+  SonarQube locally (`make sonar`, pre-commit; the owner's LAN server, no CI):
+  golangci-lint joins it, svebapp gets unit tests (vitest), every issue answered.
 
 ## Releases
 
@@ -189,6 +190,9 @@ the resources differ (IO and exiftool, CPU / GPU, ML); roles later
 - **API providers**: see Providers.
 
 ## Smaller open items
+
+- [ ] Go plugins on macOS 27: a newer Go (1.27.2+) or the linker's fix — `dlopen`
+      refuses them locally (findings, "Repository").
 
 - [ ] **Booleans set by hand** (AGENTS.md "Code Style"), each where it belongs:
       - small, with the next change of their code: `perceptor.loaded` → `sync.Once` or the registry itself;
