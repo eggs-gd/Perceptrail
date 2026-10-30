@@ -6,7 +6,7 @@ GOMODULES = \
 	perceptors/ml_faces \
 	perceptors/ml_objects
 
-.PHONY: all build-gontroller build-plugins build-plugin-% update-deps clean
+.PHONY: all build-gontroller build-plugins build-plugin-% update-deps clean test sonar
 
 all: clean update-deps build-gontroller build-plugins
 
@@ -41,3 +41,21 @@ test:
 		echo "Testing $(module)..."; \
 		(cd $(module) && go test ./...); \
 	)
+
+# SonarQube on the owner's LAN server: every Go module's tests with coverage (an
+# integration test counts for the packages it runs: -coverpkg), the scan, the
+# quality gate (red: a non-zero exit). SONAR_HOST_URL and SONAR_TOKEN from the
+# environment or a git-ignored .env; never printed.
+# -short: the tests that load the perceptors as plugins skip (pluginbuild) — a host
+# built for coverage loads no plugin, built with -cover or not; go test runs them
+# (pre-push, CI).
+SONAR_GOMODULES = $(GOMODULES) scripts/declorder
+
+sonar:
+	@set -a; [ ! -f .env ] || . ./.env; set +a; \
+	test -n "$$SONAR_HOST_URL" && test -n "$$SONAR_TOKEN" || { echo 'sonar: set SONAR_HOST_URL and SONAR_TOKEN (.env)' >&2; exit 1; }; \
+	for module in $(SONAR_GOMODULES); do \
+		echo "Coverage: $$module"; \
+		(cd $$module && go test -short -coverpkg=./... -coverprofile=coverage.out ./... > /dev/null) || exit 1; \
+	done; \
+	sonar-scanner -Dsonar.qualitygate.wait=true

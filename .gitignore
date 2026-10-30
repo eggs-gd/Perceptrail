@@ -140,3 +140,7 @@ gopls.work.sum
 /config.yml
 /data/
 /library/
+
+# SonarQube: the scanner's work directory, the Go coverage profiles (make sonar)
+.scannerwork/
+coverage.out

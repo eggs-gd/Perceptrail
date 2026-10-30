@@ -42,6 +42,17 @@ git config core.hooksPath .githooks
 
 Skip in an emergency with `--no-verify`.
 
+### SonarQube (optional)
+
+The owner's server is on a LAN: a local analysis, no CI. With `SONAR_HOST_URL` and
+`SONAR_TOKEN` in the environment or a git-ignored `.env` (mode 600), `make sonar`
+runs every Go module's tests with coverage, the scan
+([`sonar-project.properties`](sonar-project.properties)) and the quality gate (red:
+a non-zero exit); `pre-commit` runs it when code it covers is staged. Without them
+nothing runs. Needs `sonar-scanner` (`brew install sonar-scanner`); the issues:
+`sonar list issues -p perceptrail --format table` (`sonar` CLI). `.svelte` is not
+analysed — `svelte-check` guards it.
+
 ## Documentation
 
 - [Roadmap](_sb/docs/roadmap.md) and [findings & decisions](_sb/docs/findings.md)

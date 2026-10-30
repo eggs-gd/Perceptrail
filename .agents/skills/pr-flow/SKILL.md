@@ -31,7 +31,12 @@ develop` — removed after the merge (`git worktree remove`).
 2. What changed is checked: `gofmt`, `go vet`, tests (`go test -race ./...` in
    gontroller), gopls diagnostics on every Go file touched; `go_vulncheck` after a
    `go.mod` change. A plugin touched: `go build -buildmode=plugin` in its module.
-3. The message: the subject says what it is for the product; the body says why.
+3. SonarQube, where `SONAR_HOST_URL` and `SONAR_TOKEN` are set (the owner's machine,
+   `.env`; elsewhere skip): `make sonar` passes — the pre-commit hook runs it; what
+   it flagged: `sonar list issues -p perceptrail --format table`. Never print or
+   read the token, change the server's settings, or close an issue as a false
+   positive there without the owner.
+4. The message: the subject says what it is for the product; the body says why.
    End with the attribution lines the session gives.
 
 ## Push
