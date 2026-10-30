@@ -740,10 +740,6 @@ How it is read, the paths and the proxy: the
   new code ≥ 80 % and a TS change had nothing to cover it. vitest over the pure code
   and the sync's stream (moved out of the worker into `stream.ts`: the protocol
   readable and testable without a worker; `fake-indexeddb`, a stand-in `fetch`).
-- **Go plugins do not load on macOS 27 with Go 1.27.1** (2026-10-30): `dlopen` —
-  "chained fixups, seg_count does not match number of segments"; Linux (CI, Docker)
-  is fine. The plugin tests fail locally; a local server runs without its `.so`
-  perceptors.
 
 - **Docker: two containers, one address** (#38, the owner: ML and Postgres will be
   services of the same compose — no point squeezing into one process): the server,

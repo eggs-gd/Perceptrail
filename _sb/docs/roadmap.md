@@ -191,9 +191,6 @@ the resources differ (IO and exiftool, CPU / GPU, ML); roles later
 
 ## Smaller open items
 
-- [ ] Go plugins on macOS 27: a newer Go (1.27.2+) or the linker's fix — `dlopen`
-      refuses them locally (findings, "Repository").
-
 - [ ] **Booleans set by hand** (AGENTS.md "Code Style"), each where it belongs:
       - small, with the next change of their code: `perceptor.loaded` → `sync.Once` or the registry itself;
         `apple.asset.sent` → a sent group leaves the map; `walk.Result.Complete` →
