@@ -81,7 +81,7 @@ func fallbackColor(seed string) string {
 
 func hslColor(h, s, l uint32) string {
 	chroma := (100 - abs(int(2*l)-100)) * s / 100
-	x := chroma * uint32(60-abs(int(h%120)-60)) / 60
+	x := chroma * (60 - abs(int(h%120)-60)) / 60
 	m := l - chroma/2
 	var r, g, b uint32
 	switch {

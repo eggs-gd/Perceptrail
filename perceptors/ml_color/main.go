@@ -18,8 +18,9 @@ func (p *colorPerceptor) DataProvider() api.DataProviderType { return api.RawDat
 func (p *colorPerceptor) ProcessingMode() api.ProcessingMode { return api.SingleItem }
 
 func (p *colorPerceptor) Decorator(logger *l.Logger) chain.Decorator[api.RawItemR, api.RawItemR] {
-	// TODO: Implement color processor
-	return nil
+	return nil // nothing on import yet: roadmap, "Colour — deterministic, no ML"
 }
 
-func main() {}
+func main() {
+	// a Go plugin: loaded by the server, never run
+}

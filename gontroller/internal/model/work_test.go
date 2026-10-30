@@ -109,7 +109,9 @@ func TestFinish(t *testing.T) {
 	}
 
 	a.HashShort = "h2" // the file changed while it was rendered
-	db.UpdateItem(a)
+	if _, err := db.UpdateItem(a); err != nil {
+		t.Fatal(err)
+	}
 	taken, _ = db.Take("render", []api.GUID{a.GUID})
 	if done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: a.GUID, Lease: taken[0].Lease, Version: "v1", Input: "h1"}); err != nil || done {
 		t.Errorf("a stale result kept: %v %v", done, err)
@@ -169,7 +171,8 @@ func TestLateWorkerAfterLeaseLost(t *testing.T) {
 		t.Fatalf("the second worker's finish: %v %v", done, err)
 	}
 	// The first one comes back late: neither its failure nor its result counts
-	db.Fail(dto.WorkFailed{Slug: "render", GUID: a.GUID, Lease: first[0].Lease, Version: "v1", Input: "h1", Err: "late"})
+	// (refused or not: what counts is that nothing changes)
+	_ = db.Fail(dto.WorkFailed{Slug: "render", GUID: a.GUID, Lease: first[0].Lease, Version: "v1", Input: "h1", Err: "late"})
 	if done, _ := db.Finish(dto.WorkDone{Slug: "render", GUID: a.GUID, Lease: first[0].Lease, Version: "v0", Input: "h1"}); done {
 		t.Error("a late result was kept")
 	}
@@ -188,7 +191,9 @@ func TestReadyStays(t *testing.T) {
 	f, _ := db.GetFileByPath("/a.heic") // the file as the import leaves it: linked, a role
 	f.LinkToItem(a.GUID)
 	f.Role = dto.RoleOriginal
-	db.UpdateFile(f)
+	if _, err := db.UpdateFile(f); err != nil {
+		t.Fatal(err)
+	}
 	files := []*dto.FileDto{f}
 	taken, _ := db.Take("render", []api.GUID{a.GUID})
 	done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: a.GUID, Lease: taken[0].Lease, Version: "v1", Input: "h1",
@@ -223,8 +228,12 @@ func TestReadyStays(t *testing.T) {
 
 	it, _ = db.GetItemByGUID(a.GUID)
 	it.HashShort = "h2" // the file changed
-	db.UpdateItem(it)
-	db.Publish(it)
+	if _, err := db.UpdateItem(it); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Publish(it); err != nil {
+		t.Fatal(err)
+	}
 	if state() != dto.Waiting {
 		t.Errorf("a new fingerprint: state %v, want Waiting", state())
 	}

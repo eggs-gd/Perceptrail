@@ -79,39 +79,7 @@ func NewStore[T any](name string, version int) *Store[T] {
 		if !sf.IsExported() {
 			continue
 		}
-		f := Field{Name: snake(sf.Name)}
-		for _, opt := range strings.Split(sf.Tag.Get("perceptor"), ",") {
-			k, v, _ := strings.Cut(strings.TrimSpace(opt), "=")
-			switch k {
-			case "name":
-				f.Name = v
-			case "dim":
-				f.Dim, _ = strconv.Atoi(v)
-			}
-		}
-		switch {
-		case sf.Type == reflect.TypeFor[time.Time]():
-			f.Kind = KindTime
-		case sf.Type == reflect.TypeFor[[]float32]():
-			if f.Dim <= 0 {
-				panic(fmt.Sprintf("perceptor store %q: vector %s needs `perceptor:\"dim=N\"`", name, sf.Name))
-			}
-			f.Kind = KindVector
-		default:
-			switch sf.Type.Kind() {
-			case reflect.Float64, reflect.Float32:
-				f.Kind = KindFloat
-			case reflect.Int, reflect.Int64, reflect.Int32:
-				f.Kind = KindInt
-			case reflect.String:
-				f.Kind = KindText
-			case reflect.Bool:
-				f.Kind = KindBool
-			default:
-				panic(fmt.Sprintf("perceptor store %q: field %s: unsupported type %s", name, sf.Name, sf.Type))
-			}
-		}
-		s.schema.Fields = append(s.schema.Fields, f)
+		s.schema.Fields = append(s.schema.Fields, field(name, sf))
 		s.index = append(s.index, i)
 	}
 	return s
@@ -163,4 +131,50 @@ func snake(s string) string {
 		b.WriteRune(unicode.ToLower(r))
 	}
 	return b.String()
+}
+
+// field: a struct field as a schema field — its name (snake case, or the tag's
+// name=), a vector's dim=, its kind; one it cannot keep panics (at plugin load)
+func field(store string, sf reflect.StructField) Field {
+	f := Field{Name: snake(sf.Name)}
+	for _, opt := range strings.Split(sf.Tag.Get("perceptor"), ",") {
+		k, v, _ := strings.Cut(strings.TrimSpace(opt), "=")
+		switch k {
+		case "name":
+			f.Name = v
+		case "dim":
+			f.Dim, _ = strconv.Atoi(v)
+		}
+	}
+	kind, ok := kindOf(sf.Type)
+	if !ok {
+		panic(fmt.Sprintf("perceptor store %q: field %s: unsupported type %s", store, sf.Name, sf.Type))
+	}
+	if kind == KindVector && f.Dim <= 0 {
+		panic(fmt.Sprintf("perceptor store %q: vector %s needs `perceptor:\"dim=N\"`", store, sf.Name))
+	}
+	f.Kind = kind
+	return f
+}
+
+// kindOf: the kind a Go type is kept as; false: none
+func kindOf(t reflect.Type) (Kind, bool) {
+	switch t {
+	case reflect.TypeFor[time.Time]():
+		return KindTime, true
+	case reflect.TypeFor[[]float32]():
+		return KindVector, true
+	}
+	switch t.Kind() {
+	case reflect.Float64, reflect.Float32:
+		return KindFloat, true
+	case reflect.Int, reflect.Int64, reflect.Int32:
+		return KindInt, true
+	case reflect.String:
+		return KindText, true
+	case reflect.Bool:
+		return KindBool, true
+	}
+	var none Kind
+	return none, false
 }

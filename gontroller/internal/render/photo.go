@@ -7,21 +7,27 @@ import (
 	_ "image/jpeg"
 	"os"
 	"os/exec"
-	"path/filepath"
 
 	"perceptrail/gontroller/internal/model/dto"
 
-	"github.com/eggs-gd/perceplib/api"
 	_ "golang.org/x/image/webp"
 )
+
+// vips: libvips' vipsthumbnail as this server runs it — the format and the sizes the
+// config asks for, below the server (proc)
+type vips struct {
+	bin    string
+	format string
+	sizes  []int // smallest first (the config sorts them)
+	proc   proc
+}
 
 // quality: of every rendition (the encoder's 0–100)
 const quality = 80
 
-// photo: an image's renditions — one per size, the long side at most that size,
-// never upscaled — made by vipsthumbnail (libvips) in a process of its own: a
-// broken file fails that process, not the server, and ctx kills it. dir: the item's
-// directory in the cache; rel: the same, relative to the cache; src: the image (the
+// photo: an image's renditions in to — one per size, the long side at most that
+// size, never upscaled — made by vipsthumbnail in a process of its own: a broken
+// file fails that process, not the server, and ctx kills it. src: the image (the
 // item's main file, or a video's poster).
 //
 // Not obvious:
@@ -35,16 +41,16 @@ const quality = 80
 //     original's own size, the larger ones would be the same image — not made (a
 //     srcset of two equal widths is invalid): smaller than its size, or no bigger
 //     than the one before (an original exactly as big as a size).
-func photo(ctx context.Context, p proc, vipsthumbnail, format string, sizes []int, guid api.GUID, src, dir, rel string) ([]dto.RenditionDto, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+func (v vips) photo(ctx context.Context, src string, to itemDir) ([]dto.RenditionDto, error) {
+	if err := os.MkdirAll(to.abs, 0o755); err != nil {
 		return nil, err
 	}
 	var out []dto.RenditionDto
-	for _, size := range sizes {
-		name := fmt.Sprintf("%d.%s", size, format)
-		part := filepath.Join(dir, fmt.Sprintf("%d.part.%s", size, format))
+	for _, size := range v.sizes {
+		name := fmt.Sprintf("%d.%s", size, v.format)
+		part := to.path(fmt.Sprintf("%d.part.%s", size, v.format))
 		defer os.Remove(part) // a part not renamed: nothing of it stays
-		cmd := p.command(ctx, vipsthumbnail, src,
+		cmd := v.proc.command(ctx, v.bin, src,
 			"--size", fmt.Sprintf("%dx%d>", size, size), "-o", fmt.Sprintf("%s[Q=%d,strip]", part, quality))
 		if msg, err := cmd.CombinedOutput(); err != nil {
 			return nil, fmt.Errorf("vipsthumbnail %d: %w: %s", size, err, msg)
@@ -56,11 +62,11 @@ func photo(ctx context.Context, p proc, vipsthumbnail, format string, sizes []in
 		if len(out) > 0 && max(w, h) <= max(out[len(out)-1].W, out[len(out)-1].H) {
 			break // the one before is the original's size already
 		}
-		if err := os.Rename(part, filepath.Join(dir, name)); err != nil {
+		if err := os.Rename(part, to.path(name)); err != nil {
 			return nil, err
 		}
-		out = append(out, dto.RenditionDto{GUID: guid, Size: size, Format: format, Role: dto.RoleStill,
-			W: w, H: h, Bytes: bytes, Path: filepath.Join(rel, name)})
+		out = append(out, dto.RenditionDto{GUID: to.guid, Size: size, Format: v.format, Role: dto.RoleStill,
+			W: w, H: h, Bytes: bytes, Path: to.listed(name)})
 		if max(w, h) < size {
 			break // the original is smaller: a larger size is the same image
 		}
@@ -87,6 +93,6 @@ func header(path string) (w, h int, bytes int64, err error) {
 }
 
 // runs: vipsthumbnail is there and runs
-func runs(ctx context.Context, vipsthumbnail string) error {
-	return exec.CommandContext(ctx, vipsthumbnail, "--vips-version").Run()
+func (v vips) runs(ctx context.Context) error {
+	return exec.CommandContext(ctx, v.bin, "--vips-version").Run()
 }

@@ -42,6 +42,9 @@ type RenewArgs struct {
 
 const lease = 15 * time.Minute
 
+// byWork: an item's work of a slug
+const byWork = "guid = ? AND slug = ?"
+
 // backoff: how long a failed item waits, by its failures in a row (the last one
 // repeats)
 var backoff = []time.Duration{time.Minute, 10 * time.Minute, time.Hour, 24 * time.Hour}
@@ -102,7 +105,7 @@ func (q query) RenditionPaths() ([]string, error) {
 // when there is none (the work was never tried)
 func (q query) Work(guid api.GUID, slug string) (*dto.WorkDto, error) {
 	var row dto.WorkDto
-	return &row, q.db.Where("guid = ? AND slug = ?", guid, slug).First(&row).Error
+	return &row, q.db.Where(byWork, guid, slug).First(&row).Error
 }
 
 func (p *Proxy) Take(slug string, guids []api.GUID) ([]dto.Taken, error) {
@@ -223,7 +226,7 @@ func (t *tx) fail(a dto.WorkFailed) (pubsub.None, error) {
 		return pubsub.None{}, err
 	}
 	var rows []dto.WorkDto
-	if err := t.db.Where("guid = ? AND slug = ?", a.GUID, a.Slug).Limit(1).Find(&rows).Error; err != nil {
+	if err := t.db.Where(byWork, a.GUID, a.Slug).Limit(1).Find(&rows).Error; err != nil {
 		return pubsub.None{}, err
 	}
 	attempts := 1
@@ -257,14 +260,14 @@ func (t *tx) prune(pubsub.None) (int64, error) {
 
 // release: the lease goes, nothing else changes
 func (t *tx) release(slug string, guid api.GUID) error {
-	return t.db.Model(&dto.WorkDto{}).Where("guid = ? AND slug = ?", guid, slug).
+	return t.db.Model(&dto.WorkDto{}).Where(byWork, guid, slug).
 		Updates(map[string]any{"lease_until": 0, "lease": 0}).Error
 }
 
 // holds: the row is still this lease's (0: never taken, no one took it since)
 func (t *tx) holds(slug string, guid api.GUID, lease int64) (bool, error) {
 	var rows []dto.WorkDto
-	if err := t.db.Where("guid = ? AND slug = ?", guid, slug).Limit(1).Find(&rows).Error; err != nil {
+	if err := t.db.Where(byWork, guid, slug).Limit(1).Find(&rows).Error; err != nil {
 		return false, err
 	}
 	return len(rows) == 0 || rows[0].Lease == lease, nil

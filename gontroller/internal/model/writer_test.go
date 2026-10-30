@@ -49,7 +49,7 @@ func TestFailingWriteAlone(t *testing.T) {
 			switch i {
 			case 7:
 				_, err := testWrite(db, func(in *tx) error {
-					in.setMeta(MetaArgs{key, "half"})
+					_, _ = in.setMeta(MetaArgs{key, "half"}) // half a write: it gives up after
 					return errors.New("a write gives up")
 				})
 				if err == nil {
@@ -57,7 +57,7 @@ func TestFailingWriteAlone(t *testing.T) {
 				}
 			case 13:
 				_, err := testWrite(db, func(in *tx) error {
-					in.setMeta(MetaArgs{key, "half"})
+					_, _ = in.setMeta(MetaArgs{key, "half"}) // half a write: it breaks after
 					panic("a write breaks")
 				})
 				if err == nil {
@@ -140,8 +140,12 @@ func TestCloseLeavesNoJournal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	db.SetMeta("k", "v")
-	db.GetMeta("k") // a reader opened too
+	if err := db.SetMeta("k", "v"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.GetMeta("k"); err != nil { // a reader opened too
+		t.Fatal(err)
+	}
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}

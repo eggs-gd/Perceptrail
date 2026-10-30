@@ -15,6 +15,9 @@ import (
 // ignored. Reads, the writes on tx, their commands and their two public faces.
 
 // fileCommands: the files' writes as commands
+// byLinkedTo: the files linked to an item (or to none: api.NilGUID)
+const byLinkedTo = "linked_to = ?"
+
 type fileCommands struct {
 	createFile    op[dto.ItemEntry, *dto.FileDto]
 	createFiles   op[[]dto.ItemEntry, []*dto.FileDto]
@@ -69,13 +72,13 @@ func (q query) GetFileByID(id uint) (*dto.FileDto, error) {
 // GetLinkedFiles: every file of an item (its group: sidecars, derivatives…)
 func (q query) GetLinkedFiles(guid api.GUID) ([]*dto.FileDto, error) {
 	var files []*dto.FileDto
-	return files, q.db.Where("linked_to = ?", guid).Order("id").Find(&files).Error
+	return files, q.db.Where(byLinkedTo, guid).Order("id").Find(&files).Error
 }
 
 // CountLinkedFiles: how many files an item still has
 func (q query) CountLinkedFiles(guid api.GUID) (int64, error) {
 	var n int64
-	err := q.db.Model(&dto.FileDto{}).Where("linked_to = ?", guid).Count(&n).Error
+	err := q.db.Model(&dto.FileDto{}).Where(byLinkedTo, guid).Count(&n).Error
 	return n, err
 }
 
@@ -139,7 +142,7 @@ func (p *Proxy) UnignoreFilesCommand() pubsub.Signal[int64] {
 }
 
 func (t *tx) createFile(entry dto.ItemEntry) (*dto.FileDto, error) {
-	var file *dto.FileDto = &dto.FileDto{
+	file := &dto.FileDto{
 		GUID:      newGUID(),
 		ItemEntry: entry,
 	}
@@ -193,7 +196,7 @@ func (t *tx) deleteFiles(files []*dto.FileDto) (pubsub.None, error) {
 }
 
 func (t *tx) unignoreFiles(pubsub.None) (int64, error) {
-	res := t.db.Model(&dto.FileDto{}).Where("linked_to = ?", api.NilGUID).Update("linked_to", "")
+	res := t.db.Model(&dto.FileDto{}).Where(byLinkedTo, api.NilGUID).Update("linked_to", "")
 	return res.RowsAffected, res.Error
 }
 
@@ -205,7 +208,7 @@ func (t *tx) relinkGroup(group, item api.GUID) error {
 		return err
 	}
 	var oldSidecars []dto.FileDto
-	if err := t.db.Where("linked_to = ?", item).Find(&oldSidecars).Error; err != nil {
+	if err := t.db.Where(byLinkedTo, item).Find(&oldSidecars).Error; err != nil {
 		return err
 	}
 	for _, f := range oldSidecars {
@@ -216,7 +219,7 @@ func (t *tx) relinkGroup(group, item api.GUID) error {
 		}
 	}
 	// The new group (main + sidecars) links to the item's GUID
-	if err := t.db.Model(&dto.FileDto{}).Where("linked_to = ?", group).Update("linked_to", item).Error; err != nil {
+	if err := t.db.Model(&dto.FileDto{}).Where(byLinkedTo, group).Update("linked_to", item).Error; err != nil {
 		return err
 	}
 	return t.db.Model(&dto.FileDto{}).Where("guid = ?", group).Update("guid", item).Error

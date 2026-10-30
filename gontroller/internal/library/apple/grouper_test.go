@@ -81,8 +81,12 @@ func makeLibrary(t *testing.T, root string, assets []fixtureAsset) string {
 	// Photos' own files: not assets
 	for _, f := range []string{"resources/caches/x.data", "database/search/psi.sqlite"} {
 		p := filepath.Join(bundle, f)
-		os.MkdirAll(filepath.Dir(p), 0o755)
-		os.WriteFile(p, []byte("x"), 0o644)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	return bundle
 }
@@ -121,7 +125,7 @@ func fixture() []fixtureAsset {
 func walk(t *testing.T, g *Grouper, root string, before func(path string)) map[string]dto.Asset {
 	t.Helper()
 	var paths []string
-	filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error { // never fails: a bad entry is not a file
 		if err == nil && !d.IsDir() {
 			paths = append(paths, p)
 		}
@@ -402,7 +406,9 @@ func TestSkipped(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	os.MkdirAll(filepath.Join(root, "trip"), 0o755) // a plain folder next to it: not Photos'
+	if err := os.MkdirAll(filepath.Join(root, "trip"), 0o755); err != nil { // a plain folder next to it: not Photos'
+		t.Fatal(err)
+	}
 	got := (&Provider{}).Skipped(root)
 	var rel []string
 	for _, dir := range got {

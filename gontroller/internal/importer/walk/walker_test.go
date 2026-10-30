@@ -66,7 +66,7 @@ func TestWalkSkipsUnreadableDir(t *testing.T) {
 	if err := os.Chmod(locked, 0); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(locked, 0o755) })
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) }) // readable again for TempDir's cleanup
 
 	result, paths := runWalk(newTestWalker(root))
 	if !result.Complete || result.Files != 2 {
@@ -198,7 +198,9 @@ func TestWalkPass(t *testing.T) {
 	db.byPath[filepath.Join(root, "a.jpg")].Role = "original"
 	writeFile(t, filepath.Join(root, "a.jpg"))
 	later := time.Now().Add(time.Hour)
-	os.Chtimes(filepath.Join(root, "a.jpg"), later, later)
+	if err := os.Chtimes(filepath.Join(root, "a.jpg"), later, later); err != nil {
+		t.Fatal(err)
+	}
 	if g := pass(); !slices.Equal(g, []string{"a.jpg changed", "b.jpg gone"}) {
 		t.Errorf("third pass %v", g)
 	}
@@ -214,7 +216,9 @@ func TestWalkSkipped(t *testing.T) {
 	writeFile(t, filepath.Join(root, "a.jpg"))
 	writeFile(t, filepath.Join(root, "own", "cache.db"))
 	db := &rows{byPath: map[string]*dto.FileDto{}}
-	db.CreateFiles([]dto.ItemEntry{{Path: filepath.Join(root, "own", "old.db"), Name: "old.db"}}) // an older walk's
+	if _, err := db.CreateFiles([]dto.ItemEntry{{Path: filepath.Join(root, "own", "old.db"), Name: "old.db"}}); err != nil { // an older walk's
+		t.Fatal(err)
+	}
 	found := make(chan dto.WalkedFile)
 	got := &files{}
 	c := chain.NewChainProcessor(nil)
@@ -308,7 +312,9 @@ func TestWalkRoots(t *testing.T) {
 	}
 	os.Remove(filepath.Join(photos, "b.jpg"))
 	unmounted := phone + "-unmounted"
-	os.Rename(phone, unmounted)
+	if err := os.Rename(phone, unmounted); err != nil {
+		t.Fatal(err)
+	}
 	if g := pass(photos, phone); !slices.Equal(g, []string{"a.jpg changed", "b.jpg gone"}) {
 		t.Errorf("phone unmounted: %v — c.jpg must not be gone", g)
 	}
@@ -358,5 +364,44 @@ func TestWalkSource(t *testing.T) {
 	// deletes it, not the walk)
 	if g := pass(&source{}); !slices.Equal(g, []string{"a.jpg gone", "b.jpg gone"}) {
 		t.Errorf("an empty listing: %v", g)
+	}
+}
+
+// A walk stops where its consumer does (the chain stopped taking): no more files,
+// and no missing ones after them; a walk cancelled before it starts walks nothing
+// and so deletes nothing
+func TestWalkStops(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "a.jpg"))
+	writeFile(t, filepath.Join(root, "b.jpg"))
+	db := &rows{byPath: map[string]*dto.FileDto{}}
+	m := &Walker{logger: testLogger, roots: []string{root}, db: db}
+	walked := func(ctx context.Context, stopAfter int) []dto.WalkedFile {
+		var got []dto.WalkedFile
+		if err := m.Start(ctx, func(f dto.WalkedFile) bool {
+			got = append(got, f)
+			return len(got) < stopAfter
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	if got := walked(t.Context(), 1); len(got) != 1 {
+		t.Errorf("a consumer that stops after one got %d", len(got))
+	}
+	walked(t.Context(), 100) // both rows stored
+	if err := os.Remove(filepath.Join(root, "a.jpg")); err != nil {
+		t.Fatal(err)
+	}
+	if got := walked(t.Context(), 1); len(got) != 1 || got[0].Missing {
+		t.Errorf("stopped at the first file, then sent %v", got)
+	}
+	if got := walked(t.Context(), 2); len(got) != 2 || !got[1].Missing {
+		t.Errorf("stopped at the first missing file: %v", got)
+	}
+	cancelled, cancel := context.WithCancel(t.Context())
+	cancel()
+	if got := walked(cancelled, 100); len(got) != 0 {
+		t.Errorf("a cancelled walk sent %d (a gone file must wait for a walk that ran)", len(got))
 	}
 }

@@ -26,7 +26,7 @@ type sample struct {
 	At       time.Time
 	Embed    []float32 `perceptor:"dim=3"`
 	Custom   string    `perceptor:"name=label"`
-	hidden   int
+	hidden   int       //nolint:unused // an unexported field: the store must skip it
 }
 
 func TestStore(t *testing.T) {

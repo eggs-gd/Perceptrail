@@ -2,6 +2,7 @@ package model
 
 import (
 	"perceptrail/gontroller/internal/config"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
@@ -73,5 +74,35 @@ func TestPerceptorStore(t *testing.T) {
 
 	if _, err := OpenPerceptorStore(config.DriverPostgres, dir, schema); err == nil {
 		t.Error("postgres: want not implemented")
+	}
+}
+
+// decode: what SQLite gives back, as the field's kind means it — a float written
+// whole, text a driver gives as bytes, a vector's little-endian floats; another
+// type is no value
+func TestDecode(t *testing.T) {
+	at := time.Unix(1_700_000_000, 5).UTC()
+	vector := []byte{0, 0, 0x80, 0x3f, 0, 0, 0, 0xc0} // 1, -2
+	for _, c := range []struct {
+		kind api.Kind
+		in   any
+		want any
+	}{
+		{api.KindFloat, 1.5, 1.5},
+		{api.KindFloat, int64(2), 2.0},
+		{api.KindInt, int64(3), int64(3)},
+		{api.KindBool, int64(1), true},
+		{api.KindTime, at.UnixNano(), at},
+		{api.KindText, "Kyiv", "Kyiv"},
+		{api.KindText, []byte("Lviv"), "Lviv"},
+		{api.KindVector, vector, []float32{1, -2}},
+		{api.KindInt, "3", nil},
+		{api.KindText, 1.5, nil},
+		{api.KindBool, []byte{1}, nil},
+		{api.KindText, nil, nil},
+	} {
+		if got := decode(api.Field{Kind: c.kind}, c.in); !reflect.DeepEqual(got, c.want) {
+			t.Errorf("%v %#v: %#v, want %#v", c.kind, c.in, got, c.want)
+		}
 	}
 }

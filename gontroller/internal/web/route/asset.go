@@ -94,7 +94,7 @@ func toClientAsset(item *dto.ItemDto, files []*dto.FileDto, lib Library) clientA
 	a.Kind, a.Duration = dto.AssetKind(item.Kind, files), item.Duration
 	a.OnDemand = onDemandOf(item, lib)
 	if item.Size.W > 0 && item.Size.H > 0 {
-		a.Full = &dims{W: int(item.Size.W), H: int(item.Size.H)}
+		a.Full = &dims{W: item.Size.W, H: item.Size.H}
 	}
 	return a
 }

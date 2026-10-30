@@ -1,5 +1,7 @@
 package config
 
+import "path/filepath"
+
 // Database drivers (Database.Driver)
 const (
 	DriverSQLite   = "sqlite"
@@ -18,4 +20,21 @@ type Database struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
 	Token    string `yaml:"token"`
+}
+
+// resolve: sqlite by default; sqlite's Name is a file, inside dataDir unless absolute
+// (a server driver's is a database name)
+func (d *Database) resolve(dataDir string) {
+	if d.Driver == "" {
+		d.Driver = DriverSQLite
+	}
+	if d.Driver != DriverSQLite {
+		return
+	}
+	if d.Name == "" {
+		d.Name = defaultDBName
+	}
+	if !filepath.IsAbs(d.Name) {
+		d.Name = filepath.Join(dataDir, d.Name)
+	}
 }
