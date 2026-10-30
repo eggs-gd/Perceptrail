@@ -16,7 +16,7 @@ Requirements:
 
 | tool | for | config |
 |---|---|---|
-| Go 1.27.1 | building (`go` downloads the toolchain itself) | |
+| Go 1.27.3 | building (`go` downloads the toolchain itself) | |
 | `exiftool` | the import: metadata, embedded previews | `exiftool:` (default: `PATH`) |
 | `vipsthumbnail` (libvips) | render: photos' renditions | `render.vipsthumbnail:` (default: `PATH`) |
 | `ffmpeg`, `ffprobe` | render: videos' renditions, posters; HDR → SDR needs a build with `zscale` (zimg) | `render.ffmpeg:` (default: `PATH`; `ffprobe` beside it) |
