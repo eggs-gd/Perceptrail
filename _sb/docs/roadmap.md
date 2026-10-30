@@ -52,7 +52,8 @@ One line each; the details are in the READMEs and the PRs.
   without a checkout (`develop` and releases published), the config decides
   (`./config.yml` mounted), no `LIBRARY` variable · #42 render yields the host:
   nice 10, `render.threads`, renditions renamed once whole; a stop is no failure ·
-  #43 a video's cover (an attached picture) is not rendered as the video.
+  #43 a video's cover (an attached picture) is not rendered as the video · #47
+  SonarQube locally (`make sonar`, pre-commit; the owner's LAN server, no CI).
 
 ## Releases
 
