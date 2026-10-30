@@ -631,6 +631,11 @@ How it is read, the paths and the proxy: the
 
 ## Go and the toolchain
 
+- **Go 1.27.3: Go plugins load on macOS 27 again** (2026-10-30): built with 1.27.1,
+  every `.so` failed `dlopen` — "chained fixups, seg_count does not match number of
+  segments" (the plugin tests failed locally, a local server ran without its
+  perceptors; Linux was fine). 1.27.3's linker fixed it; every module, the
+  workspace and the image ask for 1.27.3.
 - **Go plugins**: host and `.so` need the same toolchain and identical versions of
   every shared package (`perceplib`, zap, multierr, `x/sync`, testify…) — bump all
   modules together, then `make build-plugins`. `TestLoadExternalPlugins` builds and
@@ -642,7 +647,7 @@ How it is read, the paths and the proxy: the
   but a step added only for the built-in ones — nobody read it. Allocate outputs
   only for real steps.
 - gopls built with an older Go cannot read code for a newer one:
-  `GOTOOLCHAIN=go1.27.1 go install golang.org/x/tools/gopls@latest`.
+  `GOTOOLCHAIN=go1.27.3 go install golang.org/x/tools/gopls@latest`.
 - **The gopls MCP saw nothing** ("could not import … in GOROOT", 2026-10-04): it
   runs from the repo root, which is no module, and with the system Go (1.26.3; only
   inside a module does `go` switch to the 1.27.1 of `go.mod`). Both were needed: the

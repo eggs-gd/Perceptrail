@@ -54,7 +54,8 @@ One line each; the details are in the READMEs and the PRs.
   nice 10, `render.threads`, renditions renamed once whole; a stop is no failure ·
   #43 a video's cover (an attached picture) is not rendered as the video · #47
   SonarQube locally (`make sonar`, pre-commit; the owner's LAN server, no CI):
-  golangci-lint joins it, svebapp gets unit tests (vitest), every issue answered.
+  golangci-lint joins it, svebapp gets unit tests (vitest), every issue answered ·
+  #48 Go 1.27.3: plugins load on macOS 27.
 
 ## Releases
 

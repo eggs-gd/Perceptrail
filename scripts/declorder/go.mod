@@ -1,3 +1,3 @@
 module perceptrail/scripts/declorder
 
-go 1.27.1
+go 1.27.3
