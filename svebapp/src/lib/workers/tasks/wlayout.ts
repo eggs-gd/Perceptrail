@@ -35,6 +35,8 @@ const RELAYOUT_THROTTLE_MS = 33;
 // Streamed photos are written in batches: one transaction per frame, not per photo
 const APPEND_FLUSH_MS = 16;
 
+/** Where the layout goes: the page's own database once init names it */
+let layout = layoutDb;
 let viewport: UpdateLayoutPayload | null = null;
 let relayoutTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -67,15 +69,17 @@ function sheetKey(item: Item): number {
  */
 let loaded = false;
 let held: MessageEvent<MessageFromSync>[] = [];
+// Not a top-level await: the handler below must be set at once, or what comes while
+// the copy loads is lost
 itemsDb.items.toArray().then((list) => {
-    items = list.sort((a, b) => sheetKey(a) - sheetKey(b) || +new Date(b.date) - +new Date(a.date));
-    list.forEach((itm, i) => arrival.set(itm.guid, i));
+    items = list.toSorted((a, b) => sheetKey(a) - sheetKey(b) || +new Date(b.date) - +new Date(a.date));
+    items.forEach((itm, i) => arrival.set(itm.guid, i));
     loaded = true;
     logger.debug('loaded', {items: items.length});
     if (viewport) queueRelayout();
     for (const event of held) onItemsDbMessage(event);
     held = [];
-});
+}).catch((error) => logger.error('the items not loaded', error)); // NOSONAR: no top-level await, see above
 
 /** Where every placed item is (its top and sheet position): the sections' marks */
 let placed = new Map<string, {y: number, order: number}>();
@@ -112,13 +116,14 @@ function enqueue(write: () => Promise<unknown>) {
     writes = writes.then(write).catch((error) => logger.error('layout write failed', error));
 }
 
-self.onmessage = function (msg: { data: WorkerMessage<any, any> }) {
+// A dedicated worker: only its page posts here (and a worker's message has no origin)
+globalThis.onmessage = function (msg: { data: WorkerMessage<any, any> }) { // NOSONAR
     const {task, payload} = msg.data;
 
     if (task === 'mode') {
         setLogLevel(payload);
     } else if (task === 'init') {
-        if (payload?.layoutDb) useLayoutDb(payload.layoutDb); // the page's own layout database
+        if (payload?.layoutDb) layout = useLayoutDb(payload.layoutDb); // the page's own layout database
         // Every tab's syncs (one copy of the items); after the database is set: the
         // messages write the layout
         new BroadcastChannel(ITEMS_CHANNEL).onmessage = onItemsDbMessage;
@@ -219,7 +224,7 @@ function onItemsDbMessage(event: MessageEvent<MessageFromSync>) {
             return;
         case 'create': {
             arrival.set(item!.guid, arrival.size);
-            const last = items[items.length - 1];
+            const last = items.at(-1);
             if (!last || sheetKey(item!) > sheetKey(last)) {
                 items.push(item!);
                 append(item!);
@@ -234,7 +239,7 @@ function onItemsDbMessage(event: MessageEvent<MessageFromSync>) {
             const i = items.findIndex((itm) => itm.guid === item!.guid);
             const prev = i >= 0 ? items[i] : undefined;
             if (i >= 0) items[i] = item!;
-            if (!prev || prev.width !== item!.width || prev.height !== item!.height) {
+            if (prev?.width !== item!.width || prev?.height !== item!.height) {
                 // Its size changed: everything after it moves
                 scheduleRelayout();
                 return;
@@ -242,9 +247,9 @@ function onItemsDbMessage(event: MessageEvent<MessageFromSync>) {
             // Same size (a new preview, a new date…): its row is patched in place
             const changed = item!;
             enqueue(async () => {
-                const row = await layoutDb.items.get(changed.guid);
+                const row = await layout.items.get(changed.guid);
                 if (!row) return;
-                await layoutDb.items.put({
+                await layout.items.put({
                     ...row, ...changed,
                     order: row.order, row: row.row, scale: row.scale,
                     x: row.x, y: row.y, w: row.w, h: row.h, bottom: row.bottom,
@@ -319,10 +324,10 @@ function writeRelayout(): Promise<unknown> {
     const sectionsRec = sectionsRecord();
 
     logger.debug('relayout', {items: rows.length, width: vp.screenWidth});
-    return layoutDb.transaction('rw', layoutDb.items, layoutDb.meta, async () => {
-        await layoutDb.items.clear();
-        await layoutDb.items.bulkPut(rows);
-        await layoutDb.meta.bulkPut([layoutRecord, sizeRecord, sectionsRec]);
+    return layout.transaction('rw', layout.items, layout.meta, async () => {
+        await layout.items.clear();
+        await layout.items.bulkPut(rows);
+        await layout.meta.bulkPut([layoutRecord, sizeRecord, sectionsRec]);
     });
 }
 
@@ -342,9 +347,7 @@ function append(item: Item) {
     for (const itm of changed) {
         pendingRows.set(itm.guid, {...itm}); // copy: the open row keeps changing
     }
-    if (!flushTimer) {
-        flushTimer = setTimeout(flushAppends, APPEND_FLUSH_MS);
-    }
+    flushTimer ??= setTimeout(flushAppends, APPEND_FLUSH_MS);
 }
 
 function flushAppends() {
@@ -358,9 +361,9 @@ function flushAppends() {
     const before = placed.size;
     remember(rows);
     const sectionsRec = sections.length && placed.size !== before ? sectionsRecord() : undefined;
-    enqueue(() => layoutDb.transaction('rw', layoutDb.items, layoutDb.meta, async () => {
-        await layoutDb.items.bulkPut(rows);
-        await layoutDb.meta.bulkPut(sectionsRec ? [sizeRecord, sectionsRec] : [sizeRecord]);
+    enqueue(() => layout.transaction('rw', layout.items, layout.meta, async () => {
+        await layout.items.bulkPut(rows);
+        await layout.meta.bulkPut(sectionsRec ? [sizeRecord, sectionsRec] : [sizeRecord]);
     }));
 }
 
@@ -459,7 +462,7 @@ function closeRow(row: LayoutItem[], vp: UpdateLayoutPayload): LayoutItem[] {
     }
     if (height === fullHeight) {
         // Rounding: the last item absorbs the remainder so the row is exactly full
-        const last = row[row.length - 1];
+        const last = row.at(-1)!;
         last.w = vp.screenWidth - last.x;
     }
 

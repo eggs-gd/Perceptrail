@@ -12,7 +12,7 @@ import {createSubscriber} from "svelte/reactivity";
  */
 export class LiveQuery<T> {
     #value: T | undefined;
-    #subscribe: () => void;
+    readonly #subscribe: () => void;
 
     constructor(querier: () => T | Promise<T>) {
         this.#subscribe = createSubscriber((update) => {

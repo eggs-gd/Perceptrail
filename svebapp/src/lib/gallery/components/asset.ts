@@ -63,7 +63,7 @@ export function biggestImage(asset: Asset): Rendition | undefined {
 export function fallbackImage(asset: Asset): Rendition | undefined {
     const images = [...asset.edit, ...asset.stills].filter((r) => VIEWABLE_IMAGES.has(r.mime));
     if (asset.original && VIEWABLE_IMAGES.has(asset.original.mime)) images.push(asset.original);
-    return images.sort((a, b) => (b.w ?? 0) - (a.w ?? 0))[0];
+    return images.toSorted((a, b) => (b.w ?? 0) - (a.w ?? 0))[0];
 }
 
 export interface VideoSource {
@@ -187,7 +187,8 @@ export function viewerChoice(asset: Asset): {image?: Rendition, full: boolean, a
 export function mediumUrl(asset: Asset): string | undefined {
     if (!asset.onDemand) return undefined;
     const url = `${PUBLIC_API_PATH}${asset.onDemand.medium}`;
-    return asset.kind === 'video' && !playsHevc() ? `${url}${url.includes('?') ? '&' : '?'}hevc=0` : url;
+    if (asset.kind !== 'video' || playsHevc()) return url;
+    return `${url}${url.includes('?') ? '&' : '?'}hevc=0`;
 }
 
 /** A video's 360p or a Live Photo's motion, for a tile's hover */

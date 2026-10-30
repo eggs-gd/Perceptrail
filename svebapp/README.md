@@ -11,8 +11,14 @@ Design: [Workers](../_sb/puml/Workers.puml), [Protocol](../_sb/puml/Protocol.pum
 npm install
 npm run dev       # dev server
 npm run check     # svelte-check (must be 0 errors)
+npm test          # unit tests (vitest); npm run coverage: with coverage (lcov)
 npm run build     # production build: static files in build/ (adapter-static)
 ```
+
+The unit tests (`*.test.ts` next to their module) cover the pure code — the logger's
+stack reading, the layout's anchor, the sheet's scale, the asset's choices — and the
+sync's stream (`stream.ts`) over `fake-indexeddb` and a stand-in `fetch`; the workers
+themselves and the components are checked in a browser (the `smoke` skill).
 
 A single-page app (`ssr = false`, `adapter-static` with the fallback `index.html`): it
 all renders in the browser. In Docker, Caddy serves `build/` and sends `/api` to
@@ -60,6 +66,7 @@ keeps in place.
   copy, in place, deleting what the stream did not bring; another database: clears
   `itemsDb` and takes everything. The new cursor is the stream's last line and
   is kept only if it came and every line was stored — else the next sync retries.
+  Which stream to ask for and its lines into the copy: `lib/workers/tasks/stream.ts`.
   One sync at a time across tabs (Web Locks; none on plain HTTP — then unserialized);
   a copy whose count differs from the stream's `total` after a delta is synced again
   from nothing. Changes go to every tab's layout worker (BroadcastChannel
