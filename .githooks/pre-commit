@@ -23,16 +23,3 @@ if [ -n "$unformatted" ]; then
   echo "run: gofmt -w$unformatted && git add$unformatted" >&2
   exit 1
 fi
-
-# SonarQube (the owner's LAN server; nothing without SONAR_HOST_URL and SONAR_TOKEN,
-# from the environment or .env): the tests with coverage, the scan, the quality gate —
-# when code it covers is staged. It reads the working copy, not the index.
-set -a; [ ! -f .env ] || . ./.env; set +a
-if [ -n "${SONAR_HOST_URL:-}" ] && [ -n "${SONAR_TOKEN:-}" ] \
-  && git diff --cached --name-only | grep -qE '^(gontroller|perceplib|perceptors|scripts|svebapp/src)/'; then
-  if command -v sonar-scanner >/dev/null 2>&1; then
-    make sonar
-  else
-    echo "pre-commit: sonar-scanner missing — SonarQube skipped" >&2
-  fi
-fi

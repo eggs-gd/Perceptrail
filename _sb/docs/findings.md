@@ -730,7 +730,9 @@ How it is read, the paths and the proxy: the
   parameters is published as the main branch and replaces its state — every
   commit on `feature/sonar` did that before the server had the community branch
   plugin. `scripts/sonar-scope` decides from the checkout, and every way a scan
-  starts (`make sonar`, the hook) goes through it; a detached HEAD or no
+  starts (`make sonar`, the hook) goes through it; the hook is `pre-push`, not
+  `pre-commit` — a scan before the commit is of its parent, and the PR's check
+  landed on the parent; a detached HEAD or no
   `origin/HEAD` is an error, never a guess. The main branch is `master`, as on
   GitHub, though PRs go to `develop`: `develop` is analysed as a branch of its
   own, a PR's new code is its diff against `develop`.
