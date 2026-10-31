@@ -56,8 +56,7 @@ git fetch -q origin <branch> && git branch -q --set-upstream-to=origin/<branch>
 - **Draft at the first push**: `gh pr create --draft --base develop` (a library repo:
   `--base main`). The body: what changed, why, how it was verified (commands), its
   width when wide and why, what is left for after the merge; the attribution line.
-- **Once it is open**, `make sonar` once (the `sonar` skill): the push's analysis was of
-  the branch, and the PR's comment and check come from an analysis made with its number.
+- **After every push, once it has finished**, `make sonar-publish` (the `sonar` skill): the push's analysis was made while GitHub did not know the commit, so the check could not land on it; this sends the scan again, as the PR's once it is open.
 - **Before ready** — the docs are in this PR, never a follow-up:
   - the module READMEs match the code; a changed `.puml` is re-rendered to
     `_sb/diagrams/*.svg`;

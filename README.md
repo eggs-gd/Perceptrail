@@ -55,8 +55,7 @@ runs every Go module's tests with coverage and golangci-lint
 a non-zero exit — on new code: no new issue, coverage ≥ 80 %); `pre-push` runs it
 when code it covers, or its config, is pushed and stops the push on a red gate (the report is on the
 server either way; not `pre-commit`: an analysis is of `HEAD`, and its check on GitHub lands on that commit).
-Once a PR is open, run `make sonar` once more: the push's analysis was of the branch, and the PR's comment
-and check come from an analysis made with its number. `make sonar SONAR_GATE=false` sends the report
+After every push, once it has finished, run `make sonar-publish`: the push's analysis was made while GitHub did not know the commit yet, so the PR's check could not land on it; this sends the scan again on the same reports (no tests, no lint), as the PR's once it is open (a branch's before). `make sonar SONAR_GATE=false` sends the report
 without waiting for the gate. The setup is the organization's
 [SonarQube standard](https://github.com/eggs-gd/.github/blob/main/docs/sonarqube.md). Without them nothing runs. What is analysed follows
 the checkout ([`scripts/sonar-scope`](scripts/sonar-scope)): `master` (GitHub's
