@@ -261,7 +261,7 @@ func (s *Service) renditions(ctx context.Context, item *dto.ItemDto) ([]dto.Rend
 	if moving(item) {
 		return s.ffmpeg.video(ctx, item.Path, size, to, true, still)
 	}
-	stills, err := still(ctx, item.Path)
+	stills, err := still(ctx, s.vips.source(item))
 	if err != nil {
 		return nil, err
 	}

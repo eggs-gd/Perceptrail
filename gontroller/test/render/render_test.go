@@ -29,6 +29,7 @@ import (
 	l "github.com/eggs-gd/go-zap-decor"
 	"github.com/eggs-gd/go-zap-decor/tree"
 	"github.com/eggs-gd/perceplib/api"
+	_ "golang.org/x/image/webp"
 )
 
 // version: what the default settings make — sizes, format, quality
@@ -71,6 +72,13 @@ func startAfter(t *testing.T, before func(*model.Proxy, *config.Config)) (*model
 // publish: a plain folder's item of this file, through the cheap stage
 func publish(t *testing.T, db *model.Proxy, path, mime string) *dto.ItemDto {
 	t.Helper()
+	return publishShown(t, db, path, mime, "")
+}
+
+// publishShown: publish, with the preview the cheap stage found (a RAW's embedded
+// JPEG, the group's JPEG)
+func publishShown(t *testing.T, db *model.Proxy, path, mime, preview string) *dto.ItemDto {
+	t.Helper()
 	f, err := db.CreateFile(dto.ItemEntry{Path: path, Name: filepath.Base(path), MimeType: mime})
 	if err != nil {
 		t.Fatal(err)
@@ -80,6 +88,9 @@ func publish(t *testing.T, db *model.Proxy, path, mime string) *dto.ItemDto {
 		t.Fatal(err)
 	}
 	item.HashShort = "fingerprint"
+	if preview != "" {
+		item.PreviewPath, item.PreviewMime = preview, "image/jpeg"
+	}
 	if _, err := db.Publish(item); err != nil {
 		t.Fatal(err)
 	}
@@ -93,6 +104,23 @@ func photo(t *testing.T, w, h int) string {
 	for x := range w {
 		img.Set(x, x*h/w, color.RGBA{200, 80, 40, 255})
 	}
+	return writeJPEG(t, img)
+}
+
+// plain: a JPEG of w × h in one colour
+func plain(t *testing.T, w, h int, c color.RGBA) string {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := range h {
+		for x := range w {
+			img.Set(x, y, c)
+		}
+	}
+	return writeJPEG(t, img)
+}
+
+func writeJPEG(t *testing.T, img image.Image) string {
+	t.Helper()
 	path := filepath.Join(t.TempDir(), "photo.jpg")
 	f, err := os.Create(path)
 	if err != nil {
@@ -265,6 +293,86 @@ func TestRenderExactSize(t *testing.T) {
 	if rs, _ := db.Renditions(item.GUID); len(rs) != 1 || rs[0].W != 400 {
 		t.Errorf("renditions %+v, want one of 400", rs)
 	}
+}
+
+// A preview at least as big as the largest size (a RAW's embedded JPEG) is what the
+// stills are made of — not the original, which libraw would decode whole; a smaller
+// one is not enough, and the original is read
+func TestRenderFromPreview(t *testing.T) {
+	red, blue := color.RGBA{220, 30, 30, 255}, color.RGBA{30, 30, 220, 255}
+	for _, c := range []struct {
+		name    string
+		preview string
+		want    color.RGBA
+	}{
+		{"big enough", plain(t, 2000, 1500, red), red},
+		{"too small", plain(t, 1200, 900, red), blue},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			db, cfg := start(t)
+			item := publishShown(t, db, plain(t, 2400, 1800, blue), "image/jpeg", c.preview)
+			if row := work(t, db, item); row.DoneAt == 0 {
+				t.Fatalf("row %+v", row)
+			}
+			rs, _ := db.Renditions(item.GUID)
+			if len(rs) != 2 || rs[1].W != 1600 {
+				t.Fatalf("renditions %+v", rs)
+			}
+			for _, r := range rs {
+				if got := middle(t, filepath.Join(cfg.CacheDir(), r.Path)); !near(got, c.want) {
+					t.Errorf("%d: %v, want %v", r.Size, got, c.want)
+				}
+			}
+		})
+	}
+}
+
+// Each smaller size from the size above it, not from the original again: a HEIC
+// has no shrink on load, every read of it decodes it whole
+func TestRenderSmallerFromLarger(t *testing.T) {
+	dir := t.TempDir()
+	bin, seen := filepath.Join(dir, "vipsthumbnail"), filepath.Join(dir, "seen")
+	vips, err := exec.LookPath("vipsthumbnail")
+	if err != nil {
+		t.Skip("no vipsthumbnail")
+	}
+	script := "#!/bin/sh\n[ \"$1\" = --vips-version ] || echo \"$1\" >> " + seen + "\nexec " + vips + " \"$@\"\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	db, _, _ := startConfig(t, "render:\n  workers: 1\n  vipsthumbnail: "+bin+"\n  ffmpeg: "+ffmpegBin()+"\n")
+	src := photo(t, 2400, 1800)
+	item := publish(t, db, src, "image/jpeg")
+	if row := work(t, db, item); row.DoneAt == 0 {
+		t.Fatalf("row %+v", row)
+	}
+	read := strings.Fields(waitFor(t, seen))
+	if len(read) != 2 || read[0] != src || filepath.Base(read[1]) != "1600.webp" {
+		t.Errorf("read %v, want the original, then the 1600", read)
+	}
+}
+
+// middle: the colour at the middle of an image
+func middle(t *testing.T, path string) color.RGBA {
+	t.Helper()
+	f, err := os.Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	img, _, err := image.Decode(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b := img.Bounds()
+	r, g, bl, a := img.At(b.Dx()/2, b.Dy()/2).RGBA()
+	return color.RGBA{uint8(r >> 8), uint8(g >> 8), uint8(bl >> 8), uint8(a >> 8)}
+}
+
+// near: the same colour, give or take what a lossy encoder moves it
+func near(a, b color.RGBA) bool {
+	d := func(x, y uint8) bool { return max(x, y)-min(x, y) <= 24 }
+	return d(a.R, b.R) && d(a.G, b.G) && d(a.B, b.B)
 }
 
 // No vipsthumbnail: render does not start — no item fails for it (five failures

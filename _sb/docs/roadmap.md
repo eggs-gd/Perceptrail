@@ -60,7 +60,8 @@ One line each; the details are in the READMEs and the PRs.
   #48 Go 1.27.3: plugins load on macOS 27 · #49 the scan sent again after every
   push (`make sonar-publish`), the PR's check lands · #50 dependencies: every
   Dependabot and govulncheck alert closed, SvelteKit 3 · #51 CI's token reads
-  only · #46 Immich's placeholders from its thumbhash.
+  only · #46 Immich's placeholders from its thumbhash · #52 photo renditions made
+  of a RAW's embedded preview, each smaller size of the one above.
 
 ## Releases
 
@@ -85,12 +86,12 @@ systems — a lens", "The work queue", "Expensive stage"):
    ([README](../../gontroller/internal/model/README.md#the-work-queue)),
    `internal/render` woken by `ItemPublished`, a stand-in renderer (a symbolic
    link to the original): the queue's rules tested before any codec.
-2. [ ] **Photo renditions** — done (#36): libvips on the CPU (`vipsthumbnail`, a
-   process each), 400 and 1600 in webp, never upscaled, the item `Ready`, the
-   renditions in the asset's stills. Open: the source chosen to avoid a full decode
-   (Photos' JPEG, the HEIC's embedded thumbnail, a RAW's embedded JPEG), benchmarks
-   on the Mac and the i5 (HEIC and RAW above all), `avif` (Go reads no AVIF header:
-   its `w`/`h` from vips).
+2. [x] **Photo renditions** (#36, #52) — libvips on the CPU (`vipsthumbnail`, a
+   process each), 400 and 1600 in webp, never upscaled; made of the item's preview
+   when it is big enough (a RAW's embedded JPEG), each smaller size of the one
+   above; measured (findings "Photo renditions: what costs"). Later, when asked
+   for: `avif` (Go reads no AVIF header: its `w`/`h` from vips), several images per
+   process if a NAS shows the start dominating.
 3. [x] **Video, software** (#37) — H.264 + AAC at 1280 (`libx264`, CRF capped at
    4 Mb/s), the poster's stills, a Live Photo's motion; HDR → SDR with `zscale`; the
    recipe the software row of a table the hardware rows join. No hover clip: the
@@ -416,16 +417,11 @@ render:           feed (the next item needing work, from the DB)
   dropped for deleted. Motion on hover: the viewer's video (the client plays the
   asset's motion); a short muted clip only if that weighs too much.
 
-**Photos — renditions**, libvips on the CPU; HEIC via libheif, RAW via its embedded
-preview (or libraw). The win is not decoding faster but not decoding a 12 MP HEIC at
-all:
+**Photos — renditions**, libvips on the CPU (built: `render/photo.go`; what costs:
+findings "Photo renditions: what costs"). Open:
 
-- **the source, cheapest first**: a big-enough JPEG in the group (JPEG shrinks while
-  it loads); the HEIC's embedded thumbnail for a tile; the full original last;
 - **a decoder per type that can be swapped** (source → decode → transform →
-  encode); libvips first;
-- **benchmarks on the real library**: JPEG / HEIC → 400 / 1600, on the Mac and the
-  i5 — images/s, CPU, peak RSS;
+  encode) — when one beats libvips on a type (a macOS ImageIO HEIC decoder);
 - **sizes: an array in the config**, long side px, default `[400, 1600]`; any array
   must work (800 for Retina tiles, 2560 for a 2K 32" — config experiments);
   previews, not copies: the original stays behind the viewer's Original;
