@@ -20,7 +20,10 @@ func (s *show) Decorate(d *draft) (*Item, error) {
 		return nil, err
 	}
 	d.Item.PreviewPath, d.Item.PreviewMime = preview(d, s.tool, s.dir, s.logger)
-	d.Item.PreviewColor = previewColor(d.Item.GUID.String(), d.Item.PreviewPath, d.Item.PreviewMime, s.logger)
+	d.Item.PreviewColor = d.PreviewColor // the asset's, from its source (Immich), else sampled
+	if d.Item.PreviewColor == "" {
+		d.Item.PreviewColor = previewColor(d.Item.GUID.String(), d.Item.PreviewPath, d.Item.PreviewMime, s.logger)
+	}
 	return yield(d), nil
 }
 

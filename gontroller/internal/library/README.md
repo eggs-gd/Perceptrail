@@ -156,7 +156,10 @@ last file has arrived (as Apple's). The key is the asset's id; `Show` the previe
 then the thumbnail — an item is `Visible` at once, nothing is rendered for it
 (render skips a library's items). `Meta`: Immich's date (the local time and its
 offset: `localDateTime` minus the instant), oriented size, GPS, length, camera, as
-exiftool tags; `Fingerprint`: its checksum. A Live Photo's video is an asset of its
+exiftool tags; `Fingerprint`: its checksum; `PreviewColor` (the gallery's
+placeholder): its thumbhash's mean — its preview is not on a disk to sample.
+`MetaHash` is the kind, `updatedAt` and that colour: what we take from Immich
+besides the files. A Live Photo's video is an asset of its
 own, hidden from the timeline: its photo's path carries its id.
 
 **Serving** (`File`): a reverse proxy to the API's URL of the path — the key added,

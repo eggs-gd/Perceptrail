@@ -10,6 +10,8 @@ import (
 	"os"
 	"strings"
 
+	"perceptrail/gontroller/internal/model/dto"
+
 	l "github.com/eggs-gd/go-zap-decor"
 	_ "golang.org/x/image/webp"
 )
@@ -27,8 +29,8 @@ func previewColor(seed, path, mime string, logger *l.Logger) string {
 	if !strings.HasPrefix(mime, "image/") {
 		return fallback
 	}
-	if strings.Contains(path, "://") {
-		return fallback
+	if dto.Remote(path) {
+		return fallback // its source's to read
 	}
 	info, err := os.Stat(path)
 	if err != nil || info.Size() > previewColorMaxBytes {

@@ -45,8 +45,8 @@ A type belongs to the package that produces it; there is no shared bag of messag
   a fact of this pass, not stored.
 - **`dto.Asset`** (group → gate → identify): one whole asset before it is identified —
   its files' rows, `Key` (a library's identity: the item's GUID), `Show`, the
-  source's `Meta` / `MetaHash`, `Kind`, `Fingerprint` (the source's, when its files
-  are not on a disk), and `Missing`: the files gone for the
+  source's `Meta` / `MetaHash`, `Kind`, `Fingerprint` and `PreviewColor` (the
+  source's, when its files are not on a disk), and `Missing`: the files gone for the
   library (the walk's, or the library's own say). The end of a walk is not a value:
   the walk's output closes.
 - **`identify.Item`** (identify → exif → commit): the item and its metadata package;
