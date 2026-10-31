@@ -438,9 +438,33 @@ transit, render bounded by its workers) — patterns go to docs and examples.
 - **`vipsthumbnail` in a process, not a cgo binding** (bimg, govips): a broken file
   fails a child process, not the server; a timeout kills it (`CommandContext`); the
   build gains no cgo. A process per image costs milliseconds next to the decode. It
-  shrinks while it loads where the format allows (JPEG). Never upscaled: the sizes
-  go smallest first and stop once the original is smaller (a srcset with two equal
-  widths is invalid). Metadata stripped: a rendition is pixels, no GPS.
+  shrinks while it loads where the format allows (JPEG). Never upscaled: a size no
+  bigger than the rendition above it is not made (a srcset with two equal widths is
+  invalid). Metadata stripped: a rendition is pixels, no GPS.
+- **Photo renditions: what costs** (measured: a Mac and the owner's i5-13500T in
+  Docker; `[400, 1600]` webp Q80; 2 threads, 1 for a NAS gives the same):
+
+  | | Mac | i5 |
+  |---|---|---|
+  | a `vipsthumbnail` process starting | ~80 ms (dyld, 35 libraries) | 35 ms |
+  | a 12 MP JPEG → 1600 / → 400 | ~145 / ~35 ms | ~17 ms over the start |
+  | webp vs jpeg at 1600 | webp ~3× slower | the same |
+  | a RAW (CR2, CR3, NEF, ARW, RAF, DNG) → 1600 through libraw | 640–2400 ms, 300–860 MB | |
+  | the same from its embedded JPEG | 230–350 ms, 45–125 MB | |
+  | a HEIC (12 / 48 MP) → 1600 / → 400 | 690 / 510, 1430 / 1220 ms | |
+
+  A JPEG archive (the owner's: 11 647 files, all JPEG) costs process starts and the
+  disk, not the decode — a few minutes for all of it, once. **The public's plain
+  folders are not that**: phones' HEIC, cameras' RAW, Takeout, on a NAS's Celeron
+  with a few GB. Two rules from it (the package's godoc): the stills are made of
+  the item's preview when it reaches the largest size — every RAW sampled carries
+  one of 1616–6720 px, the camera's own colours, a fraction of libraw's time and
+  memory (four workers on RAW: 2–3.5 GB); and each smaller size of the one above —
+  a HEIC has no shrink on load, every read decodes it whole (−30–40 % a HEIC, nothing
+  for a JPEG). Not done, measured not worth it yet: several images per process
+  (the start is half a JPEG's time, but a broken file would fail the batch), a
+  decode of a HEIC's embedded thumbnail (~320 px: not enough for a tile).
+  RAW samples: raw.pixls.us (CC0).
 - **`publish` keeps an item Ready while its renditions are for its fingerprint**: a
   second pass of the cheap stage (a perceptor's rework, Photos made a file local)
   used to set Waiting / Visible from the preview — the item would vanish, and render
