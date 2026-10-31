@@ -58,8 +58,9 @@ One line each; the details are in the READMEs and the PRs.
   SonarQube locally (`make sonar` on push; the owner's LAN server, no CI):
   golangci-lint joins it, svebapp gets unit tests (vitest), every issue answered ·
   #48 Go 1.27.3: plugins load on macOS 27 · #49 the scan sent again after every
-  push (`make sonar-publish`), the PR's check lands · #46 Immich's placeholders
-  from its thumbhash.
+  push (`make sonar-publish`), the PR's check lands · #50 dependencies: every
+  Dependabot and govulncheck alert closed, SvelteKit 3 · #51 CI's token reads
+  only · #46 Immich's placeholders from its thumbhash.
 
 ## Releases
 

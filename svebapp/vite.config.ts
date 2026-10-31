@@ -1,5 +1,7 @@
 /// <reference types="vitest/config" />
+import adapter from '@sveltejs/adapter-static';
 import {sveltekit} from '@sveltejs/kit/vite';
+import {vitePreprocess} from '@sveltejs/vite-plugin-svelte';
 import {defineConfig, loadEnv} from "vite";
 import {execFileSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
@@ -20,10 +22,18 @@ export default defineConfig(({mode}) => {
     // /api goes to gontroller in dev as the web container sends it in Docker:
     // PUBLIC_API_PATH=/api works the same in both (an absolute address works too)
     const api = loadEnv(mode, process.cwd(), 'SVEBAPP_').SVEBAPP_API ?? 'http://localhost:1323';
-    // The unit tests' API path: $env/static/public reads it as the plugin loads
+    // The unit tests' API path: $app/env/public reads it as the plugin loads
     if (mode === 'test') process.env.PUBLIC_API_PATH ??= '/api';
     return {
-        plugins: [sveltekit()],
+        plugins: [sveltekit({
+            preprocess: vitePreprocess(),
+            // A single-page app: everything renders in the browser (workers, IndexedDB);
+            // the web container serves these files and every other path gets the
+            // fallback page, which routes in the browser. index.html: nothing is
+            // prerendered, so it conflicts with no page — and / is served as any host
+            // serves a directory
+            adapter: adapter({fallback: 'index.html'}),
+        })],
         define: {
             __APP_VERSION__: JSON.stringify(appVersion()),
         },

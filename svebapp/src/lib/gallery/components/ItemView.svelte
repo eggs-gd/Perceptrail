@@ -1,5 +1,5 @@
 <script lang="ts">
-    import {type Item} from '$lib/stores'
+    import {type Item} from '#lib/stores/index.js'
     import type {Attachment} from 'svelte/attachments';
 
     import Img from "./Img.svelte";
@@ -9,7 +9,7 @@
     import KindBadge from "./KindBadge.svelte";
     import {assetUrl, biggestImage, fallbackImage, fullFetched, hasImage, hoverUrl, localFullVideo, mediumUrl, originalImage, originalOnDemand, playableVideos, viewerChoice} from "./asset";
     import {viewerPrefs} from "./viewerPrefs.svelte";
-    import {debug} from "$lib/app.svelte";
+    import {debug} from "#lib/app.svelte.js";
 
     interface Props {
         item: Item;

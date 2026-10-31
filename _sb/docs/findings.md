@@ -91,9 +91,11 @@ Rewritten 2026-10-04 (PR #25) from the full log — the history is in git.
   exceeds the browser's decoded-image budget. Dropping `lazy` made it much worse;
   since tiles show previews (Apple's derivatives, then our renditions) `lazy` is
   stable. Rule: never feed the sheet full-size photos — previews only.
-- `?at` kept with a shallow `replaceState`: Back gives `page.url` without it — read
-  it from `location`. Back restores the router's scroll, which looks like the user's
-  and drops a switch's anchor.
+- `?at` kept with a shallow `goto` (a `replaceState` before Kit 3): Back gives
+  `page.url` without it — read it from `location`. Back restores the router's scroll,
+  which looks like the user's and drops a switch's anchor. Since Kit 3 a shallow
+  navigation runs `afterNavigate` too: the layout's "what changed on the server" skips
+  it, or every scroll that settles would sync.
 - `LiveQuery.current` outside an effect or a template is `undefined` (the
   subscription is active only while something reactive reads it).
 - The layout turns pointer events off for `<main>` under the viewer: anything fixed
@@ -739,6 +741,9 @@ How it is read, the paths and the proxy: the
   multi-pack-index (`git fsck` clean) — `core.multiPackIndex false` in the
   checkout. Coverage runs `-short`: a test binary built for coverage loads no
   plugin, built with `-cover` or not; the plugin tests run in `go test` as ever.
+- **Dependabot and CodeQL read `master`** (GitHub's default branch): a fix merged
+  into `develop` (#50) leaves its alerts open until the release fast-forwards
+  `master`. Before closing one by hand, check `develop`'s lock files, not the alert.
 - **A scan says what it is, or it is the main branch** (#47): a scan without branch
   parameters is published as the main branch and replaces its state — every
   commit on `feature/sonar` did that before the server had the community branch

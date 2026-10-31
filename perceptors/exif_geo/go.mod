@@ -14,10 +14,10 @@ require (
 	github.com/ringsaturn/tzf-dist v0.0.2026-c-fix1 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
 	github.com/tidwall/geoindex v1.7.0 // indirect
-	github.com/tidwall/rtree v1.10.0 // indirect
+	github.com/tidwall/rtree v1.11.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
 )
 
 replace github.com/eggs-gd/perceplib => ../../perceplib

@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import type {Asset, Rendition} from '$lib/stores';
+import type {Asset, Rendition} from '#lib/stores/index.js';
 import {fallbackImage, mediumUrl} from './asset';
 
 const image = (url: string, mime: string, w?: number): Rendition => ({url, mime, w, h: w});

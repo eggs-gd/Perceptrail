@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type {Asset} from '$lib/stores';
+    import type {Asset} from '#lib/stores/index.js';
     import type {Attachment} from 'svelte/attachments';
     import {assetUrl, hoverUrl, playableVideos} from './asset';
 
