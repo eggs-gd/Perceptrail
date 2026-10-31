@@ -726,6 +726,14 @@ How it is read, the paths and the proxy: the
   multi-pack-index (`git fsck` clean) — `core.multiPackIndex false` in the
   checkout. Coverage runs `-short`: a test binary built for coverage loads no
   plugin, built with `-cover` or not; the plugin tests run in `go test` as ever.
+- **A scan says what it is, or it is the main branch** (#47): a scan without branch
+  parameters is published as the main branch and replaces its state — every
+  commit on `feature/sonar` did that before the server had the community branch
+  plugin. `scripts/sonar-scope` decides from the checkout, and every way a scan
+  starts (`make sonar`, the hook) goes through it; a detached HEAD or no
+  `origin/HEAD` is an error, never a guess. The main branch is `master`, as on
+  GitHub, though PRs go to `develop`: `develop` is analysed as a branch of its
+  own, a PR's new code is its diff against `develop`.
 - **The strict profiles, and what they were told no** (#47, the owner's "Sonar way
   comprehensive" / "agentic AI"; Go's own has 23 rules, so golangci-lint's report
   joins the scan). Not done, and said on the line: a top-level `await` in the

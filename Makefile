@@ -55,6 +55,8 @@ SONAR_GOMODULES = $(GOMODULES) scripts/declorder
 sonar:
 	@set -a; [ ! -f .env ] || . ./.env; set +a; \
 	test -n "$$SONAR_HOST_URL" && test -n "$$SONAR_TOKEN" || { echo 'sonar: set SONAR_HOST_URL and SONAR_TOKEN (.env)' >&2; exit 1; }; \
+	scope=$$(scripts/sonar-scope) || exit 1; \
+	echo "sonar: $${scope:-main branch}"; \
 	for module in $(SONAR_GOMODULES); do \
 		echo "Coverage: $$module"; \
 		(cd $$module && go test -short -coverpkg=./... -coverprofile=coverage.out ./... > /dev/null) || exit 1; \
@@ -63,4 +65,4 @@ sonar:
 	done; \
 	echo "Coverage: svebapp"; \
 	(cd svebapp && npx vitest run --coverage > /dev/null) || exit 1; \
-	sonar-scanner -Dsonar.qualitygate.wait=true
+	sonar-scanner -Dsonar.qualitygate.wait=true $$scope

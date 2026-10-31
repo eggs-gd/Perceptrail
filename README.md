@@ -50,7 +50,13 @@ runs every Go module's tests with coverage and golangci-lint
 ([`.golangci.yml`](.golangci.yml)), svebapp's unit tests with coverage, the scan
 ([`sonar-project.properties`](sonar-project.properties)) and the quality gate (red:
 a non-zero exit — on new code: no new issue, coverage ≥ 80 %); `pre-commit` runs it
-when code it covers is staged. Without them nothing runs. Needs `sonar-scanner` and
+when code it covers is staged. Without them nothing runs. What is analysed follows
+the checkout ([`scripts/sonar-scope`](scripts/sonar-scope)): `master` (GitHub's
+default branch) is the project's main branch; a branch with an open PR is that PR
+(its new code: the diff against the PR's base, `develop`); any other branch —
+`develop` too — is a branch of its own. Nothing but `master` may be scanned
+without these parameters: such a scan replaces the main branch's state. Branches
+and PRs need the community branch plugin on the server. Needs `sonar-scanner` and
 `golangci-lint` (`brew install sonar-scanner golangci-lint`); the issues:
 `sonar list issues -p perceptrail --format table` (`sonar` CLI). `.svelte` is not
 analysed — `svelte-check` guards it. A scan failing in blame with
