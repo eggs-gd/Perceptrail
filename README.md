@@ -25,6 +25,53 @@ The core concept is to provide an infinite way to explore content. By navigating
 - Filtering based on various criteria depending on installed **Perceptors**.
 - Support for batch operations for bulk metadata editing.
 
+## Development
+
+Running the server and what it needs on each platform (exiftool, libvips, ffmpeg):
+[`gontroller/readme.md`](gontroller/readme.md#running).
+
+Git hooks (fast local checks before CI) — enable once per clone:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+- `pre-commit`: refuses commits on `master`/`develop`, requires `gofmt` for staged Go files, and is the
+  local gate for SonarQube: golangci-lint on the Go modules with staged files, and the secrets scan of the
+  staged files when the `sonar` CLI is installed. Nothing goes to the server.
+- `pre-push`: runs the CI checks (Go vet/tests + plugin build, `svelte-check`) and SonarQube (below) for the
+  parts changed since `develop`.
+
+Skip in an emergency with `--no-verify`.
+
+### SonarQube (optional)
+
+The owner's server is on a LAN: a local analysis, no CI. With `SONAR_HOST_URL` and
+`SONAR_TOKEN` in the environment or a git-ignored `.env` (mode 600; a worktree
+uses the main checkout's), `make sonar`
+runs every Go module's tests with coverage and golangci-lint
+([`.golangci.yml`](.golangci.yml)), svebapp's unit tests with coverage, the scan
+([`sonar-project.properties`](sonar-project.properties)) and the quality gate (red:
+a non-zero exit — on new code: no new issue, coverage ≥ 80 %); `pre-push` runs it
+when code it covers, or its config, is pushed and stops the push on a red gate (the report is on the
+server either way; not `pre-commit`: an analysis is of `HEAD`, and its check on GitHub lands on that commit).
+After every push, once it has finished, run `make sonar-publish`: the push's analysis was made while GitHub did not know the commit yet, so the PR's check could not land on it; this sends the scan again on the same reports (no tests, no lint), as the PR's once it is open (a branch's before). `make sonar SONAR_GATE=false` sends the report
+without waiting for the gate. The setup is the organization's
+[SonarQube standard](https://github.com/eggs-gd/.github/blob/main/docs/sonarqube.md). Without them nothing runs. What is analysed follows
+the checkout ([`scripts/sonar-scope`](scripts/sonar-scope)): `master` (GitHub's
+default branch) is the project's main branch; a branch with an open PR is that PR
+(its new code: the diff against the PR's base, `develop`); any other branch —
+`develop` too — is a branch of its own. Nothing but `master` may be scanned
+without these parameters: such a scan replaces the main branch's state. Branches
+and PRs need the community branch plugin on the server. Needs `sonar-scanner` and
+`golangci-lint` (`brew install sonar-scanner golangci-lint`); the issues:
+`sonar list issues -p perceptrail --format table` (`sonar` CLI). `.svelte` is not
+analysed — `svelte-check` guards it. A scan failing in blame with
+`MissingObjectException` (the scanner's JGit cannot read git 2.5x's
+multi-pack-index): `git config core.multiPackIndex false` in that checkout.
+A rule that is wrong for a line is answered on that line — `// NOSONAR` or
+`//nolint:<linter>` with the reason — never by closing the issue on the server.
+
 ## Documentation
 
 - [Roadmap](_sb/docs/roadmap.md) and [findings & decisions](_sb/docs/findings.md)
@@ -32,14 +79,14 @@ The core concept is to provide an infinite way to explore content. By navigating
 - Modules: [gontroller](gontroller/readme.md) · [perceplib](perceplib/README.md) ·
   [perceptors](perceptors/readme.md) · [svebapp](svebapp/README.md)
 
-## Big Flow
+## Import chain
 
-![Alt text](./_sb/diagrams/Item%20Flow.svg)
+![Import chain](./_sb/diagrams/Import%20chain.svg)
 
-## Items watching and validating process
+## Files gate and validator
 
-![Alt text](./_sb/diagrams/Walker%20and%20validating.svg)
+![Files gate and validator](./_sb/diagrams/Walker%20and%20validating.svg)
 
 ## ML Flow
 
-![Alt text](./_sb/diagrams/ML%20Flow.svg)
+![ML Flow](./_sb/diagrams/ML%20Flow.svg)

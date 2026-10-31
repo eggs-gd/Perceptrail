@@ -22,12 +22,13 @@ repeat
   if (New data received) then (yes)
     :Restart computation with new data;
   endif
-  :Write results to LayoutDB;
+  :Write results to this tab's LayoutDB
+(one per tab: width and view are the tab's);
 repeat while (View task ongoing)
 
 |View|
 start
-:Subscribe to LayoutDB;
+:Subscribe to this tab's LayoutDB;
 :Reactively display changes;
 :Request new computation via Proxy;
 stop

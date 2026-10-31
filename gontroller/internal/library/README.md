@@ -1,0 +1,164 @@
+# library
+
+The libraries of this run, read through their own means — Apple Photos, Immich, others later
+(roadmap "Providers"). A library that keeps renditions of its own is asked for them:
+we render and store nothing it keeps.
+
+- **The contract** ([`provider.go`](provider/provider.go)): `Provider` is what a
+  library implements; each consumer declares the part it uses — the import's
+  grouping `group.Library` (`Claims`, `Grouper`), the routes' `route.Library`
+  (`Levels`, `Rendition`, `File`); the registry uses the rest (`Owns`, `Start`,
+  `Skipped`). A library that lists its files itself also is a `walk.Source`
+  (`Root`, `List`).
+- **What is walked**: a library lists the directories under a walked root that
+  hold none of its media (`Skipped(root)`: its database, caches); every pass the
+  import collects every enabled library's (`library.Skipped`) and hands the list to
+  the walk, which does not enter them — as it hands identify the perceptors' tags.
+  Rows an older walk wrote there are missing, and go. A library with no disk to walk
+  (Immich) lists its files itself: the import hands the enabled sources to the walk,
+  which lists them after the roots — their paths URLs of their own (`immich://…`,
+  `dto.Remote`) — and judges their deletions as a root's.
+- **Grouping**: the import's switch asks the enabled libraries in order and a file
+  goes to the grouper of the first that claims it; the plain folder
+  (`library/folder`) is last and claims the rest. A library not enabled is not
+  asked: its files are a plain folder's. A grouper turns the walk's files into whole
+  assets (the messages: [importer README](../importer/README.md#the-chains-messages))
+  and, when its input closes, gives what it holds (`chain.Flusher`). A missing file
+  it passes through, or makes something of it; it may also say a file still on disk
+  is gone for the library (Apple: an asset trashed or hidden in Photos). A role it
+  gives goes through `SetRole` (a new role is new work); its `Meta` uses exiftool's
+  tag names and `-n` values.
+- **On demand**: the web service asks the item's provider (`Of`, `Owns`) for a
+  level (`Levels`: medium, hover, original) and serves what it gets — a file, or
+  bytes it drew (`Rendition`). After its library made a file local, the provider
+  marks the item for the next pass (`MarkRework`); it does not wait —
+  the client guesses meanwhile. A remote file (any of an item's files, its preview
+  too) the routes serve through its provider (`File`: an `http.Handler`).
+- **Background**: `Start` — access to the library, assets nothing shows yet; run
+  with the server's services (`library.Service()`).
+
+`library.Enable(cfg, db, logger)` (in `main`) builds them from the config
+(`providers: {apple: {enabled: …}}`, enabled when not listed; Immich only with its
+`url`, and a key or the start fails); the plain folder always, last. `Enabled` gives them in order, `Of` the item's (the web service
+passes it to the routes: they do not reach the registry).
+
+| package | what |
+|---|---|
+| `library` | the libraries of this run: `Enable`, `Enabled`, `Of`, `Service` |
+| `library/provider` | the contract a library implements (`Provider`, `Grouper`, `Rendition`, `Options`) |
+| `library/apple` | Apple Photos: the grouper (the library's DB, the naming layout), on demand (`ondemand.go`) |
+| `library/apple/photokit` | PhotoKit through cgo (macOS; a stub elsewhere) |
+| `library/immich` | Immich through its API: the listing (a walk source), the grouper, its files served through a proxy |
+| `library/folder` | the plain folder: sidecars by name; nothing on demand (the transcode renders for it) |
+
+## Apple Photos
+
+Measured on the dev library (6 457 assets, Optimize Mac Storage) in two spikes
+(`_sb/spikes/photokit`). We only read the library; Photos writes into it.
+
+**The grouper.** The first file of a library loads its assets from a copy of
+`Photos.sqlite` and forms the groups up front (the files that exist, by the naming
+layout below); a group goes out when its last file arrives, one that did not
+complete waits for the next walk. The key is the asset UUID (the item's GUID: the
+main file may change — a derivative, then the downloaded original — the item
+stays); the main file is the source (a Live Photo's video before its photo); `Show`
+is the edit, the original, then Photos' derivatives; video renditions go after the
+stills. The DB's date + zone, oriented size, GPS, length and kind are the asset's
+`Meta` (they win over the files' EXIF). Trashed or hidden assets: their files are
+missing for us.
+
+**The bundle.** The DB stores only the original's path,
+`originals/<ZDIRECTORY>/<ZFILENAME>`; everything else follows a naming layout
+(`<X>` = the UUID's first character; `_o` of the original, `_a` of the edit — the
+edit's wins):
+
+| file | what | long side |
+|---|---|---|
+| `originals/<X>/<UUID>.<ext>` | the original (the source) | full |
+| `resources/renders/<X>/<UUID>_1_201_a.jpeg\|heic` | the user's edit (`.plist` beside it: edit data) | full |
+| `resources/derivatives/<X>/<UUID>_1_101_o`, `_1_102_o.jpeg` | previews of the original (`_1_102_o`: recipe 65741, what PhotoKit downloads for ≤ 2048 px) | ~2000–2600 |
+| `resources/derivatives/<X>/<UUID>_1_102_a.jpeg` | preview of the edit | ~2000 |
+| `resources/derivatives/<X>/<UUID>_1_105_c`, `_1_106_c.jpeg` | medium previews (65747) | ~1000 |
+| `resources/derivatives/masters/<X>/<UUID>_4_5005_c.jpeg` | the small thumbnail — local for nearly every asset, cloud-only too; not in the DB | ~360×480 |
+| `resources/derivatives/<X>/<UUID>.THM` | a video's "poster" | 32×32 |
+| `resources/derivatives/cvt/<X>/<UUID>/…_cvt_tNNNN.jpeg` | video scrubbing frames (0–10, Photos' own analysis; no request makes them; a third of videos have none, Live Photos never) | 400×600 |
+| `_2_4_o.mp4` / `_2_201_o.mov`, `_2_3_o.mp4` / `_2_101_o.mov` | video renditions PhotoKit makes local: fast 360p H.264 / medium (iPhone: HEVC 720p; others: H.264) / a Live Photo's motion | |
+
+Only `originals/`, `resources/renders/` and `resources/derivatives/` are walked;
+the rest of the bundle — the database (read from a copy), its search index,
+caches, journals, Messages backdrops in `internal/`, iCloud sharing in `scopes/`,
+`private/` — is Photos' own (on the owner's library: 28 253 of 47 609 files).
+
+**The DB** (`Photos.sqlite`, read from a copy):
+
+- `ZDATECREATED` is Core Data seconds since 2001 UTC, **declared `TIMESTAMP`**:
+  SQLite keeps whole seconds as integers and the Go driver turns them into
+  `time.Time` — read it as `CAST(… AS REAL)`. `ZTIMEZONEOFFSET` is known for nearly
+  every asset.
+- `ZWIDTH` / `ZHEIGHT` are already oriented (the record says Orientation 1); GPS
+  `-180` = none.
+- `ZKIND` 1 = video; `ZPLAYBACKSTYLE` 3 = a Live Photo with live on (`ZKINDSUBTYPE`
+  2 with style 1: live off — a still). `ZKINDSUBTYPE` 101 is not slo-mo (Android
+  screen recordings carry it).
+- `ZINTERNALRESOURCE` knows every rendition: recipe, size, local or in iCloud. Under
+  Optimize Mac Storage most originals and nearly every video are only in iCloud;
+  a derivative can show 6 420 assets where the originals alone show 1 781; 7 had
+  nothing local at all.
+
+**PhotoKit** (`apple/photokit`, cgo):
+
+- **Photos normalises the library**: asked for an image ≤ 2048 px with network
+  allowed it downloads recipe 65741 into `_1_102_o.jpeg` (~0.6–0.9 s, ~1 MB) and
+  marks it local; the original stays in iCloud. Videos and Live Photos the same: the
+  file comes as a `file://` URL in `resources/derivatives/`.
+- Video `deliveryMode`: `fast` → H.264 360p (~0.7 MB, 0.9 s); `medium` → HEVC 720p
+  for iPhone videos (no mode hands over iCloud's H.264 720p); `automatic` / `high`
+  download the original — only for the Original button.
+- Without network a cloud-only asset fails at once (`PHPhotosErrorDomain` 3164): a
+  free "is it local". An image of a local HEIC is drawn from the original and leaves
+  no file: the bytes PhotoKit hands over are served (JPEG), not kept.
+- `PHAssetResource` lists only the original, the edit and its adjustments — whether
+  a derivative is local is read from the DB / disk.
+- **Asynchronous results come on the main queue**, which a Go program does not run:
+  `photokit` locks `main` to the main thread (`LockOSThread` in `init`) and
+  `RunMain` turns its run loop in place of waiting for a stop. Images are
+  synchronous, videos come on any queue, Live Photos on the main queue. `NSImage`
+  sizes are points: the pixels come from its `CGImage`. The `.m` file is
+  `photokit_darwin.m` (a Linux build refuses a bare `.m`).
+- **The permission goes to the terminal** that starts the binary (its "responsible"
+  app), not to the binary: a rebuild does not drop it. Started by launchd — still
+  open (roadmap). Access is asked only when a `*.photoslibrary` is under a root.
+
+## Immich
+
+Read through its API only (3.x; a read-only key: `asset.read`, `asset.view`,
+`asset.download`), never written to. The key comes from `api_key_file` or the env
+`IMMICH_API_KEY`, never from the config itself; the browser never sees it or
+Immich's address — the routes proxy the bytes.
+
+**The listing** (`List`, the walk's source): `POST /search/metadata` with the EXIF,
+1 000 assets a page by its cursor, filtered to the timeline (`visibility: timeline`
+— not the archive, not hidden) and out of the trash (`trashedAt: null`); audio,
+offline and trashed assets are left out on our side too. Each asset is a few files
+of ours (their stat: the asset's `updatedAt` — a change in Immich is a changed
+file):
+
+| path | role | served from |
+|---|---|---|
+| `immich://<id>/original/<name>` | original (the main file) | `/assets/<id>/original` |
+| `immich://<id>/preview.jpg` | still, the short side ~1440 px | `/assets/<id>/thumbnail?size=preview` |
+| `immich://<id>/thumbnail.webp` | still, ~250 px | `/assets/<id>/thumbnail?size=thumbnail` |
+| `immich://<id>/playback.mp4` | motion (a video) | `/assets/<id>/video/playback` |
+| `immich://<id>/motion/<video id>.mp4` | motion (a Live Photo) | `/assets/<video id>/video/playback` |
+
+**The grouper.** The listing keeps what it found by id; a group goes out when its
+last file has arrived (as Apple's). The key is the asset's id; `Show` the preview,
+then the thumbnail — an item is `Visible` at once, nothing is rendered for it
+(render skips a library's items). `Meta`: Immich's date (the local time and its
+offset: `localDateTime` minus the instant), oriented size, GPS, length, camera, as
+exiftool tags; `Fingerprint`: its checksum. A Live Photo's video is an asset of its
+own, hidden from the timeline: its photo's path carries its id.
+
+**Serving** (`File`): a reverse proxy to the API's URL of the path — the key added,
+the browser's `Range` passed on (videos seek), its cookies and Immich's not. Only a
+path of an Immich id (a UUID) maps to a URL.

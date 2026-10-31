@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>gd.eggs.perceptrail.photokit-spike</string>
+	<key>CFBundleName</key>
+	<string>Perceptrail PhotoKit spike</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Perceptrail asks Photos for the renditions it shows in the gallery; it never changes the library.</string>
+</dict>
+</plist>

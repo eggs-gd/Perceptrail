@@ -1,39 +1,28 @@
 package main
 
 import (
-	"github.com/eggs-gd/perceplib/api"
-	"github.com/eggs-gd/perceplib/chain"
+	"math"
 
-	l "github.com/eggs-gd/perceplib/logger"
+	"perceptrail/perseptors/exif_geo/places"
+
+	"github.com/eggs-gd/perceplib/api"
+	"github.com/eggs-gd/perceplib/exif"
+
+	l "github.com/eggs-gd/go-zap-decor"
 )
 
+// geotagsExtractor keeps where the photo was taken: the coordinates from EXIF (or
+// the Photos DB's record, read first). No coordinates: nothing is put, the core
+// records "processed, nothing found".
 type geotagsExtractor struct {
 	logger *l.Logger
 }
 
 func (cd *geotagsExtractor) Decorate(in api.RawItemR) (api.RawItemR, error) {
-	// Extract geo data from EXIF
-	/*
-		lat, _ := strconv.ParseFloat(string(in.Exif[0]["GPSLatitude"]), 64)
-		lon, _ := strconv.ParseFloat(string(in.Exif[0]["GPSLongitude"]), 64)
-
-		// Update if changed
-		if in.Item.GeoData.Latitude != lat || in.Item.GeoData.Longitude != lon {
-			in.Item.GeoData = dto.GeoData{
-				Latitude:  lat,
-				Longitude: lon,
-			}
-			in.Item.State = dto.Dirty
-		}
-	*/
-
+	lat, lon, ok := exif.Coordinates(in)
+	// 0,0 is a camera that had no fix, not the Gulf of Guinea
+	if ok && math.Abs(lat) <= 90 && math.Abs(lon) <= 180 && (lat != 0 || lon != 0) {
+		places.Places.Put(in, places.Location{Lat: lat, Lon: lon})
+	}
 	return in, nil
-}
-
-func (cd *geotagsExtractor) Stop() {}
-
-func NewGeotagsProcessor(chin <-chan api.RawItemR, chout chan<- api.RawItemR, logger *l.Logger) chain.Processor {
-	processor := &geotagsExtractor{logger}
-
-	return chain.NewDecorator(chin, chout, processor)
 }

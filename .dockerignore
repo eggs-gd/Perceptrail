@@ -1,0 +1,11 @@
+# Only sources go into a build context
+.git
+**/node_modules
+**/.build
+**/.var
+**/.svelte-kit
+svebapp/build
+_sb
+data
+config.yml
+library

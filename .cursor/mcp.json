@@ -5,8 +5,11 @@
       "args": ["-y", "@sveltejs/mcp"]
     },
     "gopls": {
-      "command": "gopls",
-      "args": ["mcp"]
+      "command": "sh",
+      "args": [
+        "-c",
+        "cd gontroller && goroot=$(go env GOROOT) && cd .. && PATH=\"$goroot/bin:$PATH\" GOWORK=\"$PWD/gopls.work\" exec gopls mcp"
+      ]
     },
     "design-patterns": {
       "command": "sh",

@@ -1,0 +1,105 @@
+package route_test
+
+import (
+	"bufio"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
+	"testing"
+	"time"
+
+	"perceptrail/gontroller/internal/model/dto"
+)
+
+// The delta: after a full fetch, ?since=<its cursor> (the stream's last line) gives
+// only what changed — a changed or new shown item as an item, a deleted or hidden one
+// as removed; the epoch stays the same
+func TestItemsDelta(t *testing.T) {
+	e := server(nil)
+
+	put := func(it *dto.ItemDto) *dto.ItemDto {
+		t.Helper()
+		out, err := testDB.UpdateItem(it)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	keep := put(&dto.ItemDto{GUID: "d-keep", State: dto.Visible})
+	change := put(&dto.ItemDto{GUID: "d-change", State: dto.Visible})
+	gone := put(&dto.ItemDto{GUID: "d-gone", State: dto.Visible})
+	hide := put(&dto.ItemDto{GUID: "d-hide", State: dto.Visible})
+	_ = keep
+
+	get := func(query string) (map[string]bool, string, http.Header) {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/items"+query, nil))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: %d", query, rec.Code)
+		}
+		got := map[string]bool{} // guid → removed
+		cursor := ""
+		sc := bufio.NewScanner(rec.Body)
+		for sc.Scan() {
+			if cursor != "" {
+				t.Fatalf("%s: a line after the cursor: %s", query, sc.Text())
+			}
+			var line struct {
+				GUID    string `json:"guid"`
+				Removed bool   `json:"removed"`
+				Cursor  string `json:"cursor"`
+				Total   *int64 `json:"total"`
+			}
+			if err := json.Unmarshal(sc.Bytes(), &line); err != nil {
+				t.Fatal(err)
+			}
+			if line.Cursor != "" {
+				n, _ := testDB.CountItemsInStates(dto.Visible, dto.Ready)
+				if line.Total == nil || *line.Total != n {
+					t.Errorf("%s: total %v, want %d (the shown items)", query, line.Total, n)
+				}
+			}
+			cursor = line.Cursor
+			if strings.HasPrefix(line.GUID, "d-") {
+				got[line.GUID] = line.Removed
+			}
+		}
+		return got, cursor, rec.Header()
+	}
+
+	// The cursor counts from a response's start, compared as julian days (~1 ms):
+	// an item written in the same millisecond comes again in the next delta (on
+	// purpose — >=, nothing missed); the test steps past it
+	time.Sleep(10 * time.Millisecond)
+	full, cursor, h := get("")
+	if len(full) != 4 || h.Get("X-Sync-Epoch") == "" || cursor == "" {
+		t.Fatalf("full: %v, cursor %q, headers %v", full, cursor, h)
+	}
+	time.Sleep(10 * time.Millisecond)
+
+	change.MimeType = "image/jpeg"
+	put(change)
+	if err := testDB.DeleteItem(gone); err != nil {
+		t.Fatal(err)
+	}
+	hide.State = dto.Waiting
+	put(hide)
+	put(&dto.ItemDto{GUID: "d-new", State: dto.Visible})
+
+	delta, _, h2 := get("?since=" + url.QueryEscape(cursor))
+	want := map[string]bool{"d-change": false, "d-new": false, "d-gone": true, "d-hide": true}
+	if len(delta) != len(want) {
+		t.Errorf("delta %v, want %v", delta, want)
+	}
+	for guid, removed := range want {
+		if r, ok := delta[guid]; !ok || r != removed {
+			t.Errorf("%s: in delta %v removed %v, want removed %v", guid, ok, r, removed)
+		}
+	}
+	if h2.Get("X-Sync-Epoch") != h.Get("X-Sync-Epoch") {
+		t.Error("the epoch changed")
+	}
+}

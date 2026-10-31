@@ -1,0 +1,11 @@
+# A plain `go build` in a perceptor's module writes an executable next to its
+# sources, named after the module (ml_color → color): only sources are tracked here.
+# The plugins themselves are built by the root Makefile into gontroller/.build/.
+*
+!*/
+!*.go
+!go.mod
+!go.sum
+!*.md
+!testdata/**
+!.gitignore
