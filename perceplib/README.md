@@ -9,18 +9,14 @@ as a **git subtree** under `perceplib/`.
 
 | Package | What |
 |---|---|
-| `api` | perceptor contract (`Perceptor`, `ExifPerceptor`), data types (`RawExif`, `Size`), item access interfaces (`RawItemR`, `ItemDataProvider/Editor`), `GetRatio` |
-| `chain` | channel-based pipeline: `NewChainProcessor`, `NewEntryPoint`, `NewDecorator`, `NewSwitch`; `ErrSkippedItem` |
-| `logger` | zap wrapper with a custom console encoder |
-| `logger/decorators` | `GontrollerDecorator` — tree-style fields, SQL highlighting |
+| `api` | perceptor contract (`Perceptor`, `ExifPerceptor` (+ `ExifTagger`: the tags it reads — only declared tags are read, `GetExif` of another is ""; + `Decorator(logger)`: its logic over one item, the host runs it as a step), every perceptor also navigates: `View` (its button) + `Order` (the gallery's sheet in its order, with sections); what it knows about an item: `Info` (facts for the info panel); its data: `Schema` + a typed `Store[T]` (`NewStore`, `Put`, `Get` — the host keeps the storage)), data types (`GUID` — an item's identity, the same in the host and every perceptor, `NilGUID` names no item; `RawExif`, `Size`), item access interfaces (`RawItemR`, `ItemDataProvider/Editor`), `GetRatio` |
+| `exif` | helpers for the values the host reads with exiftool `-n` (numbers as numbers): `Coordinates` (signed decimal degrees) + `CoordinateTags` to declare |
 
-### chain
-
-Each step is a `Processor` with its own goroutine: reads from its input channel,
-writes to its output channel. `Decorator[Ti, To]` transforms an item; an error goes
-to the chain's shared error channel (`ErrSkippedItem` is a regular skip, not a
-failure). A chain is itself a `Processor`, so chains nest (that is how EXIF plugins
-are run).
+The perceptor contract builds on two libraries of their own (2026-10-05, they were
+packages here): [go-chain](https://github.com/eggs-gd/go-chain) — a perceptor's
+logic is a `chain.Decorator` — and [go-zap-decor](https://github.com/eggs-gd/go-zap-decor),
+the logger a perceptor gets. A Go plugin and its host must use the very same
+versions of both.
 
 ## Working from Perceptrail (subtree)
 

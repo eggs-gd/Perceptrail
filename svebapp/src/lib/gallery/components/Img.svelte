@@ -1,6 +1,6 @@
 <script lang="ts">
-    import type {Item} from "$lib/stores";
-    import {PUBLIC_API_PATH} from '$env/static/public'
+    import type {Item} from "#lib/stores/index.js";
+    import {PUBLIC_API_PATH} from '$app/env/public'
 
     interface Props {
         item: Item;
@@ -35,4 +35,6 @@
         (min-width: 1200px) 1200px,
         1920px"
      width={item.width} height={item.height}
+     loading="lazy"
+     decoding="async"
      alt={item.guid}/>

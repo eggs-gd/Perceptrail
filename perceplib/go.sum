@@ -1,5 +1,9 @@
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/eggs-gd/go-chain v0.1.0 h1:eSq61JM/JXEO4dTUXC4XK/YrWDqhwUOzrAeyA19LZzs=
+github.com/eggs-gd/go-chain v0.1.0/go.mod h1:HZSyr0MkRydTNp8FA/Rv8MY6vh/09grjNRC3tHgs1ek=
+github.com/eggs-gd/go-zap-decor v0.1.0 h1:1qhlYyrY3M+tifOZtyCRGknV39zqcNLBk7SlhnhCRlk=
+github.com/eggs-gd/go-zap-decor v0.1.0/go.mod h1:AZ9ag7g8sN6pN5t9lNUz5/YqiKhg1bD1vzy/C0fuMQE=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/stretchr/testify v1.8.1 h1:w7B6lhMri9wdJUVmEZPGGhZzrYTPvgJArz7wNPgYKsk=

@@ -1,0 +1,7 @@
+# A plain `go build` here writes an executable next to the sources: only sources
+# are tracked.
+*
+!*/
+!*.go
+!go.mod
+!.gitignore

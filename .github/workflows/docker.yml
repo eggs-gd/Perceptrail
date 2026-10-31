@@ -1,0 +1,98 @@
+name: Docker
+
+# The two images (docker/): built and smoke-tested through compose on a PR that
+# touches what goes into them; published to GHCR — develop: `develop` and the
+# version (what is being tested), master: `latest`, the version and `MAJOR.MINOR`
+# (a release: the same commits, fast-forwarded).
+on:
+  pull_request:
+    paths:
+      - docker/**
+      - compose.yml
+      - compose.build.yml
+      - .dockerignore
+      - gontroller/**
+      - perceplib/**
+      - perceptors/**
+      - svebapp/**
+      - .github/workflows/docker.yml
+  push:
+    branches: [master, develop]
+  workflow_dispatch:
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0  # the version is derived from history
+
+    - name: Version
+      id: version
+      run: echo "version=$(scripts/version.sh)" >> "$GITHUB_OUTPUT"
+
+    - name: Build
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
+      run: |
+        docker build -f docker/server.Dockerfile --build-arg VERSION="$VERSION" -t ghcr.io/eggs-gd/perceptrail-server:latest .
+        docker build -f docker/web.Dockerfile --build-arg VERSION="$VERSION" -t ghcr.io/eggs-gd/perceptrail-web:latest .
+
+    # The whole way: a photo in a library, the server imports and renders it, the web
+    # container serves the app and sends /api to the server
+    - name: Smoke
+      run: |
+        set -euo pipefail
+        # what it got, then whether it is what it should be: a check shows its answer
+        expect() { # <url> <text the body must have>
+          local body code
+          code=$(curl -s -o body.txt -w '%{http_code}' "localhost:8080$1") || true
+          body=$(head -c 200 body.txt)
+          echo "GET $1 -> $code: $body"
+          [ "$code" = 200 ] && grep -q -- "$2" body.txt
+        }
+        mkdir -p library data
+        # no config.yml: compose refuses (not an empty directory in its place)
+        if docker compose create --no-build server 2>create.txt; then echo "created without config.yml"; exit 1; fi
+        cat create.txt
+        docker compose rm -f
+        test ! -e config.yml
+        # as an owner installs: the template out of the image, as it is
+        docker run --rm --entrypoint cat ghcr.io/eggs-gd/perceptrail-server:latest /etc/perceptrail/config.yml > config.yml
+        docker run --rm -v "$PWD/library:/library" --entrypoint vips \
+          ghcr.io/eggs-gd/perceptrail-server:latest black /library/photo.jpg 1200 900 --bands 3
+        docker compose up -d --no-build
+        for i in $(seq 60); do curl -fs localhost:8080/api/app >/dev/null && break; sleep 2; done
+        expect /api/app '"version"'
+        expect / '<html'
+        expect /v/date '<html'   # an app route: the fallback page
+        for i in $(seq 60); do expect /api/items '/r/400.webp' && break; sleep 2; done
+        url=$(curl -fs localhost:8080/api/items | grep -o '/assets/[^"]*/r/400.webp' | head -1)
+        echo "rendition: $url"
+        test -n "$url"
+        type=$(curl -fs -o /dev/null -w '%{content_type}' "localhost:8080/api$url")
+        echo "GET /api$url -> $type"
+        [ "$type" = image/webp ]
+
+    - name: Logs
+      if: failure()
+      run: docker compose logs
+
+    - name: Publish
+      if: github.event_name == 'push'
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
+        BRANCH: ${{ github.ref_name }}
+      run: |
+        echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+        if [ "$BRANCH" = master ]; then tags="$VERSION ${VERSION%.*} latest"; else tags="$VERSION develop"; fi
+        for image in perceptrail-server perceptrail-web; do
+          for tag in $tags; do
+            docker tag "ghcr.io/eggs-gd/$image:latest" "ghcr.io/eggs-gd/$image:$tag"
+            docker push "ghcr.io/eggs-gd/$image:$tag"
+          done
+        done

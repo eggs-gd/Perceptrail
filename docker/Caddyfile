@@ -1,0 +1,18 @@
+# The web container: the gallery's files, and /api to the server (API_UPSTREAM,
+# default the compose service "server")
+:80 {
+	handle_path /api/* {
+		reverse_proxy {$API_UPSTREAM:server:1323} {
+			# /items is a stream of lines: each goes out as it comes
+			flush_interval -1
+		}
+	}
+	handle {
+		root * /srv
+		# The built files never change under a name: cached for good
+		header /_app/immutable/* Cache-Control "public, max-age=31536000, immutable"
+		# Any other path is the app's own route: the fallback page routes it
+		try_files {path} /index.html
+		file_server
+	}
+}

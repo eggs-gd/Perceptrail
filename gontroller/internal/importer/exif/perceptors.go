@@ -1,0 +1,142 @@
+package exif
+
+import (
+	"fmt"
+
+	"perceptrail/gontroller/internal/perceptor"
+	"perceptrail/gontroller/internal/perceptor/builtin"
+
+	l "github.com/eggs-gd/go-zap-decor"
+	"github.com/eggs-gd/perceplib/api"
+)
+
+// The perceptors as the import sees them: the ones that run in the chain (EXIF
+// data), what they read, their rows. The registry (internal/perceptor) only knows what is
+// loaded and where each one keeps its data.
+
+// Storage: a perceptor's rows as the import keeps them — one per processed item
+// (its value, or "processed, nothing found")
+type Storage interface {
+	Name() string
+	Save(guid api.GUID, v api.Values) error
+	GUIDs() ([]api.GUID, error)
+	Prune(keep func(guid api.GUID) bool) (int, error)
+}
+
+// Items: what the perceptors' bookkeeping asks of the model — every item, and the
+// ones to process again
+type Items interface {
+	GetAllGUIDs() ([]api.GUID, error)
+	MarkRework(guids []api.GUID) (int64, error)
+}
+
+// Reconcile runs at start: the import perceptors' rows against the items. An item
+// a perceptor has no row for (the perceptor is new, or its schema changed: its
+// storage was recreated) is marked for rework — the gate sends its group once more,
+// its files unchanged. A row of an item that is gone is dropped. Once at start, not
+// per pass: a perceptor's rows change only with the perceptors, and a row left
+// behind meanwhile harms nothing (values are read by the shown items' GUIDs).
+func Reconcile(db Items, logger *l.Logger) error {
+	guids, err := db.GetAllGUIDs()
+	if err != nil {
+		return err
+	}
+	live := make(map[api.GUID]bool, len(guids))
+	for _, g := range guids {
+		live[g] = true
+	}
+	missing := map[api.GUID]bool{}
+	for _, st := range importStores() {
+		has, err := st.GUIDs()
+		if err != nil {
+			return fmt.Errorf("perceptor %s: %w", st.Name(), err)
+		}
+		done := make(map[api.GUID]bool, len(has))
+		for _, g := range has {
+			done[g] = true
+		}
+		for _, g := range guids {
+			if !done[g] {
+				missing[g] = true
+			}
+		}
+		n, err := st.Prune(func(guid api.GUID) bool { return live[guid] })
+		if err != nil {
+			return fmt.Errorf("perceptor %s: %w", st.Name(), err)
+		}
+		if n > 0 {
+			logger.Info("Perceptor storage: rows of gone items dropped", l.String("store", st.Name()), l.Int("rows", n))
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	rework := make([]api.GUID, 0, len(missing))
+	for g := range missing {
+		rework = append(rework, g)
+	}
+	n, err := db.MarkRework(rework)
+	logger.Info("Perceptors without a row: items processed again", l.Int("items", int(n)))
+	return err
+}
+
+// importPerceptors: the perceptors the import chain runs (EXIF data), in order
+func importPerceptors() []api.Perceptor {
+	var out []api.Perceptor
+	for _, p := range perceptor.All() {
+		if p.DataProvider() == api.ExifDataProvider {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// corePerceptors: the built-in ones (they write into the item)
+func corePerceptors() []builtin.Perceptor {
+	var out []builtin.Perceptor
+	for _, p := range importPerceptors() {
+		if c, ok := p.(builtin.Perceptor); ok {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// externalPerceptors: the Go plugins (they only read it); one that is not an
+// api.ExifPerceptor is not run
+func externalPerceptors() []api.ExifPerceptor {
+	var out []api.ExifPerceptor
+	for _, p := range importPerceptors() {
+		if _, core := p.(builtin.Perceptor); core {
+			continue
+		}
+		if e, ok := p.(api.ExifPerceptor); ok {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// importStores: their storages — every processed item gets a row in each (a value,
+// or "nothing found")
+func importStores() []Storage {
+	var out []Storage
+	for _, p := range importPerceptors() {
+		if st, ok := perceptor.Store(p.Name()); ok {
+			out = append(out, st)
+		}
+	}
+	return out
+}
+
+// saveValues: a row in each import perceptor's storage for the item — its value, or
+// "processed, nothing found" (no GPS); values gives a storage's value (keep)
+func saveValues(guid api.GUID, values func(store string) (api.Values, bool)) error {
+	for _, st := range importStores() {
+		v, _ := values(st.Name())
+		if err := st.Save(guid, v); err != nil {
+			return fmt.Errorf("perceptor %s: %w", st.Name(), err)
+		}
+	}
+	return nil
+}
