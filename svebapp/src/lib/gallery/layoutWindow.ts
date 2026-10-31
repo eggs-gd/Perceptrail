@@ -6,7 +6,7 @@ import {
     type LayoutItem,
     type LayoutMeta,
     type LayoutSize,
-} from "$lib/stores";
+} from "#lib/stores/index.js";
 
 /**
  * What stays pinned on screen across relayouts (resize):

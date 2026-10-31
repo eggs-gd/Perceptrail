@@ -1,7 +1,7 @@
 import Dexie from "dexie";
-import {type Item, itemsDb} from "$lib/stores";
+import {type Item, itemsDb} from "#lib/stores/index.js";
 import {type CurrentWorkerTask, ITEMS_CHANNEL, type MessageFromSync, type WorkerMessage} from "./types";
-import {getLogger, setLogLevel} from "$lib/logger";
+import {getLogger, setLogLevel} from "#lib/logger/index.js";
 import {open, store} from "./stream";
 
 const logger = getLogger();

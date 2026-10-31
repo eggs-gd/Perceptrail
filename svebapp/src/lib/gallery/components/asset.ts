@@ -1,6 +1,6 @@
-import {PUBLIC_API_PATH} from '$env/static/public';
+import {PUBLIC_API_PATH} from '$app/env/public';
 import {SvelteMap} from 'svelte/reactivity';
-import type {Asset, Rendition} from '$lib/stores';
+import type {Asset, Rendition} from '#lib/stores/index.js';
 
 // What a browser surely shows; anything else only in the formats it claims
 const IMAGE_PREFERENCE = ['image/avif', 'image/webp', 'image/jpeg', 'image/png', 'image/gif'];

@@ -165,19 +165,25 @@ keeps in place.
 | `sync-start`, `sync-done` | — |
 | `create`, `update`, `delete` | `item` |
 
-## Conventions (Svelte 5 / Kit 2)
+## Conventions (Svelte 5 / Kit 3)
 
 Checked against the Svelte docs (Svelte MCP `get-documentation`: best practices).
 
 - `$app/state`, not `$app/stores`; no `svelte/store` — component state with runes,
   external data via `LiveQuery` (`lib/stores/internal/liveQuery.ts`, a Dexie
   `liveQuery` on `createSubscriber`; create it in `$derived` when it depends on state).
-  `LiveQuery` is not re-exported from `$lib/stores` (workers import that module).
+  `LiveQuery` is not re-exported from `#lib/stores` (workers import that module).
 - `$derived` for anything computed; `$effect` only for real integrations (worker
   messages, the window subscription with its per-frame scheduling and scroll
   correction, `document.body` style).
 - `{@attach}` instead of actions / `onMount` + `bind:this` for element listeners.
 - `class={[...]}` / `class={{...}}` instead of `class:`; `style:` for single styles.
+- The config is the `sveltekit()` plugin's options in `vite.config.ts` (no
+  `svelte.config.js`); `#lib/…` (`package.json` `imports`, with the module's `.js`
+  extension), not `$lib`; `$app/env`, `$app/env/public` (declared in `src/env.ts`).
+- Navigation: `goto` only — shallow (`shallow: true`) for the address's `?at`,
+  `replace`, `reset: false` to keep the scroll; a shallow one runs the navigation
+  hooks too.
 - No side effects in `load` (it runs on the server and on every navigation): the sync
   starts in `onMount` of the root layout.
 - Code that runs at module initialisation must never throw (Safari takes the whole app

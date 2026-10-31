@@ -1,15 +1,15 @@
 <script lang="ts">
-    import ItemView from "$lib/gallery/components/ItemView.svelte";
-    import ViewerTools from "$lib/gallery/components/ViewerTools.svelte";
-    import InfoPanel from "$lib/gallery/components/InfoPanel.svelte";
-    import {toggleViewerPref, viewerPrefs} from "$lib/gallery/components/viewerPrefs.svelte";
-    import {photoHref, viewHref} from "$lib/gallery/perceptors.svelte";
+    import ItemView from "#lib/gallery/components/ItemView.svelte";
+    import ViewerTools from "#lib/gallery/components/ViewerTools.svelte";
+    import InfoPanel from "#lib/gallery/components/InfoPanel.svelte";
+    import {toggleViewerPref, viewerPrefs} from "#lib/gallery/components/viewerPrefs.svelte.js";
+    import {photoHref, viewHref} from "#lib/gallery/perceptors.svelte.js";
     import {page} from '$app/state';
     import {goto} from '$app/navigation';
-    import {layoutDb} from "$lib/stores";
-    // Not re-exported from $lib/stores: the workers import that, this is page-only (svelte/reactivity)
-    import {LiveQuery} from "$lib/stores/internal/liveQuery";
-    import {mediumUrl} from "$lib/gallery/components/asset";
+    import {layoutDb} from "#lib/stores/index.js";
+    // Not re-exported from #lib/stores: the workers import that, this is page-only (svelte/reactivity)
+    import {LiveQuery} from "#lib/stores/internal/liveQuery.js";
+    import {mediumUrl} from "#lib/gallery/components/asset.js";
 
     // Apple Photos: the neighbours' medium renditions are asked for ahead (about a row
     // or two of the sheet each way), so the arrows open them at once; not videos
@@ -59,7 +59,7 @@
     // instead of leaving the site
     function close() {
         if (page.state.fromGallery) history.back();
-        else goto(viewHref(view, guid), {replaceState: true, noScroll: true});
+        else goto(viewHref(view, guid), {replace: true, reset: false});
     }
 
     // ← →: the previous / next item of the sheet. The entry is replaced, so Back (and
@@ -78,7 +78,7 @@
                 pending = undefined;
                 return;
             }
-            goto(photoHref(view, found.guid), {replaceState: true, noScroll: true, keepFocus: true, state: page.state})
+            goto(photoHref(view, found.guid), {replace: true, reset: false, state: page.state})
                 .finally(() => {
                     if (pending === next) pending = undefined;
                 });
@@ -88,7 +88,7 @@
     // A view picked here: the sheet in it around this photo (the viewer's entry is
     // replaced — Back goes to where the viewer was opened from)
     function pickView(slug: string) {
-        goto(viewHref(slug, guid), {replaceState: true, noScroll: true});
+        goto(viewHref(slug, guid), {replace: true, reset: false});
     }
 
     function onkeydown(e: KeyboardEvent) {

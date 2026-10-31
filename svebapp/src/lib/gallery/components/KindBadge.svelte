@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type {Asset, AssetKind} from '$lib/stores';
+    import type {Asset, AssetKind} from '#lib/stores/index.js';
     import {formatDuration, fullHere} from './asset';
 
     interface Props {

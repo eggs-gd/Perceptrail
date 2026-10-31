@@ -1,6 +1,6 @@
 <script lang="ts">
-    import {PUBLIC_API_PATH} from '$env/static/public';
-    import type {Asset} from '$lib/stores';
+    import {PUBLIC_API_PATH} from '$app/env/public';
+    import type {Asset} from '#lib/stores/index.js';
     import {iconMask} from '../perceptors.svelte';
     import {fullHere} from './asset';
 

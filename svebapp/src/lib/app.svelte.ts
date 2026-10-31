@@ -1,8 +1,8 @@
 // What the server says about itself (GET /app): its version and the mode. Debug: the
 // gallery shows its debug marks and logs everything; release: not — one client build
 // serves both.
-import {PUBLIC_API_PATH} from '$env/static/public';
-import {getLogger, setLogLevel} from '$lib/logger';
+import {PUBLIC_API_PATH} from '$app/env/public';
+import {getLogger, setLogLevel} from '#lib/logger/index.js';
 
 const logger = getLogger();
 

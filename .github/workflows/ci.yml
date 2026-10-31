@@ -72,7 +72,7 @@ jobs:
       run:
         working-directory: svebapp
     env:
-      # svebapp/.env is not committed; $env/static/public needs it at build time — the
+      # svebapp/.env is not committed; $app/env/public needs it at build time — the
       # API as the web container serves it
       PUBLIC_API_PATH: /api
     steps:

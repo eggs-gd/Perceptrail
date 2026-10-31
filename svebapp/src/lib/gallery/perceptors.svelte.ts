@@ -1,8 +1,8 @@
 // The perceptors — each gives the sheet its order (a view of the library) — and the
 // gallery's choices about them. The view itself lives in the URL (/v/<slug>?at=<guid>);
 // the browser keeps the user's choices: the pinned side panel, the hidden buttons.
-import {PUBLIC_API_PATH} from '$env/static/public';
-import {getLogger} from '$lib/logger';
+import {PUBLIC_API_PATH} from '$app/env/public';
+import {getLogger} from '#lib/logger/index.js';
 
 const logger = getLogger();
 const KEY = 'perceptrail.gallery';
