@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {type Item, itemsDb} from '$lib/stores';
+import {type Item, itemsDb} from '#lib/stores/index.js';
 import {open, store} from './stream';
 
 const item = (guid: string) => ({guid, date: '2024-07-01T10:00:00Z'}) as unknown as Item;

@@ -1,4 +1,4 @@
-import {type Item, itemsDb} from "$lib/stores";
+import {type Item, itemsDb} from "#lib/stores/index.js";
 
 // The server's item stream as the sync reads it (GET /items, NDJSON): which one to
 // ask for, and its lines into the copy. The sync worker (wsync.ts) runs it; it is

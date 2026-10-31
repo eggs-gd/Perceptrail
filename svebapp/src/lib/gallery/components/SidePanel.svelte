@@ -1,7 +1,7 @@
 <script lang="ts">
-    import {LAYOUT_SECTIONS_KEY, layoutDb, type LayoutSections, type SectionMark} from '$lib/stores';
-    // Not re-exported from $lib/stores: the workers import that, this is page-only
-    import {LiveQuery} from '$lib/stores/internal/liveQuery';
+    import {LAYOUT_SECTIONS_KEY, layoutDb, type LayoutSections, type SectionMark} from '#lib/stores/index.js';
+    // Not re-exported from #lib/stores: the workers import that, this is page-only
+    import {LiveQuery} from '#lib/stores/internal/liveQuery.js';
     import {sheetScale} from './sheetScale';
 
     interface Props {

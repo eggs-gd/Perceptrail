@@ -1,11 +1,11 @@
 <script lang="ts">
     import "../app.css";
-    import Gallery from "$lib/gallery/Gallery.svelte";
-    import type {LayoutItem} from "$lib/stores";
-    import {loadFromServer, refreshFromServer, setWorkersMode} from "$lib/workers";
+    import Gallery from "#lib/gallery/Gallery.svelte";
+    import type {LayoutItem} from "#lib/stores/index.js";
+    import {loadFromServer, refreshFromServer, setWorkersMode} from "#lib/workers/index.js";
     import {afterNavigate} from "$app/navigation";
-    import {loadApp} from "$lib/app.svelte";
-    import {loadPerceptors, photoHref} from "$lib/gallery/perceptors.svelte";
+    import {loadApp} from "#lib/app.svelte.js";
+    import {loadPerceptors, photoHref} from "#lib/gallery/perceptors.svelte.js";
     import {goto} from "$app/navigation";
     import {page} from "$app/state";
     import {onMount} from "svelte";
@@ -32,7 +32,10 @@
         document.addEventListener('visibilitychange', onVisible);
         return () => document.removeEventListener('visibilitychange', onVisible);
     });
-    afterNavigate(() => refreshFromServer());
+    // Not a shallow one: the gallery keeps its place in the address while scrolling
+    afterNavigate((navigation) => {
+        if (!navigation.shallow) refreshFromServer();
+    });
 
     $effect(() => {
         document.body.style.overflow = viewingItem ? 'hidden' : '';
@@ -43,7 +46,7 @@
 
     function openItem(item: LayoutItem) {
         if (!view) return;
-        goto(photoHref(view, item.guid), {noScroll: true, state: {fromGallery: true}});
+        goto(photoHref(view, item.guid), {reset: false, state: {fromGallery: true}});
     }
 </script>
 

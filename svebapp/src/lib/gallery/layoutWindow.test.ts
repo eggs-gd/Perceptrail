@@ -1,5 +1,5 @@
 import {describe, expect, it} from 'vitest';
-import type {LayoutItem} from '$lib/stores';
+import type {LayoutItem} from '#lib/stores/index.js';
 import {findAnchor} from './layoutWindow';
 
 const item = (guid: string, x: number, y: number, w: number, h: number) =>

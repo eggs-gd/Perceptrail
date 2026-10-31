@@ -1,10 +1,10 @@
 import type {InitMessage, OrderMessage, OrderResult, StartSyncMessage, UpdateLayoutMessage} from "./tasks/types";
 import UpdateDbWorker from './tasks/wsync?worker';
 import UpdateLayoutWorker from './tasks/wlayout?worker';
-import {browser} from "$app/environment";
-import {PUBLIC_API_PATH} from "$env/static/public";
-import {getLogger} from "$lib/logger";
-import {layoutDbName} from "$lib/stores";
+import {browser} from "$app/env";
+import {PUBLIC_API_PATH} from "$app/env/public";
+import {getLogger} from "#lib/logger/index.js";
+import {layoutDbName} from "#lib/stores/index.js";
 
 const logger = getLogger();
 

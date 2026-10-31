@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type {Asset} from '$lib/stores';
+    import type {Asset} from '#lib/stores/index.js';
     import {assetUrl, fallbackImage, pictureSources} from './asset';
 
     interface Props {

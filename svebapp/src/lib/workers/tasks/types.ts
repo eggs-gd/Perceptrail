@@ -1,4 +1,4 @@
-import type {Item, LayoutItem} from "$lib/stores";
+import type {Item, LayoutItem} from "#lib/stores/index.js";
 
 export type WorkerTask<TData, TResult = void> = (
     signal: AbortSignal,

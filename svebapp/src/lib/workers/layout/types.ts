@@ -1,4 +1,4 @@
-import type {Item} from "$lib/stores";
+import type {Item} from "#lib/stores/index.js";
 
 
 export interface ItemOrig extends Item {

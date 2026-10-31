@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type {Asset} from '$lib/stores';
+    import type {Asset} from '#lib/stores/index.js';
     import {assetUrl, canShowImage, hasImage, localFullVideo, originalImage, originalOnDemand, playableVideos, viewerChoice} from './asset';
     import {cycleLiveMode, toggleViewerPref, viewerPrefs} from './viewerPrefs.svelte';
     import PerceptorButtons from './PerceptorButtons.svelte';

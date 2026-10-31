@@ -21,8 +21,8 @@ import {
     type LayoutSections,
     type LayoutSize,
     type SectionMark,
-} from "$lib/stores";
-import {getLogger, setLogLevel} from "$lib/logger";
+} from "#lib/stores/index.js";
+import {getLogger, setLogLevel} from "#lib/logger/index.js";
 
 const logger = getLogger()
 

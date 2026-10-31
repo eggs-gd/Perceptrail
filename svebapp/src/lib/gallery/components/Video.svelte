@@ -1,6 +1,6 @@
 <script lang="ts">
-    import type {Item} from "$lib/stores";
-    import {PUBLIC_API_PATH} from '$env/static/public'
+    import type {Item} from "#lib/stores/index.js";
+    import {PUBLIC_API_PATH} from '$app/env/public'
 
     interface Props {
         item: Item;

@@ -1,4 +1,4 @@
-import type {SectionMark} from '$lib/stores';
+import type {SectionMark} from '#lib/stores/index.js';
 
 /**
  * The side panel's scale: where on the track a place of the sheet is, and back.

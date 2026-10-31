@@ -5,17 +5,17 @@
     import ItemView from "./components/ItemView.svelte";
     import GalleryTools from "./components/GalleryTools.svelte";
     import SidePanel from "./components/SidePanel.svelte";
-    import type {LayoutItem} from "$lib/stores";
-    import {onSynced, setOrder, updateLayout} from "$lib/workers";
+    import type {LayoutItem} from "#lib/stores/index.js";
+    import {onSynced, setOrder, updateLayout} from "#lib/workers/index.js";
     import {onDestroy, onMount} from "svelte";
     import {nextRequest, orderApplied, perceptors, viewHref} from "./perceptors.svelte";
-    import {debug} from "$lib/app.svelte";
-    import {goto, replaceState} from "$app/navigation";
+    import {debug} from "#lib/app.svelte.js";
+    import {goto} from "$app/navigation";
     import {page} from "$app/state";
     import {galleryRowHeight} from "./metrics";
     import type {Anchor} from "./layoutWindow";
-    import type {LayoutSize} from "$lib/stores";
-    import {layoutDb} from "$lib/stores";
+    import type {LayoutSize} from "#lib/stores/index.js";
+    import {layoutDb} from "#lib/stores/index.js";
     import {type AnchorState, findAnchor, readWindow, watchSize, watchWindow, type WindowSnapshot} from "./layoutWindow";
 
     interface Props {
@@ -112,7 +112,7 @@
 
     export function switchView(slug: string) {
         switchAnchor = anchorOnScreen(screenWidth);
-        goto(viewHref(slug, switchAnchor?.guid), {noScroll: true, keepFocus: true});
+        goto(viewHref(slug, switchAnchor?.guid), {reset: false});
     }
 
     $effect(() => {
@@ -121,13 +121,13 @@
         if (!slug || list.length === 0) return;
         untrack(() => {
             if (!list.some((p) => p.slug === slug)) {
-                goto(viewHref(list[0].slug), {replaceState: true});
+                goto(viewHref(list[0].slug), {replace: true});
                 return;
             }
             if (slug === requestedView) return;
             requestedView = slug;
             // From the address bar, not page.url: ?at is updated by a shallow
-            // replaceState, and Back to such an entry gives page.url without it
+            // goto, and Back to such an entry gives page.url without it
             const at = new URL(location.href).searchParams.get('at') ?? viewing;
             anchorState.pending = switchAnchor?.guid && switchAnchor.guid === at
                 ? switchAnchor
@@ -141,7 +141,7 @@
                 // wave), and the URL goes back to the view the sheet is in
                 switching = false;
                 requestedView = perceptors.active;
-                if (perceptors.active) goto(viewHref(perceptors.active), {replaceState: true});
+                if (perceptors.active) goto(viewHref(perceptors.active), {replace: true});
             });
         });
     });
@@ -166,7 +166,7 @@
             if (viewing !== undefined || !view || view !== perceptors.active) return;
             const a = anchorOnScreen(screenWidth);
             const href = viewHref(view, a?.guid);
-            if (href !== location.pathname + location.search) replaceState(href, page.state);
+            if (href !== location.pathname + location.search) goto(href, {shallow: true, replace: true, state: page.state});
         }, 400);
     }
 
