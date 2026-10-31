@@ -102,7 +102,10 @@ func (e *reader) read(g dto.Asset) (*draft, error) {
 		e.logger.Warn("exiftool: no metadata", l.String("file", paths[i]), l.Error(err))
 	}
 	if !found {
-		return nil, fmt.Errorf("exiftool: no metadata for the group of %s: %v", files[0].Path, err)
+		if err != nil {
+			return nil, fmt.Errorf("exiftool: no metadata for the group of %s: %w", files[0].Path, err)
+		}
+		return nil, fmt.Errorf("exiftool: no metadata for the group of %s", files[0].Path)
 	}
 	if err != nil {
 		// ExifTool reported a problem but still returned data: use it

@@ -36,7 +36,9 @@ func photosLibrary(t *testing.T, root string) (string, func(query string, args .
 	for _, f := range files {
 		write(t, filepath.Join(bundle, f), f)
 	}
-	os.MkdirAll(filepath.Join(bundle, "database"), 0o755)
+	if err := os.MkdirAll(filepath.Join(bundle, "database"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	db, err := sql.Open("sqlite3", filepath.Join(bundle, "database", "Photos.sqlite"))
 	if err != nil {
 		t.Fatal(err)

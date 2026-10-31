@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"perceptrail/gontroller/internal/app"
 	"perceptrail/gontroller/internal/library/provider"
 	"perceptrail/gontroller/internal/model/dto"
 
@@ -36,6 +37,13 @@ type Library interface {
 	File(path string) http.Handler
 }
 
+// Config: what the routes read of the config — the data's cache (renditions are
+// under it), the mode the client is told
+type Config interface {
+	CacheDir() string
+	Mode() string
+}
+
 // LibraryOf: the library an item belongs to, nil for a plain folder's (the server
 // gives library.Of)
 type LibraryOf func(item *dto.ItemDto) Library
@@ -53,12 +61,12 @@ type routes struct {
 
 // Register: every route of the API — items, assets, renditions (of: the item's
 // library), the perceptors the client is given (perceptors; values loads their
-// stored values), the app's info
-func Register(e *echo.Echo, db Store, of LibraryOf, cache string, info AppInfo, perceptors []api.Perceptor, values ValuesLoader, logger *l.Logger) {
-	r := &routes{db: db, of: of, cache: cache, logger: logger, values: values}
+// stored values), the app's info (its version, the config's mode)
+func Register(e *echo.Echo, cfg Config, db Store, of LibraryOf, perceptors []api.Perceptor, values ValuesLoader, logger *l.Logger) {
+	r := &routes{db: db, of: of, cache: cfg.CacheDir(), logger: logger, values: values}
 	r.registerItems("/items", e)
 	r.registerAssets("/assets", e)
 	r.registerPerceptors(e, perceptors)
 	r.registerRenditions(e)
-	RegisterAppRoutes(e, info)
+	RegisterAppRoutes(e, AppInfo{Version: app.Version, Mode: cfg.Mode()})
 }

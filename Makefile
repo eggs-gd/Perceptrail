@@ -6,7 +6,7 @@ GOMODULES = \
 	perceptors/ml_faces \
 	perceptors/ml_objects
 
-.PHONY: all build-gontroller build-plugins build-plugin-% update-deps clean
+.PHONY: all build-gontroller build-plugins build-plugin-% update-deps clean test sonar
 
 all: clean update-deps build-gontroller build-plugins
 
@@ -41,3 +41,31 @@ test:
 		echo "Testing $(module)..."; \
 		(cd $(module) && go test ./...); \
 	)
+
+# SonarQube on the owner's LAN server: every Go module's tests with coverage (an
+# integration test counts for the packages it runs: -coverpkg) and golangci-lint's
+# findings (.golangci.yml: a report, not a stop — the gate decides), svebapp's unit
+# tests with coverage (lcov), the scan, the quality gate (red: a non-zero exit). SONAR_HOST_URL and SONAR_TOKEN from the
+# environment or a git-ignored .env; never printed.
+# -short: the tests that load the perceptors as plugins skip (pluginbuild) — a host
+# built for coverage loads no plugin, built with -cover or not; go test runs them
+# (pre-push, CI).
+SONAR_GOMODULES = $(GOMODULES) scripts/declorder
+# SONAR_GATE=false sends the report without waiting for the quality gate.
+SONAR_GATE ?= true
+
+sonar:
+	@env=./.env; [ -f $$env ] || env="$$(git rev-parse --path-format=absolute --git-common-dir)/../.env"; \
+	set -a; [ ! -f "$$env" ] || . "$$env"; set +a; \
+	test -n "$$SONAR_HOST_URL" && test -n "$$SONAR_TOKEN" || { echo 'sonar: set SONAR_HOST_URL and SONAR_TOKEN (.env)' >&2; exit 1; }; \
+	scope=$$(scripts/sonar-scope) || exit 1; \
+	echo "sonar: $${scope:-main branch}"; \
+	for module in $(SONAR_GOMODULES); do \
+		echo "Coverage: $$module"; \
+		(cd $$module && go test -short -coverpkg=./... -coverprofile=coverage.out ./... > /dev/null) || exit 1; \
+		(cd $$module && golangci-lint run --issues-exit-code=0 --output.text.path=stderr \
+			--output.checkstyle.path=$(CURDIR)/$$module/golangci-lint.xml ./... 2> /dev/null) || exit 1; \
+	done; \
+	echo "Coverage: svebapp"; \
+	(cd svebapp && npx vitest run --coverage > /dev/null) || exit 1; \
+	sonar-scanner -Dsonar.qualitygate.wait=$(SONAR_GATE) $$scope

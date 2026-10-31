@@ -81,7 +81,7 @@ func Open(cfg Config, logger *l.Logger) (*Proxy, error) {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	// An ignored group was marked "-" before the GUID had a nil value of its own
-	if err := writes.Model(&dto.FileDto{}).Where("linked_to = ?", "-").Update("linked_to", api.NilGUID).Error; err != nil {
+	if err := writes.Model(&dto.FileDto{}).Where(byLinkedTo, "-").Update("linked_to", api.NilGUID).Error; err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	reads, err := connect(cfg, true, logger)

@@ -64,11 +64,11 @@ export function sheetScale(marks: SectionMark[], height: number, count: number, 
         // ≤: a section without height of its own (it starts and ends in one row)
         // keeps the y at its start — y 0 is the top of the track
         toTrack(y) {
-            const s = segments.find((g) => y <= g.y1) ?? segments[segments.length - 1];
+            const s = segments.find((g) => y <= g.y1) ?? segments.at(-1)!;
             return within(Math.min(Math.max(y, s.y0), s.y1), s.y0, s.y1, s.t0, s.t1);
         },
         toSheet(p) {
-            const s = segments.find((g) => p < g.t1) ?? segments[segments.length - 1];
+            const s = segments.find((g) => p < g.t1) ?? segments.at(-1)!;
             return within(Math.min(Math.max(p, s.t0), s.t1), s.t0, s.t1, s.y0, s.y1);
         },
     };

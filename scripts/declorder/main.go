@@ -109,21 +109,29 @@ func groupOf(decl ast.Decl) (int, string, bool) {
 		if d.Tok == token.IMPORT || len(d.Specs) == 0 {
 			return 0, "", false
 		}
-		switch s := d.Specs[0].(type) {
-		case *ast.TypeSpec:
-			if !ast.IsExported(s.Name.Name) {
-				return privateDeclarations, s.Name.Name, true
-			}
-			if _, ok := s.Type.(*ast.InterfaceType); ok {
-				return publicInterfaces, s.Name.Name, true
-			}
+		return specGroup(d.Specs[0])
+	}
+	return 0, "", false
+}
+
+// specGroup: a type's or a value's group (by its first spec) and its name
+func specGroup(spec ast.Spec) (int, string, bool) {
+	switch s := spec.(type) {
+	case *ast.TypeSpec:
+		_, isInterface := s.Type.(*ast.InterfaceType)
+		switch {
+		case !ast.IsExported(s.Name.Name):
+			return privateDeclarations, s.Name.Name, true
+		case isInterface:
+			return publicInterfaces, s.Name.Name, true
+		default:
 			return publicDeclarations, s.Name.Name, true
-		case *ast.ValueSpec:
-			if ast.IsExported(s.Names[0].Name) {
-				return publicDeclarations, s.Names[0].Name, true
-			}
-			return privateDeclarations, s.Names[0].Name, true
 		}
+	case *ast.ValueSpec:
+		if ast.IsExported(s.Names[0].Name) {
+			return publicDeclarations, s.Names[0].Name, true
+		}
+		return privateDeclarations, s.Names[0].Name, true
 	}
 	return 0, "", false
 }

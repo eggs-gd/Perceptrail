@@ -93,7 +93,9 @@ func (p *pool) Extract(tag, src, dst string) error {
 // Close: the processes end — the stage's steps that use them stop (once)
 func (p *pool) Close() {
 	p.closeOnce.Do(func() {
-		p.startOnce.Do(func() {}) // none starts after this
+		p.startOnce.Do(func() {
+			// nothing to do: once used up, none starts after this
+		})
 		for _, et := range p.workers {
 			et.Close()
 		}

@@ -210,7 +210,7 @@ func TestValidatorKeepsUnreadable(t *testing.T) {
 	if err := os.Chmod(locked, 0); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(locked, 0o755) })
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) }) // readable again for TempDir's cleanup
 	scan(t, root)
 	if item := itemAt(t, hidden); item.GUID != guid {
 		t.Error("a file in an unreadable directory was taken as deleted")

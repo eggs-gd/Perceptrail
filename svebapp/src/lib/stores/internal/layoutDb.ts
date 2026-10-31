@@ -32,29 +32,29 @@ function open(name: string): LayoutDb {
     return db;
 }
 
-const inPage = typeof window !== 'undefined';
+const inPage = globalThis.window !== undefined;
 
-// Not crypto.randomUUID: secure contexts only
-const randomId = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
+// Not crypto.randomUUID: secure contexts only (plain HTTP on a LAN is not one). A
+// database name for this tab, not a secret.
+const randomId = () => Date.now().toString(36) + Math.random().toString(36).slice(2); // NOSONAR
 
-/** This page's layout database (the worker's after useLayoutDb) */
-export let layoutDbName = PREFIX + (inPage ? randomId() : 'unset');
+/** This page's layout database */
+export const layoutDbName = PREFIX + (inPage ? randomId() : 'unset');
 
 // Written by the layout worker only; the page reads it with liveQuery over the
 // visible window (see Gallery.svelte). Not opened until used (SSR never does).
-export let layoutDb: LayoutDb = open(layoutDbName);
+export const layoutDb: LayoutDb = open(layoutDbName);
 
-/** The layout worker: the database its page named */
-export function useLayoutDb(name: string) {
+/** The layout worker's: the database its page named (this module's own unused) */
+export function useLayoutDb(name: string): LayoutDb {
     layoutDb.close();
-    layoutDbName = name;
-    layoutDb = open(name);
+    return open(name);
 }
 
 if (inPage) {
     if (navigator.locks) {
         // Held until the page goes away
-        navigator.locks.request(layoutDbName, () => new Promise<never>(() => {}));
+        void navigator.locks.request(layoutDbName, () => new Promise<never>(() => {}));
     } else {
         const roll = new BroadcastChannel(ROLL_CALL);
         roll.onmessage = (e) => { if (e.data === 'who') roll.postMessage(layoutDbName); };
@@ -64,7 +64,8 @@ if (inPage) {
     layoutDb.on('versionchange', (e) => {
         if (e.newVersion === null) location.reload();
     });
-    dropClosedTabs().catch(() => {});
+    // In the background: the module does not wait for it (no top-level await)
+    dropClosedTabs().catch(() => {}); // NOSONAR
 }
 
 async function dropClosedTabs() {

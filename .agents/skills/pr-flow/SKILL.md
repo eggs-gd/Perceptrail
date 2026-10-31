@@ -31,7 +31,13 @@ develop` — removed after the merge (`git worktree remove`).
 2. What changed is checked: `gofmt`, `go vet`, tests (`go test -race ./...` in
    gontroller), gopls diagnostics on every Go file touched; `go_vulncheck` after a
    `go.mod` change. A plugin touched: `go build -buildmode=plugin` in its module.
-3. The message: the subject says what it is for the product; the body says why.
+3. SonarQube, where `SONAR_HOST_URL` and `SONAR_TOKEN` are set (the owner's machine,
+   `.env`; elsewhere skip): the pre-commit hook is the local gate (golangci-lint, the
+   secrets scan); the pre-push hook sends the analysis and stops on a red gate. The
+   `sonar` skill says how to read and answer what it flagged. Never print or read the
+   token, change the server's settings, or close an issue as a false positive there
+   without the owner.
+4. The message: the subject says what it is for the product; the body says why.
    End with the attribution lines the session gives.
 
 ## Push
@@ -50,6 +56,8 @@ git fetch -q origin <branch> && git branch -q --set-upstream-to=origin/<branch>
 - **Draft at the first push**: `gh pr create --draft --base develop` (a library repo:
   `--base main`). The body: what changed, why, how it was verified (commands), its
   width when wide and why, what is left for after the merge; the attribution line.
+- **Once it is open**, `make sonar` once (the `sonar` skill): the push's analysis was of
+  the branch, and the PR's comment and check come from an analysis made with its number.
 - **Before ready** — the docs are in this PR, never a follow-up:
   - the module READMEs match the code; a changed `.puml` is re-rendered to
     `_sb/diagrams/*.svg`;

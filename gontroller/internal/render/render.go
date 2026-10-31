@@ -67,9 +67,16 @@ type Service struct {
 	db      Store
 	logger  *l.Logger
 	version string        // what the renditions are: sizes, format, quality, the video's size
+	vips    vips          // the photo tool (set up at Start)
 	ffmpeg  *ffmpeg       // the video tools (found at Start)
-	proc    proc          // how the tools run: below the server, a share of the CPUs each
 	wake    chan struct{} // one pending wake-up: many events, one pass
+}
+
+// itemDir: where an item's renditions go — its directory in the cache, and the same
+// relative to the cache (what the database lists)
+type itemDir struct {
+	guid     api.GUID
+	abs, rel string
 }
 
 // job: an item taken, with the lease its result carries
@@ -97,7 +104,9 @@ func (s *Service) Start(ctx context.Context) {
 		return
 	}
 	cfg := s.cfg.Render()
-	if err := runs(ctx, cfg.Vipsthumbnail); err != nil {
+	tools := newProc(cfg.Threads)
+	s.vips = vips{bin: cfg.Vipsthumbnail, format: cfg.Format, sizes: cfg.Sizes, proc: tools}
+	if err := s.vips.runs(ctx); err != nil {
 		s.logger.Error("Render off: no vipsthumbnail", l.String("vipsthumbnail", cfg.Vipsthumbnail), l.Error(err))
 		return
 	}
@@ -109,8 +118,7 @@ func (s *Service) Start(ctx context.Context) {
 	if video.tonemap == "" {
 		s.logger.Warn("Render: this ffmpeg has no zscale — HDR videos are kept as they are", l.String("ffmpeg", cfg.FFmpeg))
 	}
-	s.proc = newProc(cfg.Threads)
-	video.proc = s.proc
+	video.proc = tools
 	s.ffmpeg = video
 	published := s.db.Published().Subscribe(func(dto.ItemPublished) {
 		select {
@@ -243,16 +251,15 @@ func (s *Service) keep(ctx context.Context, cancel context.CancelFunc, j job) {
 // renditions: an item's renditions by what it is — a photo, a video, a Live Photo
 // (a photo with a motion file in its group)
 func (s *Service) renditions(ctx context.Context, item *dto.ItemDto) ([]dto.RenditionDto, error) {
-	cfg := s.cfg.Render()
-	rel := cache.ItemDir("r", item.GUID)
-	dir := filepath.Join(s.cfg.CacheDir(), rel)
+	size := s.cfg.Render().Video
+	to := s.itemDir(item.GUID)
 	still := func(ctx context.Context, src string) ([]dto.RenditionDto, error) {
 		ctx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
-		return photo(ctx, s.proc, cfg.Vipsthumbnail, cfg.Format, cfg.Sizes, item.GUID, src, dir, rel)
+		return s.vips.photo(ctx, src, to)
 	}
 	if moving(item) {
-		return s.ffmpeg.video(ctx, item.GUID, item.Path, cfg.Video, dir, rel, true, still)
+		return s.ffmpeg.video(ctx, item.Path, size, to, true, still)
 	}
 	stills, err := still(ctx, item.Path)
 	if err != nil {
@@ -264,7 +271,7 @@ func (s *Service) renditions(ctx context.Context, item *dto.ItemDto) ([]dto.Rend
 	}
 	for _, f := range files {
 		if f.Role == dto.RoleMotion { // a Live Photo: its video too
-			motion, err := s.ffmpeg.video(ctx, item.GUID, f.Path, cfg.Video, dir, rel, false, still)
+			motion, err := s.ffmpeg.video(ctx, f.Path, size, to, false, still)
 			if err != nil {
 				return nil, err
 			}
@@ -289,3 +296,15 @@ func picture(item *dto.ItemDto) bool { return strings.HasPrefix(item.MimeType, "
 
 // moving: the item's main file is a video
 func moving(item *dto.ItemDto) bool { return strings.HasPrefix(item.MimeType, "video/") }
+
+// itemDir: the item's directory under the cache's r/ (cache.ItemDir)
+func (s *Service) itemDir(guid api.GUID) itemDir {
+	rel := cache.ItemDir("r", guid)
+	return itemDir{guid: guid, abs: filepath.Join(s.cfg.CacheDir(), rel), rel: rel}
+}
+
+// path: a file of the item's directory, on the disk
+func (d itemDir) path(name string) string { return filepath.Join(d.abs, name) }
+
+// listed: the same as the database lists it, relative to the cache
+func (d itemDir) listed(name string) string { return filepath.Join(d.rel, name) }

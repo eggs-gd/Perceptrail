@@ -211,12 +211,16 @@ func TestSweep(t *testing.T) {
 	write := func(cache, rel string, at time.Time) string {
 		t.Helper()
 		path := filepath.Join(cache, rel)
-		os.MkdirAll(filepath.Dir(path), 0o755)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
 		if err := os.WriteFile(path, []byte("webp"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 		for p := path; p != cache; p = filepath.Dir(p) {
-			os.Chtimes(p, at, at)
+			if err := os.Chtimes(p, at, at); err != nil {
+				t.Fatal(err)
+			}
 		}
 		return path
 	}
@@ -227,7 +231,9 @@ func TestSweep(t *testing.T) {
 		f, _ := db.CreateFile(dto.ItemEntry{Path: "/x.jpg", Name: "x.jpg"})
 		item, _ := db.CreateItem(f)
 		item.HashShort = "h"
-		db.UpdateItem(item)
+		if _, err := db.UpdateItem(item); err != nil {
+			t.Fatal(err)
+		}
 		rel := filepath.Join("r", "ee", "ff", string(item.GUID), "400.webp")
 		listed = write(cfg.CacheDir(), rel, old)
 		taken, _ := db.Take("render", []api.GUID{item.GUID})
@@ -238,6 +244,7 @@ func TestSweep(t *testing.T) {
 	})
 	gone := func(path string) bool { _, err := os.Stat(path); return os.IsNotExist(err) }
 	for deadline := time.Now().Add(5 * time.Second); !gone(stale) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		// the sweep runs at render's start: wait for it
 	}
 	if !gone(stale) || !gone(filepath.Join(cfg.CacheDir(), "r", "aa")) {
 		t.Error("the stale rendition or its directories stayed")
@@ -452,7 +459,9 @@ func TestRenderLivePhoto(t *testing.T) {
 	f.Role = dto.RoleOriginal
 	motion.LinkToItem(item.GUID)
 	motion.Role = dto.RoleMotion
-	db.UpdateFiles([]*dto.FileDto{f, motion})
+	if _, err := db.UpdateFiles([]*dto.FileDto{f, motion}); err != nil {
+		t.Fatal(err)
+	}
 	item.HashShort = "fingerprint"
 	if _, err := db.Publish(item); err != nil {
 		t.Fatal(err)

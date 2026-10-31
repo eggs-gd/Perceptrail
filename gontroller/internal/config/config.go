@@ -192,13 +192,7 @@ func (f *file) resolve(base string) error {
 	if f.Rescan <= 0 {
 		f.Rescan = defaultRescan
 	}
-	if f.Exiftool == "" {
-		f.Exiftool = defaultExiftool
-	}
-	// A bare command name is looked up in PATH; only paths are resolved
-	if filepath.Base(f.Exiftool) != f.Exiftool {
-		f.Exiftool = abs(f.Exiftool)
-	}
+	f.Exiftool = tool(f.Exiftool, defaultExiftool, abs) // a bare name: looked up in PATH
 	for name, p := range f.Providers {
 		p.APIKeyFile = abs(p.APIKeyFile)
 		f.Providers[name] = p
@@ -206,18 +200,7 @@ func (f *file) resolve(base string) error {
 	if err := f.Render.resolve(abs); err != nil {
 		return err
 	}
-	if f.Database.Driver == "" {
-		f.Database.Driver = DriverSQLite
-	}
-	if f.Database.Driver == DriverSQLite {
-		// sqlite: Name is a file inside DataDir
-		if f.Database.Name == "" {
-			f.Database.Name = defaultDBName
-		}
-		if !filepath.IsAbs(f.Database.Name) {
-			f.Database.Name = filepath.Join(f.DataDir, f.Database.Name)
-		}
-	}
+	f.Database.resolve(f.DataDir)
 	return f.Server.resolve()
 }
 

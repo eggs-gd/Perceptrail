@@ -8,15 +8,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"perceptrail/gontroller/internal/model/dto"
-
-	"github.com/eggs-gd/perceplib/api"
 )
 
 // ffmpeg: the video tools this server has — found at start, nil without them
@@ -57,6 +54,9 @@ type stream struct {
 // alone came out at 14 Mb/s for 720p)
 // probeTimeout: ffprobe's time before the encode's is known
 const probeTimeout = time.Minute
+
+// quiet: how every encode starts — errors only, the output overwritten
+var quiet = []string{"-hide_banner", "-loglevel", "error", "-y"}
 
 var software = recipe{encode: []string{"-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
 	"-maxrate", "4M", "-bufsize", "8M", "-pix_fmt", "yuv420p", "-profile:v", "high"}}
@@ -99,7 +99,7 @@ func findFFmpeg(ctx context.Context, bin, probe string) (*ffmpeg, error) {
 //     length, at least two minutes).
 //   - Written as <size>.part.mp4 and renamed once whole (as a photo's): the one the
 //     gallery serves is never half of a new one; a crash's part goes with the sweep.
-func (f *ffmpeg) video(ctx context.Context, guid api.GUID, src string, size int, dir, rel string,
+func (f *ffmpeg) video(ctx context.Context, src string, size int, to itemDir,
 	poster bool, still func(ctx context.Context, src string) ([]dto.RenditionDto, error)) ([]dto.RenditionDto, error) {
 	probe, cancelProbe := context.WithTimeout(ctx, probeTimeout) // a stalled file holds no worker
 	in, err := f.info(probe, src)
@@ -109,17 +109,16 @@ func (f *ffmpeg) video(ctx context.Context, guid api.GUID, src string, size int,
 	}
 	ctx, cancel := context.WithTimeout(ctx, max(2*time.Minute, 3*in.duration))
 	defer cancel()
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(to.abs, 0o755); err != nil {
 		return nil, err
 	}
 	filters := f.filters(in, size)
 	name := fmt.Sprintf("%d.mp4", size)
-	dst := filepath.Join(dir, name)
-	part := filepath.Join(dir, fmt.Sprintf("%d.part.mp4", size)) // renamed once whole
+	dst := to.path(name)
+	part := to.path(fmt.Sprintf("%d.part.mp4", size)) // renamed once whole
 	defer os.Remove(part)
 	threads := f.proc.threadArgs()
-	args := append([]string{"-hide_banner", "-loglevel", "error", "-y"}, threads...)
-	args = append(args, software.input...)
+	args := slices.Concat(quiet, threads, software.input)
 	args = append(args, "-i", src, "-map", in.mapping(), "-map", "0:a:0?", "-vf", filters)
 	args = append(args, threads...)
 	args = append(args, "-filter_threads", threads[1])
@@ -139,16 +138,16 @@ func (f *ffmpeg) video(ctx context.Context, guid api.GUID, src string, size int,
 	if err != nil {
 		return nil, err
 	}
-	out := []dto.RenditionDto{{GUID: guid, Size: size, Format: "mp4", Role: dto.RoleMotion,
-		W: made.w, H: made.h, Bytes: info.Size(), Path: filepath.Join(rel, name)}}
+	out := []dto.RenditionDto{{GUID: to.guid, Size: size, Format: "mp4", Role: dto.RoleMotion,
+		W: made.w, H: made.h, Bytes: info.Size(), Path: to.listed(name)}}
 	if !poster {
 		return out, nil
 	}
-	frame := filepath.Join(dir, "poster.png")
+	frame := to.path("poster.png")
 	defer os.Remove(frame)
 	at := min(time.Second, in.duration/2)
-	grab := []string{"-hide_banner", "-loglevel", "error", "-y", "-threads", threads[1], "-ss", strconv.FormatFloat(at.Seconds(), 'f', 3, 64),
-		"-i", src, "-map", in.mapping(), "-frames:v", "1"}
+	grab := slices.Concat(quiet, threads, []string{"-ss", strconv.FormatFloat(at.Seconds(), 'f', 3, 64),
+		"-i", src, "-map", in.mapping(), "-frames:v", "1"})
 	if sdr := f.toSDR(in); sdr != "" {
 		grab = append(grab, "-vf", sdr)
 	}

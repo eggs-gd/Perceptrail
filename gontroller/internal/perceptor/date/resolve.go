@@ -43,36 +43,48 @@ var (
 // wall-clock time (DateTimeOriginal) and maybe its offset; QuickTime videos carry
 // UTC (CreateDate) and maybe a zoned CreationDate; everything has FileModifyDate.
 func resolveDate(exif api.ExifProvider) (dateInfo, bool) {
+	date := photoDate
 	if strings.HasPrefix(exif.GetExif("MIMEType"), "video/") {
-		if d, ok := zonedTag(exif, "CreationDate"); ok { // Keys (Apple): local time + zone
-			return d, true
-		}
-		if t, ok := parseWall(exif.GetExif("CreateDate")); ok { // QuickTime: UTC by spec
-			return withZoneOf(exif, t, "CreateDate"), true
-		}
-	} else {
-		wallTags := []struct{ tag, subsec, offset string }{
-			{"DateTimeOriginal", "SubSecTimeOriginal", "OffsetTimeOriginal"},
-			{"CreateDate", "SubSecTimeDigitized", "OffsetTimeDigitized"},
-		}
-		for _, w := range wallTags {
-			if d, ok := localTag(exif, w.tag, w.subsec, w.offset); ok {
-				return d, true
-			}
-		}
-		if t, ok := gpsTime(exif); ok {
-			return withZoneOf(exif, t, "GPSDateTime"), true
-		}
-		if d, ok := localTag(exif, "ModifyDate", "SubSecTime", "OffsetTime"); ok {
-			return d, true
-		}
+		date = videoDate
 	}
-
+	if d, ok := date(exif); ok {
+		return d, true
+	}
 	if d, ok := zonedTag(exif, "FileModifyDate"); ok {
 		d.zone = ZoneFile
 		return d, true
 	}
 	return dateInfo{}, false
+}
+
+// videoDate: Keys' CreationDate (Apple: local time + zone), else QuickTime's
+// CreateDate (UTC by spec)
+func videoDate(exif api.ExifProvider) (dateInfo, bool) {
+	if d, ok := zonedTag(exif, "CreationDate"); ok {
+		return d, true
+	}
+	if t, ok := parseWall(exif.GetExif("CreateDate")); ok {
+		return withZoneOf(exif, t, "CreateDate"), true
+	}
+	return dateInfo{}, false
+}
+
+// photoDate: the capture's wall clock (original, then digitized), the GPS time, the
+// last modification's wall clock
+func photoDate(exif api.ExifProvider) (dateInfo, bool) {
+	wallTags := []struct{ tag, subsec, offset string }{
+		{"DateTimeOriginal", "SubSecTimeOriginal", "OffsetTimeOriginal"},
+		{"CreateDate", "SubSecTimeDigitized", "OffsetTimeDigitized"},
+	}
+	for _, w := range wallTags {
+		if d, ok := localTag(exif, w.tag, w.subsec, w.offset); ok {
+			return d, true
+		}
+	}
+	if t, ok := gpsTime(exif); ok {
+		return withZoneOf(exif, t, "GPSDateTime"), true
+	}
+	return localTag(exif, "ModifyDate", "SubSecTime", "OffsetTime")
 }
 
 // localTag reads a wall-clock tag and finds its zone: its Offset* tag, the GPS

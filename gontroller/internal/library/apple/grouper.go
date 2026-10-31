@@ -106,6 +106,9 @@ const (
 
 // showRank: the edit first (it is what the user sees in Photos), then the original,
 // then the biggest derivative; the cheap stage takes the first the browser shows
+// photosDB: the library's database, under database/ in the bundle
+const photosDB = "Photos.sqlite"
+
 var showRank = []role{roleRender, roleEditPreview, roleRenderHEIC, roleOriginal, roleLarge, roleLarge2, roleMedium, roleMedium2, roleThumb, roleVideoPoster}
 
 // wanted: the renditions that answer a want, best first. Not the original: its
@@ -365,15 +368,15 @@ func readAssets(root string) ([]assetRow, error) {
 	}
 	defer os.RemoveAll(tmp)
 	for _, suffix := range []string{"", "-wal", "-shm"} {
-		src := filepath.Join(root, "database", "Photos.sqlite"+suffix)
-		if err := copyFile(src, filepath.Join(tmp, "Photos.sqlite"+suffix)); err != nil {
+		src := filepath.Join(root, "database", photosDB+suffix)
+		if err := copyFile(src, filepath.Join(tmp, photosDB+suffix)); err != nil {
 			if suffix == "" || !errors.Is(err, os.ErrNotExist) {
 				return nil, err
 			}
 		}
 	}
 
-	db, err := sql.Open("sqlite3", "file:"+filepath.Join(tmp, "Photos.sqlite")+"?mode=ro")
+	db, err := sql.Open("sqlite3", "file:"+filepath.Join(tmp, photosDB)+"?mode=ro")
 	if err != nil {
 		return nil, err
 	}
