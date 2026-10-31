@@ -6,7 +6,7 @@ GOMODULES = \
 	perceptors/ml_faces \
 	perceptors/ml_objects
 
-.PHONY: all build-gontroller build-plugins build-plugin-% update-deps clean test sonar
+.PHONY: all build-gontroller build-plugins build-plugin-% update-deps clean test sonar sonar-publish
 
 all: clean update-deps build-gontroller build-plugins
 
@@ -68,4 +68,17 @@ sonar:
 	done; \
 	echo "Coverage: svebapp"; \
 	(cd svebapp && npx vitest run --coverage > /dev/null) || exit 1; \
+	{ mkdir -p .scannerwork; if [ -z "$$(git status --porcelain --untracked-files=no)" ]; then git rev-parse HEAD > .scannerwork/reports-head; else rm -f .scannerwork/reports-head; fi; }; \
 	sonar-scanner -Dsonar.qualitygate.wait=$(SONAR_GATE) $$scope
+
+# The scan again, on the reports `make sonar` wrote for this commit, once the commit is on GitHub:
+# the pull request's check is made for a commit GitHub knows, and at pre-push it does not yet.
+sonar-publish:
+	@env=./.env; [ -f $$env ] || env="$$(git rev-parse --path-format=absolute --git-common-dir)/../.env"; \
+	set -a; [ ! -f "$$env" ] || . "$$env"; set +a; \
+	test -n "$$SONAR_HOST_URL" && test -n "$$SONAR_TOKEN" || { echo 'sonar-publish: set SONAR_HOST_URL and SONAR_TOKEN (.env)' >&2; exit 1; }; \
+	[ "$$(cat .scannerwork/reports-head 2>/dev/null)" = "$$(git rev-parse HEAD)" ] || { echo 'sonar-publish: no reports of this commit (or a dirty tree made them): run make sonar first' >&2; exit 1; }; \
+	git ls-remote origin "refs/heads/$$(git rev-parse --abbrev-ref HEAD)" | grep -q "^$$(git rev-parse HEAD)" || { echo 'sonar-publish: this commit is not on the remote yet: push it first' >&2; exit 1; }; \
+	scope=$$(scripts/sonar-scope) || exit 1; \
+	echo "sonar: $${scope:-main branch} (the reports of this commit, sent again)"; \
+	sonar-scanner -Dsonar.qualitygate.wait=false $$scope
