@@ -61,7 +61,8 @@ One line each; the details are in the READMEs and the PRs.
   push (`make sonar-publish`), the PR's check lands · #50 dependencies: every
   Dependabot and govulncheck alert closed, SvelteKit 3 · #51 CI's token reads
   only · #46 Immich's placeholders from its thumbhash · #52 photo renditions made
-  of a RAW's embedded preview, each smaller size of the one above.
+  of a RAW's embedded preview, each smaller size of the one above · #54 render's
+  sweep test waits for the emptied directories too (flaky under load).
 
 ## Releases
 
