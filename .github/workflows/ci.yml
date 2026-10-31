@@ -8,6 +8,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+# The token reads the code; a job that writes says so itself (tag)
+permissions:
+  contents: read
+
 jobs:
 
   go:
