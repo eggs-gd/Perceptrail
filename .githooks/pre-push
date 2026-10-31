@@ -60,7 +60,7 @@ COVERED='^(gontroller|perceplib|perceptors|scripts|svebapp/src)/|^(Makefile|sona
 # can pass them on.
 sonar_on_push() {
 	refs=$1
-	env=.env
+	env=./.env
 	[ -f "$env" ] || env="$(git rev-parse --path-format=absolute --git-common-dir)/../.env"
 	set -a; [ ! -f "$env" ] || . "$env"; set +a
 	[ -n "${SONAR_HOST_URL:-}" ] && [ -n "${SONAR_TOKEN:-}" ] || return 0
