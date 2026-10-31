@@ -54,8 +54,12 @@ One line each; the details are in the READMEs and the PRs.
   nice 10, `render.threads`, renditions renamed once whole; a stop is no failure ·
   #43 a video's cover (an attached picture) is not rendered as the video · #44
   tiles wait in their photo's colour, the row height from the viewport (no lone
-  portrait as a poster) · #45 a big jump warms its window first · #46 Immich's
-  placeholders from its thumbhash.
+  portrait as a poster) · #45 a big jump warms its window first · #47
+  SonarQube locally (`make sonar` on push; the owner's LAN server, no CI):
+  golangci-lint joins it, svebapp gets unit tests (vitest), every issue answered ·
+  #48 Go 1.27.3: plugins load on macOS 27 · #49 the scan sent again after every
+  push (`make sonar-publish`), the PR's check lands · #46 Immich's placeholders
+  from its thumbhash.
 
 ## Releases
 

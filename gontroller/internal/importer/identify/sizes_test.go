@@ -48,7 +48,9 @@ func TestSetSizesDerivativeAsMain(t *testing.T) {
 	dir := t.TempDir()
 	still := filepath.Join(dir, "d.jpg")
 	out, _ := os.Create(still)
-	jpeg.Encode(out, image.NewRGBA(image.Rect(0, 0, 32, 24)), nil)
+	if err := jpeg.Encode(out, image.NewRGBA(image.Rect(0, 0, 32, 24)), nil); err != nil {
+		t.Fatal(err)
+	}
 	out.Close()
 	it := &draft{
 		Files: []*dto.FileDto{{Role: dto.RoleStill, ItemEntry: dto.ItemEntry{Path: still}}},

@@ -89,6 +89,9 @@ const (
 // scheme: the prefix of every path of ours
 const scheme = "immich://"
 
+// record: exiftool's tags as meta builds them; an empty value is no tag
+type record api.RawExif
+
 // listed: what the library has of an asset — media we show (not audio, not the
 // trashed or offline ones)
 func (a *asset) listed() bool {
@@ -153,64 +156,20 @@ func (a *asset) kind() string {
 // so the perceptors read it unchanged: the date it shows (local, its offset), the
 // oriented size, the place, the length, the camera
 func (a *asset) meta() api.RawExif {
-	r := api.RawExif{}
-	set := func(tag, v string) {
-		if v != "" {
-			r[tag] = []byte(v)
-		}
-	}
-	taken := a.FileCreatedAt
-	if a.Exif != nil && a.Exif.DateTimeOriginal != nil {
-		taken = *a.Exif.DateTimeOriginal
-	}
-	if !taken.IsZero() {
-		// localDateTime is the wall clock written as UTC: its difference from the
-		// instant is the zone's offset
-		offset := a.LocalDateTime.Sub(taken).Round(time.Minute)
-		if !a.LocalDateTime.IsZero() && offset.Abs() <= 14*time.Hour {
-			set("DateTimeOriginal", a.LocalDateTime.UTC().Format("2006:01:02 15:04:05"))
-			set("OffsetTimeOriginal", formatOffset(offset))
-		} else {
-			set("GPSDateTime", taken.UTC().Format("2006:01:02 15:04:05")+"Z")
-		}
-		if ms := taken.Nanosecond() / int(time.Millisecond); ms > 0 {
-			set("SubSecTimeOriginal", fmt.Sprintf("%03d", ms))
-		}
-	}
+	r := record{}
+	a.date(r)
 	if w, h := a.size(); w > 0 && h > 0 {
-		set("ImageWidth", strconv.Itoa(w))
-		set("ImageHeight", strconv.Itoa(h))
+		r.number("ImageWidth", float64(w))
+		r.number("ImageHeight", float64(h))
 		// The size is oriented: a file's Orientation/Rotation must not turn it again
-		set("Orientation", "1")
-		set("Rotation", "0")
+		r.set("Orientation", "1")
+		r.set("Rotation", "0")
 	}
-	if d := a.duration(); d > 0 {
-		set("Duration", strconv.FormatFloat(d, 'f', -1, 64))
+	r.number("Duration", a.duration())
+	if a.Exif != nil {
+		a.Exif.place(r)
 	}
-	if e := a.Exif; e != nil {
-		if e.Latitude != nil && e.Longitude != nil {
-			set("GPSLatitude", strconv.FormatFloat(*e.Latitude, 'f', -1, 64))
-			set("GPSLongitude", strconv.FormatFloat(*e.Longitude, 'f', -1, 64))
-		}
-		set("Make", e.Make)
-		set("Model", e.Model)
-		set("LensModel", e.LensModel)
-		set("ExposureTime", e.ExposureTime)
-		set("ImageDescription", e.Description)
-		if e.ISO > 0 {
-			set("ISO", strconv.Itoa(e.ISO))
-		}
-		if e.FNumber > 0 {
-			set("FNumber", strconv.FormatFloat(e.FNumber, 'f', -1, 64))
-		}
-		if e.FocalLength > 0 {
-			set("FocalLength", strconv.FormatFloat(e.FocalLength, 'f', -1, 64))
-		}
-		if e.Rating != nil {
-			set("Rating", strconv.Itoa(*e.Rating))
-		}
-	}
-	return r
+	return api.RawExif(r)
 }
 
 // size: the asset's oriented size — Immich's own, else the EXIF's turned by its
@@ -280,4 +239,60 @@ func formatOffset(d time.Duration) string {
 	}
 	minutes := int(d / time.Minute)
 	return fmt.Sprintf("%c%02d:%02d", sign, minutes/60, minutes%60)
+}
+
+// date: when the asset was taken as Immich shows it — localDateTime is the wall
+// clock written as UTC: its difference from the instant is the zone's offset (none
+// that makes sense: the instant alone)
+func (a *asset) date(r record) {
+	taken := a.FileCreatedAt
+	if a.Exif != nil && a.Exif.DateTimeOriginal != nil {
+		taken = *a.Exif.DateTimeOriginal
+	}
+	if taken.IsZero() {
+		return
+	}
+	offset := a.LocalDateTime.Sub(taken).Round(time.Minute)
+	if !a.LocalDateTime.IsZero() && offset.Abs() <= 14*time.Hour {
+		r.set("DateTimeOriginal", a.LocalDateTime.UTC().Format("2006:01:02 15:04:05"))
+		r.set("OffsetTimeOriginal", formatOffset(offset))
+	} else {
+		r.set("GPSDateTime", taken.UTC().Format("2006:01:02 15:04:05")+"Z")
+	}
+	if ms := taken.Nanosecond() / int(time.Millisecond); ms > 0 {
+		r.set("SubSecTimeOriginal", fmt.Sprintf("%03d", ms))
+	}
+}
+
+// place: where and with what — the coordinates, the camera and its settings, the
+// description and the rating
+func (e *exif) place(r record) {
+	if e.Latitude != nil && e.Longitude != nil {
+		r.set("GPSLatitude", strconv.FormatFloat(*e.Latitude, 'f', -1, 64))
+		r.set("GPSLongitude", strconv.FormatFloat(*e.Longitude, 'f', -1, 64))
+	}
+	r.set("Make", e.Make)
+	r.set("Model", e.Model)
+	r.set("LensModel", e.LensModel)
+	r.set("ExposureTime", e.ExposureTime)
+	r.set("ImageDescription", e.Description)
+	r.number("ISO", float64(e.ISO))
+	r.number("FNumber", e.FNumber)
+	r.number("FocalLength", e.FocalLength)
+	if e.Rating != nil { // 0 is a rating too
+		r.set("Rating", strconv.Itoa(*e.Rating))
+	}
+}
+
+func (r record) set(tag, v string) {
+	if v != "" {
+		r[tag] = []byte(v)
+	}
+}
+
+// number: a positive value as exiftool -n writes it (none: no tag)
+func (r record) number(tag string, v float64) {
+	if v > 0 {
+		r.set(tag, strconv.FormatFloat(v, 'f', -1, 64))
+	}
 }

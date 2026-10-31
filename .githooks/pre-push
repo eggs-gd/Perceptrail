@@ -5,6 +5,8 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
+refs=$(cat) # the pushed refs; the SonarQube block takes them as an argument
+
 zero=0000000000000000000000000000000000000000
 head=$(git rev-parse HEAD)
 changed=""
@@ -29,7 +31,7 @@ while read -r local_ref local_oid remote_ref remote_oid; do
     exit 1
   fi
   changed="$changed"$'\n'"$ref_changed"
-done
+done <<< "$refs"
 
 touches() { echo "$changed" | grep -qE "$1"; }
 
@@ -43,5 +45,69 @@ fi
 
 if touches '^svebapp/'; then
   echo "pre-push: svebapp checks"
-  (cd svebapp && npm run check --silent)
+  (cd svebapp && npm run check --silent && npm test --silent)
 fi
+
+# SonarQube (the owner's LAN server; nothing without SONAR_HOST_URL and SONAR_TOKEN): the tests
+# with coverage, the scan, the quality gate, as the branch or its PR (scripts/sonar-scope), when
+# code it covers changed. Here, not in pre-commit: the analysis is of HEAD, and only a pushed commit
+# carries its check on GitHub. A red gate stops the push; the report is on the server either way.
+COVERED='^(gontroller|perceplib|perceptors|scripts|svebapp/src)/|^(Makefile|sonar-project\.properties|\.golangci\.yml)$'
+
+# --- sonar:begin
+# The pushed refs are an argument ("<local ref> <local oid> <remote ref> <remote oid>", one
+# line per ref: what git sends a pre-push hook on stdin), so a hook that reads them itself
+# can pass them on.
+sonar_on_push() {
+	refs=$1
+	env=./.env
+	[ -f "$env" ] || env="$(git rev-parse --path-format=absolute --git-common-dir)/../.env"
+	set -a; [ ! -f "$env" ] || . "$env"; set +a
+	[ -n "${SONAR_HOST_URL:-}" ] && [ -n "${SONAR_TOKEN:-}" ] || return 0
+	if ! command -v sonar-scanner >/dev/null 2>&1; then
+		echo "pre-push: sonar-scanner is not installed, SonarQube skipped" >&2
+		return 0
+	fi
+
+	zero=0000000000000000000000000000000000000000
+	head=$(git rev-parse HEAD)
+	changed=""
+	while read -r local_ref local_oid remote_ref remote_oid; do
+		[ -n "$local_ref" ] || continue
+		[ "$local_oid" = "$zero" ] && continue
+		if [ "$local_oid" != "$head" ]; then
+			echo "pre-push: $local_ref is not the checked-out commit, SonarQube skipped (it analyses the checkout)" >&2
+			return 0
+		fi
+		if [ "$remote_oid" = "$zero" ]; then
+			base=$(git merge-base "$local_oid" origin/HEAD 2>/dev/null || true)
+		else
+			base=$remote_oid
+		fi
+		if [ -z "$base" ]; then
+			changed="$changed
+.analyse"
+		else
+			changed="$changed
+$(git diff --name-only "$base" "$local_oid")"
+		fi
+	done <<REFS
+$refs
+REFS
+	echo "$changed" | grep -qE "$COVERED|^\.analyse$" || return 0
+
+	if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+		echo "pre-push: uncommitted changes, SonarQube skipped (it would analyse them)" >&2
+		return 0
+	fi
+	make sonar || {
+		echo "pre-push: the SonarQube analysis or its quality gate failed; the report is on the server." >&2
+		echo "  Read it: sonar list issues. Fix or answer on the line, commit, push again." >&2
+		return 1
+	}
+	echo "pre-push: the analysis is on the server. When the push has finished, run: make sonar-publish" >&2
+	echo "  (GitHub does not know this commit yet, so the check cannot land on it until the analysis is sent again)" >&2
+}
+# --- sonar:end
+
+sonar_on_push "$refs" || exit 1

@@ -25,6 +25,7 @@ import (
 // cache
 var (
 	testDB    *model.Proxy
+	testCfg   *config.Config
 	testCache string
 )
 
@@ -43,7 +44,7 @@ func TestMain(m *testing.M) {
 	if testDB, err = model.Open(cfg, l.NewLogger(l.ErrorLevel, &tree.Decorator{})); err != nil {
 		panic(err)
 	}
-	testCache = cfg.CacheDir()
+	testCfg, testCache = cfg, cfg.CacheDir()
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
@@ -56,7 +57,7 @@ func server(of route.LibraryOf, perceptors ...api.Perceptor) *echo.Echo {
 		of = func(*dto.ItemDto) route.Library { return nil }
 	}
 	e := echo.New()
-	route.Register(e, testDB, of, testCache, route.AppInfo{}, perceptors, nil, l.NewLogger(l.FatalLevel, &tree.Decorator{}))
+	route.Register(e, testCfg, testDB, of, perceptors, nil, l.NewLogger(l.FatalLevel, &tree.Decorator{}))
 	return e
 }
 

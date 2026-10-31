@@ -29,6 +29,15 @@ var (
 	finder     tzf.F
 )
 
+// placed: a photo with a place — its point on the curve, its region and city (the
+// time zone's), its position in the sheet's own order
+type placed struct {
+	guid         api.GUID
+	d            uint64
+	region, city string
+	at           int
+}
+
 func (p *geoPerceptor) View() api.View {
 	return api.View{
 		Slug:  "place",
@@ -41,76 +50,12 @@ func (p *geoPerceptor) View() api.View {
 func (p *geoPerceptor) Schema() api.Schema { return places.Places.Schema() }
 
 func (p *geoPerceptor) Order(ctx context.Context, _ string, items []api.ItemDataProvider) ([]api.Entry, error) {
-	type placed struct {
-		guid         api.GUID
-		d            uint64
-		region, city string
-		at           int
-	}
-	var located []placed
-	var nowhere []api.GUID
-	for i, it := range items {
-		loc, ok := places.Places.Get(it)
-		if !ok {
-			nowhere = append(nowhere, it.GetGUID())
-			continue
-		}
-		r, c := splitZone(zoneName(loc))
-		located = append(located, placed{it.GetGUID(), hilbert(loc), r, c, i})
-	}
+	located, nowhere := locate(items)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-
-	// Every city in one piece, every region too: a region's and a city's place on the
-	// curve is its first photo's, so near regions and near cities stay near; within a
-	// city, by the curve (near spots together), the same spot newest first. Sorting by
-	// the curve alone made a city come back several times (the curve zigzags).
-	regionAt, cityAt := map[string]uint64{}, map[[2]string]uint64{}
-	for _, p := range located {
-		if d, ok := regionAt[p.region]; !ok || p.d < d {
-			regionAt[p.region] = p.d
-		}
-		key := [2]string{p.region, p.city}
-		if d, ok := cityAt[key]; !ok || p.d < d {
-			cityAt[key] = p.d
-		}
-	}
-	slices.SortStableFunc(located, func(a, b placed) int {
-		return cmp.Or(
-			cmp.Compare(regionAt[a.region], regionAt[b.region]),
-			cmp.Compare(a.region, b.region),
-			cmp.Compare(cityAt[[2]string{a.region, a.city}], cityAt[[2]string{b.region, b.city}]),
-			cmp.Compare(a.city, b.city),
-			cmp.Compare(a.d, b.d),
-			cmp.Compare(a.at, b.at),
-		)
-	})
-
-	out := make([]api.Entry, 0, len(items))
-	region, city := "", ""
-	for _, p := range located {
-		e := api.Entry{GUID: p.guid}
-		switch {
-		case p.region != region:
-			e.Sections = []api.Section{{Level: 0, Label: p.region}}
-			if p.city != "" {
-				e.Sections = append(e.Sections, api.Section{Level: 1, Label: p.city})
-			}
-		case p.city != city:
-			e.Sections = []api.Section{{Level: 1, Label: p.city}}
-		}
-		region, city = p.region, p.city
-		out = append(out, e)
-	}
-	for i, guid := range nowhere {
-		e := api.Entry{GUID: guid}
-		if i == 0 {
-			e.Sections = []api.Section{{Level: 0, Label: "No place"}}
-		}
-		out = append(out, e)
-	}
-	return out, nil
+	byPlace(located)
+	return entries(located, nowhere), nil
 }
 
 // Info: where the photo was taken — the place (from the time zone there) and the
@@ -183,4 +128,75 @@ func splitZone(zone string) (region, city string) {
 		return zone, ""
 	}
 	return parts[0], strings.ReplaceAll(parts[len(parts)-1], "_", " ")
+}
+
+// locate: the photos with a place, and the ones without
+func locate(items []api.ItemDataProvider) (located []placed, nowhere []api.GUID) {
+	for i, it := range items {
+		loc, ok := places.Places.Get(it)
+		if !ok {
+			nowhere = append(nowhere, it.GetGUID())
+			continue
+		}
+		r, c := splitZone(zoneName(loc))
+		located = append(located, placed{it.GetGUID(), hilbert(loc), r, c, i})
+	}
+	return located, nowhere
+}
+
+// byPlace: every city in one piece, every region too — a region's and a city's
+// place on the curve is its first photo's, so near regions and near cities stay
+// near; within a city, by the curve (near spots together), the same spot newest
+// first. Sorting by the curve alone made a city come back several times (the curve
+// zigzags).
+func byPlace(located []placed) {
+	regionAt, cityAt := map[string]uint64{}, map[[2]string]uint64{}
+	for _, p := range located {
+		if d, ok := regionAt[p.region]; !ok || p.d < d {
+			regionAt[p.region] = p.d
+		}
+		key := [2]string{p.region, p.city}
+		if d, ok := cityAt[key]; !ok || p.d < d {
+			cityAt[key] = p.d
+		}
+	}
+	slices.SortStableFunc(located, func(a, b placed) int {
+		return cmp.Or(
+			cmp.Compare(regionAt[a.region], regionAt[b.region]),
+			cmp.Compare(a.region, b.region),
+			cmp.Compare(cityAt[[2]string{a.region, a.city}], cityAt[[2]string{b.region, b.city}]),
+			cmp.Compare(a.city, b.city),
+			cmp.Compare(a.d, b.d),
+			cmp.Compare(a.at, b.at),
+		)
+	})
+}
+
+// entries: the sheet — a section where the region or the city changes, the photos
+// without a place last, under "No place"
+func entries(located []placed, nowhere []api.GUID) []api.Entry {
+	out := make([]api.Entry, 0, len(located)+len(nowhere))
+	region, city := "", ""
+	for _, p := range located {
+		e := api.Entry{GUID: p.guid}
+		switch {
+		case p.region != region:
+			e.Sections = []api.Section{{Level: 0, Label: p.region}}
+			if p.city != "" {
+				e.Sections = append(e.Sections, api.Section{Level: 1, Label: p.city})
+			}
+		case p.city != city:
+			e.Sections = []api.Section{{Level: 1, Label: p.city}}
+		}
+		region, city = p.region, p.city
+		out = append(out, e)
+	}
+	for i, guid := range nowhere {
+		e := api.Entry{GUID: guid}
+		if i == 0 {
+			e.Sections = []api.Section{{Level: 0, Label: "No place"}}
+		}
+		out = append(out, e)
+	}
+	return out
 }

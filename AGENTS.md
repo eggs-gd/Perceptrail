@@ -41,7 +41,8 @@ No symlinks (Windows).
 How to do the recurring work is in [`.agents/skills/`](.agents/skills/) (canonical;
 `.claude/skills/` only points there): `pr-flow` (branch → commit → push → PR → after
 merge), `review-reply` (answering a review), `self-review` (the owner's corrections
-as a checklist, before "done"), `smoke` (a test pair). This file holds the rules;
+as a checklist, before "done"), `smoke` (a test pair), `sonar` (the analysis: the gate, the
+issues, answering a finding). This file holds the rules;
 the skills hold the order of the hands and link back here.
 
 ### Documentation contract — one fact, one place

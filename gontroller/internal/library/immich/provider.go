@@ -32,6 +32,9 @@ type Provider struct {
 
 var _ provider.Provider = (*Provider)(nil)
 
+// assets: the API's path of an asset's files
+const assets = "/assets/"
+
 // New: server is the Immich URL (http://host:2283), key its API key (Key)
 func New(server, key string, logger *l.Logger) (*Provider, error) {
 	c, err := newClient(server, key)
@@ -91,7 +94,9 @@ func (p *Provider) Rendition(*dto.ItemDto, string, provider.Options) (provider.R
 	return provider.Rendition{}, provider.ErrNoRendition
 }
 
-func (p *Provider) Start(context.Context) {}
+func (p *Provider) Start(context.Context) {
+	// nothing in the background: the walk lists it, the routes serve it
+}
 
 // File: a path of ours served from Immich — the request (its Range too) passed on
 // with the key, the answer as Immich gives it; nil when the path is not one of ours
@@ -132,19 +137,19 @@ func (p *Provider) upstream(path string) *url.URL {
 	query := url.Values{}
 	switch {
 	case strings.HasPrefix(file, "original/"):
-		api = "/assets/" + id + "/original"
+		api = assets + id + "/original"
 	case file == "preview.jpg":
-		api, query = "/assets/"+id+"/thumbnail", url.Values{"size": {"preview"}}
+		api, query = assets+id+"/thumbnail", url.Values{"size": {"preview"}}
 	case file == "thumbnail.webp":
-		api, query = "/assets/"+id+"/thumbnail", url.Values{"size": {"thumbnail"}}
+		api, query = assets+id+"/thumbnail", url.Values{"size": {"thumbnail"}}
 	case file == "playback.mp4":
-		api = "/assets/" + id + "/video/playback"
+		api = assets + id + "/video/playback"
 	case strings.HasPrefix(file, "motion/"):
 		video := strings.TrimSuffix(strings.TrimPrefix(file, "motion/"), ".mp4")
 		if !isID(video) {
 			return nil
 		}
-		api = "/assets/" + video + "/video/playback"
+		api = assets + video + "/video/playback"
 	default:
 		return nil
 	}
@@ -165,7 +170,7 @@ func isID(s string) bool {
 			if c != '-' {
 				return false
 			}
-		case !('0' <= c && c <= '9' || 'a' <= c && c <= 'f' || 'A' <= c && c <= 'F'):
+		case (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F'):
 			return false
 		}
 	}

@@ -20,7 +20,9 @@ import (
 func TestAssetFileOnlyOfItsAsset(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.jpg")
-	os.WriteFile(path, []byte("jpeg"), 0o644)
+	if err := os.WriteFile(path, []byte("jpeg"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	f, err := testDB.CreateFile(dto.ItemEntry{Path: path, Name: "a.jpg"})
 	if err != nil {
 		t.Fatal(err)
@@ -52,8 +54,12 @@ func TestRenditionsInTheAsset(t *testing.T) {
 		t.Fatal(err)
 	}
 	rel := filepath.Join("r", "R1", "v1", "400.webp")
-	os.MkdirAll(filepath.Join(testCache, filepath.Dir(rel)), 0o755)
-	os.WriteFile(filepath.Join(testCache, rel), []byte("webp"), 0o644)
+	if err := os.MkdirAll(filepath.Join(testCache, filepath.Dir(rel)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(testCache, rel), []byte("webp"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	taken, _ := testDB.Take("render", []api.GUID{item.GUID})
 	done, err := testDB.Finish(dto.WorkDone{Slug: "render", GUID: item.GUID, Lease: taken[0].Lease, Version: "v1", Input: "h",
 		Renditions: []dto.RenditionDto{{GUID: item.GUID, Size: 400, Format: "webp", W: 400, H: 300, Path: rel}}})
@@ -76,7 +82,9 @@ func TestRenditionsInTheAsset(t *testing.T) {
 		if json.Unmarshal(sc.Bytes(), &line) != nil || line.GUID != "R1" {
 			continue
 		}
-		json.Unmarshal(line.Asset["stills"], &stills)
+		if err := json.Unmarshal(line.Asset["stills"], &stills); err != nil {
+			t.Fatal(err)
+		}
 		// Every list is a list, never null: the client spreads them
 		for _, list := range []string{"edit", "stills", "motion", "frames"} {
 			if string(line.Asset[list]) == "null" || len(line.Asset[list]) == 0 {

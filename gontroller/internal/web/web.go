@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"time"
 
-	"perceptrail/gontroller/internal/app"
 	"perceptrail/gontroller/internal/config"
 	"perceptrail/gontroller/internal/library"
 	"perceptrail/gontroller/internal/model/dto"
@@ -56,7 +55,7 @@ func (s *Service) Start(parentCtx context.Context) {
 	}))
 	// A line per request (every tile image too): debug only
 	if s.cfg.Debug() {
-		e.Use(middleware.Logger())
+		e.Use(middleware.RequestLogger())
 	}
 	e.Use(middleware.Recover())
 
@@ -64,7 +63,7 @@ func (s *Service) Start(parentCtx context.Context) {
 		return c.String(http.StatusOK, "Hello, World!")
 	})
 
-	route.Register(e, s.db, libraryOf, s.cfg.CacheDir(), route.AppInfo{Version: app.Version, Mode: s.cfg.Mode()}, perceptor.Client(), perceptor.LoadValues, s.logger)
+	route.Register(e, s.cfg, s.db, libraryOf, perceptor.Client(), perceptor.LoadValues, s.logger)
 
 	go func() {
 		if err := e.Start(s.cfg.Server().Addr()); err != nil && !errors.Is(err, http.ErrServerClosed) {

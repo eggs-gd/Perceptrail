@@ -51,8 +51,9 @@ var assets = map[string]string{
 }
 
 var (
-	testDB *model.Proxy
-	immich = &fakeImmich{listed: []string{photoID, liveID, videoID}}
+	testDB  *model.Proxy
+	testCfg *config.Config
+	immich  = &fakeImmich{listed: []string{photoID, liveID, videoID}}
 )
 
 // fakeImmich: the timeline it lists now, an asset a page; refuses: it fails after
@@ -70,12 +71,15 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	// The server's own start, with an Immich: its url in the config, its key in the env
-	os.Setenv("IMMICH_API_KEY", "test-key")
+	if err := os.Setenv("IMMICH_API_KEY", "test-key"); err != nil {
+		panic(err)
+	}
 	cfgFile := filepath.Join(dir, "config.yml")
 	if err := os.WriteFile(cfgFile, []byte("providers:\n  immich:\n    url: "+server.URL+"\n"), 0o644); err != nil {
 		panic(err)
 	}
 	cfg, err := config.Read(cfgFile)
+	testCfg = cfg
 	if err != nil {
 		panic(err)
 	}
@@ -130,17 +134,19 @@ func TestImmichLibrary(t *testing.T) {
 	}
 
 	e := echo.New()
-	route.Register(e, testDB, func(item *dto.ItemDto) route.Library {
+	route.Register(e, testCfg, testDB, func(item *dto.ItemDto) route.Library {
 		if lib := library.Of(item); lib != nil {
 			return lib
 		}
 		return nil
-	}, t.TempDir(), route.AppInfo{}, nil, nil, l.NewLogger(l.FatalLevel, &tree.Decorator{}))
+	}, nil, nil, l.NewLogger(l.FatalLevel, &tree.Decorator{}))
 	if body := get(t, e, "/assets/"+photoID); body != "/api/assets/"+photoID+"/thumbnail?size=preview" {
 		t.Errorf("the item's preview: %q", body)
 	}
 	var files []struct{ Name, URL string }
-	json.Unmarshal([]byte(get(t, e, "/items/"+liveID+"/files")), &files)
+	if err := json.Unmarshal([]byte(get(t, e, "/items/"+liveID+"/files")), &files); err != nil {
+		t.Fatal(err)
+	}
 	served := map[string]string{}
 	for _, f := range files {
 		served[f.Name] = get(t, e, f.URL)
@@ -183,7 +189,10 @@ func (f *fakeImmich) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct{ Cursor string }
-	json.NewDecoder(r.Body).Decode(&req)
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	page, _ := strconv.Atoi(req.Cursor)
 	if f.refuses && page > 0 {
 		http.Error(w, "down", http.StatusServiceUnavailable)

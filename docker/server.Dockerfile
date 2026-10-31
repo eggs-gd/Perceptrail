@@ -5,7 +5,7 @@
 # jellyfin-ffmpeg (every hardware backend, HDR tone mapping), libvips (with its HEIC
 # decoder) and exiftool. Context: the repository root.
 
-ARG GO_VERSION=1.27.1
+ARG GO_VERSION=1.27.3
 
 FROM golang:${GO_VERSION}-trixie AS build
 WORKDIR /src

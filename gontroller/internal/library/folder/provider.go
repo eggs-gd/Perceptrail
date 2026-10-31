@@ -29,7 +29,9 @@ func (p *Provider) Owns(*dto.ItemDto) bool { return false }
 
 func (p *Provider) Levels(*dto.ItemDto) []string { return nil }
 
-func (p *Provider) Start(context.Context) {}
+func (p *Provider) Start(context.Context) {
+	// nothing in the background: a plain folder is walked, nothing more
+}
 
 func (p *Provider) File(string) http.Handler { return nil }
 

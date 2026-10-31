@@ -1,11 +1,14 @@
 package folder
 
 import (
+	"errors"
 	"path/filepath"
 	"reflect"
 	"testing"
 
 	"perceptrail/gontroller/internal/model/dto"
+
+	chain "github.com/eggs-gd/go-chain"
 )
 
 func entry(path string) dto.WalkedFile {
@@ -51,7 +54,9 @@ func TestGenericGrouper(t *testing.T) {
 
 	// A file the walk found missing passes through alone; the open group stays open
 	g = &Grouper{}
-	g.Decorate(entry("/lib/y.jpg"))
+	if _, err := g.Decorate(entry("/lib/y.jpg")); !errors.Is(err, chain.ErrSkippedItem) {
+		t.Fatalf("y.jpg not held open: %v", err)
+	}
 	gone := entry("/lib/y.xmp")
 	gone.Missing = true
 	if group, err := g.Decorate(gone); err != nil || len(group.Files) != 0 || len(group.Missing) != 1 || group.Missing[0] != gone.FileDto {
@@ -63,7 +68,9 @@ func TestGenericGrouper(t *testing.T) {
 
 	// Another directory closes the group, even with the same name
 	g = &Grouper{}
-	g.Decorate(entry("/lib/x.jpg"))
+	if _, err := g.Decorate(entry("/lib/x.jpg")); !errors.Is(err, chain.ErrSkippedItem) {
+		t.Fatalf("x.jpg not held open: %v", err)
+	}
 	if group, err := g.Decorate(entry("/lib/sub/x.xmp")); err != nil || len(group.Files) != 1 {
 		t.Errorf("a file of another directory joined the group: %v %v", group, err)
 	}

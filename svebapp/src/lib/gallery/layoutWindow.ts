@@ -143,7 +143,7 @@ export function findAnchor(items: LayoutItem[], view: View, edge: 'top' | 'botto
 
     // The photo under the middle of the screen
     const x = view.width / 2;
-    const distance = (i: LayoutItem) => x < i.x ? i.x - x : x > i.x + i.w ? x - (i.x + i.w) : 0;
-    const itm = row.reduce((best, i) => distance(i) < distance(best) ? i : best);
+    const distance = (i: LayoutItem) => Math.max(i.x - x, x - (i.x + i.w), 0); // 0: under it
+    const itm = row.reduce((best, i) => distance(i) < distance(best) ? i : best, row[0]);
     return {mode, guid: itm.guid, ratio: (point - itm.y) / itm.h};
 }

@@ -644,6 +644,11 @@ How it is read, the paths and the proxy: the
 
 ## Go and the toolchain
 
+- **Go 1.27.3: Go plugins load on macOS 27 again** (2026-10-30): built with 1.27.1,
+  every `.so` failed `dlopen` — "chained fixups, seg_count does not match number of
+  segments" (the plugin tests failed locally, a local server ran without its
+  perceptors; Linux was fine). 1.27.3's linker fixed it; every module, the
+  workspace and the image ask for 1.27.3.
 - **Go plugins**: host and `.so` need the same toolchain and identical versions of
   every shared package (`perceplib`, zap, multierr, `x/sync`, testify…) — bump all
   modules together, then `make build-plugins`. `TestLoadExternalPlugins` builds and
@@ -655,7 +660,7 @@ How it is read, the paths and the proxy: the
   but a step added only for the built-in ones — nobody read it. Allocate outputs
   only for real steps.
 - gopls built with an older Go cannot read code for a newer one:
-  `GOTOOLCHAIN=go1.27.1 go install golang.org/x/tools/gopls@latest`.
+  `GOTOOLCHAIN=go1.27.3 go install golang.org/x/tools/gopls@latest`.
 - **The gopls MCP saw nothing** ("could not import … in GOROOT", 2026-10-04): it
   runs from the repo root, which is no module, and with the system Go (1.26.3; only
   inside a module does `go` switch to the 1.27.1 of `go.mod`). Both were needed: the
@@ -725,6 +730,44 @@ How it is read, the paths and the proxy: the
   with its reason; the next pass tries again.
 
 ## Repository
+
+- **SonarQube, locally** (#47, the owner's LAN server, no CI): the first scan hung
+  ten minutes in "Preprocessing files" — the scanner walks a listed directory
+  whole, exclusions or not, and `gontroller/` held the dev checkout's data (`.var`:
+  19 441 files): gontroller is listed by its code (`gontroller.go`, `internal`,
+  `test`). Then blame failed: JGit misses objects behind git 2.54's
+  multi-pack-index (`git fsck` clean) — `core.multiPackIndex false` in the
+  checkout. Coverage runs `-short`: a test binary built for coverage loads no
+  plugin, built with `-cover` or not; the plugin tests run in `go test` as ever.
+- **A scan says what it is, or it is the main branch** (#47): a scan without branch
+  parameters is published as the main branch and replaces its state — every
+  commit on `feature/sonar` did that before the server had the community branch
+  plugin. `scripts/sonar-scope` decides from the checkout, and every way a scan
+  starts (`make sonar`, the hook) goes through it; the hook is `pre-push`, not
+  `pre-commit` — a scan before the commit is of its parent, and the PR's check
+  landed on the parent; a detached HEAD or no
+  `origin/HEAD` is an error, never a guess. The main branch is `master`, as on
+  GitHub, though PRs go to `develop`: `develop` is analysed as a branch of its
+  own, a PR's new code is its diff against `develop`.
+- **The strict profiles, and what they were told no** (#47, the owner's "Sonar way
+  comprehensive" / "agentic AI"; Go's own has 23 rules, so golangci-lint's report
+  joins the scan). Not done, and said on the line: a top-level `await` in the
+  workers (the message handler must be set at once, or what comes while the copy
+  loads is lost) and in `layoutDb` (a background cleanup the module must not wait
+  for); "check the message's origin" on a dedicated worker's `onmessage` (only its
+  page posts there, and a worker's message has no origin); `crypto` for the tab's
+  layout database name (not in an insecure context: plain HTTP on a LAN). errcheck
+  is not asked about cleanup (a deferred `Close` of what was read, a `Remove` of
+  what is no longer wanted), nor a test's `Close`, nor a fake server's writes; the
+  model's `Close` in production is checked (it writes). Cognitive complexity is not
+  a test's measure. The real finds: the logger's stack patterns backtracked (now
+  read from the end, no `.*`), floating promises, a `reduce` without a start, an
+  exported `let` the worker reassigned, an error message ending in `<nil>`, a
+  deprecated Echo logger.
+- **svebapp got unit tests for the gate's sake, and kept them** (#47): coverage of
+  new code ≥ 80 % and a TS change had nothing to cover it. vitest over the pure code
+  and the sync's stream (moved out of the worker into `stream.ts`: the protocol
+  readable and testable without a worker; `fake-indexeddb`, a stand-in `fetch`).
 
 - **Docker: two containers, one address** (#38, the owner: ML and Postgres will be
   services of the same compose — no point squeezing into one process): the server,

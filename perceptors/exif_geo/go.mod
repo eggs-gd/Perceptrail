@@ -1,6 +1,6 @@
 module perceptrail/perseptors/exif_geo
 
-go 1.27.1
+go 1.27.3
 
 require (
 	github.com/eggs-gd/go-chain v0.1.0

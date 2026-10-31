@@ -24,4 +24,6 @@ func (p *geoPerceptor) Decorator(logger *l.Logger) chain.Decorator[api.RawItemR,
 // ExifTags: the coordinates (exif.Coordinates)
 func (p *geoPerceptor) ExifTags() []string { return exif.CoordinateTags }
 
-func main() {}
+func main() {
+	// a Go plugin: loaded by the server, never run
+}

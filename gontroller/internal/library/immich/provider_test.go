@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"perceptrail/gontroller/internal/model/dto"
 
@@ -142,7 +144,7 @@ func TestGroup(t *testing.T) {
 	var groups []dto.Asset
 	for i, e := range list(t, p) {
 		g, err := p.Grouper().Decorate(dto.WalkedFile{FileDto: &dto.FileDto{ID: uint(i + 1), ItemEntry: e}})
-		if err == chain.ErrSkippedItem {
+		if errors.Is(err, chain.ErrSkippedItem) {
 			continue
 		}
 		if err != nil {
@@ -213,7 +215,9 @@ func TestFile(t *testing.T) {
 // The key: the env first, else the file's first line; none is an error
 func TestKey(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "immich.key")
-	os.WriteFile(file, []byte("  from-file \nrest\n"), 0o600)
+	if err := os.WriteFile(file, []byte("  from-file \nrest\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("IMMICH_API_KEY", "")
 	if key, err := Key(file); err != nil || key != "from-file" {
 		t.Errorf("file: %q, %v", key, err)
@@ -251,5 +255,18 @@ func TestColor(t *testing.T) {
 		if got := (&asset{Thumbhash: c.hash}).color(); got != c.want {
 			t.Errorf("%q: %q, want %q", c.hash, got, c.want)
 		}
+	}
+}
+
+// The date without Immich's local time: the instant alone (GPSDateTime, UTC) — the
+// date perceptor finds its zone; no date at all: no date tags
+func TestMetaDateFallback(t *testing.T) {
+	taken := time.Date(2024, 7, 1, 10, 0, 0, 0, time.UTC)
+	meta := (&asset{FileCreatedAt: taken}).meta()
+	if string(meta["GPSDateTime"]) != "2024:07:01 10:00:00Z" || meta["DateTimeOriginal"] != nil {
+		t.Errorf("no local time: %v", meta)
+	}
+	if meta := (&asset{}).meta(); len(meta) != 0 {
+		t.Errorf("no date: %v", meta)
 	}
 }

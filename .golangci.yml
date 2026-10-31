@@ -1,0 +1,40 @@
+# golangci-lint for every Go module of the repo (each run from its module finds
+# this file); its findings go to SonarQube with the scan (make sonar).
+version: "2"
+run:
+  relative-path-mode: gitroot # report paths from the repo's root: SonarQube's
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose
+    - errorlint
+    - gocritic
+    - misspell
+    - nilerr
+    - unconvert
+  settings:
+    errcheck:
+      # Cleanup: a deferred Close of what was read, a Remove of what is no longer
+      # wanted — nothing to do with their error (writes check theirs)
+      exclude-functions:
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (*database/sql.DB).Close
+        - (*database/sql.Rows).Close
+        - os.Remove
+        - os.RemoveAll
+        - (*github.com/eggs-gd/go-exiftool.Server).Close # the processes end: nothing to keep
+  exclusions:
+    rules:
+      # A test's Close is its cleanup (production checks the model's: it writes)
+      - path: _test\.go
+        linters: [errcheck]
+        text: "\\.Close` is not checked"
+      # A fake server's response: a failed write shows as its client's error
+      - path: _test\.go
+        linters: [errcheck]
+        text: "`(io\\.WriteString|fmt\\.Fprintf)` is not checked"
+      # cgo's generated code: gocritic reads its rewritten calls as `x == x`
+      - path: photokit_darwin\.go
+        linters: [gocritic]
+        text: dupSubExpr

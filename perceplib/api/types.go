@@ -3,8 +3,8 @@ package api
 import "time"
 
 type ExifProvider interface {
-	//returns exifdata with given key from main file
-	//todo add support for sidecars
+	// GetExif: a declared tag's value, the source's metadata first, then the
+	// sidecars, the main file, the derivatives (see ExifTagger)
 	GetExif(key string) string
 }
 

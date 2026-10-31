@@ -66,6 +66,15 @@ type Walker struct {
 // first
 const page = 256
 
+// batch: a walk's files on their way out, a page at a time — each page's rows
+// written first (seen); unseen: the rows not seen yet
+type batch struct {
+	walker  *Walker
+	emit    func(dto.WalkedFile) bool
+	unseen  map[string]*dto.FileDto
+	entries []dto.ItemEntry
+}
+
 // New: the chain's entry — out gets every file of a walk, then the gone ones
 // skipped: directories not entered (the libraries' own, without their media); the
 // rows under them are missing
@@ -84,54 +93,13 @@ func (m *Walker) Start(ctx context.Context, emit func(dto.WalkedFile) bool) erro
 		return err // nothing walked: no deletions either
 	}
 	// The rows not seen yet: what is left after the walk is missing
-	unseen := make(map[string]*dto.FileDto, len(rows))
+	b := &batch{walker: m, emit: emit, unseen: make(map[string]*dto.FileDto, len(rows))}
 	for _, f := range rows {
-		unseen[f.Path] = f
+		b.unseen[f.Path] = f
 	}
-	var entries []dto.ItemEntry
-	send := func() bool {
-		files := m.seen(entries, unseen)
-		entries = entries[:0]
-		for _, f := range files {
-			if !emit(dto.WalkedFile{FileDto: f}) {
-				return false
-			}
-		}
-		return true
-	}
-	var results []Result
-	for _, root := range m.roots {
-		results = append(results, m.walk(ctx, root, func(e dto.ItemEntry) bool {
-			entries = append(entries, e)
-			return len(entries) < page || send()
-		}))
-		if ctx.Err() != nil {
-			break
-		}
-	}
-	for _, source := range m.sources {
-		if ctx.Err() != nil {
-			break
-		}
-		results = append(results, m.list(ctx, source, func(e dto.ItemEntry) bool {
-			entries = append(entries, e)
-			return len(entries) < page || send()
-		}))
-	}
-	if !send() {
-		return nil
-	}
-	for _, r := range results { // a root unreachable or empty this pass deletes nothing of its own
-		missing := m.missing(r, unseen)
-		for _, f := range missing {
-			if !emit(dto.WalkedFile{FileDto: f, Missing: true}) {
-				return nil
-			}
-		}
-		if r.Complete {
-			m.logger.Info("Walk complete", l.String("path", r.Root), l.Int("files", r.Files),
-				l.Int("unreadable", len(r.Unreadable)), l.Int("gone", len(missing)))
-		}
+	results := m.visit(ctx, b.add)
+	if b.send() {
+		m.sendMissing(results, b.unseen, emit)
 	}
 	return nil
 }
@@ -235,38 +203,18 @@ func (m *Walker) walk(ctx context.Context, root string, emit func(dto.ItemEntry)
 	}
 
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ctxErr
-		}
-		if err != nil {
-			if path == root {
-				return err
-			}
-			m.logger.Warn("Unreadable, skipped", l.String("path", path), l.Error(err))
-			result.Unreadable = append(result.Unreadable, path)
-			if entry != nil && entry.IsDir() {
-				return fs.SkipDir
-			}
-			return nil
-		}
-		if entry.IsDir() {
-			if m.skip[path] {
-				return fs.SkipDir // a library's directory without its media
-			}
-			return nil
-		}
-
-		result.Files++
-		// A file that vanished since it was listed is not seen: the gate will take it
-		// as deleted
-		info, err := entry.Info()
-		if err != nil {
-			return nil
-		}
-		if !emit(dto.ItemEntry{Path: path, Name: entry.Name(), Size: info.Size(), ModTime: info.ModTime()}) {
+		switch {
+		case ctx.Err() != nil:
 			return ctx.Err()
+		case err != nil:
+			return m.unreadable(&result, path, entry, err)
+		case entry.IsDir() && m.skip[path]:
+			return fs.SkipDir // a library's directory without its media
+		case entry.IsDir():
+			return nil
 		}
-		return nil
+		result.Files++
+		return file(ctx, path, entry, emit)
 	})
 
 	if err != nil {
@@ -310,4 +258,85 @@ func isUnder(path, dir string) bool {
 	}
 	rel, err := filepath.Rel(dir, path)
 	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func (b *batch) add(e dto.ItemEntry) bool {
+	b.entries = append(b.entries, e)
+	return len(b.entries) < page || b.send()
+}
+
+// send: the page's rows written, its files out; false: the chain stopped taking
+func (b *batch) send() bool {
+	files := b.walker.seen(b.entries, b.unseen)
+	b.entries = b.entries[:0]
+	for _, f := range files {
+		if !b.emit(dto.WalkedFile{FileDto: f}) {
+			return false
+		}
+	}
+	return true
+}
+
+// visit: every root walked, then every source listed — a result each, until ctx
+// ends
+func (m *Walker) visit(ctx context.Context, add func(dto.ItemEntry) bool) []Result {
+	var results []Result
+	for _, root := range m.roots {
+		if ctx.Err() != nil {
+			return results
+		}
+		results = append(results, m.walk(ctx, root, add))
+	}
+	for _, source := range m.sources {
+		if ctx.Err() != nil {
+			return results
+		}
+		results = append(results, m.list(ctx, source, add))
+	}
+	return results
+}
+
+// sendMissing: each result's missing rows — a root unreachable or empty this pass
+// deletes nothing of its own
+func (m *Walker) sendMissing(results []Result, unseen map[string]*dto.FileDto, emit func(dto.WalkedFile) bool) {
+	for _, r := range results {
+		missing := m.missing(r, unseen)
+		for _, f := range missing {
+			if !emit(dto.WalkedFile{FileDto: f, Missing: true}) {
+				return
+			}
+		}
+		if r.Complete {
+			m.logger.Info("Walk complete", l.String("path", r.Root), l.Int("files", r.Files),
+				l.Int("unreadable", len(r.Unreadable)), l.Int("gone", len(missing)))
+		}
+	}
+}
+
+// unreadable: a path the walk could not read — the root's error ends the walk;
+// another is skipped (a directory with everything under it) and recorded: nothing
+// under it is taken as gone
+func (m *Walker) unreadable(result *Result, path string, entry fs.DirEntry, err error) error {
+	if path == result.Root {
+		return err
+	}
+	m.logger.Warn("Unreadable, skipped", l.String("path", path), l.Error(err))
+	result.Unreadable = append(result.Unreadable, path)
+	if entry != nil && entry.IsDir() {
+		return fs.SkipDir
+	}
+	return nil
+}
+
+// file: a walked file out as an entry. One that vanished since it was listed is
+// not seen: the gate will take it as deleted.
+func file(ctx context.Context, path string, entry fs.DirEntry, emit func(dto.ItemEntry) bool) error {
+	info, err := entry.Info()
+	if err != nil {
+		return nil //nolint:nilerr // vanished: not a failure of the walk
+	}
+	if !emit(dto.ItemEntry{Path: path, Name: entry.Name(), Size: info.Size(), ModTime: info.ModTime()}) {
+		return ctx.Err()
+	}
+	return nil
 }

@@ -214,46 +214,53 @@ func encode(f api.Field, v any) any {
 	return v
 }
 
-// decode: back to the Go type the field's kind means
+// decode: back to the Go type the field's kind means (nil: not that type)
 func decode(f api.Field, v any) any {
-	if v == nil {
-		return nil
+	switch x := v.(type) {
+	case float64:
+		if f.Kind == api.KindFloat {
+			return x
+		}
+	case int64:
+		return decodeInt(f.Kind, x)
+	case []byte:
+		return decodeBytes(f.Kind, x)
+	case string:
+		if f.Kind == api.KindText {
+			return x
+		}
 	}
-	switch f.Kind {
-	case api.KindFloat:
-		if x, ok := v.(float64); ok {
-			return x
-		}
-		if x, ok := v.(int64); ok {
-			return float64(x)
-		}
+	return nil
+}
+
+// decodeInt: what SQLite keeps as an integer — an int, a float written whole, a
+// bool, a time (nanoseconds)
+func decodeInt(kind api.Kind, x int64) any {
+	switch kind {
 	case api.KindInt:
-		if x, ok := v.(int64); ok {
-			return x
-		}
+		return x
+	case api.KindFloat:
+		return float64(x)
 	case api.KindBool:
-		if x, ok := v.(int64); ok {
-			return x != 0
-		}
+		return x != 0
 	case api.KindTime:
-		if x, ok := v.(int64); ok {
-			return time.Unix(0, x).UTC()
-		}
+		return time.Unix(0, x).UTC()
+	}
+	return nil
+}
+
+// decodeBytes: what SQLite keeps as a blob — a vector (float32, little-endian), or
+// text a driver gave as bytes
+func decodeBytes(kind api.Kind, b []byte) any {
+	switch kind {
 	case api.KindVector:
-		if b, ok := v.([]byte); ok {
-			vec := make([]float32, len(b)/4)
-			for i := range vec {
-				vec[i] = math.Float32frombits(binary.LittleEndian.Uint32(b[4*i:]))
-			}
-			return vec
+		vec := make([]float32, len(b)/4)
+		for i := range vec {
+			vec[i] = math.Float32frombits(binary.LittleEndian.Uint32(b[4*i:]))
 		}
+		return vec
 	case api.KindText:
-		switch x := v.(type) {
-		case string:
-			return x
-		case []byte:
-			return string(x)
-		}
+		return string(b)
 	}
 	return nil
 }
