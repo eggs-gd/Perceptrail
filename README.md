@@ -36,7 +36,9 @@ Git hooks (fast local checks before CI) — enable once per clone:
 git config core.hooksPath .githooks
 ```
 
-- `pre-commit`: refuses commits on `master`/`develop`, requires `gofmt` for staged Go files.
+- `pre-commit`: refuses commits on `master`/`develop`, requires `gofmt` for staged Go files, and is the
+  local gate for SonarQube: golangci-lint on the Go modules with staged files, and the secrets scan of the
+  staged files when the `sonar` CLI is installed. Nothing goes to the server.
 - `pre-push`: runs the CI checks (Go vet/tests + plugin build, `svelte-check`) and SonarQube (below) for the
   parts changed since `develop`.
 
@@ -51,8 +53,12 @@ runs every Go module's tests with coverage and golangci-lint
 ([`.golangci.yml`](.golangci.yml)), svebapp's unit tests with coverage, the scan
 ([`sonar-project.properties`](sonar-project.properties)) and the quality gate (red:
 a non-zero exit — on new code: no new issue, coverage ≥ 80 %); `pre-push` runs it
-when code it covers, or its config, is pushed (not `pre-commit`: an analysis is of `HEAD`, and its
-check on GitHub lands on that commit). Without them nothing runs. What is analysed follows
+when code it covers, or its config, is pushed and stops the push on a red gate (the report is on the
+server either way; not `pre-commit`: an analysis is of `HEAD`, and its check on GitHub lands on that commit).
+Once a PR is open, run `make sonar` once more: the push's analysis was of the branch, and the PR's comment
+and check come from an analysis made with its number. `make sonar SONAR_GATE=false` sends the report
+without waiting for the gate. The setup is the organization's
+[SonarQube standard](https://github.com/eggs-gd/.github/blob/main/docs/sonarqube.md). Without them nothing runs. What is analysed follows
 the checkout ([`scripts/sonar-scope`](scripts/sonar-scope)): `master` (GitHub's
 default branch) is the project's main branch; a branch with an open PR is that PR
 (its new code: the diff against the PR's base, `develop`); any other branch —

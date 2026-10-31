@@ -51,6 +51,8 @@ test:
 # built for coverage loads no plugin, built with -cover or not; go test runs them
 # (pre-push, CI).
 SONAR_GOMODULES = $(GOMODULES) scripts/declorder
+# SONAR_GATE=false sends the report without waiting for the quality gate.
+SONAR_GATE ?= true
 
 sonar:
 	@env=.env; [ -f $$env ] || env="$$(git rev-parse --path-format=absolute --git-common-dir)/../.env"; \
@@ -66,4 +68,4 @@ sonar:
 	done; \
 	echo "Coverage: svebapp"; \
 	(cd svebapp && npx vitest run --coverage > /dev/null) || exit 1; \
-	sonar-scanner -Dsonar.qualitygate.wait=true $$scope
+	sonar-scanner -Dsonar.qualitygate.wait=$(SONAR_GATE) $$scope

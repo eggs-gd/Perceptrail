@@ -23,3 +23,27 @@ if [ -n "$unformatted" ]; then
   echo "run: gofmt -w$unformatted && git add$unformatted" >&2
   exit 1
 fi
+
+# Local gate for the SonarQube setup (nothing goes to the server): the secrets scan and golangci-lint.
+# --- sonar:begin
+env=.env
+[ -f "$env" ] || env="$(git rev-parse --path-format=absolute --git-common-dir)/../.env"
+set -a; [ ! -f "$env" ] || . "$env"; set +a
+if [ -n "${SONAR_HOST_URL:-}" ] && [ -n "${SONAR_TOKEN:-}" ] && command -v sonar >/dev/null 2>&1; then
+	sonar hook git-pre-commit || exit 1
+fi
+
+if command -v golangci-lint >/dev/null 2>&1; then
+	modules=$(git diff --cached --name-only --diff-filter=ACMR -- '*.go' | while read -r f; do
+		d=$(dirname "$f")
+		while [ "$d" != . ] && [ ! -f "$d/go.mod" ]; do d=$(dirname "$d"); done
+		if [ -f "$d/go.mod" ]; then echo "$d"; fi
+	done | sort -u)
+	for m in $modules; do
+		echo "pre-commit: golangci-lint in $m"
+		(cd "$m" && golangci-lint run ./...) || exit 1
+	done
+elif [ -n "$(git diff --cached --name-only -- '*.go')" ]; then
+	echo "pre-commit: golangci-lint is not installed, the lint is skipped" >&2
+fi
+# --- sonar:end
