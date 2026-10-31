@@ -45,12 +45,13 @@ Skip in an emergency with `--no-verify`.
 ### SonarQube (optional)
 
 The owner's server is on a LAN: a local analysis, no CI. With `SONAR_HOST_URL` and
-`SONAR_TOKEN` in the environment or a git-ignored `.env` (mode 600), `make sonar`
+`SONAR_TOKEN` in the environment or a git-ignored `.env` (mode 600; a worktree
+uses the main checkout's), `make sonar`
 runs every Go module's tests with coverage and golangci-lint
 ([`.golangci.yml`](.golangci.yml)), svebapp's unit tests with coverage, the scan
 ([`sonar-project.properties`](sonar-project.properties)) and the quality gate (red:
 a non-zero exit — on new code: no new issue, coverage ≥ 80 %); `pre-push` runs it
-when code it covers is pushed (not `pre-commit`: an analysis is of `HEAD`, and its
+when code it covers, or its config, is pushed (not `pre-commit`: an analysis is of `HEAD`, and its
 check on GitHub lands on that commit). Without them nothing runs. What is analysed follows
 the checkout ([`scripts/sonar-scope`](scripts/sonar-scope)): `master` (GitHub's
 default branch) is the project's main branch; a branch with an open PR is that PR

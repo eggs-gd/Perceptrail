@@ -50,11 +50,15 @@ fi
 # from the environment or .env): the tests with coverage, the scan, the quality gate —
 # as the branch or its PR (scripts/sonar-scope), when code it covers changed. Here,
 # not in pre-commit: the analysis is of HEAD, and only a pushed commit carries its
-# check on GitHub. It reads the working copy: not with uncommitted changes.
-set -a; [ ! -f .env ] || . ./.env; set +a
-if [ -n "${SONAR_HOST_URL:-}" ] && [ -n "${SONAR_TOKEN:-}" ] \
-  && touches '^(gontroller|perceplib|perceptors|scripts|svebapp/src)/'; then
-  if ! command -v sonar-scanner >/dev/null 2>&1; then
+# check on GitHub. It reads the working copy: not with uncommitted changes. The
+# .env is this checkout's, else the main checkout's (a worktree has none).
+env=.env
+[ -f "$env" ] || env="$(git rev-parse --path-format=absolute --git-common-dir)/../.env"
+set -a; [ ! -f "$env" ] || . "$env"; set +a
+if touches '^(gontroller|perceplib|perceptors|scripts|svebapp/src)/|^(Makefile|sonar-project\.properties|\.golangci\.yml)$'; then
+  if [ -z "${SONAR_HOST_URL:-}" ] || [ -z "${SONAR_TOKEN:-}" ]; then
+    echo "pre-push: no SONAR_HOST_URL/SONAR_TOKEN — SonarQube skipped" >&2
+  elif ! command -v sonar-scanner >/dev/null 2>&1; then
     echo "pre-push: sonar-scanner missing — SonarQube skipped" >&2
   elif [ -n "$(git status --porcelain --untracked-files=no)" ]; then
     echo "pre-push: uncommitted changes — SonarQube skipped (it would analyse them)" >&2
