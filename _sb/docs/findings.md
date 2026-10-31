@@ -728,6 +728,9 @@ How it is read, the paths and the proxy: the
   multi-pack-index (`git fsck` clean) — `core.multiPackIndex false` in the
   checkout. Coverage runs `-short`: a test binary built for coverage loads no
   plugin, built with `-cover` or not; the plugin tests run in `go test` as ever.
+- **Dependabot and CodeQL read `master`** (GitHub's default branch): a fix merged
+  into `develop` (#50) leaves its alerts open until the release fast-forwards
+  `master`. Before closing one by hand, check `develop`'s lock files, not the alert.
 - **A scan says what it is, or it is the main branch** (#47): a scan without branch
   parameters is published as the main branch and replaces its state — every
   commit on `feature/sonar` did that before the server had the community branch
