@@ -61,7 +61,8 @@ One line each; the details are in the READMEs and the PRs.
   push (`make sonar-publish`), the PR's check lands · #50 dependencies: every
   Dependabot and govulncheck alert closed, SvelteKit 3 · #51 CI's token reads
   only · #46 Immich's placeholders from its thumbhash · #52 photo renditions made
-  of a RAW's embedded preview, each smaller size of the one above.
+  of a RAW's embedded preview, each smaller size of the one above · #53 items and
+  files found by path through an index: the first import no longer quadratic.
 
 ## Releases
 
@@ -81,7 +82,10 @@ systems — a lens", "The work queue", "Expensive stage"):
    rule a command — the public method waits for its result, `…Command()` gives it
    asynchronously (nobody uses that yet). Next: the classes' deadlines and the
    callers going asynchronous (the walk without its own pages, the steps each its
-   own way). Before any new writer comes.
+   own way). Before any new writer comes. Measured (#53): the bottleneck was a
+   missing index, not the bus; the commits batching would save are ~20 % of a first
+   pass — waits until a pass shows it worth it (findings "Measured before the
+   deadlines").
 1. [x] **The work queue and the render service** (#36) — the queue in the model
    ([README](../../gontroller/internal/model/README.md#the-work-queue)),
    `internal/render` woken by `ItemPublished`, a stand-in renderer (a symbolic

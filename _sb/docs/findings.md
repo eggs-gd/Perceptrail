@@ -311,6 +311,17 @@ an item):
   10 000 files — first pass 4.0 s (4.6 s before), idle passes 0.09 s (0.11–0.13 s);
   the grouping comes from callers writing at once (identify's five readers). No
   deadlines yet: a caller waiting for each result would pay one per call.
+- **Measured before the deadlines, and they wait** (#53; a first pass of 10 000 /
+  20 000 synthetic JPEGs, release mode, render off; a timer kept on a local branch):
+  the writer busy 73 % of a 29.7 s pass, 30 080 writes in 20 066 transactions. Of
+  its time the writes themselves 84 %, begin and commit 16 % — what batching and
+  the classes' deadlines could save. The writes were one: `validateGroup`, 1.6 ms a
+  group and growing with the library — `items.path` and `files.path` had no index,
+  each lookup read the table (the first import quadratic: a 100 k library's
+  validation alone ~20 min, 500 k hours). With the indexes: 0.6 ms a group at
+  10 000 and at 20 000 (linear), the pass 22.1 s / 43.7 s; the commits left are
+  ~20 % of a pass. The deadlines and asynchronous callers wait until a pass shows
+  them worth it; an idle pass is 0.4 s and writes 80 rows.
 - **A write and its two faces** (the owner, after two wrong turns): a write is
   the unexported method (its debugged logic, untouched); the public method of its
   name submits and waits (`Do`), its `…Command()` submits and goes on. Rejected: the
