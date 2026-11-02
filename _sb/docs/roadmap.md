@@ -63,7 +63,8 @@ One line each; the details are in the READMEs and the PRs.
   only · #46 Immich's placeholders from its thumbhash · #52 photo renditions made
   of a RAW's embedded preview, each smaller size of the one above · #53 items and
   files found by path through an index: the first import no longer quadratic ·
-  #54 render's sweep test waits for the emptied directories too (flaky under load).
+  #54 render's sweep test waits for the emptied directories too (flaky under load) ·
+  #55 the roadmap sorted: the asset-from-all-files feature, bugs by kind, ML next.
 
 ## Releases
 
@@ -71,6 +72,8 @@ One line each; the details are in the READMEs and the PRs.
   encoding) and Docker. A release is an image someone installs; without the
   transcode HEIC does not show in Chrome, iPhone HEVC does not play, big originals
   slow the grid. Until then everything stays in `develop`.
+- **The next milestone — ML**: the first pixel perceptor (faces) on goMLer, with
+  the relative perceptors (the trail) it opens (Later: the perceptor platform).
 
 ## Next: the expensive stage (transcode)
 
@@ -148,27 +151,36 @@ The mechanism is done (`internal/library`, Apple Photos first).
 | **Google Takeout** | folders + `*.supplemental-metadata.json` per file | a folder with sidecars | EXIF often stripped |
 | Google Photos (live) | — | — | not possible: since 2025 its API sees only what the app created |
 
-## Next: the asset from all its files
+## Feature: the asset from all its files
+
+What a person sees: a photo carries what their other tools said about it — the
+rating, keywords and captions set in Lightroom, digiKam or darktable, the faces
+named there — and a Live Photo stays a Live Photo after a rename.
 
 Libraries write sidecars, so an asset is a package (the original, RAW + JPEG, edits,
-`.xmp` / `.aae`, the motion part); the grouping collects the whole package.
+`.xmp` / `.aae`, the motion part). Built: the grouping collects the whole package,
+merge reads every file's declared tags. Missing — the meaning, in steps:
 
-- [ ] **One item from the whole package**: rating, tags, captions, face regions from
-      the XMP sidecars (merge reads every file's declared tags already). Which
+- [ ] **The package's values on the item**: rating, keywords, captions, face regions
+      from the XMP sidecars, as perceptor data (nothing reads them yet). Which
       library writes what, and what wins when files disagree — per library.
 - [ ] **Live Photo pairs by `ContentIdentifier`** in generic folders (today by name:
       a rename breaks the pair, two namesakes stick together).
 - [ ] An `animated` kind (GIF, animated WebP / HEIC) shown moving.
+- [ ] Reading the sidecars of keyed (Apple) groups (only the main file is read now).
 - [ ] Storing the metadata package in the DB — when a consumer needs it (the info
       panel's raw exif, a perceptor re-run without the files).
-- [ ] Reading the sidecars of keyed (Apple) groups (only the main file is read now).
 
 ## Next: Apple Photos — open
 
-- [ ] Files Photos offloads (Optimize Mac Storage) must not hide or delete the item:
-      the grouper gets them as gone now and may keep the asset.
-- [ ] The Photos permission when gontroller is not started from a terminal
-      (launchd): the binary would need its own (Info.plist, a stable signature).
+- [ ] **Offloaded originals** (Optimize Mac Storage): a file Photos moved to iCloud
+      must not hide or delete the item — the grouper gets it as gone now and may
+      keep the asset. `Photos.sqlite` knows "in the cloud" from "deleted"; the
+      original comes through PhotoKit on demand.
+- [ ] **Published macOS binaries** (a step of its own, after the source release):
+      run by launchd, not a terminal, the binary needs its own Photos permission —
+      an `Info.plist` with the usage text, a stable signature. Whoever builds from
+      source signs their own build.
 - Supported schema: `ZASSET` (macOS 11+); older (`ZGENERICASSET`) — not planned.
 - Later: albums, people (`ZPERSON` / `ZDETECTEDFACE`) → perceptors.
 
@@ -201,7 +213,7 @@ the resources differ (IO and exiftool, CPU / GPU, ML); roles later
   orphans.
 - **API providers**: see Providers.
 
-## Smaller open items
+## Architecture bugs
 
 - [ ] **Booleans set by hand** (AGENTS.md "Code Style"), each where it belongs:
       - small, with the next change of their code: `perceptor.loaded` → `sync.Once` or the registry itself;
@@ -214,10 +226,11 @@ the resources differ (IO and exiftool, CPU / GPU, ML); roles later
         versions and inputs, not a mark;
       - `dto.WalkedFile.Missing` stays for now (a fact in a message).
 
+## Product bugs
+
 - [ ] **Zoom in the viewer** — the wheel zoom worked badly and is gone. Look at
       Immich and Google Photos (they differ): around the pointer, pan, pinch,
       double-click, the original's pixels past the preview.
-- [ ] Geo on a map (markers) — a perceptor UI slot.
 - Maybe: the optimal (Dijkstra) layout for full relayouts (a switch, a resize),
   the greedy one appending. Code kept (`svebapp/src/lib/workers/layout/`); not
   planned.
@@ -270,7 +283,10 @@ A stable core first.
 - [ ] **Relative perceptors (the trail)** with the first ML perceptor (faces): from
       the anchor to the nearest unseen photo, then the nearest to that, both ways;
       shared with the colour trail.
-- UI slots (`item-panel`, `view`): a perceptor brings its own UI (map, faces).
+- [ ] **A perceptor's own UI** — there is none today: a perceptor gives an order and
+      sections, the gallery draws them all the same. Slots (`item-panel`, `view`)
+      where a perceptor brings its UI (map, faces); the first feature on them:
+      **geo on a map** — the markers from `exif_geo`'s coordinates, a view of its own.
 - Reprocessing on a plugin version change; fsnotify instead of the periodic walk.
 - Several codecs / formats at once (`codecs: [h264, av1]`, `formats: [avif, webp]`)
   — the asset contract is ready, but each is another encode: N× disk and time.
