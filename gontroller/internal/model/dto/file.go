@@ -8,7 +8,7 @@ import (
 )
 
 type ItemEntry struct {
-	Path     string
+	Path     string `gorm:"index"` // the walk and the validation find a file by it (a FileDto column)
 	Name     string
 	Size     int64
 	MimeType string

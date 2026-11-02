@@ -66,7 +66,7 @@ type ItemDto struct {
 	DateOffset int
 	DateSource string // the tag Date came from; "" = no date
 	DateZone   string // how DateOffset was found: tag, gps, coords, file, server (assumed)
-	Path       string // Source path
+	Path       string `gorm:"index"` // Source path: the validation of every group finds its item by it
 
 	Size  api.Size `gorm:"embedded;embeddedPrefix:size_"`
 	Ratio api.Size `gorm:"embedded;embeddedPrefix:ratio_"`
