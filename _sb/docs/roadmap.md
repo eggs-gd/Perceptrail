@@ -62,7 +62,8 @@ One line each; the details are in the READMEs and the PRs.
   Dependabot and govulncheck alert closed, SvelteKit 3 · #51 CI's token reads
   only · #46 Immich's placeholders from its thumbhash · #52 photo renditions made
   of a RAW's embedded preview, each smaller size of the one above · #53 items and
-  files found by path through an index: the first import no longer quadratic.
+  files found by path through an index: the first import no longer quadratic ·
+  #54 render's sweep test waits for the emptied directories too (flaky under load).
 
 ## Releases
 

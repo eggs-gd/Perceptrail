@@ -271,10 +271,12 @@ func TestSweep(t *testing.T) {
 		}
 	})
 	gone := func(path string) bool { _, err := os.Stat(path); return os.IsNotExist(err) }
-	for deadline := time.Now().Add(5 * time.Second); !gone(stale) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
-		// the sweep runs at render's start: wait for it
+	staleDir := filepath.Join(cfg.CacheDir(), "r", "aa")
+	for deadline := time.Now().Add(5 * time.Second); (!gone(stale) || !gone(staleDir)) && time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		// the sweep runs at render's start: wait for it — the file, then its emptied
+		// directories a moment later
 	}
-	if !gone(stale) || !gone(filepath.Join(cfg.CacheDir(), "r", "aa")) {
+	if !gone(stale) || !gone(staleDir) {
 		t.Error("the stale rendition or its directories stayed")
 	}
 	if gone(fresh) || gone(listed) {
