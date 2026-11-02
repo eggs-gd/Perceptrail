@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"perceptrail/gontroller/internal/config"
@@ -13,6 +14,7 @@ import (
 	"github.com/eggs-gd/go-zap-decor/tree"
 	"github.com/eggs-gd/perceplib/api"
 	_ "github.com/mattn/go-sqlite3"
+	"gorm.io/gorm"
 )
 
 // A data_dir with URI-significant characters must open exactly that file
@@ -114,5 +116,31 @@ func TestOpenDropsVersionedRenditions(t *testing.T) {
 	}
 	if _, err := db.Work("g", "faces"); err != nil {
 		t.Errorf("another slug's work went: %v", err)
+	}
+}
+
+// The validation of every group looks its item up by path, the walk its files: by an
+// index — without one each lookup reads the whole table, and the first import of a
+// library is quadratic (measured: findings "The write bus and the queue")
+func TestPathLookupsUseIndex(t *testing.T) {
+	db := openTest(t)
+	for _, c := range []struct {
+		name string
+		find func(tx *gorm.DB) *gorm.DB
+	}{
+		{"item", func(tx *gorm.DB) *gorm.DB { var item dto.ItemDto; return tx.Where("path = ?", "/a.jpg").First(&item) }},
+		{"file", func(tx *gorm.DB) *gorm.DB { var file dto.FileDto; return tx.Where("path = ?", "/a.jpg").First(&file) }},
+	} {
+		query := db.db.ToSQL(c.find)
+		var plan []struct {
+			ID, Parent, Notused int
+			Detail              string
+		}
+		if err := db.db.Raw("EXPLAIN QUERY PLAN " + query).Scan(&plan).Error; err != nil {
+			t.Fatal(err)
+		}
+		if len(plan) == 0 || !strings.Contains(plan[0].Detail, "(path=?)") {
+			t.Errorf("%s by path: %+v, want a search by an index on path", c.name, plan)
+		}
 	}
 }
