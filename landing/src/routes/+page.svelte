@@ -1,4 +1,5 @@
 <script lang="ts">
+    import {asset} from '$app/paths';
     import {channel, commands, installs, origin, repo, version, type Channel} from '#lib/site.js';
 
     // What the page is, written for the search snippet (≤ 155 characters); the same
@@ -74,6 +75,9 @@
             <a class="button primary" href="#install" data-cta="install" data-cta-placement="hero">Install</a>
             <a class="button" href={repo} data-cta="github" data-cta-placement="hero">GitHub</a>
         </p>
+        <!-- The demo library (landing/demo): public photos, never a real archive -->
+        <img class="shot" src={asset('demo/poster.webp')} width="1280" height="800"
+             alt="The gallery: a justified grid of photos of every shape">
     </header>
 
     <section>
@@ -83,6 +87,15 @@
             with its own sections. The gallery has a button for each; the photo you are looking at stays
             in place while everything around it is ordered anew.
         </p>
+        <figure>
+            <video class="shot" autoplay muted loop playsinline width="1280" height="800"
+                   poster={asset('demo/poster.webp')}
+                   aria-label="The gallery ordered by date, then by place, around one marked photo">
+                <source src={asset('demo/perceptors.webm')} type="video/webm">
+                <source src={asset('demo/perceptors.mp4')} type="video/mp4">
+            </video>
+            <figcaption>Date, then Place: the hint is the perceptor's own; the marked photo stays put.</figcaption>
+        </figure>
         <ul class="grid">
             <li><strong>Date</strong> — the timeline, by year and month, in the zone the photo was taken in.</li>
             <li><strong>Places</strong> — from GPS: photos taken near each other side by side, sections by region and city.</li>
@@ -210,6 +223,30 @@
         background: var(--accent);
         color: #1b1f3b;
         font-weight: 600;
+    }
+
+    .shot {
+        display: block;
+        width: 100%;
+        height: auto;
+        margin-top: 2.5rem;
+        border: 1px solid var(--line);
+        border-radius: 0.75rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+    }
+
+    figure {
+        margin: 1.5rem 0;
+    }
+
+    figure .shot {
+        margin-top: 0;
+    }
+
+    figcaption {
+        margin-top: 0.75rem;
+        color: var(--muted);
+        font-size: 0.875rem;
     }
 
     section {
