@@ -1,7 +1,8 @@
 <script lang="ts">
     import {channel, commands, installs, origin, repo, version, type Channel} from '#lib/site.js';
 
-    // What the page is, written for the search snippet (≤ 155 characters)
+    // What the page is, written for the search snippet (≤ 155 characters); the same
+    // title as app.html's <title>
     const title = 'Perceptrail — a self-hosted photo gallery with points of view';
     const description = 'One endless sheet of your photos, ordered by date, place or size. Switch the view on any photo and stay on it. Self-hosted, reads your library only.';
     const here = installs[channel];
@@ -37,7 +38,6 @@
 </script>
 
 <svelte:head>
-    <title>{title}</title>
     <meta name="description" content={description}>
     <link rel="canonical" href={url}>
     {#if channel === 'develop'}
