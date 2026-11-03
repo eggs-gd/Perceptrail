@@ -190,13 +190,14 @@
     });
 
     async function reveal(guid: string) {
+        // The user is at this photo now, not at the one a relayout kept — also when
+        // it is on screen already and nothing scrolls
+        anchorState.pending = undefined;
         const item = await layoutDb.items.get(guid);
         if (!item || !containerEl?.parentElement) return;
         const top = containerEl.parentElement.getBoundingClientRect().top + window.scrollY + item.y;
         if (top >= window.scrollY && top + item.h <= window.scrollY + window.innerHeight) return;
         programmaticScrollY = Math.max(0, top - (window.innerHeight - item.h) / 2);
-        // The user is at this photo now, not at the one a relayout kept
-        anchorState.pending = undefined;
         window.scrollTo({top: programmaticScrollY, behavior: 'instant'});
     }
 
