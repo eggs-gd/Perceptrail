@@ -130,10 +130,12 @@ systems — a lens", "The work queue", "Expensive stage"):
    exiftool, the plugins; the web: Caddy, `/api` to the server), one compose with
    software encoding, GHCR on every release; a Mac with Photos runs the native
    binary. Open: the server as a non-root user, arm64 images.
-5. [ ] **Hardware** — QSV (a compose override `hwaccel.qsv.yml`: `/dev/dri`, the
-   `render` group; `hwaccel.nvenc.yml`), VideoToolbox (native on a Mac),
-   NVENC when there is one to test on; a macOS ImageIO HEIC decoder only if the
-   benchmarks show HEIC is the bottleneck.
+5. [ ] **Hardware** — VAAPI first on Intel Linux, QSV beside it (a compose override
+   `hwaccel.qsv.yml`: `/dev/dri`, the `render` group; `hwaccel.nvenc.yml`),
+   VideoToolbox (native on a Mac), NVENC when there is one to test on; a macOS
+   ImageIO HEIC decoder only if the benchmarks show HEIC is the bottleneck.
+   Measured: ~25× less CPU, not urgent for a phone library (findings "Hardware
+   video: measured").
 
 0.2.0 needs 0–4; 5 is wanted. Only the plain folder's items are rendered (a library
 renders itself: Apple — on demand through PhotoKit).
