@@ -183,7 +183,9 @@ func reclassifyIgnored(db KindsStore, logger *l.Logger) error {
 	if err != nil {
 		return err
 	}
-	logger.Info("MIME detection changed: ignored files are classified again",
-		l.String("from", stored), l.String("to", mimeVersion), l.Int("files", int(n)))
+	if n > 0 { // a new database has nothing to do again: nothing to say
+		logger.Info("MIME detection changed: ignored files are classified again",
+			l.String("from", stored), l.String("to", mimeVersion), l.Int("files", int(n)))
+	}
 	return db.SetMeta(mimeVersionKey, mimeVersion)
 }

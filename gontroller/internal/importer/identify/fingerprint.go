@@ -70,7 +70,9 @@ func forgetOldHashes(db HashStore, logger *l.Logger) error {
 	if err != nil {
 		return err
 	}
-	logger.Info("Fingerprint changed: every item is identified once more",
-		l.String("from", stored), l.String("to", hashVersion), l.Int("items", int(n)))
+	if n > 0 { // a new database has nothing to do again: nothing to say
+		logger.Info("Fingerprint changed: every item is identified once more",
+			l.String("from", stored), l.String("to", hashVersion), l.Int("items", int(n)))
+	}
 	return db.SetMeta(hashVersionKey, hashVersion)
 }
