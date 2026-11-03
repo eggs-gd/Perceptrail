@@ -71,6 +71,7 @@ One line each; the details are in the READMEs and the PRs.
   develop from their branches, the install of either (`PERCEPTRAIL_TAG`). · #58 a switch
   keeps the user's photo through the next switches too, not only the first. · #59 the
   demo: the perceptors recorded over public photos, on the landing and in the README.
+  · #60 the landing's demo an animated image, playing by itself in every browser.
 
 ## 0.2.0 — the first release
 

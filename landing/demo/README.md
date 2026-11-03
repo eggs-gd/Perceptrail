@@ -14,8 +14,8 @@ the renditions, records, and writes:
 
 | file | where it is shown |
 |---|---|
-| `landing/static/demo/perceptors.webm`, `.mp4` | the landing, the perceptors' block |
-| `landing/static/demo/poster.webp` | the landing's hero, the video's poster |
+| `landing/static/demo/perceptors.avif` | the landing, the perceptors' block (an animated image) |
+| `landing/static/demo/poster.webp` | the landing's hero; the block's image where AVIF is not shown |
 | `docs/images/perceptors.gif` | the README |
 
 Needs exiftool, libvips, ffmpeg, Google Chrome (driven by `playwright-core`; no browser

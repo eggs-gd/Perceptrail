@@ -866,6 +866,13 @@ How it is read, the paths and the proxy: the
   acknowledged out of order: sorted by time).
 - **The browser pane of the desktop app freezes animations while hidden** — tiles
   stay on their placeholder colour there; a headless Chrome shows them.
+- **An animated AVIF, not a video** (#60): a `<video autoplay muted playsinline>`
+  played in Chrome, but the owner saw a still with a play button — a muted video's
+  autoplay is still refused (Safari in Low Power Mode, a browser's "never
+  autoplay"), and the demo is pointless until clicked. An image plays wherever it
+  shows. Animated WebP has no motion between frames: 20–35 MB for the 26 s; AVIF is
+  AV1 inside, 2.2 MB — less than the WebM was. Without AVIF (Safari before 16.4)
+  the poster.
 
 ## Repository
 

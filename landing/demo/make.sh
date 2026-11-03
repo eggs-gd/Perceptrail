@@ -5,7 +5,7 @@
 # landing and the README show. Needs exiftool, libvips, ffmpeg, Google Chrome.
 #
 #   landing/demo/make.sh <work dir>
-# Writes landing/static/demo/{perceptors.mp4,perceptors.webm,poster.webp} and
+# Writes landing/static/demo/{perceptors.avif,poster.webp} and
 # docs/images/perceptors.gif.
 set -euo pipefail
 work=$(mkdir -p "$1" && cd "$1" && pwd)
@@ -43,12 +43,12 @@ echo "make.sh: $done of $want rendered"
 
 node "$repo/landing/demo/record.mjs" http://localhost:5174 "$work/rec"
 
-# The landing's video (H.264 for every browser, WebM beside it), its poster, the
-# README's GIF (smaller: GitHub shows a GIF inline)
+# The landing's animation (an AVIF: an image plays by itself, where a video's autoplay
+# may be refused), its poster, the README's GIF (smaller: GitHub shows a GIF inline)
 out="$repo/landing/static/demo"
 mkdir -p "$out" "$repo/docs/images"
-ffmpeg -loglevel error -y -i "$work/rec/raw.mp4" -an -c:v libx264 -crf 26 -preset slow -pix_fmt yuv420p -movflags +faststart "$out/perceptors.mp4"
-ffmpeg -loglevel error -y -i "$work/rec/raw.mp4" -an -c:v libvpx-vp9 -crf 38 -b:v 0 "$out/perceptors.webm"
+SVT_LOG=1 ffmpeg -loglevel error -y -i "$work/rec/raw.mp4" -an -vf format=yuv420p -c:v libsvtav1 -crf 38 -preset 6 -g 300 \
+    -f avif -loop 0 "$out/perceptors.avif"
 vips copy "$work/rec/poster.png" "$out/poster.webp[Q=80]"
 ffmpeg -loglevel error -y -i "$work/rec/raw.mp4" -vf "fps=10,scale=720:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128[p];[b][p]paletteuse=dither=bayer:bayer_scale=4" \
     "$repo/docs/images/perceptors.gif"

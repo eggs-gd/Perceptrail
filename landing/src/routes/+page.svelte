@@ -88,12 +88,13 @@
             in place while everything around it is ordered anew.
         </p>
         <figure>
-            <video class="shot" autoplay muted loop playsinline width="1280" height="800"
-                   poster={asset('demo/poster.webp')}
-                   aria-label="The gallery ordered by date, then by place, around one marked photo">
-                <source src={asset('demo/perceptors.webm')} type="video/webm">
-                <source src={asset('demo/perceptors.mp4')} type="video/mp4">
-            </video>
+            <!-- An animated image, not a video: a muted video's autoplay is still refused
+                 (Safari in Low Power Mode, a "never autoplay" setting); without AVIF, the poster -->
+            <picture>
+                <source srcset={asset('demo/perceptors.avif')} type="image/avif">
+                <img class="shot" src={asset('demo/poster.webp')} width="1280" height="800" loading="lazy"
+                     alt="The gallery ordered by date, then by place; the marked tile stays in view">
+            </picture>
             <figcaption>Date, then Place: the hint is the perceptor's own; the marked photo stays put.</figcaption>
         </figure>
         <ul class="grid">
