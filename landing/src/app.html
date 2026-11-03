@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<!-- Google tag (gtag.js) -->
+		<script async src="https://www.googletagmanager.com/gtag/js?id=G-FKP0SF1KEL"></script>
+		<script>
+			window.dataLayer = window.dataLayer || [];
+			function gtag() {
+				dataLayer.push(arguments);
+			}
+			// Consent policy for analytics: one switch per site.
+			// 'granted' = no banner, Google Analytics cookies on (the current behaviour).
+			// 'denied'  = Consent Mode: nothing is stored until a banner calls setAnalyticsConsent('granted').
+			var ANALYTICS_CONSENT = 'denied';
+			gtag('consent', 'default', {
+				analytics_storage: ANALYTICS_CONSENT,
+				ad_storage: 'denied',
+				ad_user_data: 'denied',
+				ad_personalization: 'denied',
+				wait_for_update: 500
+			});
+			window.setAnalyticsConsent = function (choice) {
+				try {
+					localStorage.setItem('analyticsConsent', choice);
+				} catch (e) {}
+				gtag('consent', 'update', { analytics_storage: choice });
+			};
+			try {
+				// A returning visitor's choice must be in place before the first page view.
+				if (
+					ANALYTICS_CONSENT === 'denied' &&
+					localStorage.getItem('analyticsConsent') === 'granted'
+				) {
+					gtag('consent', 'update', { analytics_storage: 'granted' });
+				}
+			} catch (e) {}
+			gtag('js', new Date());
+			gtag('config', 'G-FKP0SF1KEL');
+
+			// Any element with data-cta="…" reports a cta_click event.
+			document.addEventListener('click', function (e) {
+				var el = e.target instanceof Element && e.target.closest('[data-cta]');
+				if (!el) return;
+				gtag('event', 'cta_click', {
+					cta_target: el.getAttribute('data-cta'),
+					cta_placement: el.getAttribute('data-cta-placement') || '',
+					transport_type: 'beacon'
+				});
+			});
+		</script>
+		<meta charset="utf-8" />
+		<link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
+		<link rel="icon" href="%sveltekit.assets%/favicon.ico" sizes="32x32" />
+		<link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="theme-color" content="#1b1f3b" />
+		%sveltekit.head%
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">%sveltekit.body%</div>
+	</body>
+</html>

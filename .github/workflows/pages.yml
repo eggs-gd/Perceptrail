@@ -1,0 +1,68 @@
+name: Pages
+
+# The landing on perceptrail.eggs.gd (landing/), one site built from both branches:
+# master's at the root (stable: what a release installs), develop's under /develop
+# (what is being tested). A push to either rebuilds both. A branch without landing/
+# is not built; the root then gets develop's (before the first release with it).
+
+on:
+  push:
+    branches: [ master, develop ]
+    paths: [ 'landing/**', 'scripts/version.sh', 'VERSION', '.github/workflows/pages.yml' ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0  # scripts/version.sh counts commits; both branches
+
+    - name: Set up Node
+      uses: actions/setup-node@v7
+      with:
+        node-version: 24
+
+    # Each branch in a worktree of its own, built with its channel and base path
+    - name: Build
+      run: |
+        build() { # branch, channel, base path, out
+          git worktree add -q "$RUNNER_TEMP/$1" "origin/$1"
+          [ -d "$RUNNER_TEMP/$1/landing" ] || return 1
+          (cd "$RUNNER_TEMP/$1/landing" && npm ci && LANDING_CHANNEL=$2 BASE_PATH=$3 npm run build)
+          mkdir -p "$4" && cp -R "$RUNNER_TEMP/$1/landing/build/." "$4"
+        }
+        site="$RUNNER_TEMP/site"
+        build develop develop /develop "$site/develop"
+        build master stable "" "$site" || {
+          echo "master has no landing yet: the root is develop's"
+          (cd "$RUNNER_TEMP/develop/landing" && LANDING_CHANNEL=develop npm run build)
+          cp -R "$RUNNER_TEMP/develop/landing/build/." "$site"
+        }
+        echo perceptrail.eggs.gd > "$site/CNAME"
+
+    - uses: actions/upload-pages-artifact@v5
+      with:
+        path: ${{ runner.temp }}/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+    - id: deployment
+      uses: actions/deploy-pages@v5

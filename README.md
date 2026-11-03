@@ -65,7 +65,8 @@ Your photos, other libraries, updates, a Mac with Apple Photos:
   IndexedDB, the layout in web workers.
 - **Perceptors**: built in, or Go plugins on [`perceplib`](perceplib/README.md).
 
-Changing the code: [CONTRIBUTING.md](CONTRIBUTING.md).
+The project's page: [perceptrail.eggs.gd](https://perceptrail.eggs.gd). Changing the
+code: [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

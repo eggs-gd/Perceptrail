@@ -27,7 +27,8 @@ No symlinks (Windows).
 - Module READMEs — how things work now: `gontroller/readme.md`,
   `gontroller/internal/importer/README.md`, `gontroller/internal/library/README.md`,
   `gontroller/internal/model/README.md`,
-  `perceplib/README.md`, `perceptors/readme.md`, `svebapp/README.md`.
+  `perceplib/README.md`, `perceptors/readme.md`, `svebapp/README.md`,
+  `landing/README.md`.
 
 ### Hard limits
 
@@ -53,7 +54,7 @@ retelling (a retold fact goes stale on the next change and widens every PR).
 | What | Where |
 |---|---|
 | how a package works: its API, the non-obvious lines | godoc in the code |
-| a module's design: its parts, the rules across them, the types it owns | that module's README (`internal/importer`, `internal/library`, `internal/model`, `svebapp`, `perceplib`, `perceptors`) |
+| a module's design: its parts, the rules across them, the types it owns | that module's README (`internal/importer`, `internal/library`, `internal/model`, `svebapp`, `landing`, `perceplib`, `perceptors`) |
 | what a person running Perceptrail does: install, config, faults in their library (playbooks) | `docs/` |
 | running from source, the HTTP API, the map of packages (one line each + a link) | the top README of the program (`gontroller/readme.md`) |
 | target flows: steps and who does what | `_sb/puml`, rendered to `_sb/diagrams/*.svg` (the READMEs show them: re-render with every `.puml` change) |

@@ -26,7 +26,8 @@ docker compose up -d    # then http://<host>:8080
   (`user: 1000:1000` — `./data` must be theirs), `/dev/dri` with the `render`
   group for Intel QSV.
 - **Tags**: `latest` and `MAJOR.MINOR` (releases), `develop` (every merge, what is
-  being tested), the version (`0.1.35`).
+  being tested), the version (`0.1.35`) — `PERCEPTRAIL_TAG` in a `.env` beside
+  `compose.yml` chooses (default `latest`).
 - From a checkout: `docker compose -f compose.yml -f compose.build.yml up -d
   --build` ([`compose.build.yml`](../compose.build.yml)).
 
@@ -38,6 +39,17 @@ services:
     user: 1000:1000
     volumes:
       - /mnt/photos/old:/old:ro   # and `- /old` under paths in config.yml
+```
+
+### The develop channel
+
+What is being tested, from every merge: its compose file and its images.
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/eggs-gd/Perceptrail/develop/compose.yml
+echo PERCEPTRAIL_TAG=develop > .env
+docker run --rm --entrypoint cat ghcr.io/eggs-gd/perceptrail-server:develop /etc/perceptrail/config.yml > config.yml
+docker compose up -d
 ```
 
 ## Updating

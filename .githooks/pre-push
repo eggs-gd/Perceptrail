@@ -25,7 +25,7 @@ while read -r local_ref local_oid remote_ref remote_oid; do
 
   ref_changed=$(git diff --name-only "$base" "$local_oid")
   if [ -n "$ref_changed" ] && [ "$local_oid" != "$head" ] \
-    && echo "$ref_changed" | grep -qE '^(perceplib|gontroller|perceptors|svebapp)/'; then
+    && echo "$ref_changed" | grep -qE '^(perceplib|gontroller|perceptors|svebapp|landing)/'; then
     echo "pre-push: $local_ref has code changes but is not checked out;" >&2
     echo "  the checks run on the working copy — check it out and push again, or use --no-verify" >&2
     exit 1
@@ -48,11 +48,16 @@ if touches '^svebapp/'; then
   (cd svebapp && npm run check --silent && npm test --silent)
 fi
 
+if touches '^landing/'; then
+  echo "pre-push: landing checks"
+  (cd landing && npm run check --silent && npm test --silent && npm run build --silent > /dev/null)
+fi
+
 # SonarQube (the owner's LAN server; nothing without SONAR_HOST_URL and SONAR_TOKEN): the tests
 # with coverage, the scan, the quality gate, as the branch or its PR (scripts/sonar-scope), when
 # code it covers changed. Here, not in pre-commit: the analysis is of HEAD, and only a pushed commit
 # carries its check on GitHub. A red gate stops the push; the report is on the server either way.
-COVERED='^(gontroller|perceplib|perceptors|scripts|svebapp/src)/|^(Makefile|sonar-project\.properties|\.golangci\.yml)$'
+COVERED='^(gontroller|perceplib|perceptors|scripts|svebapp/src|landing/src)/|^(Makefile|sonar-project\.properties|\.golangci\.yml)$'
 
 # --- sonar:begin
 # The pushed refs are an argument ("<local ref> <local oid> <remote ref> <remote oid>", one
