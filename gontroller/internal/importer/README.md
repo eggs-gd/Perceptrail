@@ -115,7 +115,14 @@ is (`dto.AssetKind`). A step gathers stat, exif, kinds, the fingerprint.
   `mimeVersion` (on start every "ignored" mark is cleared). **Changing the
   fingerprint** (`identify/fingerprint.go`) needs a new `hashVersion` (on start
   every item forgets its fingerprint; not `Dirty`, or the library would vanish from
-  the client for the pass).
+  the client for the pass). **Changing what is stored of the files** (sizes, codec,
+  orientation: `setSizes`) needs a new `readVersion` — on start every item is marked
+  for another pass (its fingerprint kept: render is not redone).
+- **A stale Orientation is not followed**: a JPEG whose tag turns it a quarter while
+  its pixels are portrait already (`dto.StaleOrientation`) gives the item
+  Orientation 1 — the size perceptor swaps nothing; render reads its source by the
+  same rule, the client gets `image-orientation: none` for such a file (findings
+  "Old photos turned twice").
 
 ## Tests
 

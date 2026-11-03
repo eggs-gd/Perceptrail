@@ -785,6 +785,44 @@ How it is read, the paths and the proxy: the
 - The pool never panics: an exiftool that cannot start fails the pass's commands
   with its reason; the next pass tries again.
 
+## Old photos turned twice
+
+- **The fault** (2026-11-03, the owner's archive, a console script): 415 of 2 359
+  photos before 2010 — nearly all one Panasonic DMC-LS70 — have pixels already
+  portrait and `Orientation` 6 / 8 left on them (the camera's own rotate, `Software`
+  still its firmware); every viewer that reads the tag (all of them today: browsers,
+  libvips, Immich, Preview) turns them again. The 144 landscape ones with 6 from the
+  same camera are right.
+- **The rule, one function** (`dto.StaleOrientation`): a JPEG, a quarter turn
+  (5–8), portrait pixels. A sensor writes landscape pixels, so a portrait JPEG asking
+  for a quarter turn has been turned already. JPEG only: a HEIC keeps its pixels
+  unturned beside its turn (`irot`), and how exiftool reports its size was not
+  checked on a real one — a wrong guess there would turn every iPhone portrait.
+  Three readers: identify (the item's Orientation 1, so the size perceptor swaps
+  nothing; the file's own tag stored, `files.orientation` — a fact of the file like
+  its size), render (`vipsthumbnail --no-rotate`), the client (`image-orientation:
+  none` on such an original — the browser turns by the tag; our renditions carry no
+  tag, so `none` leaves them as they are).
+- **Render reads its source itself** (the tag by a small EXIF reader, the size from
+  the JPEG header), not the files' rows: identify and render run apart, and a render
+  that came before identify stored the tag would make sideways stills for good.
+- **Existing items, without redoing everything**: a new `readVersion` marks every
+  item for another cheap pass (`MarkRework`, the fingerprint kept), so the files are
+  read again and the item's size is corrected; the work queue then finds such a
+  JPEG's stills turned against the item and renders it again — only those. Rejected:
+  a revision in render's version and clearing the fingerprints (both redo every
+  rendition, videos too; and either could run before identify read the tag); fixing
+  the files (we never write to a library: that is the owner's own step, the
+  playbook `docs/playbooks/photos-on-their-side.md`).
+- **`image-orientation: none` holds only on the page's own origin**: a browser
+  ignores it for a cross-origin image (it would reveal the image's EXIF). Docker and
+  the dev proxy serve `/api` on the gallery's origin; a gallery pointed at an
+  absolute API address shows such an original turned (its stills stay right).
+- **Smoke** (2026-11-03, a test pair, two JPEGs with Orientation 6 — portrait pixels
+  and landscape pixels): the build before showed the stale one 4:3 with landscape
+  stills; the new one over the same data marked both for another pass, made the
+  stale one 3:4 and rendered only it again.
+
 ## Repository
 
 - **SonarQube, locally** (#47, the owner's LAN server, no CI): the first scan hung

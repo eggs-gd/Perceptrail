@@ -59,6 +59,16 @@ export function biggestImage(asset: Asset): Rendition | undefined {
     return images.filter((r) => r.w && r.h).sort((a, b) => b.w! - a.w!)[0];
 }
 
+/**
+ * How an <img> of the asset is oriented: "none" when one of its images has a stale
+ * Orientation tag (the server says so) — the browser must not turn pixels already
+ * upright. Our renditions carry no tag, so "none" leaves them as they are.
+ */
+export function imageOrientation(asset: Asset): 'none' | undefined {
+    const images = [...asset.edit, ...asset.stills, ...(asset.original ? [asset.original] : [])];
+    return images.some((r) => r.orientation === 'none') ? 'none' : undefined;
+}
+
 /** The <img> fallback: the biggest image every browser shows */
 export function fallbackImage(asset: Asset): Rendition | undefined {
     const images = [...asset.edit, ...asset.stills].filter((r) => VIEWABLE_IMAGES.has(r.mime));

@@ -26,6 +26,11 @@ import (
 //   - A result for an input that changed meanwhile is dropped; the item stays due.
 //   - Failures back off — 1 min, 10 min, 1 h, then once a day: a broken file costs
 //     a failed try a day, and one a newer tool can read comes back by itself.
+//   - A JPEG item whose stills are turned against it (one portrait, the other
+//     landscape) is due too: its orientation was decided again after they were made
+//     (a stale Orientation tag, findings "Old photos turned twice"); the same file
+//     read by the same rule, so a JPEG's never stay turned. Other kinds are not
+//     asked: their sizes come by other ways (a video's rotation, a RAW's preview).
 
 // TakeArgs: items to take into a slug's work
 type TakeArgs struct {
@@ -44,6 +49,13 @@ const lease = 15 * time.Minute
 
 // byWork: an item's work of a slug
 const byWork = "guid = ? AND slug = ?"
+
+// turnedStills: a JPEG item's work done, and a still of it portrait where the item is
+// landscape, or the other way (squares tell nothing)
+const turnedStills = `(work.done_at > 0 AND items.mime_type = 'image/jpeg'
+	AND items.size_w > 0 AND items.size_w <> items.size_h AND EXISTS (
+		SELECT 1 FROM renditions r WHERE r.guid = items.guid AND r.role = 'still'
+			AND r.w > 0 AND r.w <> r.h AND (r.w > r.h) <> (items.size_w > items.size_h)))`
 
 // backoff: how long a failed item waits, by its failures in a row (the last one
 // repeats)
@@ -71,7 +83,7 @@ func (q query) Due(slug, version string, after dto.Cursor, n int) ([]*dto.ItemDt
 			Joins("LEFT JOIN work ON work.guid = items.guid AND work.slug = ?", slug).
 			Where("items.state IN ?", states).
 			Where(`(work.guid IS NULL OR work.version <> ? OR work.input <> items.hash_short
-				OR (work.done_at = 0 AND work.next_try <= ?))`, version, now).
+				OR (work.done_at = 0 AND work.next_try <= ?) OR `+turnedStills+`)`, version, now).
 			Where("(work.guid IS NULL OR work.lease_until <= ?)", now)
 		if phase == after.Phase && after.ID != 0 {
 			page = page.Where("(items.date < ? OR (items.date = ? AND items.id < ?))", after.Date, after.Date, after.ID)

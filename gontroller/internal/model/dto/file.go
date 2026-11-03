@@ -30,6 +30,9 @@ type FileDto struct {
 	// metadata); 0 = unknown
 	Width  int
 	Height int
+	// The file's own EXIF Orientation (1–8; 0: none or unknown) — what a browser and
+	// libvips turn it by, unless StaleOrientation
+	Orientation int
 	// A video's codec (exiftool CompressorID: avc1, hvc1, …) when known: lets the
 	// client offer <source type="video/mp4; codecs=…"> and the browser choose
 	Codec string
@@ -100,6 +103,20 @@ func (f *FileDto) IsIgnored() bool {
 // it but its provider
 func (f *FileDto) Remote() bool {
 	return Remote(f.Path)
+}
+
+// StaleOrientation: the JPEG's Orientation turns it a quarter (5–8), but its pixels
+// are portrait already — a tag left behind when the camera or an old tool turned the
+// pixels (findings "Old photos turned twice"). A sensor writes landscape pixels, so
+// such a tag is not followed: the item is as its pixels are.
+func (f *FileDto) StaleOrientation() bool {
+	return StaleOrientation(f.MimeType, f.Orientation, f.Width, f.Height)
+}
+
+// StaleOrientation: the rule of FileDto.StaleOrientation, for a file read elsewhere
+// (render reads its source itself)
+func StaleOrientation(mime string, orientation, width, height int) bool {
+	return mime == "image/jpeg" && orientation >= 5 && orientation <= 8 && height > width
 }
 
 // Remote: path is a library's URL (immich://…), not a file on a disk

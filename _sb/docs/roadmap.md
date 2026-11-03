@@ -65,24 +65,17 @@ One line each; the details are in the READMEs and the PRs.
   files found by path through an index: the first import no longer quadratic ·
   #54 render's sweep test waits for the emptied directories too (flaky under load) ·
   #55 the roadmap sorted (the asset-from-all-files feature, bugs by kind, ML
-  next), docs for the public (`docs/`, the README, `CONTRIBUTING.md`).
+  next), docs for the public (`docs/`, the README, `CONTRIBUTING.md`). · #56 old
+  photos turned twice (a stale Orientation on portrait pixels) shown as their pixels
+  are: the import, render, the viewer.
 
 ## 0.2.0 — the first release
 
 A release is an image someone installs. Built: the transcode — the work queue and
 render (#36), photos (#36, #52), videos (#37) — Docker (#38, #41), the docs for the
-public (#55). Without the transcode HEIC does not show in Chrome, iPhone HEVC does
+public (#55), old photos turned twice shown upright (#56). Without the transcode HEIC does not show in Chrome, iPhone HEVC does
 not play, big originals slow the grid. Open:
 
-- [ ] **Old photos turned twice** — pixels already rotated upright, the quarter-turn
-      Orientation (6 / 8) left in place (an in-camera rotate or an XP-era tool;
-      `Software` still the firmware's): every modern viewer turns them again, on
-      their side. The owner's archive: 415 of 2 359 photos before 2010 (Panasonic
-      DMC-LS70, a Sony DSC-W80); the 144 landscape ones with 6 are right. No sensor
-      writes portrait pixels, so the rule: Orientation 5–8 on portrait pixels is
-      ignored — by the size perceptor, by render (no auto-rotate), and the viewer
-      shows such an item from its renditions, never the original (a browser turns
-      it by the tag).
 - [ ] **A landing page**: the project's face for the public — what it is, how it
       looks, install.
 - [ ] **The README shows it**: screenshots, better a GIF — one photo seen through

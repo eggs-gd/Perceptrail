@@ -1,6 +1,6 @@
 <script lang="ts">
     import type {Asset} from '#lib/stores/index.js';
-    import {assetUrl, fallbackImage, pictureSources} from './asset';
+    import {assetUrl, fallbackImage, imageOrientation, pictureSources} from './asset';
 
     interface Props {
         asset: Asset;
@@ -28,7 +28,8 @@
         <source type={source.type} srcset={source.srcset} {sizes}>
     {/each}
     {#if fallback}
-        <img src={assetUrl(fallback)} {width} {height} {alt} {loading} decoding="async">
+        <img src={assetUrl(fallback)} {width} {height} {alt} {loading} decoding="async"
+             style:image-orientation={imageOrientation(asset)}>
     {/if}
 </picture>
 

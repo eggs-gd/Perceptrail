@@ -7,6 +7,8 @@ export interface Rendition {
     h?: number;
     /** A video's codec: avc1, hvc1, … */
     codec?: string;
+    /** The CSS image-orientation to show it with: "none" — its Orientation tag is stale (pixels already upright) */
+    orientation?: 'none';
 }
 
 /** Every file of an asset, by role: the client decides what to show when */

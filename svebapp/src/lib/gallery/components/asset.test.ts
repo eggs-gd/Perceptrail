@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import type {Asset, Rendition} from '#lib/stores/index.js';
-import {fallbackImage, mediumUrl} from './asset';
+import {fallbackImage, imageOrientation, mediumUrl} from './asset';
 
 const image = (url: string, mime: string, w?: number): Rendition => ({url, mime, w, h: w});
 const asset = (over: Partial<Asset>): Asset =>
@@ -16,6 +16,14 @@ describe('fallbackImage', () => {
 
     it('none viewable: none', () => {
         expect(fallbackImage(asset({original: image('raw', 'image/x-nikon-nef', 6000)}))).toBeUndefined();
+    });
+});
+
+describe('imageOrientation', () => {
+    it('"none" when the server says a file\'s Orientation tag is stale; else as the files say', () => {
+        const stale = {...image('jpg', 'image/jpeg', 3000), orientation: 'none' as const};
+        expect(imageOrientation(asset({stills: [image('s400', 'image/webp', 400)], original: stale}))).toBe('none');
+        expect(imageOrientation(asset({original: image('jpg', 'image/jpeg', 3000)}))).toBeUndefined();
     });
 });
 

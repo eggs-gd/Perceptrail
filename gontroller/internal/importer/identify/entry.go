@@ -35,13 +35,16 @@ const workers = 5
 
 // Migrate: at start, what changed in identify since the last run — the kinds'
 // table (files judged "not media" are judged again), the fingerprint (every item
-// gets the new one)
+// gets the new one), what is read of the files (every item read again)
 func Migrate(db Store, logger *l.Logger) {
 	if err := reclassifyIgnored(db, logger); err != nil {
 		logger.Error("MIME version check failed", l.Error(err))
 	}
 	if err := forgetOldHashes(db, logger); err != nil {
 		logger.Error("Fingerprint version check failed", l.Error(err))
+	}
+	if err := readFilesAgain(db, logger); err != nil {
+		logger.Error("Read version check failed", l.Error(err))
 	}
 }
 

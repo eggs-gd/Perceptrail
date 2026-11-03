@@ -354,3 +354,47 @@ func TestRenew(t *testing.T) {
 		t.Errorf("lease left %v, want about %v", until, lease)
 	}
 }
+
+// A JPEG rendered landscape and then found portrait (a stale Orientation decided
+// again): due again, though its version and input match; once its stills agree, not;
+// a video's poster is not asked
+func TestDueWhenStillsTurned(t *testing.T) {
+	db := openTest(t)
+	render := func(item *dto.ItemDto, w, h int) {
+		t.Helper()
+		taken, _ := db.Take("render", []api.GUID{item.GUID})
+		done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: item.GUID, Lease: taken[0].Lease, Version: "v1", Input: "h1",
+			Renditions: []dto.RenditionDto{{GUID: item.GUID, Size: 1600, Format: "webp", W: w, H: h, Path: "r/" + string(item.GUID) + "/1600.webp"}}})
+		if err != nil || !done {
+			t.Fatalf("finish: %v %v", done, err)
+		}
+	}
+	sized := func(item *dto.ItemDto, mime string, w, h int) {
+		t.Helper()
+		item.MimeType, item.Size = mime, api.Size{W: w, H: h}
+		if _, err := db.UpdateItem(item); err != nil {
+			t.Fatal(err)
+		}
+	}
+	photo := workItem(t, db, "old.jpg", dto.Ready, time.Now(), "h1")
+	sized(photo, "image/jpeg", 3072, 2304)
+	render(photo, 1600, 1200)
+	if got := pass(t, db, "v1", 10); len(got) != 0 {
+		t.Fatalf("rendered as the item is: due %v", got)
+	}
+	sized(photo, "image/jpeg", 2304, 3072) // its orientation decided again
+	if got := pass(t, db, "v1", 10); len(got) != 1 || got[0] != photo.GUID {
+		t.Fatalf("stills turned against the item: due %v, want it", got)
+	}
+	render(photo, 1200, 1600)
+	if got := pass(t, db, "v1", 10); len(got) != 0 {
+		t.Fatalf("stills agree again: due %v", got)
+	}
+
+	video := workItem(t, db, "v.mp4", dto.Ready, time.Now(), "h1")
+	sized(video, "video/mp4", 1080, 1920)
+	render(video, 1600, 900)
+	if got := pass(t, db, "v1", 10); len(got) != 0 {
+		t.Fatalf("a video is not asked: due %v", got)
+	}
+}
