@@ -64,7 +64,8 @@ One line each; the details are in the READMEs and the PRs.
   of a RAW's embedded preview, each smaller size of the one above · #53 items and
   files found by path through an index: the first import no longer quadratic ·
   #54 render's sweep test waits for the emptied directories too (flaky under load) ·
-  #55 the roadmap sorted: the asset-from-all-files feature, bugs by kind, ML next.
+  #55 the roadmap sorted: the asset-from-all-files feature, bugs by kind, docs for
+  the public, ML next.
 
 ## Releases
 
@@ -74,6 +75,27 @@ One line each; the details are in the READMEs and the PRs.
   slow the grid. Until then everything stays in `develop`.
 - **The next milestone — ML**: the first pixel perceptor (faces) on goMLer, with
   the relative perceptors (the trail) it opens (Later: the perceptor platform).
+
+## Next: docs for the public
+
+Everything written so far is for developers (`_sb/docs`, the module READMEs); a
+person who installs Perceptrail gets a few lines on Docker. In steps, each a PR,
+refined as we go:
+
+- [ ] **`docs/` at the root — for whoever runs it**: `install.md` (compose, native on
+      a Mac, updates), `config.md` (libraries, providers, render, hardware encoding,
+      the database), `playbooks/` (a fault in one's library: symptom → how to check →
+      what to do; the first: photos on their side — the console diagnosis, the
+      cause, `exiftool -n -Orientation=1` on a backed-up copy; next: Apple's
+      offloaded originals, Live Photos split by a rename), `faq.md` (we never write
+      to a library, where the data lives, moving to another server). A row for it
+      in AGENTS.md's "one fact, one place"; Docker's part of `gontroller/readme.md`
+      moves there, a link stays.
+- [ ] **The root README for the public**: what it is, a screenshot, install in three
+      commands, links to `docs/`; what works now apart from what is planned
+      (metadata editing, batch operations); the storage database-agnostic (an ORM
+      behind the model's `Proxy`) — SQLite now, PostgreSQL planned. The developers'
+      part (hooks, SonarQube, git flow) → `CONTRIBUTING.md`.
 
 ## Next: the expensive stage (transcode)
 
