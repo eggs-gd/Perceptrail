@@ -65,3 +65,37 @@ func rawWithThumb(orientation uint16) []byte {
 	b.Write(thumb.Bytes())
 	return b.Bytes()
 }
+
+// A JPEG whose Orientation 6 sits on pixels already portrait (an old camera turned
+// them and left the tag): the item is as its pixels are — Orientation 1 for the
+// perceptors (the size is not swapped); a landscape one keeps its 6
+func TestStaleOrientation(t *testing.T) {
+	if _, err := exec.LookPath("exiftool"); err != nil {
+		t.Skip("exiftool not installed")
+	}
+	for _, c := range []struct {
+		w, h int
+		want string
+	}{{30, 40, "1"}, {40, 30, "6"}} {
+		path := filepath.Join(t.TempDir(), "p.jpg")
+		f, err := os.Create(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := jpeg.Encode(f, image.NewGray(image.Rect(0, 0, c.w, c.h)), nil); err != nil {
+			t.Fatal(err)
+		}
+		f.Close()
+		if out, err := exec.Command("exiftool", "-q", "-overwrite_original", "-n", "-Orientation=6",
+			"-DateTimeOriginal=2005:01:01 00:00:00", path).CombinedOutput(); err != nil {
+			t.Fatalf("%v: %s", err, out)
+		}
+		it := identifyGroup(t, t.TempDir(), path)
+		if it == nil {
+			t.Fatal("no item")
+		}
+		if got := it.GetExif("Orientation"); got != c.want {
+			t.Errorf("%dx%d with Orientation 6: the item's Orientation %q, want %q", c.w, c.h, got, c.want)
+		}
+	}
+}

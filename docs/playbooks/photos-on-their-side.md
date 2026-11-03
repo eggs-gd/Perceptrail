@@ -54,5 +54,6 @@ ExifTool keeps each original beside it as `<name>_original`; once you have looke
 `exiftool -r -delete_original /path/to/photos` removes them. Only the tag changes —
 the pixels are not re-encoded. Perceptrail picks the files up on its next walk.
 
-Perceptrail is to see through this by itself (the tag ignored on portrait pixels):
-[roadmap](../../_sb/docs/roadmap.md), "Product bugs".
+Perceptrail itself sees through it (since 0.2.0): a JPEG with portrait pixels and a
+quarter-turn tag is shown as its pixels are — in the grid, the viewer and the
+original. Other tools still turn it; fixing the files fixes it everywhere.

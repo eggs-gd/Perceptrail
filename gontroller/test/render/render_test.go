@@ -697,3 +697,33 @@ func TestRenderYields(t *testing.T) {
 		t.Errorf("started with %q (niceness, threads), want %q", got, want)
 	}
 }
+
+// A JPEG whose pixels were turned upright with its Orientation 6 left (an old
+// camera's rotate): rendered as its pixels are, portrait — while a landscape JPEG
+// with the same tag is still turned
+func TestRenderStaleOrientation(t *testing.T) {
+	if _, err := exec.LookPath("exiftool"); err != nil {
+		t.Skip("exiftool not installed")
+	}
+	db, _ := start(t)
+	for _, c := range []struct{ w, h, wantW, wantH int }{
+		{600, 800, 600, 800}, // portrait pixels: the tag is stale
+		{800, 600, 600, 800}, // landscape pixels: the tag turns them
+	} {
+		path := photo(t, c.w, c.h)
+		if out, err := exec.Command("exiftool", "-q", "-overwrite_original", "-n", "-Orientation=6", path).CombinedOutput(); err != nil {
+			t.Fatalf("%v: %s", err, out)
+		}
+		item := publish(t, db, path, "image/jpeg") // render reads the tag from the file itself
+		if row := work(t, db, item); row.DoneAt == 0 {
+			t.Fatalf("%dx%d: row %+v", c.w, c.h, row)
+		}
+		rs, err := db.Renditions(item.GUID)
+		if err != nil || len(rs) == 0 {
+			t.Fatalf("%dx%d: renditions %+v %v", c.w, c.h, rs, err)
+		}
+		if big := rs[len(rs)-1]; big.W != c.wantW || big.H != c.wantH {
+			t.Errorf("%dx%d with Orientation 6: rendered %dx%d, want %dx%d", c.w, c.h, big.W, big.H, c.wantW, c.wantH)
+		}
+	}
+}

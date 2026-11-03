@@ -93,3 +93,19 @@ func TestClientAssetFull(t *testing.T) {
 		t.Errorf("full %+v, want the item's size", a.Full)
 	}
 }
+
+// An original whose Orientation tag is stale (portrait pixels, 6) goes to the client
+// with image-orientation "none"; one whose tag turns landscape pixels, as it is
+func TestClientAssetStaleOrientation(t *testing.T) {
+	for _, c := range []struct {
+		w, h int
+		want string
+	}{{2304, 3072, "none"}, {3072, 2304, ""}} {
+		f := &dto.FileDto{ID: 1, Role: dto.RoleOriginal, Width: c.w, Height: c.h, Orientation: 6, LinkedTo: "G"}
+		f.MimeType = "image/jpeg"
+		a := toClientAsset(&dto.ItemDto{GUID: "G"}, []*dto.FileDto{f}, nil)
+		if a.Original == nil || a.Original.Orientation != c.want {
+			t.Errorf("%dx%d with Orientation 6: original %+v, want orientation %q", c.w, c.h, a.Original, c.want)
+		}
+	}
+}

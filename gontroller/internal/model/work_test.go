@@ -354,3 +354,54 @@ func TestRenew(t *testing.T) {
 		t.Errorf("lease left %v, want about %v", until, lease)
 	}
 }
+
+// A JPEG whose stored pixels are portrait but whose stills are landscape — what render
+// made before it read a stale Orientation — is due again, though its version and input
+// match; once its stills are portrait, not. A landscape JPEG whose item is portrait
+// for another reason (an .xmp's Orientation: render reads the file only) is not
+// asked — render could not change it, it would be redone forever; nor is a video.
+func TestDueWhenStillsTurned(t *testing.T) {
+	db := openTest(t)
+	render := func(item *dto.ItemDto, w, h int) {
+		t.Helper()
+		taken, _ := db.Take("render", []api.GUID{item.GUID})
+		done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: item.GUID, Lease: taken[0].Lease, Version: "v1", Input: "h1",
+			Renditions: []dto.RenditionDto{{GUID: item.GUID, Size: 1600, Format: "webp", W: w, H: h, Path: "r/" + string(item.GUID) + "/1600.webp"}}})
+		if err != nil || !done {
+			t.Fatalf("finish: %v %v", done, err)
+		}
+	}
+	// item: an item of mime, its main file w × h pixels, the item itself iw × ih
+	item := func(name, mime string, w, h, iw, ih int) *dto.ItemDto {
+		t.Helper()
+		it := workItem(t, db, name, dto.Ready, time.Now(), "h1")
+		f, _ := db.GetFileByPath("/" + name)
+		f.Width, f.Height, f.MimeType = w, h, mime
+		if _, err := db.UpdateFile(f); err != nil {
+			t.Fatal(err)
+		}
+		it.MimeType, it.Size = mime, api.Size{W: iw, H: ih}
+		if _, err := db.UpdateItem(it); err != nil {
+			t.Fatal(err)
+		}
+		return it
+	}
+
+	stale := item("old.jpg", "image/jpeg", 2304, 3072, 2304, 3072)
+	render(stale, 1600, 1200) // before render read the stale tag
+	if got := pass(t, db, "v1", 10); len(got) != 1 || got[0] != stale.GUID {
+		t.Fatalf("portrait pixels, landscape stills: due %v, want it", got)
+	}
+	render(stale, 1200, 1600)
+	if got := pass(t, db, "v1", 10); len(got) != 0 {
+		t.Fatalf("portrait stills: due %v", got)
+	}
+
+	sidecar := item("xmp.jpg", "image/jpeg", 3072, 2304, 2304, 3072) // an .xmp says 6
+	render(sidecar, 1600, 1200)
+	video := item("v.mp4", "video/mp4", 1080, 1920, 1080, 1920)
+	render(video, 1600, 900)
+	if got := pass(t, db, "v1", 10); len(got) != 0 {
+		t.Fatalf("what render cannot change is not asked: due %v", got)
+	}
+}

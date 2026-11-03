@@ -7,7 +7,7 @@
     import Picture from "./Picture.svelte";
     import Motion from "./Motion.svelte";
     import KindBadge from "./KindBadge.svelte";
-    import {assetUrl, biggestImage, fallbackImage, fullFetched, hasImage, hoverUrl, localFullVideo, mediumUrl, originalImage, originalOnDemand, playableVideos, viewerChoice} from "./asset";
+    import {assetUrl, biggestImage, fallbackImage, fullFetched, hasImage, hoverUrl, imageOrientation, localFullVideo, mediumUrl, originalImage, originalOnDemand, playableVideos, viewerChoice} from "./asset";
     import {viewerPrefs} from "./viewerPrefs.svelte";
     import {debug} from "#lib/app.svelte.js";
 
@@ -164,7 +164,7 @@
          onmouseleave={() => (hovered = false)}>
         {#if choice?.image}
             <!-- The viewer: the local image of our comfortable size, as it is -->
-            <img src={assetUrl(choice.image)} alt={item.guid}>
+            <img src={assetUrl(choice.image)} alt={item.guid} style:image-orientation={imageOrientation(asset)}>
         {:else}
             <Picture {asset} {sizes} alt={item.guid} width={item.width} height={item.height}/>
         {/if}
@@ -179,6 +179,7 @@
         {#if original}
             <!-- Over what is shown, once it loaded (from Photos it may take a while) -->
             <img class="medium" class:ready={originalReady} src={original.url} alt={item.guid}
+                 style:image-orientation={imageOrientation(asset)}
                  onload={(e) => {
                      const img = e.currentTarget as HTMLImageElement;
                      originalLoad = {url: original!.url, w: img.naturalWidth, h: img.naturalHeight};

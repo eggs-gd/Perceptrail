@@ -25,6 +25,10 @@ type rendition struct {
 	W     int    `json:"w,omitempty"`
 	H     int    `json:"h,omitempty"`
 	Codec string `json:"codec,omitempty"` // video: avc1, hvc1, …
+	// The CSS image-orientation the browser must show it with: "none" when its
+	// Orientation tag is stale (dto.FileDto.StaleOrientation) — the browser would turn
+	// pixels already upright; "" — as the file says
+	Orientation string `json:"orientation,omitempty"`
 }
 
 type clientAsset struct {
@@ -68,6 +72,9 @@ func toClientAsset(item *dto.ItemDto, files []*dto.FileDto, lib Library) clientA
 			continue
 		}
 		r := rendition{URL: fmt.Sprintf("/assets/%s/%d", item.GUID, f.ID), Mime: f.MimeType, W: f.Width, H: f.Height, Codec: f.Codec}
+		if f.StaleOrientation() {
+			r.Orientation = "none"
+		}
 		previewIsFile = previewIsFile || f.Path == item.PreviewPath
 		switch f.Role {
 		case dto.RoleOriginal:

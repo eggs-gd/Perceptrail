@@ -38,6 +38,8 @@ const quality = 80
 //     (a JPEG is never decoded whole for a 400 px tile), a HEIC it decodes whole on
 //     every read (measured: findings "Photo renditions: what costs").
 //   - Metadata is stripped (GPS, the camera): a rendition is pixels only.
+//   - A JPEG whose Orientation tag is stale (staleOrientation) is not turned by it:
+//     vipsthumbnail turns by the tag unless told not to.
 //   - Each is written beside its name (<size>.part.<format>: the format is the
 //     extension) and renamed once whole: a rendition the gallery serves is never
 //     half of a new one (a render stopped, failed).
@@ -48,6 +50,10 @@ func (v vips) photo(ctx context.Context, src string, to itemDir) ([]dto.Renditio
 	if err := os.MkdirAll(to.abs, 0o755); err != nil {
 		return nil, err
 	}
+	var turn []string
+	if staleOrientation(src) {
+		turn = []string{"--no-rotate"}
+	}
 	var out []dto.RenditionDto
 	for i := len(v.sizes) - 1; i >= 0; i-- {
 		size := v.sizes[i]
@@ -56,8 +62,9 @@ func (v vips) photo(ctx context.Context, src string, to itemDir) ([]dto.Renditio
 		}
 		part := to.path(fmt.Sprintf("%d.part.%s", size, v.format))
 		defer os.Remove(part) // a part not renamed: nothing of it stays
-		cmd := v.proc.command(ctx, v.bin, src,
-			"--size", fmt.Sprintf("%dx%d>", size, size), "-o", fmt.Sprintf("%s[Q=%d,strip]", part, quality))
+		args := append([]string{src, "--size", fmt.Sprintf("%dx%d>", size, size),
+			"-o", fmt.Sprintf("%s[Q=%d,strip]", part, quality)}, turn...)
+		cmd := v.proc.command(ctx, v.bin, args...)
 		if msg, err := cmd.CombinedOutput(); err != nil {
 			return nil, fmt.Errorf("vipsthumbnail %d: %w: %s", size, err, msg)
 		}
