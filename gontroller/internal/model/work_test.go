@@ -355,9 +355,11 @@ func TestRenew(t *testing.T) {
 	}
 }
 
-// A JPEG rendered landscape and then found portrait (a stale Orientation decided
-// again): due again, though its version and input match; once its stills agree, not;
-// a video's poster is not asked
+// A JPEG whose stored pixels are portrait but whose stills are landscape — what render
+// made before it read a stale Orientation — is due again, though its version and input
+// match; once its stills are portrait, not. A landscape JPEG whose item is portrait
+// for another reason (an .xmp's Orientation: render reads the file only) is not
+// asked — render could not change it, it would be redone forever; nor is a video.
 func TestDueWhenStillsTurned(t *testing.T) {
 	db := openTest(t)
 	render := func(item *dto.ItemDto, w, h int) {
@@ -369,32 +371,37 @@ func TestDueWhenStillsTurned(t *testing.T) {
 			t.Fatalf("finish: %v %v", done, err)
 		}
 	}
-	sized := func(item *dto.ItemDto, mime string, w, h int) {
+	// item: an item of mime, its main file w × h pixels, the item itself iw × ih
+	item := func(name, mime string, w, h, iw, ih int) *dto.ItemDto {
 		t.Helper()
-		item.MimeType, item.Size = mime, api.Size{W: w, H: h}
-		if _, err := db.UpdateItem(item); err != nil {
+		it := workItem(t, db, name, dto.Ready, time.Now(), "h1")
+		f, _ := db.GetFileByPath("/" + name)
+		f.Width, f.Height, f.MimeType = w, h, mime
+		if _, err := db.UpdateFile(f); err != nil {
 			t.Fatal(err)
 		}
-	}
-	photo := workItem(t, db, "old.jpg", dto.Ready, time.Now(), "h1")
-	sized(photo, "image/jpeg", 3072, 2304)
-	render(photo, 1600, 1200)
-	if got := pass(t, db, "v1", 10); len(got) != 0 {
-		t.Fatalf("rendered as the item is: due %v", got)
-	}
-	sized(photo, "image/jpeg", 2304, 3072) // its orientation decided again
-	if got := pass(t, db, "v1", 10); len(got) != 1 || got[0] != photo.GUID {
-		t.Fatalf("stills turned against the item: due %v, want it", got)
-	}
-	render(photo, 1200, 1600)
-	if got := pass(t, db, "v1", 10); len(got) != 0 {
-		t.Fatalf("stills agree again: due %v", got)
+		it.MimeType, it.Size = mime, api.Size{W: iw, H: ih}
+		if _, err := db.UpdateItem(it); err != nil {
+			t.Fatal(err)
+		}
+		return it
 	}
 
-	video := workItem(t, db, "v.mp4", dto.Ready, time.Now(), "h1")
-	sized(video, "video/mp4", 1080, 1920)
+	stale := item("old.jpg", "image/jpeg", 2304, 3072, 2304, 3072)
+	render(stale, 1600, 1200) // before render read the stale tag
+	if got := pass(t, db, "v1", 10); len(got) != 1 || got[0] != stale.GUID {
+		t.Fatalf("portrait pixels, landscape stills: due %v, want it", got)
+	}
+	render(stale, 1200, 1600)
+	if got := pass(t, db, "v1", 10); len(got) != 0 {
+		t.Fatalf("portrait stills: due %v", got)
+	}
+
+	sidecar := item("xmp.jpg", "image/jpeg", 3072, 2304, 2304, 3072) // an .xmp says 6
+	render(sidecar, 1600, 1200)
+	video := item("v.mp4", "video/mp4", 1080, 1920, 1080, 1920)
 	render(video, 1600, 900)
 	if got := pass(t, db, "v1", 10); len(got) != 0 {
-		t.Fatalf("a video is not asked: due %v", got)
+		t.Fatalf("what render cannot change is not asked: due %v", got)
 	}
 }

@@ -84,8 +84,9 @@ func (p *Proxy) CreateFileCommand() pubsub.Command[dto.ItemEntry, *dto.FileDto] 
 per item and slug (`render`; later the pixel perceptors). **What is needed is
 derived, never recorded**: an item needs a slug's work when it has no row, or its row
 was done with another `version` (the code or config that made it) or for another
-`input` (the item's fingerprint), or — a JPEG — its stills are turned against it (one
-portrait, the other landscape: its orientation decided again since). A new item
+`input` (the item's fingerprint), or — a JPEG — its pixels are portrait and its stills
+landscape (made before render read a stale Orientation; only what render itself can
+change, or it would be redone forever). A new item
 enters by itself, a deleted one leaves by the join, a new version makes everything
 due — nobody enqueues.
 

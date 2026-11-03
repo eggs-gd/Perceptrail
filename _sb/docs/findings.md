@@ -816,8 +816,11 @@ How it is read, the paths and the proxy: the
   that came before identify stored the tag would make sideways stills for good.
 - **Existing items, without redoing everything**: a new `readVersion` marks every
   item for another cheap pass (`MarkRework`, the fingerprint kept), so the files are
-  read again and the item's size is corrected; the work queue then finds such a
-  JPEG's stills turned against the item and renders it again — only those. Rejected:
+  read again and the item's size is corrected; the work queue finds a JPEG whose
+  pixels are portrait and whose stills are landscape — what only the old render made
+  — and renders it again, only those. Not "the stills disagree with the item"
+  (review: Codex): an item turned by what render does not read (an `.xmp`'s
+  Orientation) would stay due and be rendered on every pass. Rejected:
   a revision in render's version and clearing the fingerprints (both redo every
   rendition, videos too; and either could run before identify read the tag); fixing
   the files (we never write to a library: that is the owner's own step, the
