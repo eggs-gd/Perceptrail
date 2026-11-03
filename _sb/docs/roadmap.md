@@ -67,66 +67,57 @@ One line each; the details are in the READMEs and the PRs.
   #55 the roadmap sorted (the asset-from-all-files feature, bugs by kind, ML
   next), docs for the public (`docs/`, the README, `CONTRIBUTING.md`).
 
-## Releases
+## 0.2.0 — the first release
 
-- **0.2.0 — the first release**: the transcode (photos and video, hardware video
-  encoding) and Docker. A release is an image someone installs; without the
-  transcode HEIC does not show in Chrome, iPhone HEVC does not play, big originals
-  slow the grid. Until then everything stays in `develop`.
-- **The next milestone — ML**: the first pixel perceptor (faces) on goMLer, with
-  the relative perceptors (the trail) it opens (Later: the perceptor platform).
+A release is an image someone installs. Built: the transcode — the work queue and
+render (#36), photos (#36, #52), videos (#37) — Docker (#38, #41), the docs for the
+public (#55). Without the transcode HEIC does not show in Chrome, iPhone HEVC does
+not play, big originals slow the grid. Open:
 
-## Next: docs for the public
+- [ ] **Old photos turned twice** — pixels already rotated upright, the quarter-turn
+      Orientation (6 / 8) left in place (an in-camera rotate or an XP-era tool;
+      `Software` still the firmware's): every modern viewer turns them again, on
+      their side. The owner's archive: 415 of 2 359 photos before 2010 (Panasonic
+      DMC-LS70, a Sony DSC-W80); the 144 landscape ones with 6 are right. No sensor
+      writes portrait pixels, so the rule: Orientation 5–8 on portrait pixels is
+      ignored — by the size perceptor, by render (no auto-rotate), and the viewer
+      shows such an item from its renditions, never the original (a browser turns
+      it by the tag).
+- [ ] **A landing page**: the project's face for the public — what it is, how it
+      looks, install.
+- [ ] **The README shows it**: screenshots, better a GIF — one photo seen through
+      several perceptors, the switch between them.
+- [ ] **The docs checked for the release**: the install from a clean host, the
+      config's choices.
 
-Built (#55): [`docs/`](../../docs/README.md), the root README for the public,
-[`CONTRIBUTING.md`](../../CONTRIBUTING.md). Open:
+Then the release (AGENTS.md "Git workflow"); until then everything stays in
+`develop`.
 
-- [ ] A screenshot (or a short clip) in the README.
+## The next milestone — ML
+
+The first pixel perceptor (faces) on goMLer, with the relative perceptors (the
+trail) it opens (Later: the perceptor platform).
+
+## After 0.2.0 — the order to be decided
+
+- [ ] **Hardware video** — VAAPI first on Intel Linux, QSV beside it (a compose
+      override: `/dev/dri`, the `render` group; NVENC's), VideoToolbox (native on a
+      Mac), NVENC when there is one to test on; a macOS ImageIO HEIC decoder only if
+      the benchmarks show HEIC is the bottleneck. Measured: ~25× less CPU, not
+      urgent for a phone library (findings "Hardware video: measured").
+- [ ] **The write bus, its rest** — the classes' deadlines, the callers
+      asynchronous ("Design: the write bus"). Measured (#53): the bottleneck was a
+      missing index; batching would save ~20 % of a first pass — waits until a pass
+      shows it worth it.
+- [ ] Render, when asked for: `avif` (Go reads no AVIF header: its `w`/`h` from
+      vips), several images per vips process if a NAS shows the start dominating, a
+      hover clip if 720p on hover weighs too much.
+- [ ] Docker: the server as a non-root user, arm64 images.
 - [ ] More playbooks, as faults are met: Apple's offloaded originals, Live Photos
       split by a rename.
 
-## Next: the expensive stage (transcode)
-
-In steps, each its own PR (designs below: "The write bus", "Entities, components,
-systems — a lens", "The work queue", "Expensive stage"):
-
-0. [ ] **The write bus** — [go-pub-sub](https://github.com/eggs-gd/go-pub-sub) (events and commands,
-   classes) and the model's writer. Done: one write connection, a read pool,
-   batches of what is queued, lanes by class, `synchronous=NORMAL`; every write
-   rule a command — the public method waits for its result, `…Command()` gives it
-   asynchronously (nobody uses that yet). Next: the classes' deadlines and the
-   callers going asynchronous (the walk without its own pages, the steps each its
-   own way). Before any new writer comes. Measured (#53): the bottleneck was a
-   missing index, not the bus; the commits batching would save are ~20 % of a first
-   pass — waits until a pass shows it worth it (findings "Measured before the
-   deadlines").
-1. [x] **The work queue and the render service** (#36) — the queue in the model
-   ([README](../../gontroller/internal/model/README.md#the-work-queue)),
-   `internal/render` woken by `ItemPublished`, a stand-in renderer (a symbolic
-   link to the original): the queue's rules tested before any codec.
-2. [x] **Photo renditions** (#36, #52) — libvips on the CPU (`vipsthumbnail`, a
-   process each), 400 and 1600 in webp, never upscaled; made of the item's preview
-   when it is big enough (a RAW's embedded JPEG), each smaller size of the one
-   above; measured (findings "Photo renditions: what costs"). Later, when asked
-   for: `avif` (Go reads no AVIF header: its `w`/`h` from vips), several images per
-   process if a NAS shows the start dominating.
-3. [x] **Video, software** (#37) — H.264 + AAC at 1280 (`libx264`, CRF capped at
-   4 Mb/s), the poster's stills, a Live Photo's motion; HDR → SDR with `zscale`; the
-   recipe the software row of a table the hardware rows join. No hover clip: the
-   tile plays the motion (open: a clip if 720p on hover weighs too much).
-4. [x] **Docker** (#38) — two images (the server: jellyfin-ffmpeg, libvips,
-   exiftool, the plugins; the web: Caddy, `/api` to the server), one compose with
-   software encoding, GHCR on every release; a Mac with Photos runs the native
-   binary. Open: the server as a non-root user, arm64 images.
-5. [ ] **Hardware** — VAAPI first on Intel Linux, QSV beside it (a compose override
-   `hwaccel.qsv.yml`: `/dev/dri`, the `render` group; `hwaccel.nvenc.yml`),
-   VideoToolbox (native on a Mac), NVENC when there is one to test on; a macOS
-   ImageIO HEIC decoder only if the benchmarks show HEIC is the bottleneck.
-   Measured: ~25× less CPU, not urgent for a phone library (findings "Hardware
-   video: measured").
-
-0.2.0 needs 0–4; 5 is wanted. Only the plain folder's items are rendered (a library
-renders itself: Apple — on demand through PhotoKit).
+Only the plain folder's items are rendered (a library renders itself: Apple — on
+demand through PhotoKit).
 
 ## Next: providers — other libraries as sources
 
@@ -239,16 +230,6 @@ the resources differ (IO and exiftool, CPU / GPU, ML); roles later
       - `dto.WalkedFile.Missing` stays for now (a fact in a message).
 
 ## Product bugs
-
-- [ ] **Old photos turned twice** — pixels already rotated upright, the quarter-turn
-      Orientation (6 / 8) left in place (an in-camera rotate or an XP-era tool;
-      `Software` still the firmware's): every modern viewer turns them again, on
-      their side. The owner's archive: 415 of 2 359 photos before 2010 (Panasonic
-      DMC-LS70, a Sony DSC-W80); the 144 landscape ones with 6 are right. No sensor
-      writes portrait pixels, so the rule: Orientation 5–8 on portrait pixels is
-      ignored — by the size perceptor, by render (no auto-rotate), and the viewer
-      shows such an item from its renditions, never the original (a browser turns
-      it by the tag).
 
 - [ ] **Zoom in the viewer** — the wheel zoom worked badly and is gone. Look at
       Immich and Google Photos (they differ): around the pointer, pan, pinch,
