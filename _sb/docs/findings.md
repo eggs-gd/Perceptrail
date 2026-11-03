@@ -803,6 +803,14 @@ How it is read, the paths and the proxy: the
   its size), render (`vipsthumbnail --no-rotate`), the client (`image-orientation:
   none` on such an original — the browser turns by the tag; our renditions carry no
   tag, so `none` leaves them as they are).
+- **Where the rule would be wrong**: portrait pixels with a right quarter-turn tag —
+  a portrait shot (landscape pixels + 6) cut by a lossless crop (jpegtran,
+  IrfanView) into a strip taller than wide in its stored pixels, meant to be seen
+  wide. Not in the owner's archive: all 415 are a whole frame (2304×3072 of a
+  3072×2304 sensor). If one shows up: only a whole frame's size is stale (EXIF's
+  size equals the pixels, a camera's aspect), a cut keeps its tag. Tools of the XP
+  era showed the pixels, not the tag — what they left is meant as its pixels are;
+  today's tools keep the pixels and the tag in step.
 - **Render reads its source itself** (the tag by a small EXIF reader, the size from
   the JPEG header), not the files' rows: identify and render run apart, and a render
   that came before identify stored the tag would make sideways stills for good.
