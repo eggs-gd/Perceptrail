@@ -58,7 +58,8 @@ A rule that is wrong for a line is answered on that line — `// NOSONAR` or
 - [Roadmap](_sb/docs/roadmap.md) and [findings & decisions](_sb/docs/findings.md)
 - [Design diagrams](_sb/puml) (PlantUML; rendered in [_sb/diagrams](_sb/diagrams))
 - Modules: [gontroller](gontroller/readme.md) · [perceplib](perceplib/README.md) ·
-  [perceptors](perceptors/readme.md) · [svebapp](svebapp/README.md)
+  [perceptors](perceptors/readme.md) · [svebapp](svebapp/README.md) ·
+  [landing](landing/README.md) (perceptrail.eggs.gd)
 
 ## Import chain
 

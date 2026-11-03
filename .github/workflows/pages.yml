@@ -1,0 +1,57 @@
+name: Pages
+
+# The landing on perceptrail.eggs.gd (landing/), one site built from both branches:
+# master's at the root (stable: what a release installs), develop's under /develop
+# (what is being tested). A push to either rebuilds both (scripts/landing-site.sh).
+
+on:
+  push:
+    branches: [ master, develop ]
+    paths: [ 'landing/**', 'scripts/version.sh', 'scripts/landing-site.sh', 'VERSION', '.github/workflows/pages.yml' ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0  # scripts/version.sh counts commits; both branches
+
+    - name: Set up Node
+      uses: actions/setup-node@v7
+      with:
+        node-version: 24
+
+    # Each branch in a worktree of its own; scripts/landing-site.sh builds them (a
+    # failed build fails the site, never falls back)
+    - name: Build
+      run: |
+        git worktree add -q "$RUNNER_TEMP/develop" origin/develop
+        git worktree add -q "$RUNNER_TEMP/master" origin/master
+        scripts/landing-site.sh "$RUNNER_TEMP/develop" "$RUNNER_TEMP/master" "$RUNNER_TEMP/site"
+
+    - uses: actions/upload-pages-artifact@v5
+      with:
+        path: ${{ runner.temp }}/site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+    - id: deployment
+      uses: actions/deploy-pages@v5

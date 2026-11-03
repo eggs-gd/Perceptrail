@@ -96,6 +96,29 @@ jobs:
     - run: npm test
     - run: npm run build
 
+  # The landing (perceptrail.eggs.gd, deployed by pages.yml): checked, tested, built
+  landing:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: landing
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        fetch-depth: 0  # vite.config.ts derives the version from history
+
+    - name: Set up Node
+      uses: actions/setup-node@v7
+      with:
+        node-version: 24
+        cache: npm
+        cache-dependency-path: landing/package-lock.json
+
+    - run: npm ci
+    - run: npm run check
+    - run: npm test
+    - run: npm run build
+
   # Every push to develop is one squash merge = one version. Tag it once checks pass.
   # master only receives fast-forwards of develop, so its commits are already tagged.
   tag:

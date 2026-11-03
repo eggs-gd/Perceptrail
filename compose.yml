@@ -9,10 +9,11 @@
 # directory it reads is mounted here, read only; the data — database, caches — stays
 # in ./data. Your own settings (more mounts, a user, /dev/dri) go in a
 # compose.override.yml beside it: an update replaces this file, not that one.
-# Images: latest (a release), develop (what is being tested), or a version.
+# Images: latest (a release), develop (what is being tested), or a version —
+# PERCEPTRAIL_TAG in a .env beside this file (default: latest).
 services:
   server:
-    image: ghcr.io/eggs-gd/perceptrail-server:latest
+    image: ghcr.io/eggs-gd/perceptrail-server:${PERCEPTRAIL_TAG:-latest}
     volumes:
       - type: bind
         source: ./config.yml
@@ -26,7 +27,7 @@ services:
     restart: unless-stopped
 
   web:
-    image: ghcr.io/eggs-gd/perceptrail-web:latest
+    image: ghcr.io/eggs-gd/perceptrail-web:${PERCEPTRAIL_TAG:-latest}
     ports:
       - "${PORT:-8080}:80"
     depends_on:

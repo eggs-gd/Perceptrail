@@ -1,0 +1,40 @@
+/* The gallery's colours (its icon): a night blue and an amber */
+:root {
+    --bg: #12142a;
+    --surface: #1b1f3b;
+    --line: rgba(255, 255, 255, 0.12);
+    --text: #eceef7;
+    --muted: #a9adc6;
+    --accent: #ffb347;
+
+    --consent-bg: var(--surface);
+    --consent-text: var(--text);
+    --consent-muted: var(--muted);
+    --consent-border: var(--line);
+    --consent-accent: var(--accent);
+
+    color-scheme: dark;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    background: var(--bg);
+    color: var(--text);
+    font: 17px/1.6 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+body {
+    margin: 0;
+}
+
+a {
+    color: var(--accent);
+}
+
+code, pre {
+    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    font-size: 0.875rem;
+}

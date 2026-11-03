@@ -67,7 +67,8 @@ One line each; the details are in the READMEs and the PRs.
   #55 the roadmap sorted (the asset-from-all-files feature, bugs by kind, ML
   next), docs for the public (`docs/`, the README, `CONTRIBUTING.md`). · #56 old
   photos turned twice (a stale Orientation on portrait pixels) shown as their pixels
-  are: the import, render, the viewer.
+  are: the import, render, the viewer. · #57 the landing, perceptrail.eggs.gd: stable and
+  develop from their branches, the install of either (`PERCEPTRAIL_TAG`).
 
 ## 0.2.0 — the first release
 
@@ -76,10 +77,13 @@ render (#36), photos (#36, #52), videos (#37) — Docker (#38, #41), the docs fo
 public (#55), old photos turned twice shown upright (#56). Without the transcode HEIC does not show in Chrome, iPhone HEVC does
 not play, big originals slow the grid. Open:
 
-- [ ] **A landing page**: the project's face for the public — what it is, how it
-      looks, install.
-- [ ] **The README shows it**: screenshots, better a GIF — one photo seen through
-      several perceptors, the switch between them.
+- [ ] **A landing page** — built (#57): [perceptrail.eggs.gd](https://perceptrail.eggs.gd)
+      (`landing/`), stable and develop from their branches, SEO and consent by the
+      organization's spec. Open: how it looks — the demo below.
+- [ ] **The README and the landing show it**: screenshots, better a GIF — one photo
+      seen through several perceptors, the switch between them — of a demo library
+      (public photos of every aspect ratio, with dates and places), never a real
+      archive.
 - [ ] **The docs checked for the release**: the install from a clean host, the
       config's choices.
 
