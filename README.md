@@ -1,92 +1,72 @@
 # Perceptrail
 
-**Perceptrail** is a self-hosted next-generation photo gallery that allows users to interact with large photo libraries through dynamic and flexible navigation. Instead of traditional albums and directories, **Perceptrail** offers an endless journey through your photos, enabling you to view them from various perspectives, such as people, geolocations, objects, cameras, and other metadata powered by AI.
+**Perceptrail** is a self-hosted photo gallery for large libraries. Instead of
+albums and folders it is one endless sheet of your photos, and you choose the point
+of view — by date, by place, by size; people, objects and colour come with ML. Each
+view is a **perceptor**, a plugin that knows one thing about a photo and orders the
+sheet by it. From any photo you can switch the view and stay on that photo.
 
-The core concept is to provide an infinite way to explore content. By navigating through similar photos, users can see their collection from new angles, choosing different points of view through the plugin system we call **Perceptors**.
+It reads your libraries and never writes to them: a plain folder, Apple Photos (on
+a Mac), Immich (through its API).
 
-**Perceptors** is a modular system built from scratch, allowing the integration of various plugins for analyzing, searching, and interacting with photos. These plugins can introduce new navigation criteria like filters by geotags, faces, objects, camera models, and more.
+**Status**: before its first release (0.2.0). It runs every day on its author's
+library; the install and the config may still change.
 
-## Key Features
+## What works now
 
-- Infinite browsing of photos based on similarity or metadata.
-- Navigation by people, geolocations, objects, cameras, and other criteria.
-- Powerful **Perceptors** plugin system for extended navigation and analysis capabilities.
-- AI/ML integration for recognizing and analyzing content.
+- **The gallery**: one sheet of every photo and video, a justified grid that keeps
+  its place on a resize, fast on tens of thousands of items (the list is cached in
+  the browser and synced by its changes), several tabs at once.
+- **Views (perceptors)**: date, size, duration, places (from GPS: sections by
+  region and city), each with its sections; more as plugins.
+- **The viewer**: photos, videos, Live Photos (the motion plays on a tile), an info
+  panel with what each perceptor knows, every file of an item to download.
+- **Libraries**: plain folders (one or several), RAW + JPEG pairs, edits and
+  sidecars kept together as one item; Apple Photos (its database, its files, and
+  what is in iCloud through PhotoKit — on a Mac, the native server); Immich (its
+  timeline, previews and playback through our server — its key never reaches the
+  browser).
+- **Renditions** for a plain folder: photos as WebP in two sizes (from a RAW's
+  embedded preview when it is big enough), videos as H.264 any browser plays, HDR
+  tone mapped, a poster each. Libraries that make their own (Apple, Immich) are not
+  rendered again.
+- **Docker**: two images, one compose file.
 
-## Tech Stack
+## Planned
 
-- **Frontend**: Built with [Svelte](https://svelte.dev/), using **IndexDB** for local storage and fast interactions.
-- **Backend**: Developed with [Go](https://go.dev/), using **PostgreSQL** for data storage.
-- **ML Backend**: (in development) Likely to be implemented in Go or Python with a custom data structure for storing machine learning results.
+- **ML**: faces first, then the **trail** — from a photo to the nearest one you have
+  not seen, then the nearest to that; colour, objects.
+- A perceptor's own UI (a map for places), what other tools wrote into sidecars
+  (ratings, keywords, faces), metadata editing, batch operations.
+- Hardware video encoding (VAAPI / QSV, NVENC, VideoToolbox).
+- PostgreSQL beside SQLite.
 
-## Capabilities
+The whole list: [roadmap](_sb/docs/roadmap.md).
 
-- Interactive display and editing of metadata for each item.
-- Filtering based on various criteria depending on installed **Perceptors**.
-- Support for batch operations for bulk metadata editing.
+## Install
 
-## Development
-
-Running the server and what it needs on each platform (exiftool, libvips, ffmpeg):
-[`gontroller/readme.md`](gontroller/readme.md#running).
-
-Git hooks (fast local checks before CI) — enable once per clone:
+Docker, in a directory of its own:
 
 ```bash
-git config core.hooksPath .githooks
+curl -fsSLO https://raw.githubusercontent.com/eggs-gd/Perceptrail/master/compose.yml
+docker run --rm --entrypoint cat ghcr.io/eggs-gd/perceptrail-server /etc/perceptrail/config.yml > config.yml
+docker compose up -d    # then http://<host>:8080
 ```
 
-- `pre-commit`: refuses commits on `master`/`develop`, requires `gofmt` for staged Go files, and is the
-  local gate for SonarQube: golangci-lint on the Go modules with staged files, and the secrets scan of the
-  staged files when the `sonar` CLI is installed. Nothing goes to the server.
-- `pre-push`: runs the CI checks (Go vet/tests + plugin build, `svelte-check`) and SonarQube (below) for the
-  parts changed since `develop`.
+Your photos, other libraries, updates, a Mac with Apple Photos:
+[docs/install.md](docs/install.md). All the docs: [`docs/`](docs/README.md).
 
-Skip in an emergency with `--no-verify`.
+## Inside
 
-### SonarQube (optional)
+- **Server** (`gontroller`): Go; metadata by ExifTool, renditions by libvips and
+  ffmpeg. The storage is database-agnostic (GORM behind the model): SQLite now,
+  PostgreSQL planned.
+- **Gallery** (`svebapp`): SvelteKit, a single-page app; the list lives in
+  IndexedDB, the layout in web workers.
+- **Perceptors**: built in, or Go plugins on [`perceplib`](perceplib/README.md).
 
-The owner's server is on a LAN: a local analysis, no CI. With `SONAR_HOST_URL` and
-`SONAR_TOKEN` in the environment or a git-ignored `.env` (mode 600; a worktree
-uses the main checkout's), `make sonar`
-runs every Go module's tests with coverage and golangci-lint
-([`.golangci.yml`](.golangci.yml)), svebapp's unit tests with coverage, the scan
-([`sonar-project.properties`](sonar-project.properties)) and the quality gate (red:
-a non-zero exit — on new code: no new issue, coverage ≥ 80 %); `pre-push` runs it
-when code it covers, or its config, is pushed and stops the push on a red gate (the report is on the
-server either way; not `pre-commit`: an analysis is of `HEAD`, and its check on GitHub lands on that commit).
-After every push, once it has finished, run `make sonar-publish`: the push's analysis was made while GitHub did not know the commit yet, so the PR's check could not land on it; this sends the scan again on the same reports (no tests, no lint), as the PR's once it is open (a branch's before). `make sonar SONAR_GATE=false` sends the report
-without waiting for the gate. The setup is the organization's
-[SonarQube standard](https://github.com/eggs-gd/.github/blob/main/docs/sonarqube.md). Without them nothing runs. What is analysed follows
-the checkout ([`scripts/sonar-scope`](scripts/sonar-scope)): `master` (GitHub's
-default branch) is the project's main branch; a branch with an open PR is that PR
-(its new code: the diff against the PR's base, `develop`); any other branch —
-`develop` too — is a branch of its own. Nothing but `master` may be scanned
-without these parameters: such a scan replaces the main branch's state. Branches
-and PRs need the community branch plugin on the server. Needs `sonar-scanner` and
-`golangci-lint` (`brew install sonar-scanner golangci-lint`); the issues:
-`sonar list issues -p perceptrail --format table` (`sonar` CLI). `.svelte` is not
-analysed — `svelte-check` guards it. A scan failing in blame with
-`MissingObjectException` (the scanner's JGit cannot read git 2.5x's
-multi-pack-index): `git config core.multiPackIndex false` in that checkout.
-A rule that is wrong for a line is answered on that line — `// NOSONAR` or
-`//nolint:<linter>` with the reason — never by closing the issue on the server.
+Changing the code: [CONTRIBUTING.md](CONTRIBUTING.md).
 
-## Documentation
+## License
 
-- [Roadmap](_sb/docs/roadmap.md) and [findings & decisions](_sb/docs/findings.md)
-- [Design diagrams](_sb/puml) (PlantUML; rendered in [_sb/diagrams](_sb/diagrams))
-- Modules: [gontroller](gontroller/readme.md) · [perceplib](perceplib/README.md) ·
-  [perceptors](perceptors/readme.md) · [svebapp](svebapp/README.md)
-
-## Import chain
-
-![Import chain](./_sb/diagrams/Import%20chain.svg)
-
-## Files gate and validator
-
-![Files gate and validator](./_sb/diagrams/Walker%20and%20validating.svg)
-
-## ML Flow
-
-![ML Flow](./_sb/diagrams/ML%20Flow.svg)
+[Mozilla Public License 2.0](LICENSE).
