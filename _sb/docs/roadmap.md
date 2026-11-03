@@ -228,6 +228,16 @@ the resources differ (IO and exiftool, CPU / GPU, ML); roles later
 
 ## Product bugs
 
+- [ ] **Old photos turned twice** — pixels already rotated upright, the quarter-turn
+      Orientation (6 / 8) left in place (an in-camera rotate or an XP-era tool;
+      `Software` still the firmware's): every modern viewer turns them again, on
+      their side. The owner's archive: 415 of 2 359 photos before 2010 (Panasonic
+      DMC-LS70, a Sony DSC-W80); the 144 landscape ones with 6 are right. No sensor
+      writes portrait pixels, so the rule: Orientation 5–8 on portrait pixels is
+      ignored — by the size perceptor, by render (no auto-rotate), and the viewer
+      shows such an item from its renditions, never the original (a browser turns
+      it by the tag).
+
 - [ ] **Zoom in the viewer** — the wheel zoom worked badly and is gone. Look at
       Immich and Google Photos (they differ): around the pointer, pan, pinch,
       double-click, the original's pixels past the preview.
