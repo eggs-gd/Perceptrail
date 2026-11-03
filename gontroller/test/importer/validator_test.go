@@ -303,3 +303,25 @@ func TestValidatorBrokenFiles(t *testing.T) {
 	scan(t, root)
 	assertNoItem(t, guid)
 }
+
+// A photo corrupted, then repaired: its item comes back — the same one (its GUID,
+// kept by the file), not a second one the database refuses
+func TestValidatorCorruptedThenRepaired(t *testing.T) {
+	root := t.TempDir()
+	photo := filepath.Join(root, "photo.jpg")
+	write(t, photo, "a good photo")
+	scan(t, root)
+	guid := itemAt(t, photo).GUID
+
+	write(t, photo, "BROKEN now, and longer than before")
+	scan(t, root)
+	assertNoItem(t, guid)
+
+	write(t, photo, "repaired, and longer than ever before")
+	if repaired := scan(t, root); len(repaired) != 1 || repaired[0] != photo {
+		t.Errorf("after the repair processed %v, want the photo", repaired)
+	}
+	if item := itemAt(t, photo); item.GUID != guid {
+		t.Errorf("repaired: GUID %s, want the old %s", item.GUID, guid)
+	}
+}
