@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="en">
-	<head>
+	<head><!-- NOSONAR Web:PageWithoutTitleCheck: each page sets its <title> in <svelte:head>; one here would make two -->
 		<!-- Google tag (gtag.js) -->
 		<script async src="https://www.googletagmanager.com/gtag/js?id=G-FKP0SF1KEL"></script>
 		<script>
-			window.dataLayer = window.dataLayer || [];
+			globalThis.dataLayer = globalThis.dataLayer || [];
 			function gtag() {
 				dataLayer.push(arguments);
 			}
@@ -19,7 +19,7 @@
 				ad_personalization: 'denied',
 				wait_for_update: 500
 			});
-			window.setAnalyticsConsent = function (choice) {
+			globalThis.setAnalyticsConsent = function (choice) {
 				try {
 					localStorage.setItem('analyticsConsent', choice);
 				} catch (e) {}
@@ -42,8 +42,8 @@
 				var el = e.target instanceof Element && e.target.closest('[data-cta]');
 				if (!el) return;
 				gtag('event', 'cta_click', {
-					cta_target: el.getAttribute('data-cta'),
-					cta_placement: el.getAttribute('data-cta-placement') || '',
+					cta_target: el.dataset.cta,
+					cta_placement: el.dataset.ctaPlacement || '',
 					transport_type: 'beacon'
 				});
 			});

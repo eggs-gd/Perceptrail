@@ -32,8 +32,9 @@ SEO, analytics and consent follow the organization's spec (the reference copy is
 [`eggs-gd/.github`](https://github.com/eggs-gd/.github/blob/main/docs/working-rules.md#analytics-and-consent)):
 a canonical URL, Open Graph and Twitter cards, `SoftwareApplication` JSON-LD,
 `robots.txt` and `sitemap.xml`; the Google tag in Consent Mode (`denied` until the
-visitor accepts) — `src/app.html`, `src/lib/analytics/` are the template's files, kept
-identical to it; the footer of a `*.eggs.gd` project (© earwiG Games, eggs.gd, Privacy,
+visitor accepts) — `src/app.html`, `src/lib/analytics/` are the template's files, with
+the quality gate's style fixes (`globalThis` for `window`, `dataset`), which go back to
+the template; the footer of a `*.eggs.gd` project (© earwiG Games, eggs.gd, Privacy,
 Cookie settings). English only for now.
 
 The tests are the pure code's: the install commands per channel and the consent's

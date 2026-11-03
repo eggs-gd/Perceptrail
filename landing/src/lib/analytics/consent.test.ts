@@ -10,7 +10,7 @@ beforeEach(() => {
         getItem: (k: string) => stored.get(k) ?? null,
         setItem: (k: string, v: string) => void stored.set(k, v),
     });
-    vi.stubGlobal('window', {setAnalyticsConsent: vi.fn((c: string) => stored.set('analyticsConsent', c))});
+    vi.stubGlobal('setAnalyticsConsent', vi.fn((c: string) => stored.set('analyticsConsent', c)));
 });
 
 describe('consent', () => {
@@ -24,7 +24,7 @@ describe('consent', () => {
 
     it('a choice goes to the tag and hides the banner; settings show it again', () => {
         choose('granted');
-        expect(window.setAnalyticsConsent).toHaveBeenCalledWith('granted');
+        expect(globalThis.setAnalyticsConsent).toHaveBeenCalledWith('granted');
         expect(get(consent)).toBe('granted');
         reopenConsent();
         expect(get(consent)).toBe('unset');
