@@ -48,14 +48,14 @@ sudo dnf install perl-Image-ExifTool vips-tools ffmpeg
 ```
 
 **Windows**: not natively (the perceptors are Go plugins, `.so`) — WSL 2 with the
-Debian / Ubuntu line above. A Docker image with everything inside comes with 0.2.0.
+Debian / Ubuntu line above — or the Docker images ([`docs/install.md`](../docs/install.md)).
 
 `exiftool` may also be a distribution from the
 [`eggs-gd/go-exiftool` `dist-*` releases](https://github.com/eggs-gd/go-exiftool/releases),
 set with `exiftool:` in the config.
 
 ```bash
-mkdir -p .var && cp config.example.yml .var/config.yml   # once, then edit path:
+mkdir -p .var && cp config.example.yml .var/config.yml   # once, then edit paths:
 make run
 ```
 

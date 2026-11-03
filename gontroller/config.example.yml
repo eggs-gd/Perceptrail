@@ -31,7 +31,7 @@ plugins:
 
 # Providers: libraries read through their own means, one after another in the
 # import chain; what none of them claims is a plain folder. A provider not listed is
-# enabled. apple: a *.photoslibrary under `path` — its DB, and PhotoKit on demand
+# enabled. apple: a *.photoslibrary under one of `paths` — its DB, and PhotoKit on demand
 # (macOS; access is asked once, the prompt names the terminal that started us).
 # immich: a server read through its API, read only, when its url is set — the
 # timeline (not the archive, the hidden or the trash); its previews and playback are

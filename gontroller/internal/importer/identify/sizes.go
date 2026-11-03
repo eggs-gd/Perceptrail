@@ -84,8 +84,10 @@ func readFilesAgain(db SizesStore, logger *l.Logger) error {
 	if err != nil {
 		return err
 	}
-	logger.Info("What is read of the files changed: every item is identified once more",
-		l.String("from", stored), l.String("to", readVersion), l.Int("items", int(n)))
+	if n > 0 { // a new database has nothing to do again: nothing to say
+		logger.Info("What is read of the files changed: every item is identified once more",
+			l.String("from", stored), l.String("to", readVersion), l.Int("items", int(n)))
+	}
 	return db.SetMeta(readVersionKey, readVersion)
 }
 

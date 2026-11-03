@@ -72,6 +72,8 @@ One line each; the details are in the READMEs and the PRs.
   keeps the user's photo through the next switches too, not only the first. · #59 the
   demo: the perceptors recorded over public photos, on the landing and in the README.
   · #60 the landing's demo an animated image, playing by itself in every browser.
+  · #61 the docs checked for the release; a new database starts without notes of
+  migrations it had nothing to do for.
 
 ## 0.2.0 — the first release
 
@@ -86,8 +88,9 @@ not play, big originals slow the grid. Open:
 - [x] **The README and the landing show it** (#59): a recording of Date, then Place
       around one marked photo, over a demo library of public photos
       (`landing/demo/`).
-- [ ] **The docs checked for the release**: the install from a clean host, the
-      config's choices.
+- [x] **The docs checked for the release** (#61): the source install on a fresh
+      clone, the config's fields against the code; the Docker one is CI's (the
+      images in compose, the template config, `/api`).
 
 Then the release (AGENTS.md "Git workflow"); until then everything stays in
 `develop`.
