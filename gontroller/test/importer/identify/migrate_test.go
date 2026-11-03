@@ -14,7 +14,8 @@ import (
 
 // At start, what changed in identify since the last run (the versions kept in the
 // meta table): a new kinds' table makes the ignored files judged again; a new
-// fingerprint makes every item forget its old one. The same versions change nothing.
+// fingerprint makes every item forget its old one; a new read of the files marks
+// every item for another pass. The same versions change nothing.
 func TestMigrate(t *testing.T) {
 	logger := l.NewLogger(l.ErrorLevel, &tree.Decorator{})
 	clip := filepath.Join(t.TempDir(), "clip.mov")
@@ -43,7 +44,7 @@ func TestMigrate(t *testing.T) {
 		t.Fatal(err)
 	}
 	// The versions an older run kept (the meta table's keys are the DB's contract)
-	for key := range map[string]bool{"mime_version": true, "hash_version": true} {
+	for key := range map[string]bool{"mime_version": true, "hash_version": true, "read_version": true} {
 		if err := testDB.SetMeta(key, "1"); err != nil {
 			t.Fatal(err)
 		}
@@ -53,10 +54,10 @@ func TestMigrate(t *testing.T) {
 	if f, _ := testDB.GetFileByPath(clip); f.IsIgnored() {
 		t.Error("the file is still ignored")
 	}
-	if got, _ := testDB.GetItemByGUID(item.GUID); got.HashShort != "" {
-		t.Errorf("fingerprint kept: %q", got.HashShort)
+	if got, _ := testDB.GetItemByGUID(item.GUID); got.HashShort != "" || !got.Rework {
+		t.Errorf("fingerprint kept %q, or not marked for another pass (rework %v)", got.HashShort, got.Rework)
 	}
-	for _, key := range []string{"mime_version", "hash_version"} {
+	for _, key := range []string{"mime_version", "hash_version", "read_version"} {
 		if v, _ := testDB.GetMeta(key); v == "1" {
 			t.Errorf("%s still %q", key, v)
 		}

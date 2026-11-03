@@ -40,6 +40,34 @@ func TestJPEGOrientation(t *testing.T) {
 	}
 }
 
+// Not a JPEG, cut short, a broken EXIF: no orientation, nothing stale
+func TestJPEGOrientationBroken(t *testing.T) {
+	good := withExif(t, 30, 40, binary.LittleEndian, 6)
+	exifAt := bytes.Index(good, []byte("Exif"))
+	badOrder := bytes.Clone(good)
+	copy(badOrder[exifAt+6:], "XX")
+	for name, data := range map[string][]byte{
+		"empty":         nil,
+		"not a JPEG":    []byte("GIF89a"),
+		"cut in EXIF":   good[:exifAt+10],
+		"cut at a head": good[:3],
+		"byte order":    badOrder,
+	} {
+		if got := jpegOrientation(bytes.NewReader(data)); got != 0 {
+			t.Errorf("%s: orientation %d, want 0", name, got)
+		}
+	}
+	if got := tiffOrientation([]byte("II\x2a\x00\xff\x00\x00\x00")); got != 0 {
+		t.Errorf("IFD past the end: %d", got)
+	}
+	if got := tiffOrientation([]byte("II\x2a\x00\x08\x00\x00\x00\x05\x00")); got != 0 {
+		t.Errorf("entries past the end: %d", got)
+	}
+	if staleOrientation(filepath.Join(t.TempDir(), "missing.jpg")) {
+		t.Error("a missing file is stale")
+	}
+}
+
 // withExif: a w × h JPEG with an Exif APP1 holding only Orientation (order nil: no
 // EXIF at all)
 func withExif(t *testing.T, w, h int, order binary.ByteOrder, orientation uint16) []byte {

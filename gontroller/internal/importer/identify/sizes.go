@@ -39,30 +39,34 @@ const readVersionKey = "read_version"
 // asset "as its pixels are" — the size perceptor then turns nothing.
 func setSizes(it *draft) {
 	for i, f := range it.Files {
-		if f.Role == dto.RoleMeta || f.Remote() {
-			continue
-		}
-		if it.Exif[i] != nil {
-			f.Codec = string(it.Exif[i]["CompressorID"])
-			f.Orientation, _ = strconv.Atoi(string(it.Exif[i]["Orientation"]))
-		}
-		// The metadata describes the original: a derivative standing in as the main
-		// file (a cloud-only asset) has its own size
-		if i == 0 && f.Role == dto.RoleOriginal {
-			f.Orientation, _ = strconv.Atoi(mainTag(it, "Orientation"))
-			w, _ := strconv.Atoi(mainTag(it, "ImageWidth"))
-			h, _ := strconv.Atoi(mainTag(it, "ImageHeight"))
-			if w > 0 && h > 0 {
-				f.Width, f.Height = w, h
-				continue
-			}
-		}
-		if w, h, ok := headerSize(f.Path); ok {
-			f.Width, f.Height = w, h
+		if f.Role != dto.RoleMeta && !f.Remote() {
+			setSize(it, i, f)
 		}
 	}
 	if len(it.Files) > 0 && it.Files[0].StaleOrientation() {
 		it.Merged["Orientation"] = []byte("1")
+	}
+}
+
+// setSize: one file's codec, orientation and pixels (setSizes)
+func setSize(it *draft, i int, f *dto.FileDto) {
+	if it.Exif[i] != nil {
+		f.Codec = string(it.Exif[i]["CompressorID"])
+		f.Orientation, _ = strconv.Atoi(string(it.Exif[i]["Orientation"]))
+	}
+	// The metadata describes the original: a derivative standing in as the main
+	// file (a cloud-only asset) has its own size
+	if i == 0 && f.Role == dto.RoleOriginal {
+		f.Orientation, _ = strconv.Atoi(mainTag(it, "Orientation"))
+		w, _ := strconv.Atoi(mainTag(it, "ImageWidth"))
+		h, _ := strconv.Atoi(mainTag(it, "ImageHeight"))
+		if w > 0 && h > 0 {
+			f.Width, f.Height = w, h
+			return
+		}
+	}
+	if w, h, ok := headerSize(f.Path); ok {
+		f.Width, f.Height = w, h
 	}
 }
 
