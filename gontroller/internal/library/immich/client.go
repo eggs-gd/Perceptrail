@@ -69,7 +69,7 @@ func Key(file string) (string, error) {
 	}
 	key, _, _ := strings.Cut(strings.TrimSpace(string(data)), "\n")
 	if key = strings.TrimSpace(key); key == "" {
-		return "", fmt.Errorf("immich: API key file %s is empty", file)
+		return "", fmt.Errorf("immich: the API key file (api_key_file) is empty")
 	}
 	return key, nil
 }

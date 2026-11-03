@@ -876,6 +876,14 @@ How it is read, the paths and the proxy: the
 
 ## Repository
 
+- **GitHub's CodeQL sees a change only at the release** (#63): its default setup
+  scans `master` and the PRs into it — not the feature PRs into `develop` — so the
+  `develop` → `master` PR of 0.2.0 showed three alerts of code merged long before:
+  a demo script's tag stripping in one pass, the Immich key file's path in an error
+  (a path, never the key — CodeQL goes by the name), a `ParseUint` of 64 bits into a
+  `uint`. Fixed before the release push, not after; SonarQube runs on every PR, not
+  CodeQL's rules.
+
 - **SonarQube, locally** (#47, the owner's LAN server, no CI): the first scan hung
   ten minutes in "Preprocessing files" — the scanner walks a listed directory
   whole, exclusions or not, and `gontroller/` held the dev checkout's data (`.var`:
