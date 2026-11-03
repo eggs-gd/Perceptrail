@@ -99,6 +99,9 @@ is (`dto.AssetKind`). A step gathers stat, exif, kinds, the fingerprint.
   soft-deleted; a sidecar gone → the item is `Dirty`.
 - **Moves**: a moved file's old path may be deleted before the new one is
   validated; validate restores the soft-deleted item by fingerprint, the GUID stays.
+- **Broken, then repaired**: a broken main file is ignored and its item
+  soft-deleted; the file keeps its GUID, so once repaired validate restores that
+  item (`Dirty`) — never a second one under the same GUID.
 - **A remote file is its provider's alone** (a path with a scheme, `dto.Remote`:
   `immich://…`): nothing opens it — identify takes its metadata and fingerprint
   from the asset, its sizes from the grouper, extracts no embedded preview; the

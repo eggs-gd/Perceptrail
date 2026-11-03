@@ -113,6 +113,16 @@ func (t *tx) validateFile(item *dto.FileDto, hashShort string) (*dto.ItemDto, er
 	}
 
 	if itemByGUID.GUID == "" {
+		// The file's own item, deleted (the photo was corrupted, now repaired): it is
+		// back — its GUID is the file's, a new item under it is refused
+		var deleted dto.ItemDto
+		if t.db.Unscoped().Where("guid = ? AND deleted_at IS NOT NULL", item.GUID).First(&deleted).Error == nil {
+			deleted.DeletedAt = gorm.DeletedAt{}
+			deleted.State = dto.Dirty
+			deleted.Path, deleted.MimeType, deleted.HashShort = item.Path, item.MimeType, hashShort
+			return &deleted, t.db.Unscoped().Save(&deleted).Error
+		}
+
 		// Walker.puml "found moved": same hash, the old path no longer exists
 		if moved := t.findMovedItem(item, hashShort); moved != nil {
 			return moved, t.moveItem(moved, item)

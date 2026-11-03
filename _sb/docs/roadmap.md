@@ -75,7 +75,8 @@ One line each; the details are in the READMEs and the PRs.
   · #61 the docs checked for the release; a new database starts without notes of
   migrations it had nothing to do for. · #62 `VERSION` 0.2 · #63 the release PR's
   CodeQL alerts fixed before the release. · #64 the demo's tag stripping without a
-  regex, as CodeQL reads it.
+  regex, as CodeQL reads it. · #65 a photo broken, then repaired, comes back as its
+  own item.
 
 ## 0.2.0 — the first release
 
@@ -177,6 +178,17 @@ merge reads every file's declared tags. Missing — the meaning, in steps:
 - [ ] Reading the sidecars of keyed (Apple) groups (only the main file is read now).
 - [ ] Storing the metadata package in the DB — when a consumer needs it (the info
       panel's raw exif, a perceptor re-run without the files).
+- [ ] **Render from what it renders** (review: Codex on #7): render may make a RAW +
+      JPEG group's stills from the JPEG, but the work queue's input is the main
+      file's fingerprint (the RAW) — a JPEG edited alone is never rendered again.
+      The input: the fingerprint of the file render read.
+- [ ] **Sidecars whose name differs in case** (review: Codex on #7, to discuss):
+      the grouper compares names case-insensitively but sees one group at a time,
+      so `img_001.xmp` joins `IMG_001.JPG` only when nothing sorts between them.
+      Likely not a real case (tools write a sidecar under the photo's own name; on
+      Linux two cases are two files) — then the comparison should keep the case of
+      the stem and only the extension's be free, and the result stops depending on
+      the neighbours.
 
 ## Next: Apple Photos — open
 

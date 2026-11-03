@@ -49,6 +49,14 @@ alt found the same
     end note
     DB -> Validator: <font color=blue><b>existing guid
 
+else found deleted
+    note over Validator, DB
+    the file's own item, soft-deleted
+    (the file was broken, now repaired)
+    end note
+    DB <- DB: restore the item
+    DB -> Validator: <font color=blue><b>existing guid</b></font>, Dirty
+
 else found moved
     note over Validator, DB
     same hash, different path,
