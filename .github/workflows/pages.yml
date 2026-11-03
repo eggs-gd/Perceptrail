@@ -2,13 +2,12 @@ name: Pages
 
 # The landing on perceptrail.eggs.gd (landing/), one site built from both branches:
 # master's at the root (stable: what a release installs), develop's under /develop
-# (what is being tested). A push to either rebuilds both. A branch without landing/
-# is not built; the root then gets develop's (before the first release with it).
+# (what is being tested). A push to either rebuilds both (scripts/landing-site.sh).
 
 on:
   push:
     branches: [ master, develop ]
-    paths: [ 'landing/**', 'scripts/version.sh', 'VERSION', '.github/workflows/pages.yml' ]
+    paths: [ 'landing/**', 'scripts/version.sh', 'scripts/landing-site.sh', 'VERSION', '.github/workflows/pages.yml' ]
   workflow_dispatch:
 
 permissions:
@@ -32,23 +31,13 @@ jobs:
       with:
         node-version: 24
 
-    # Each branch in a worktree of its own, built with its channel and base path
+    # Each branch in a worktree of its own; scripts/landing-site.sh builds them (a
+    # failed build fails the site, never falls back)
     - name: Build
       run: |
-        build() { # branch, channel, base path, out
-          git worktree add -q "$RUNNER_TEMP/$1" "origin/$1"
-          [ -d "$RUNNER_TEMP/$1/landing" ] || return 1
-          (cd "$RUNNER_TEMP/$1/landing" && npm ci && LANDING_CHANNEL=$2 BASE_PATH=$3 npm run build)
-          mkdir -p "$4" && cp -R "$RUNNER_TEMP/$1/landing/build/." "$4"
-        }
-        site="$RUNNER_TEMP/site"
-        build develop develop /develop "$site/develop"
-        build master stable "" "$site" || {
-          echo "master has no landing yet: the root is develop's"
-          (cd "$RUNNER_TEMP/develop/landing" && LANDING_CHANNEL=develop npm run build)
-          cp -R "$RUNNER_TEMP/develop/landing/build/." "$site"
-        }
-        echo perceptrail.eggs.gd > "$site/CNAME"
+        git worktree add -q "$RUNNER_TEMP/develop" origin/develop
+        git worktree add -q "$RUNNER_TEMP/master" origin/master
+        scripts/landing-site.sh "$RUNNER_TEMP/develop" "$RUNNER_TEMP/master" "$RUNNER_TEMP/site"
 
     - uses: actions/upload-pages-artifact@v5
       with:

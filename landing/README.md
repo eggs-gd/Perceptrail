@@ -3,7 +3,8 @@
 The project's page for the public, [perceptrail.eggs.gd](https://perceptrail.eggs.gd):
 what Perceptrail is, its perceptors, the libraries it reads, how to install it. A
 static SvelteKit site (adapter-static, every page prerendered), deployed to GitHub
-Pages by [`pages.yml`](../.github/workflows/pages.yml).
+Pages by [`pages.yml`](../.github/workflows/pages.yml), built by
+[`scripts/landing-site.sh`](../scripts/landing-site.sh).
 
 ```bash
 npm install
@@ -20,7 +21,8 @@ installs (images tagged `latest`) — and `develop`'s under `/develop` — what 
 tested (images tagged `develop`; `noindex`, the stable page is the one to find).
 `LANDING_CHANNEL` and `BASE_PATH` say which build it is; the install section switches
 between both channels' commands and links to the other page. Before a release carries
-the landing, the root is `develop`'s too.
+the landing, the root is `develop`'s too; a build that fails fails the site (never
+another channel's page in its place).
 
 The facts the page shows — its address, the channels, the install commands — are in
 one place, [`src/lib/site.ts`](src/lib/site.ts).
