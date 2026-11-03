@@ -68,7 +68,8 @@ One line each; the details are in the READMEs and the PRs.
   next), docs for the public (`docs/`, the README, `CONTRIBUTING.md`). · #56 old
   photos turned twice (a stale Orientation on portrait pixels) shown as their pixels
   are: the import, render, the viewer. · #57 the landing, perceptrail.eggs.gd: stable and
-  develop from their branches, the install of either (`PERCEPTRAIL_TAG`).
+  develop from their branches, the install of either (`PERCEPTRAIL_TAG`). · #58 a switch
+  keeps the user's photo through the next switches too, not only the first.
 
 ## 0.2.0 — the first release
 

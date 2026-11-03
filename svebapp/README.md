@@ -56,7 +56,9 @@ Perceptors ([Perceptors.puml](../_sb/puml/Perceptors.puml)) — every perceptor 
 view of the sheet: `GET /perceptors` gives a button per perceptor (`lib/gallery/perceptors.svelte.ts` keeps the active one and
 the pinned panel per browser). A switch is carried out like a resize: the photo in
 the middle of the screen (or the viewer's photo, centred) is the anchor the relayout
-keeps in place.
+keeps in place — and it stays the anchor of the next switches (and of `?at=`) until
+the user scrolls (`placeAnchor`): after a switch it is at its height but in another
+column, and the middle of the screen shows a neighbour.
 
 - `lib/workers/proxy.ts` — creates the workers, `loadFromServer()`,
   `updateLayout(screenWidth, rowHeight, anchor?)`.
