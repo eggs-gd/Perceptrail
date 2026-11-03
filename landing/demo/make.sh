@@ -29,8 +29,8 @@ EOF
     npx vite dev --port 5174 --strictPort > "$pair/vite.log" 2>&1) &
 trap 'pkill -f -- "--config $pair/config.yml"; pkill -f -- "vite dev --port 5174"' EXIT
 
-# Every photo with its renditions before the camera rolls — or as many as render: a
-# few Commons files may not, so it waits while the count still grows
+# Every photo with its renditions before the camera rolls — or as many as render: it
+# waits while the count still grows, not for a file that will not render
 want=$(node -e 'console.log(JSON.parse(require("fs").readFileSync(process.argv[1])).length)' "$repo/landing/demo/manifest.json")
 done=0 still=0
 while [ "$done" -lt "$want" ] && [ "$still" -lt 6 ]; do

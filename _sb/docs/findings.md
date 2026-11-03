@@ -850,6 +850,13 @@ How it is read, the paths and the proxy: the
   `coordinates` come for part of the pages at a time: without following `continue`
   almost nothing has them. The first pick was one author's subway stations and swans:
   at most three of an author in a city.
+- **Commons' dates and titles are text, not data** (review: Codex): a fifth of the
+  dates are "Taken on 2 February 2006, 13:36 (according to Exif data)", "1952",
+  "2011-04" — read as ISO only, they became their city's trip day. A title made an
+  ASCII name loses Cyrillic and Kanji whole: six of 272 came to one file, the photos
+  after the first never fetched and their places written onto it (a Kyiv photo in
+  Kyoto) — the "267 of 272 rendered" blamed on Commons. A file's name carries a
+  hash of the whole title.
 - **A switch keeps the photo in the middle, not at the very top** (svebapp: at the
   top the page stays at the top) — the first take, from the top, showed the sheet
   jumping away from the marked photo. The recording scrolls into the sheet first.

@@ -32,9 +32,9 @@ export default defineConfig({
         __CHANNEL__: JSON.stringify(channel),
         __VERSION__: JSON.stringify(version()),
     },
-    // The analytics consent's unit tests; coverage as lcov for SonarQube (make sonar)
+    // The unit tests (the analytics consent, the demo's names); coverage as lcov for SonarQube (make sonar)
     test: {
-        include: ['src/**/*.test.ts'],
+        include: ['src/**/*.test.ts', 'demo/**/*.test.mjs'],
         coverage: {provider: 'v8', include: ['src/**/*.ts'], exclude: ['src/**/*.d.ts', 'src/**/*.test.ts'], reporter: [['lcov', {projectRoot: '..'}], 'text-summary']},
     },
 });
