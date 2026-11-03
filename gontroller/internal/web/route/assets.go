@@ -77,7 +77,7 @@ func (r *routes) getAssetFile(c echo.Context) error {
 		return c.File(item.PreviewPath)
 	}
 
-	id, err := strconv.ParseUint(name, 10, 64)
+	id, err := strconv.ParseUint(name, 10, strconv.IntSize) // a uint: no wider than this platform's
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound)
 	}

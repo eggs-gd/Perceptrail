@@ -18,7 +18,13 @@ const perCity = 28;
 const perAuthor = 3;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const text = (html) => (html ?? '').replace(/<[^>]+>/g, '').trim();
+// Commons' HTML as plain text: tags taken out until none is left (one pass can join
+// the halves of a tag into a new one)
+function text(html) {
+    let out = html ?? '';
+    for (let prev; prev !== out;) [prev, out] = [out, out.replace(/<[^>]*>/g, '')];
+    return out.replace(/[<>]/g, '').trim();
+}
 
 // The Commons API, again after a pause while it says it is busy
 async function api(params) {
