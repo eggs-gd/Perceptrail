@@ -54,7 +54,8 @@ retelling (a retold fact goes stale on the next change and widens every PR).
 |---|---|
 | how a package works: its API, the non-obvious lines | godoc in the code |
 | a module's design: its parts, the rules across them, the types it owns | that module's README (`internal/importer`, `internal/library`, `internal/model`, `svebapp`, `perceplib`, `perceptors`) |
-| running, config, the HTTP API, the map of packages (one line each + a link) | the top README of the program (`gontroller/readme.md`) |
+| what a person running Perceptrail does: install, config, faults in their library (playbooks) | `docs/` |
+| running from source, the HTTP API, the map of packages (one line each + a link) | the top README of the program (`gontroller/readme.md`) |
 | target flows: steps and who does what | `_sb/puml`, rendered to `_sb/diagrams/*.svg` (the READMEs show them: re-render with every `.puml` change) |
 | why it is so, what was rejected, traps | `_sb/docs/findings.md` |
 | what is open, designs not built yet | `_sb/docs/roadmap.md` |

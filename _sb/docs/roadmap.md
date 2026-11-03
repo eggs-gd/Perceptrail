@@ -63,55 +63,61 @@ One line each; the details are in the READMEs and the PRs.
   only · #46 Immich's placeholders from its thumbhash · #52 photo renditions made
   of a RAW's embedded preview, each smaller size of the one above · #53 items and
   files found by path through an index: the first import no longer quadratic ·
-  #54 render's sweep test waits for the emptied directories too (flaky under load).
+  #54 render's sweep test waits for the emptied directories too (flaky under load) ·
+  #55 the roadmap sorted (the asset-from-all-files feature, bugs by kind, ML
+  next), docs for the public (`docs/`, the README, `CONTRIBUTING.md`).
 
-## Releases
+## 0.2.0 — the first release
 
-- **0.2.0 — the first release**: the transcode (photos and video, hardware video
-  encoding) and Docker. A release is an image someone installs; without the
-  transcode HEIC does not show in Chrome, iPhone HEVC does not play, big originals
-  slow the grid. Until then everything stays in `develop`.
+A release is an image someone installs. Built: the transcode — the work queue and
+render (#36), photos (#36, #52), videos (#37) — Docker (#38, #41), the docs for the
+public (#55). Without the transcode HEIC does not show in Chrome, iPhone HEVC does
+not play, big originals slow the grid. Open:
 
-## Next: the expensive stage (transcode)
+- [ ] **Old photos turned twice** — pixels already rotated upright, the quarter-turn
+      Orientation (6 / 8) left in place (an in-camera rotate or an XP-era tool;
+      `Software` still the firmware's): every modern viewer turns them again, on
+      their side. The owner's archive: 415 of 2 359 photos before 2010 (Panasonic
+      DMC-LS70, a Sony DSC-W80); the 144 landscape ones with 6 are right. No sensor
+      writes portrait pixels, so the rule: Orientation 5–8 on portrait pixels is
+      ignored — by the size perceptor, by render (no auto-rotate), and the viewer
+      shows such an item from its renditions, never the original (a browser turns
+      it by the tag).
+- [ ] **A landing page**: the project's face for the public — what it is, how it
+      looks, install.
+- [ ] **The README shows it**: screenshots, better a GIF — one photo seen through
+      several perceptors, the switch between them.
+- [ ] **The docs checked for the release**: the install from a clean host, the
+      config's choices.
 
-In steps, each its own PR (designs below: "The write bus", "Entities, components,
-systems — a lens", "The work queue", "Expensive stage"):
+Then the release (AGENTS.md "Git workflow"); until then everything stays in
+`develop`.
 
-0. [ ] **The write bus** — [go-pub-sub](https://github.com/eggs-gd/go-pub-sub) (events and commands,
-   classes) and the model's writer. Done: one write connection, a read pool,
-   batches of what is queued, lanes by class, `synchronous=NORMAL`; every write
-   rule a command — the public method waits for its result, `…Command()` gives it
-   asynchronously (nobody uses that yet). Next: the classes' deadlines and the
-   callers going asynchronous (the walk without its own pages, the steps each its
-   own way). Before any new writer comes. Measured (#53): the bottleneck was a
-   missing index, not the bus; the commits batching would save are ~20 % of a first
-   pass — waits until a pass shows it worth it (findings "Measured before the
-   deadlines").
-1. [x] **The work queue and the render service** (#36) — the queue in the model
-   ([README](../../gontroller/internal/model/README.md#the-work-queue)),
-   `internal/render` woken by `ItemPublished`, a stand-in renderer (a symbolic
-   link to the original): the queue's rules tested before any codec.
-2. [x] **Photo renditions** (#36, #52) — libvips on the CPU (`vipsthumbnail`, a
-   process each), 400 and 1600 in webp, never upscaled; made of the item's preview
-   when it is big enough (a RAW's embedded JPEG), each smaller size of the one
-   above; measured (findings "Photo renditions: what costs"). Later, when asked
-   for: `avif` (Go reads no AVIF header: its `w`/`h` from vips), several images per
-   process if a NAS shows the start dominating.
-3. [x] **Video, software** (#37) — H.264 + AAC at 1280 (`libx264`, CRF capped at
-   4 Mb/s), the poster's stills, a Live Photo's motion; HDR → SDR with `zscale`; the
-   recipe the software row of a table the hardware rows join. No hover clip: the
-   tile plays the motion (open: a clip if 720p on hover weighs too much).
-4. [x] **Docker** (#38) — two images (the server: jellyfin-ffmpeg, libvips,
-   exiftool, the plugins; the web: Caddy, `/api` to the server), one compose with
-   software encoding, GHCR on every release; a Mac with Photos runs the native
-   binary. Open: the server as a non-root user, arm64 images.
-5. [ ] **Hardware** — QSV (a compose override `hwaccel.qsv.yml`: `/dev/dri`, the
-   `render` group; `hwaccel.nvenc.yml`), VideoToolbox (native on a Mac),
-   NVENC when there is one to test on; a macOS ImageIO HEIC decoder only if the
-   benchmarks show HEIC is the bottleneck.
+## The next milestone — ML
 
-0.2.0 needs 0–4; 5 is wanted. Only the plain folder's items are rendered (a library
-renders itself: Apple — on demand through PhotoKit).
+The first pixel perceptor (faces) on goMLer, with the relative perceptors (the
+trail) it opens (Later: the perceptor platform).
+
+## After 0.2.0 — the order to be decided
+
+- [ ] **Hardware video** — VAAPI first on Intel Linux, QSV beside it (a compose
+      override: `/dev/dri`, the `render` group; NVENC's), VideoToolbox (native on a
+      Mac), NVENC when there is one to test on; a macOS ImageIO HEIC decoder only if
+      the benchmarks show HEIC is the bottleneck. Measured: ~25× less CPU, not
+      urgent for a phone library (findings "Hardware video: measured").
+- [ ] **The write bus, its rest** — the classes' deadlines, the callers
+      asynchronous ("Design: the write bus"). Measured (#53): the bottleneck was a
+      missing index; batching would save ~20 % of a first pass — waits until a pass
+      shows it worth it.
+- [ ] Render, when asked for: `avif` (Go reads no AVIF header: its `w`/`h` from
+      vips), several images per vips process if a NAS shows the start dominating, a
+      hover clip if 720p on hover weighs too much.
+- [ ] Docker: the server as a non-root user, arm64 images.
+- [ ] More playbooks, as faults are met: Apple's offloaded originals, Live Photos
+      split by a rename.
+
+Only the plain folder's items are rendered (a library renders itself: Apple — on
+demand through PhotoKit).
 
 ## Next: providers — other libraries as sources
 
@@ -148,27 +154,36 @@ The mechanism is done (`internal/library`, Apple Photos first).
 | **Google Takeout** | folders + `*.supplemental-metadata.json` per file | a folder with sidecars | EXIF often stripped |
 | Google Photos (live) | — | — | not possible: since 2025 its API sees only what the app created |
 
-## Next: the asset from all its files
+## Feature: the asset from all its files
+
+What a person sees: a photo carries what their other tools said about it — the
+rating, keywords and captions set in Lightroom, digiKam or darktable, the faces
+named there — and a Live Photo stays a Live Photo after a rename.
 
 Libraries write sidecars, so an asset is a package (the original, RAW + JPEG, edits,
-`.xmp` / `.aae`, the motion part); the grouping collects the whole package.
+`.xmp` / `.aae`, the motion part). Built: the grouping collects the whole package,
+merge reads every file's declared tags. Missing — the meaning, in steps:
 
-- [ ] **One item from the whole package**: rating, tags, captions, face regions from
-      the XMP sidecars (merge reads every file's declared tags already). Which
+- [ ] **The package's values on the item**: rating, keywords, captions, face regions
+      from the XMP sidecars, as perceptor data (nothing reads them yet). Which
       library writes what, and what wins when files disagree — per library.
 - [ ] **Live Photo pairs by `ContentIdentifier`** in generic folders (today by name:
       a rename breaks the pair, two namesakes stick together).
 - [ ] An `animated` kind (GIF, animated WebP / HEIC) shown moving.
+- [ ] Reading the sidecars of keyed (Apple) groups (only the main file is read now).
 - [ ] Storing the metadata package in the DB — when a consumer needs it (the info
       panel's raw exif, a perceptor re-run without the files).
-- [ ] Reading the sidecars of keyed (Apple) groups (only the main file is read now).
 
 ## Next: Apple Photos — open
 
-- [ ] Files Photos offloads (Optimize Mac Storage) must not hide or delete the item:
-      the grouper gets them as gone now and may keep the asset.
-- [ ] The Photos permission when gontroller is not started from a terminal
-      (launchd): the binary would need its own (Info.plist, a stable signature).
+- [ ] **Offloaded originals** (Optimize Mac Storage): a file Photos moved to iCloud
+      must not hide or delete the item — the grouper gets it as gone now and may
+      keep the asset. `Photos.sqlite` knows "in the cloud" from "deleted"; the
+      original comes through PhotoKit on demand.
+- [ ] **Published macOS binaries** (a step of its own, after the source release):
+      run by launchd, not a terminal, the binary needs its own Photos permission —
+      an `Info.plist` with the usage text, a stable signature. Whoever builds from
+      source signs their own build.
 - Supported schema: `ZASSET` (macOS 11+); older (`ZGENERICASSET`) — not planned.
 - Later: albums, people (`ZPERSON` / `ZDETECTEDFACE`) → perceptors.
 
@@ -201,7 +216,7 @@ the resources differ (IO and exiftool, CPU / GPU, ML); roles later
   orphans.
 - **API providers**: see Providers.
 
-## Smaller open items
+## Architecture bugs
 
 - [ ] **Booleans set by hand** (AGENTS.md "Code Style"), each where it belongs:
       - small, with the next change of their code: `perceptor.loaded` → `sync.Once` or the registry itself;
@@ -214,10 +229,11 @@ the resources differ (IO and exiftool, CPU / GPU, ML); roles later
         versions and inputs, not a mark;
       - `dto.WalkedFile.Missing` stays for now (a fact in a message).
 
+## Product bugs
+
 - [ ] **Zoom in the viewer** — the wheel zoom worked badly and is gone. Look at
       Immich and Google Photos (they differ): around the pointer, pan, pinch,
       double-click, the original's pixels past the preview.
-- [ ] Geo on a map (markers) — a perceptor UI slot.
 - Maybe: the optimal (Dijkstra) layout for full relayouts (a switch, a resize),
   the greedy one appending. Code kept (`svebapp/src/lib/workers/layout/`); not
   planned.
@@ -270,7 +286,10 @@ A stable core first.
 - [ ] **Relative perceptors (the trail)** with the first ML perceptor (faces): from
       the anchor to the nearest unseen photo, then the nearest to that, both ways;
       shared with the colour trail.
-- UI slots (`item-panel`, `view`): a perceptor brings its own UI (map, faces).
+- [ ] **A perceptor's own UI** — there is none today: a perceptor gives an order and
+      sections, the gallery draws them all the same. Slots (`item-panel`, `view`)
+      where a perceptor brings its UI (map, faces); the first feature on them:
+      **geo on a map** — the markers from `exif_geo`'s coordinates, a view of its own.
 - Reprocessing on a plugin version change; fsnotify instead of the periodic walk.
 - Several codecs / formats at once (`codecs: [h264, av1]`, `formats: [avif, webp]`)
   — the asset contract is ready, but each is another encode: N× disk and time.

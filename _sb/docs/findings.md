@@ -676,6 +676,25 @@ How it is read, the paths and the proxy: the
   was lost) was kept as the file's failure and backed off; the work just stops
   now, its lease runs out.
 - One codec and one image format in the config, not arrays (N× disk and time).
+- **Hardware video: measured, not urgent** (2026-11-03, the owner's i5-13500T, a
+  console script in Immich's container over its originals — a phone library): 884
+  videos, 1 hour in all, 4 s on average — mostly Live Photos' motion (777 HEVC
+  1080p, 366 HDR). Our 720p recipe on the first 30 s of a sample (shorter samples
+  whole, so the per-second cost is a floor):
+
+  | | wall | CPU |
+  |---|---|---|
+  | HEVC 1080 → libx264 | 2.8 s | 29 s (decoding alone 16 s) |
+  | the same on VAAPI / QSV | 1.0 / 1.6 s | 0.9 / 1.1 s |
+  | H.264 2340×1080 → libx264 | 4.2 s | 32 s |
+  | the same on VAAPI | 3.8 s | 2.8 s |
+
+  So a phone library's video costs CPU-hours once, minutes of wall time; the GPU
+  takes ~25× less CPU — what matters on a box shared with Immich, and for archives of
+  long videos (hours of them: a night on the CPU). Decoding is half the CPU, so a
+  hardware decoder alone halves it. **VAAPI first on Intel Linux**: faster than QSV
+  here, and QSV's encoder refused 1280×590 (VAAPI took it). HDR tone mapping left
+  out of the run — it adds to the CPU path.
 - **jellyfin-ffmpeg** in the image, not our own build: every hardware backend and
   HDR tone mapping.
 
