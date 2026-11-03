@@ -16,7 +16,7 @@
     import type {Anchor} from "./layoutWindow";
     import type {LayoutSize} from "#lib/stores/index.js";
     import {layoutDb} from "#lib/stores/index.js";
-    import {type AnchorState, findAnchor, readWindow, watchSize, watchWindow, type WindowSnapshot} from "./layoutWindow";
+    import {type AnchorState, findAnchor, placeAnchor, readWindow, watchSize, watchWindow, type WindowSnapshot} from "./layoutWindow";
 
     interface Props {
         gutter?: number;
@@ -104,14 +104,15 @@
 
     // The view is the URL's (/v/<slug>?at=<guid>): the sheet is rearranged around
     // the photo the user is at, kept in place like a resize keeps it. A button here
-    // goes to the URL with the photo in the middle as ?at (its place on screen kept);
+    // goes to the URL with the photo the user is at as ?at (its place on screen kept;
+    // the one the last switch kept, until the user scrolls — placeAnchor);
     // a link, a reload, Back or the viewer's button: ?at (or the viewed photo) is
     // centred. An unknown view goes to the first one.
     let requestedView = '';
     let switchAnchor: Anchor | undefined;
 
     export function switchView(slug: string) {
-        switchAnchor = anchorOnScreen(screenWidth);
+        switchAnchor = placeAnchor(anchorState, () => anchorOnScreen(screenWidth));
         goto(viewHref(slug, switchAnchor?.guid), {reset: false});
     }
 
@@ -164,7 +165,7 @@
         clearTimeout(atTimer);
         atTimer = setTimeout(() => {
             if (viewing !== undefined || !view || view !== perceptors.active) return;
-            const a = anchorOnScreen(screenWidth);
+            const a = placeAnchor(anchorState, () => anchorOnScreen(screenWidth));
             const href = viewHref(view, a?.guid);
             if (href !== location.pathname + location.search) goto(href, {shallow: true, replace: true, state: page.state});
         }, 400);
@@ -189,6 +190,9 @@
     });
 
     async function reveal(guid: string) {
+        // The user is at this photo now, not at the one a relayout kept — also when
+        // it is on screen already and nothing scrolls
+        anchorState.pending = undefined;
         const item = await layoutDb.items.get(guid);
         if (!item || !containerEl?.parentElement) return;
         const top = containerEl.parentElement.getBoundingClientRect().top + window.scrollY + item.y;

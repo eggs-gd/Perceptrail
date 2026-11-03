@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import type {LayoutItem} from '#lib/stores/index.js';
-import {findAnchor} from './layoutWindow';
+import {findAnchor, placeAnchor} from './layoutWindow';
 
 const item = (guid: string, x: number, y: number, w: number, h: number) =>
     ({guid, x, y, w, h, bottom: y + h}) as LayoutItem;
@@ -30,5 +30,18 @@ describe('findAnchor', () => {
 
     it('below every photo: none', () => {
         expect(findAnchor(items, {top: 500, height: 200, width: 316}, null)).toBeUndefined();
+    });
+});
+
+describe('placeAnchor', () => {
+    const onScreen = {mode: 'center' as const, guid: 'neighbour', ratio: 0.5};
+
+    it('after a relayout, the photo it kept — not whichever landed under the middle', () => {
+        const kept = {mode: 'center' as const, guid: 'mine', ratio: 0.3};
+        expect(placeAnchor({pending: kept, appliedRev: 3}, () => onScreen)).toBe(kept);
+    });
+
+    it('once the user scrolled (nothing kept): the photo on screen', () => {
+        expect(placeAnchor({appliedRev: 3}, () => onScreen)).toBe(onScreen);
     });
 });

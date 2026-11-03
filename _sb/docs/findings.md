@@ -123,6 +123,13 @@ Rewritten 2026-10-04 (PR #25) from the full log — the history is in git.
 - SVG icons from plugins are drawn as a CSS `mask-image`: no script runs, the
   button's colour paints it.
 
+- **A switch kept the photo once** (2026-11-03, found recording the demo): a switch
+  keeps its anchor at its height, but in its new row the photo lands in another
+  column; the URL's `?at=` and the next switch then took the photo under the middle —
+  a neighbour — and the second switch lost the user's photo. The anchor a relayout
+  keeps is the user's place until the user scrolls (`placeAnchor`); a reveal (the
+  viewer closed on another photo) drops it.
+
 ## Sync and the server ↔ client contract
 
 - **The cursor is the stream's last line**, not a header: once the 200 is out a DB

@@ -126,6 +126,16 @@ export interface View {
 }
 
 /**
+ * Where the user is: the anchor the relayouts keep (a switch, a resize) until the user
+ * scrolls, else what is on screen now. Not the photo under the middle after a switch:
+ * the kept one stays at its height, but lands in another column of its new row — the
+ * middle then shows a neighbour, and the next switch would keep that one.
+ */
+export function placeAnchor(state: AnchorState, onScreen: () => Anchor | undefined): Anchor | undefined {
+    return state.pending ?? onScreen();
+}
+
+/**
  * The anchor for a relayout: its mode depends on where the page is scrolled (the
  * edges pin the edge, the middle pins the photo in the middle of the screen).
  */
