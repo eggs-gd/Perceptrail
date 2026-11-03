@@ -841,6 +841,32 @@ How it is read, the paths and the proxy: the
   stills; the new one over the same data marked both for another pass, made the
   stale one 3:4 and rendered only it again.
 
+## The demo (landing/demo)
+
+- **Public photos only, PD or CC0** (the organization: never a real archive in a
+  frame): a CC BY photo in a recording would owe its author a credit in the frame.
+  Wikimedia Commons' geosearch gives photos with real places and mostly real dates;
+  a city's undated ones join its first dated day. Commons' `imageinfo` and
+  `coordinates` come for part of the pages at a time: without following `continue`
+  almost nothing has them. The first pick was one author's subway stations and swans:
+  at most three of an author in a city.
+- **Commons' dates and titles are text, not data** (review: Codex): a fifth of the
+  dates are "Taken on 2 February 2006, 13:36 (according to Exif data)", "1952",
+  "2011-04" — read as ISO only, they became their city's trip day. A title made an
+  ASCII name loses Cyrillic and Kanji whole: six of 272 came to one file, the photos
+  after the first never fetched and their places written onto it (a Kyiv photo in
+  Kyoto) — the "267 of 272 rendered" blamed on Commons. A file's name carries a
+  hash of the whole title.
+- **A switch keeps the photo in the middle, not at the very top** (svebapp: at the
+  top the page stays at the top) — the first take, from the top, showed the sheet
+  jumping away from the marked photo. The recording scrolls into the sheet first.
+- **Chrome's screencast, not Playwright's video**: Playwright records through an
+  ffmpeg build of its own (a download); CDP's `Page.startScreencast` gives each frame
+  with its time, and the system's ffmpeg makes the video (the frames come
+  acknowledged out of order: sorted by time).
+- **The browser pane of the desktop app freezes animations while hidden** — tiles
+  stay on their placeholder colour there; a headless Chrome shows them.
+
 ## Repository
 
 - **SonarQube, locally** (#47, the owner's LAN server, no CI): the first scan hung

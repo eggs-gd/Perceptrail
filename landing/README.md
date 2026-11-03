@@ -39,5 +39,8 @@ the quality gate's style fixes (`globalThis` for `window`, `dataset`), which go 
 the template; the footer of a `*.eggs.gd` project (© earwiG Games, eggs.gd, Privacy,
 Cookie settings). English only for now.
 
+What the page shows of the gallery — a recording of the perceptors over a library of
+public photos — is made by [`demo/`](demo/README.md).
+
 The tests are the pure code's: the install commands per channel and the consent's
 state.

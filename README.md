@@ -6,6 +6,8 @@ of view — by date, by place, by size; people, objects and colour come with ML.
 view is a **perceptor**, a plugin that knows one thing about a photo and orders the
 sheet by it. From any photo you can switch the view and stay on that photo.
 
+![The gallery ordered by date, then by place, around one marked photo](docs/images/perceptors.gif)
+
 It reads your libraries and never writes to them: a plain folder, Apple Photos (on
 a Mac), Immich (through its API).
 
