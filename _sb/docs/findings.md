@@ -882,7 +882,8 @@ How it is read, the paths and the proxy: the
   a demo script's tag stripping in one pass, the Immich key file's path in an error
   (a path, never the key — CodeQL goes by the name), a `ParseUint` of 64 bits into a
   `uint`. Fixed before the release push, not after; SonarQube runs on every PR, not
-  CodeQL's rules.
+  CodeQL's rules. A regex pass repeated until nothing changes still read as
+  incomplete to it (#64): the tags are cut out by splitting at `<`, no regex.
 
 - **SonarQube, locally** (#47, the owner's LAN server, no CI): the first scan hung
   ten minutes in "Preprocessing files" — the scanner walks a listed directory

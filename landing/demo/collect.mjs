@@ -18,12 +18,13 @@ const perCity = 28;
 const perAuthor = 3;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-// Commons' HTML as plain text: tags taken out until none is left (one pass can join
-// the halves of a tag into a new one)
+// Commons' HTML as plain text: split at every <, each piece after one loses what is
+// up to its > — all of it when there is none (a tag cut short). No < is left; a
+// regex pass could join the halves of a tag into a new one
 function text(html) {
-    let out = html ?? '';
-    for (let prev; prev !== out;) [prev, out] = [out, out.replace(/<[^>]*>/g, '')];
-    return out.replace(/[<>]/g, '').trim();
+    const [before, ...tagged] = (html ?? '').split('<');
+    const after = tagged.map((piece) => (piece.includes('>') ? piece.slice(piece.indexOf('>') + 1) : ''));
+    return [before, ...after].join('').trim();
 }
 
 // The Commons API, again after a pause while it says it is busy

@@ -74,7 +74,8 @@ One line each; the details are in the READMEs and the PRs.
   · #60 the landing's demo an animated image, playing by itself in every browser.
   · #61 the docs checked for the release; a new database starts without notes of
   migrations it had nothing to do for. · #62 `VERSION` 0.2 · #63 the release PR's
-  CodeQL alerts fixed before the release.
+  CodeQL alerts fixed before the release. · #64 the demo's tag stripping without a
+  regex, as CodeQL reads it.
 
 ## 0.2.0 — the first release
 
