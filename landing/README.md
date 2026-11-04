@@ -41,6 +41,8 @@ Cookie settings). English only for now.
 
 What the page shows of the gallery — a recording of the perceptors over a library of
 public photos — is made by [`demo/`](demo/README.md).
+The link preview (`static/og.png`) is made by [`og.sh`](og.sh); its address carries the
+version, so a chat that keeps a link's preview shows the new one after a release.
 
 The tests are the pure code's: the install commands per channel and the consent's
 state.
