@@ -1,10 +1,46 @@
 import {describe, expect, it} from 'vitest';
 import type {Asset, Rendition} from '#lib/stores/index.js';
-import {fallbackImage, imageOrientation, mediumUrl} from './asset';
+import {fallbackImage, imageOrientation, mediumUrl, pictureSources} from './asset';
 
 const image = (url: string, mime: string, w?: number): Rendition => ({url, mime, w, h: w});
 const asset = (over: Partial<Asset>): Asset =>
     ({kind: 'photo', original: null, edit: [], stills: [], motion: [], frames: [], ...over}) as Asset;
+
+describe('pictureSources', () => {
+    it('the stills, a source per type, best format first, each sized', () => {
+        const stills = [image('/s400.jpg', 'image/jpeg', 400), image('/s400.webp', 'image/webp', 400), image('/s1600.webp', 'image/webp', 1600)];
+        expect(pictureSources(asset({stills}))).toEqual([
+            {type: 'image/webp', srcset: '/api/s400.webp 400w, /api/s1600.webp 1600w'},
+            {type: 'image/jpeg', srcset: '/api/s400.jpg 400w'},
+        ]);
+    });
+
+    it('with an original every browser shows: it is offered too, unsized as it is', () => {
+        const a = asset({stills: [image('/s400.jpg', 'image/jpeg', 400)], original: image('/orig.jpg', 'image/jpeg')});
+        expect(pictureSources(a)).toEqual([{type: 'image/jpeg', srcset: '/api/s400.jpg 400w, /api/orig.jpg'}]);
+        expect(a.stills).toHaveLength(1);
+    });
+
+    it('an original a browser may not show (HEIC, RAW) is left to the stills', () => {
+        const a = asset({stills: [image('/s400.webp', 'image/webp', 400)], original: image('/orig.heic', 'image/heic', 4000)});
+        expect(pictureSources(a)).toEqual([{type: 'image/webp', srcset: '/api/s400.webp 400w'}]);
+    });
+
+    it('the edit is what the user sees: no stills, no original', () => {
+        const a = asset({
+            edit: [image('/e800.webp', 'image/webp', 800)],
+            stills: [image('/s400.webp', 'image/webp', 400)],
+            original: image('/orig.jpg', 'image/jpeg', 3000),
+        });
+        expect(pictureSources(a)).toEqual([{type: 'image/webp', srcset: '/api/e800.webp 800w'}]);
+    });
+
+    it('a type outside the preference goes last; what is not an image is no source', () => {
+        const stills = [image('/s.heic', 'image/heic', 400), image('/s.png', 'image/png', 400), image('/v.mp4', 'video/mp4', 400)];
+        expect(pictureSources(asset({stills})).map((s) => s.type)).toEqual(['image/png', 'image/heic']);
+        expect(pictureSources(asset({}))).toEqual([]);
+    });
+});
 
 describe('fallbackImage', () => {
     it('the biggest image every browser shows, the asset left as it was', () => {
