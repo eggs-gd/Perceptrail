@@ -40,7 +40,7 @@ export default defineConfig(({mode}) => {
         server: {
             proxy: {'/api': {target: api, rewrite: (path) => path.replace(/^\/api/, '')}},
         },
-        // Unit tests of the pure code (no DOM, no IndexedDB); coverage as lcov for
+        // Unit tests (no DOM; IndexedDB is fake-indexeddb); coverage as lcov for
         // SonarQube (make sonar)
         test: {
             include: ['src/**/*.test.ts'],
