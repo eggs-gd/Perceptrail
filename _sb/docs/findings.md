@@ -893,6 +893,12 @@ How it is read, the paths and the proxy: the
   multi-pack-index (`git fsck` clean) — `core.multiPackIndex false` in the
   checkout. Coverage runs `-short`: a test binary built for coverage loads no
   plugin, built with `-cover` or not; the plugin tests run in `go test` as ever.
+- **The release push's gate is the whole release** (0.2.3): pushing `develop` to
+  `master` scans `develop`, whose new code is everything since `master` — every PR's
+  few uncovered lines at once (66% against the gate's 80, where each PR had passed
+  its own). Covered where it is the product's logic (the layout worker, then 99%),
+  the rest seen and let through with `SONAR_GATE=false` on that push; not by
+  lowering the gate.
 - **Dependabot and CodeQL read `master`** (GitHub's default branch): a fix merged
   into `develop` (#50) leaves its alerts open until the release fast-forwards
   `master`. Before closing one by hand, check `develop`'s lock files, not the alert.

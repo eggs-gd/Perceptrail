@@ -16,9 +16,10 @@ npm run build     # production build: static files in build/ (adapter-static)
 ```
 
 The unit tests (`*.test.ts` next to their module) cover the pure code — the logger's
-stack reading, the layout's anchor, the sheet's scale, the asset's choices — and the
-sync's stream (`stream.ts`) over `fake-indexeddb` and a stand-in `fetch`; the workers
-themselves and the components are checked in a browser (the `smoke` skill).
+stack reading, the layout's anchor, the sheet's scale, the asset's choices — and, over
+`fake-indexeddb` and a stand-in `fetch`, the sync's stream (`stream.ts`) and the layout
+worker as its page and the sync see it (`wlayout.ts`: messages in, `layoutDb` out); the
+sync worker, the proxy and the components are checked in a browser (the `smoke` skill).
 
 A single-page app (`ssr = false`, `adapter-static` with the fallback `index.html`): it
 all renders in the browser. In Docker, Caddy serves `build/` and sends `/api` to
