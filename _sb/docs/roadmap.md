@@ -76,7 +76,7 @@ One line each; the details are in the READMEs and the PRs.
   migrations it had nothing to do for. · #62 `VERSION` 0.2 · #63 the release PR's
   CodeQL alerts fixed before the release. · #64 the demo's tag stripping without a
   regex, as CodeQL reads it. · #65 a photo broken, then repaired, comes back as its
-  own item.
+  own item. · #66 the layout worker tested as its page and the sync see it.
 
 ## 0.2.0 — the first release
 
