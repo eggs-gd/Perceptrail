@@ -11,8 +11,8 @@ sheet by it. From any photo you can switch the view and stay on that photo.
 It reads your libraries and never writes to them: a plain folder, Apple Photos (on
 a Mac), Immich (through its API).
 
-**Status**: before its first release (0.2.0). It runs every day on its author's
-library; the install and the config may still change.
+**Status**: 0.2, the first release. It runs every day on its author's library; the
+install and the config may still change.
 
 ## What works now
 
@@ -69,6 +69,12 @@ Your photos, other libraries, updates, a Mac with Apple Photos:
 
 The project's page: [perceptrail.eggs.gd](https://perceptrail.eggs.gd). Changing the
 code: [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Thanks
+
+Perceptrail is inspired by [HomeGallery](https://home-gallery.org/) by
+[Sebastian (xemle)](https://github.com/xemle) — a self-hosted gallery of your own
+photos and videos. Thank you.
 
 ## License
 
