@@ -8,7 +8,8 @@
     const description = 'One endless sheet of your photos, ordered by date, place or size. Switch the view on any photo and stay on it. Self-hosted, reads your library only.';
     const here = installs[channel];
     const url = origin + here.path;
-    const image = url + 'og.png';
+    // By version: a chat keeps a link's preview by the image's address
+    const image = `${url}og.png?v=${version}`;
 
     // The install shown: this build's channel first, the other one a click away
     let shown = $state<Channel>(channel);
