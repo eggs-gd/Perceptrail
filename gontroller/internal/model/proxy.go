@@ -77,8 +77,17 @@ func Open(cfg Config, logger *l.Logger) (*Proxy, error) {
 			return nil, fmt.Errorf("migrate: %w", err)
 		}
 	}
+	pixelsHashNew := !writes.Migrator().HasColumn(&dto.ItemDto{}, "pixels_hash")
 	if err := writes.AutoMigrate(&dto.ItemDto{}, &dto.FileDto{}, &dto.MetaDto{}, &dto.WorkDto{}, &dto.RenditionDto{}); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
+	}
+	// Render's input was the main file's fingerprint: an item keeps it until it is
+	// identified again (else every item would be rendered again)
+	if pixelsHashNew {
+		err := writes.Unscoped().Model(&dto.ItemDto{}).Where("1 = 1").UpdateColumn("pixels_hash", gorm.Expr("hash_short")).Error
+		if err != nil {
+			return nil, fmt.Errorf("migrate: %w", err)
+		}
 	}
 	// An ignored group was marked "-" before the GUID had a nil value of its own
 	if err := writes.Model(&dto.FileDto{}).Where(byLinkedTo, "-").Update("linked_to", api.NilGUID).Error; err != nil {

@@ -38,6 +38,11 @@ type ItemDto struct {
 	*/
 	GUID      api.GUID `gorm:"uniqueIndex"`
 	HashShort string   `gorm:"index"` // Fast hash based on size, exifdata
+	// The fingerprint of the files the item's pixels are read from: the main file,
+	// the group's other file shown as its preview (a RAW's JPEG), a Live Photo's
+	// motion — the expensive work's input (one of them changed: it is due again).
+	// Only the main file: HashShort itself.
+	PixelsHash string
 	// HashFull  string    `gorm:"index"` // Hash of whole file, make sense only if hashfull is chiper than transode. As an option enable for CPU setups
 	MimeType string    `gorm:"index"` //
 	State    ItemState `gorm:"index"` // Current state of item

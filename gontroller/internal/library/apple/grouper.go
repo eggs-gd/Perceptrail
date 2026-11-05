@@ -50,7 +50,7 @@ const (
 
 type library struct {
 	assets []*asset
-	byPath map[string]*asset
+	byPath map[string]*asset // the assets not sent yet, by each of their files
 	root   string
 	// The files of assets Photos keeps out of the library (trashed, hidden): on disk,
 	// but gone for us
@@ -65,7 +65,6 @@ type asset struct {
 	files    []candidate // on disk at load time, in group order: the main file first
 	show     []string    // what to show first, best first
 	arrived  map[string]*dto.FileDto
-	sent     bool
 }
 
 type candidate struct {
@@ -163,14 +162,16 @@ func (g *Grouper) Decorate(walked dto.WalkedFile) (dto.Asset, error) {
 		return dto.Asset{Missing: []*dto.FileDto{f}}, nil
 	}
 	a, ok := lib.byPath[f.Path]
-	if !ok || a.sent {
+	if !ok {
 		return dto.Asset{}, chain.ErrSkippedItem // not an asset file (caches, DB, …)
 	}
 	a.arrived[f.Path] = f
 	if len(a.arrived) < len(a.files) {
 		return dto.Asset{}, chain.ErrSkippedItem // not complete yet
 	}
-	a.sent = true
+	for _, c := range a.files { // sent: once per walk
+		delete(lib.byPath, c.path)
+	}
 	return a.group(), nil
 }
 

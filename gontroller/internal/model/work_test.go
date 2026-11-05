@@ -21,7 +21,7 @@ func workItem(t *testing.T, db *Proxy, name string, state dto.ItemState, date ti
 	if err != nil {
 		t.Fatal(err)
 	}
-	item.State, item.Date, item.HashShort = state, date, hash
+	item.State, item.Date, item.HashShort, item.PixelsHash = state, date, hash, hash
 	if _, err := db.UpdateItem(item); err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +108,7 @@ func TestFinish(t *testing.T) {
 		t.Errorf("renditions %d, want 1", kept)
 	}
 
-	a.HashShort = "h2" // the file changed while it was rendered
+	a.PixelsHash = "h2" // the file changed while it was rendered
 	if _, err := db.UpdateItem(a); err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func TestReadyStays(t *testing.T) {
 	}
 
 	it, _ = db.GetItemByGUID(a.GUID)
-	it.HashShort = "h2" // the file changed
+	it.PixelsHash = "h2" // the file changed
 	if _, err := db.UpdateItem(it); err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +308,7 @@ func TestPrune(t *testing.T) {
 		t.Helper()
 		taken, _ := db.Take("render", []api.GUID{item.GUID})
 		path := "r/" + string(item.GUID) + "/" + version + "/400.webp"
-		done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: item.GUID, Lease: taken[0].Lease, Version: version, Input: item.HashShort,
+		done, err := db.Finish(dto.WorkDone{Slug: "render", GUID: item.GUID, Lease: taken[0].Lease, Version: version, Input: item.PixelsHash,
 			Renditions: []dto.RenditionDto{{GUID: item.GUID, Size: 400, Format: "webp", Path: path}}})
 		if err != nil || !done {
 			t.Fatalf("finish %s: %v %v", version, done, err)
