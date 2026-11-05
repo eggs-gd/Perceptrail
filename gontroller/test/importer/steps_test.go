@@ -121,6 +121,33 @@ func TestNotMediaIgnored(t *testing.T) {
 	}
 }
 
+// A RAW's JPEG is what its pixels are read from too: the JPEG edited alone changes
+// the item's pixels' fingerprint (render is due again), not its identity; an item of
+// one file has its own fingerprint as both
+func TestPixelsHashFollowsThePreview(t *testing.T) {
+	root := t.TempDir()
+	raw, jpeg, lone := filepath.Join(root, "D.NEF"), filepath.Join(root, "D.JPG"), filepath.Join(root, "E.JPG")
+	write(t, raw, "source")
+	write(t, jpeg, "derivative")
+	write(t, lone, "alone")
+	scan(t, root)
+	before := itemAt(t, raw)
+	if before.PreviewPath != jpeg || before.PixelsHash == "" || before.PixelsHash == before.HashShort {
+		t.Fatalf("RAW + JPEG: preview %q, pixels %q, hash %q", before.PreviewPath, before.PixelsHash, before.HashShort)
+	}
+	if item := itemAt(t, lone); item.PixelsHash != item.HashShort {
+		t.Errorf("one file: pixels %q, hash %q", item.PixelsHash, item.HashShort)
+	}
+
+	write(t, jpeg, "derivative, edited")
+	scan(t, root)
+	after := itemAt(t, raw)
+	if after.GUID != before.GUID || after.HashShort != before.HashShort || after.PixelsHash == before.PixelsHash {
+		t.Errorf("JPEG edited: guid %v→%v, hash %q→%q, pixels %q→%q",
+			before.GUID, after.GUID, before.HashShort, after.HashShort, before.PixelsHash, after.PixelsHash)
+	}
+}
+
 // The RAW is deleted, its JPEG stays: the JPEG becomes the item in the same walk
 // (it was linked to the RAW's item, which the walk deletes)
 func TestFormerMainGone(t *testing.T) {

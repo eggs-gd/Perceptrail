@@ -15,7 +15,7 @@ type WorkDto struct {
 	GUID       api.GUID `gorm:"primaryKey"`
 	Slug       string   `gorm:"primaryKey"`
 	Version    string   // what the result is: render's sizes, format and quality; a perceptor's version
-	Input      string   // the item's fingerprint it was done (or tried) for
+	Input      string   // the item's PixelsHash it was done (or tried) for
 	DoneAt     int64    // 0: not done
 	Attempts   int      // failures in a row with this version and input
 	NextTry    int64    // after a failure: not before

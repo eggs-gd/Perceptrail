@@ -174,7 +174,7 @@ func (s *Service) pass(ctx context.Context, jobs chan<- job, free chan struct{})
 		cursor = next
 		for _, item := range due {
 			if library.Of(item) != nil || !picture(item) && !moving(item) {
-				s.finish(dto.WorkDone{Slug: slug, GUID: item.GUID, Version: s.version, Input: item.HashShort})
+				s.finish(dto.WorkDone{Slug: slug, GUID: item.GUID, Version: s.version, Input: item.PixelsHash})
 				continue
 			}
 			select {
@@ -209,13 +209,13 @@ func (s *Service) render(ctx context.Context, j job) {
 	}
 	if err != nil {
 		s.logger.Warn("Render failed", l.String("file", item.Path), l.Error(err))
-		failed := dto.WorkFailed{Slug: slug, GUID: item.GUID, Lease: j.lease, Version: s.version, Input: item.HashShort, Err: err.Error()}
+		failed := dto.WorkFailed{Slug: slug, GUID: item.GUID, Lease: j.lease, Version: s.version, Input: item.PixelsHash, Err: err.Error()}
 		if err := s.db.Fail(failed); err != nil {
 			s.logger.Error("Render: a failure not kept", l.String("file", item.Path), l.Error(err))
 		}
 		return
 	}
-	s.finish(dto.WorkDone{Slug: slug, GUID: item.GUID, Lease: j.lease, Version: s.version, Input: item.HashShort, Renditions: renditions})
+	s.finish(dto.WorkDone{Slug: slug, GUID: item.GUID, Lease: j.lease, Version: s.version, Input: item.PixelsHash, Renditions: renditions})
 }
 
 func (s *Service) finish(done dto.WorkDone) {

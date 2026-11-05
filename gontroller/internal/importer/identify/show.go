@@ -5,7 +5,8 @@ import (
 )
 
 // show: the show step's logic — what the client may show of the identified asset:
-// every file's pixels and codec (stored), what to show now (preview); then the
+// every file's pixels and codec (stored), what to show now (preview), the
+// fingerprint of the files its pixels come from (render's input); then the
 // item leaves the stage. The last step to use the stage's exiftool: it closes it.
 type show struct {
 	db     SizesStore
@@ -20,6 +21,11 @@ func (s *show) Decorate(d *draft) (*Item, error) {
 		return nil, err
 	}
 	d.Item.PreviewPath, d.Item.PreviewMime = preview(d, s.tool, s.dir, s.logger)
+	pixels, err := pixelsHash(d)
+	if err != nil {
+		return nil, err
+	}
+	d.Item.PixelsHash = pixels
 	d.Item.PreviewColor = d.PreviewColor // the asset's, from its source (Immich), else sampled
 	if d.Item.PreviewColor == "" {
 		d.Item.PreviewColor = previewColor(d.Item.GUID.String(), d.Item.PreviewPath, d.Item.PreviewMime, s.logger)

@@ -13,7 +13,8 @@ import (
 
 // The work queue: the expensive stage's work per item and slug ("render"). What is
 // needed is derived — an item needs a slug's work when it has no row, or its row was
-// done with another version or for another input (the item's fingerprint); only
+// done with another version or for another input (the fingerprint of the files its
+// pixels are read from: PixelsHash); only
 // what was done, failed or taken is recorded.
 //
 // Not obvious:
@@ -81,7 +82,7 @@ func (q query) Due(slug, version string, after dto.Cursor, n int) ([]*dto.ItemDt
 		page := q.db.Model(&dto.ItemDto{}).Select("items.*").
 			Joins("LEFT JOIN work ON work.guid = items.guid AND work.slug = ?", slug).
 			Where("items.state IN ?", states).
-			Where(`(work.guid IS NULL OR work.version <> ? OR work.input <> items.hash_short
+			Where(`(work.guid IS NULL OR work.version <> ? OR work.input <> items.pixels_hash
 				OR (work.done_at = 0 AND work.next_try <= ?) OR `+turnedStills+`)`, version, now).
 			Where("(work.guid IS NULL OR work.lease_until <= ?)", now)
 		if phase == after.Phase && after.ID != 0 {
@@ -205,7 +206,7 @@ func (t *tx) finish(a dto.WorkDone) (bool, error) {
 		return false, err
 	}
 	item, err := t.GetItemByGUID(a.GUID)
-	if errors.Is(err, ErrNotFound) || (err == nil && item.HashShort != a.Input) {
+	if errors.Is(err, ErrNotFound) || (err == nil && item.PixelsHash != a.Input) {
 		return false, t.release(a.Slug, a.GUID)
 	}
 	if err != nil {
@@ -294,12 +295,12 @@ func newWorkCommands(p *Proxy) workCommands {
 	}
 }
 
-// rendered: the item has renditions made for its fingerprint as it is now
+// rendered: the item has renditions made for its files as they are now
 func (q query) rendered(item *dto.ItemDto) bool {
 	var n int64
 	q.db.Model(&dto.RenditionDto{}).
 		Joins("JOIN work ON work.guid = renditions.guid").
-		Where("renditions.guid = ? AND work.done_at > 0 AND work.input = ?", item.GUID, item.HashShort).
+		Where("renditions.guid = ? AND work.done_at > 0 AND work.input = ?", item.GUID, item.PixelsHash).
 		Count(&n)
 	return n > 0
 }

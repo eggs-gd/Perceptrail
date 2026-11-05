@@ -84,7 +84,8 @@ func (p *Proxy) CreateFileCommand() pubsub.Command[dto.ItemEntry, *dto.FileDto] 
 per item and slug (`render`; later the pixel perceptors). **What is needed is
 derived, never recorded**: an item needs a slug's work when it has no row, or its row
 was done with another `version` (the code or config that made it) or for another
-`input` (the item's fingerprint), or — a JPEG — its pixels are portrait and its stills
+`input` (`PixelsHash`: the fingerprint of the files its pixels are read from — the
+main file, the group's other file shown as its preview, a Live Photo's motion), or — a JPEG — its pixels are portrait and its stills
 landscape (made before render read a stale Orientation; only what render itself can
 change, or it would be redone forever). A new item
 enters by itself, a deleted one leaves by the join, a new version makes everything
@@ -95,7 +96,7 @@ due — nobody enqueues.
   (`dto.Cursor`) — never a sort of everything.
 - **`Take`**: a lease of 15 minutes, not a mark — a crash lets it expire.
 - **`Finish`**: the row done and the version's renditions replaced — unless the
-  item's fingerprint changed meanwhile: the result is dropped, the item stays due.
+  item's files changed meanwhile: the result is dropped, the item stays due.
 - **`Prune`** (Idle): the renditions no one shows any more — of another version than
   their work was last done with, or of an item gone — and the work of items gone;
   `RenditionPaths` lists what stays (render sweeps its cache by it).
@@ -113,9 +114,9 @@ in `dto`: a consumer (render) depends on `dto` and its own `Store`, not on the m
 
 - `Finish` with renditions sets `Ready` (`updated_at` moves: the client's delta
   brings it, a Waiting HEIC finally shows);
-- `publish` keeps it `Ready` while its renditions are for its fingerprint — another
+- `publish` keeps it `Ready` while its renditions are for its files as they are — another
   pass of the cheap stage (a perceptor's rework) would hide it otherwise, and render
-  would not come back (its work is done); a new fingerprint sends it back to Waiting
+  would not come back (its work is done); a changed file sends it back to Waiting
   or Visible, and render's work is due again;
 - `NeedsWork` counts such an item through the cheap stage, preview or not.
 

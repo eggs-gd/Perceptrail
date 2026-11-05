@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 
+	"perceptrail/gontroller/internal/model/dto"
+
 	l "github.com/eggs-gd/go-zap-decor"
 )
 
@@ -56,6 +58,33 @@ func fingerprint(path string) (string, error) {
 	}
 	if err != nil {
 		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// pixelsHash: the fingerprint of the files the item's pixels are read from (render
+// reads the main file, the preview when it is big enough, the motion) — the main
+// file's, and each other local file of the group shown as the preview or played as
+// the motion; only the main file: its own fingerprint. An extracted preview is not
+// one of them: it is the main file's.
+func pixelsHash(d *draft) (string, error) {
+	var others []string
+	for _, f := range d.Files[1:] {
+		if !f.Remote() && (f.Path == d.Item.PreviewPath || f.Role == dto.RoleMotion) {
+			others = append(others, f.Path)
+		}
+	}
+	if len(others) == 0 {
+		return d.Hash, nil
+	}
+	h := sha256.New()
+	h.Write([]byte(d.Hash))
+	for _, path := range others {
+		sum, err := fingerprint(path)
+		if err != nil {
+			return "", err
+		}
+		h.Write([]byte(sum))
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }

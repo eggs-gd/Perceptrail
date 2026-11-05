@@ -178,10 +178,6 @@ merge reads every file's declared tags. Missing — the meaning, in steps:
 - [ ] Reading the sidecars of keyed (Apple) groups (only the main file is read now).
 - [ ] Storing the metadata package in the DB — when a consumer needs it (the info
       panel's raw exif, a perceptor re-run without the files).
-- [ ] **Render from what it renders** (review: Codex on #7): render may make a RAW +
-      JPEG group's stills from the JPEG, but the work queue's input is the main
-      file's fingerprint (the RAW) — a JPEG edited alone is never rendered again.
-      The input: the fingerprint of the file render read.
 - [ ] **Sidecars whose name differs in case** (review: Codex on #7, to discuss):
       the grouper compares names case-insensitively but sees one group at a time,
       so `img_001.xmp` joins `IMG_001.JPG` only when nothing sorts between them.
