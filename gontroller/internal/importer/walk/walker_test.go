@@ -47,7 +47,7 @@ func TestWalkComplete(t *testing.T) {
 	writeFile(t, filepath.Join(root, "sub", "b.jpg"))
 
 	result, paths := runWalk(newTestWalker(root))
-	if !result.Complete || result.Files != 2 || len(paths) != 2 || len(result.Unreadable) != 0 {
+	if !result.Complete() || result.Files != 2 || len(paths) != 2 || len(result.Unreadable) != 0 {
 		t.Errorf("got %+v, paths %v", result, paths)
 	}
 }
@@ -69,7 +69,7 @@ func TestWalkSkipsUnreadableDir(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) }) // readable again for TempDir's cleanup
 
 	result, paths := runWalk(newTestWalker(root))
-	if !result.Complete || result.Files != 2 {
+	if !result.Complete() || result.Files != 2 {
 		t.Errorf("got %+v, paths %v", result, paths)
 	}
 	if len(result.Unreadable) != 1 || result.Unreadable[0] != locked {
@@ -79,7 +79,7 @@ func TestWalkSkipsUnreadableDir(t *testing.T) {
 
 func TestWalkMissingRoot(t *testing.T) {
 	result, paths := runWalk(newTestWalker(filepath.Join(t.TempDir(), "unmounted")))
-	if result.Complete || len(paths) != 0 {
+	if result.Complete() || len(paths) != 0 {
 		t.Errorf("got %+v, paths %v", result, paths)
 	}
 }
@@ -94,7 +94,7 @@ func TestWalkCancelled(t *testing.T) {
 		cancel() // take one file, then cancel
 		return true
 	})
-	if result.Complete {
+	if result.Complete() {
 		t.Errorf("cancelled walk reported complete: %+v", result)
 	}
 }
@@ -278,14 +278,14 @@ func TestWalkPages(t *testing.T) {
 func TestMissing(t *testing.T) {
 	file := func(p string) *dto.FileDto { return &dto.FileDto{Path: p} }
 	stale := []*dto.FileDto{file("/lib/a.jpg"), file("/lib/locked/b.jpg"), file("/other/c.jpg")}
-	r := Result{Root: "/lib", Complete: true, Files: 3, Unreadable: []string{"/lib/locked"}}
+	r := Result{Root: "/lib", Files: 3, Unreadable: []string{"/lib/locked"}}
 	if g := Missing(r, stale); len(g) != 1 || g[0].Path != "/lib/a.jpg" {
 		t.Errorf("gone %v", g)
 	}
-	if g := Missing(Result{Root: "/lib", Files: 3}, stale); g != nil {
+	if g := Missing(Result{Root: "/lib", Err: context.Canceled, Files: 3}, stale); g != nil {
 		t.Error("an incomplete walk deleted files")
 	}
-	if g := Missing(Result{Root: "/lib", Complete: true}, stale); g != nil {
+	if g := Missing(Result{Root: "/lib"}, stale); g != nil {
 		t.Error("a walk that found nothing deleted files")
 	}
 }

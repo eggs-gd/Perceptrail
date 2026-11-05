@@ -294,6 +294,9 @@ describe('the order', () => {
 
     it('a server failure keeps the kept order; with nothing kept the switch fails', async () => {
         vi.stubGlobal('fetch', async () => new Response('', {status: 500}));
+        // Expected here: logged, not printed
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const post = await start([photo('a', 300), photo('b', 300)]);
         post('update', {screenWidth: W, rowHeight: H});
         await settle();
@@ -301,11 +304,15 @@ describe('the order', () => {
         post('order', view(1));
         await vi.waitFor(() => expect(answers).toEqual([{task: 'order', id: 1, ok: false}]));
         expect(await guids()).toEqual(['a', 'b']);
+        expect(error).toHaveBeenCalledWith(expect.any(String), expect.any(String), 'order failed', expect.any(Error));
 
         await itemsDb.orders.put({key: 'order:place', entries: [{guid: 'b'}, {guid: 'a'}]});
         post('order', view(2));
         await vi.waitFor(() => expect(answers.at(-1)).toEqual({task: 'order', id: 2, ok: true}));
         await vi.waitFor(async () => expect(await guids()).toEqual(['b', 'a']));
+        expect(warn).toHaveBeenCalledWith(expect.any(String), expect.any(String), 'order not refreshed, the kept one stays', expect.any(Error));
+        error.mockRestore();
+        warn.mockRestore();
     });
 
     it('a newer order aborts the one being fetched', async () => {

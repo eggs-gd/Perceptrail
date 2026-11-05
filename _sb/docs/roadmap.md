@@ -76,7 +76,7 @@ One line each; the details are in the READMEs and the PRs.
   migrations it had nothing to do for. · #62 `VERSION` 0.2 · #63 the release PR's
   CodeQL alerts fixed before the release. · #64 the demo's tag stripping without a
   regex, as CodeQL reads it. · #65 a photo broken, then repaired, comes back as its
-  own item. · #66 the layout worker tested as its page and the sync see it. · #67 the viewer's `<picture>` sources tested. · #68 the README credits HomeGallery, its inspiration. · #69 the landing's link preview without a literal `\n`.
+  own item. · #66 the layout worker tested as its page and the sync see it. · #67 the viewer's `<picture>` sources tested. · #68 the README credits HomeGallery, its inspiration. · #69 the landing's link preview without a literal `\n`. · #70 the small hand-set flags derived; `closeRow`'s dead clamp gone; the layout tests quiet.
 
 ## 0.2.0 — the first release
 
@@ -235,9 +235,6 @@ the resources differ (IO and exiftool, CPU / GPU, ML); roles later
 ## Architecture bugs
 
 - [ ] **Booleans set by hand** (AGENTS.md "Code Style"), each where it belongs:
-      - small, with the next change of their code: `perceptor.loaded` → `sync.Once` or the registry itself;
-        `apple.asset.sent` → a sent group leaves the map; `walk.Result.Complete` →
-        `Result.Err` (why it is incomplete), `Complete()` = no error;
       - `dto.FileDto.Changed` (stored) → the stat the group was validated with,
         `Changed()` = the stat differs from it — a PR of its own (a schema change,
         a migration);
@@ -250,12 +247,6 @@ the resources differ (IO and exiftool, CPU / GPU, ML); roles later
 - [ ] **Zoom in the viewer** — the wheel zoom worked badly and is gone. Look at
       Immich and Google Photos (they differ): around the pointer, pan, pinch,
       double-click, the original's pixels past the preview.
-- [ ] **The row's height cap never applies** (`closeRow` in `wlayout.ts`, seen by its
-      tests): a row closes either short of the width by less than half of the next
-      photo — only when stretching it stays under the cap (`rowCanFillScreen`) — or
-      over the width, which shrinks it below the row height. Every closed row fills
-      the width; the cap and the "not full" branch are dead. Remove them, or decide
-      what the cap was for (a few wide photos in a short row?).
 - Maybe: the optimal (Dijkstra) layout for full relayouts (a switch, a resize),
   the greedy one appending. Code kept (`svebapp/src/lib/workers/layout/`); not
   planned.
