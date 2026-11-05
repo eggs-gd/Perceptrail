@@ -87,7 +87,7 @@ func publishShown(t *testing.T, db *model.Proxy, path, mime, preview string) *dt
 	if err != nil {
 		t.Fatal(err)
 	}
-	item.HashShort = "fingerprint"
+	item.HashShort, item.PixelsHash = "fingerprint", "fingerprint"
 	if preview != "" {
 		item.PreviewPath, item.PreviewMime = preview, "image/jpeg"
 	}
@@ -258,7 +258,7 @@ func TestSweep(t *testing.T) {
 		fresh = write(cfg.CacheDir(), "r/cc/dd/CCDD-new/400.webp", time.Now())
 		f, _ := db.CreateFile(dto.ItemEntry{Path: "/x.jpg", Name: "x.jpg"})
 		item, _ := db.CreateItem(f)
-		item.HashShort = "h"
+		item.HashShort, item.PixelsHash = "h", "h"
 		if _, err := db.UpdateItem(item); err != nil {
 			t.Fatal(err)
 		}
@@ -572,7 +572,7 @@ func TestRenderLivePhoto(t *testing.T) {
 	if _, err := db.UpdateFiles([]*dto.FileDto{f, motion}); err != nil {
 		t.Fatal(err)
 	}
-	item.HashShort = "fingerprint"
+	item.HashShort, item.PixelsHash = "fingerprint", "fingerprint"
 	if _, err := db.Publish(item); err != nil {
 		t.Fatal(err)
 	}

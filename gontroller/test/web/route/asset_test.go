@@ -49,7 +49,7 @@ func TestAssetFileOnlyOfItsAsset(t *testing.T) {
 // Our renditions are stills of the asset (with their widths: the client's srcset) and
 // are served by name — only the ones listed for that item
 func TestRenditionsInTheAsset(t *testing.T) {
-	item, err := testDB.UpdateItem(&dto.ItemDto{GUID: "R1", State: dto.Visible, HashShort: "h"})
+	item, err := testDB.UpdateItem(&dto.ItemDto{GUID: "R1", State: dto.Visible, HashShort: "h", PixelsHash: "h"})
 	if err != nil {
 		t.Fatal(err)
 	}

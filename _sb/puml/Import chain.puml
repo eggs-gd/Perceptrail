@@ -89,7 +89,7 @@ Validator -> DB: not media / broken: ignored; else by path and\nfingerprint: sam
 Validator -> Preview: + the item (its GUID)
 
 Preview -> DB: pixels, codec of every file
-Preview -> Preview: what the browser shows now, no transcode:\nShow / the main file (JPEG, PNG, ...; H.264 video) /\nthe biggest viewable derivative / the main file's embedded\npreview (exiftool -b into the cache); any size counts
+Preview -> Preview: what the browser shows now, no transcode:\nShow / the main file (JPEG, PNG, ...; H.264 video) /\nthe biggest viewable derivative / the main file's embedded\npreview (exiftool -b into the cache); any size counts;\nthe fingerprint of the files the pixels come from (the main\nfile, the group's preview, the motion): render's input
 Preview -> Core: the item + its metadata package
 Core -> Plugins: + date, size, length (written into the item)
 Plugins -> Keep: + the external perceptors' values (read-only)

@@ -447,6 +447,16 @@ transit, render bounded by its workers) — patterns go to docs and examples.
 - **A result carries its lease's token** (review: Codex): a worker that ran past its
   lease could overwrite the result of the one that took the item next, or a late
   failure replace a success.
+- **The input is what the pixels are read from, not the item's identity** (review:
+  Codex on #7): render makes a RAW + JPEG group's stills from the JPEG, so the main
+  file's fingerprint left a JPEG edited alone unrendered. The input covers every
+  file render may read — the main file, the group's other file shown as the preview,
+  a Live Photo's motion — not only the one it read: which one depends on render's
+  sizes, and the queue would have to know them. A sidecar (`.xmp`) is not in it:
+  a rating changed in Lightroom must not render the photo again. An extracted
+  preview is not either: it comes from the main file. Items from before keep the
+  main file's fingerprint (a migration copies it): nothing is rendered again until
+  a file of the group changes.
 - **Proved by breaking it**: the queue's tests fail when the lease or the input
   condition goes, the events' test when a rolled back write keeps its events;
   render's integration test reads the work row (`Work`) — "not due" alone is also

@@ -119,6 +119,33 @@ func TestOpenDropsVersionedRenditions(t *testing.T) {
 	}
 }
 
+// Items from before the pixels' fingerprint: Open gives each its main file's, what
+// render's work was done for — nothing is rendered again until it is identified again
+func TestOpenFillsPixelsHash(t *testing.T) {
+	logger := l.NewLogger(l.ErrorLevel, &tree.Decorator{})
+	cfg := database{config.Database{Driver: config.DriverSQLite, Name: filepath.Join(t.TempDir(), "x.db")}}
+	db, err := Open(cfg, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.UpdateItem(&dto.ItemDto{GUID: "g", HashShort: "h"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.writer.db.Migrator().DropColumn(&dto.ItemDto{}, "pixels_hash"); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	db, err = Open(cfg, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if got, err := db.GetItemByGUID("g"); err != nil || got.PixelsHash != "h" {
+		t.Errorf("pixels %q (%v), want the main file's fingerprint", got.PixelsHash, err)
+	}
+}
+
 // The validation of every group looks its item up by path, the walk its files: by an
 // index — without one each lookup reads the whole table, and the first import of a
 // library is quadratic (measured: findings "The write bus and the queue")
