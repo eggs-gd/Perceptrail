@@ -7,6 +7,7 @@
 package walk
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"io/fs"
@@ -45,8 +46,9 @@ type Source interface {
 // files are gone.
 type Result struct {
 	Root string
-	// The walk reached the end
-	Complete bool
+	// Why the walk did not reach the end (cancelled, the root unreadable, the source
+	// unreachable); nil: it did
+	Err error
 	// Files seen (before grouping and filtering)
 	Files int
 	// Directories that could not be read: their files are not "deleted"
@@ -65,6 +67,9 @@ type Walker struct {
 // page: how many files a walk sends at once, their rows written in one transaction
 // first
 const page = 256
+
+// errNotDir: the root is there but is not a directory
+var errNotDir = errors.New("not a directory")
 
 // batch: a walk's files on their way out, a page at a time — each page's rows
 // written first (seen); unseen: the rows not seen yet
@@ -109,7 +114,7 @@ func (m *Walker) Start(ctx context.Context, emit func(dto.WalkedFile) bool) erro
 // library emptied), only under its root (another root: the config changed, not ours
 // to judge), never under an unreadable directory
 func Missing(r Result, stale []*dto.FileDto) []*dto.FileDto {
-	if !r.Complete || r.empty() {
+	if !r.Complete() || r.empty() {
 		return nil // an empty root (an unmounted drive's mount point) must not delete the library
 	}
 	var gone []*dto.FileDto
@@ -124,6 +129,9 @@ func Missing(r Result, stale []*dto.FileDto) []*dto.FileDto {
 	}
 	return gone
 }
+
+// Complete: the walk reached the end
+func (r Result) Complete() bool { return r.Err == nil }
 
 // seen: a page of the walk as rows, in its order — a new file's row created, a
 // changed one's stat saved (Changed: its size or mtime differ); unchanged rows are
@@ -167,7 +175,7 @@ func (m *Walker) seen(entries []dto.ItemEntry, unseen map[string]*dto.FileDto) [
 // missing: the rows the walk did not see that it says are deleted (sent as Missing)
 func (m *Walker) missing(r Result, unseen map[string]*dto.FileDto) []*dto.FileDto {
 	switch {
-	case !r.Complete:
+	case !r.Complete():
 		m.logger.Warn("Walk incomplete: deletions are not checked")
 		return nil
 	case r.empty():
@@ -198,7 +206,8 @@ func (m *Walker) walk(ctx context.Context, root string, emit func(dto.ItemEntry)
 	result := Result{Root: root}
 
 	if info, err := os.Stat(root); err != nil || !info.IsDir() {
-		m.logger.Error("Library root is not a readable directory", l.String("path", root), l.Error(err))
+		result.Err = cmp.Or(err, errNotDir)
+		m.logger.Error("Library root is not a readable directory", l.String("path", root), l.Error(result.Err))
 		return result
 	}
 
@@ -217,13 +226,10 @@ func (m *Walker) walk(ctx context.Context, root string, emit func(dto.ItemEntry)
 		return file(ctx, path, entry, emit)
 	})
 
-	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			m.logger.Error("Walk failed", l.String("path", root), l.Error(err))
-		}
-		return result
+	if err != nil && !errors.Is(err, context.Canceled) {
+		m.logger.Error("Walk failed", l.String("path", root), l.Error(err))
 	}
-	result.Complete = true
+	result.Err = err
 	return result
 }
 
@@ -242,13 +248,10 @@ func (m *Walker) list(ctx context.Context, source Source, emit func(dto.ItemEntr
 		result.Files++
 		return emit(e)
 	})
-	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			m.logger.Error("Source not listed: its deletions wait", l.String("source", result.Root), l.Error(err))
-		}
-		return result
+	if err != nil && !errors.Is(err, context.Canceled) {
+		m.logger.Error("Source not listed: its deletions wait", l.String("source", result.Root), l.Error(err))
 	}
-	result.Complete = ctx.Err() == nil
+	result.Err = cmp.Or(err, ctx.Err())
 	return result
 }
 
@@ -306,7 +309,7 @@ func (m *Walker) sendMissing(results []Result, unseen map[string]*dto.FileDto, e
 				return
 			}
 		}
-		if r.Complete {
+		if r.Complete() {
 			m.logger.Info("Walk complete", l.String("path", r.Root), l.Int("files", r.Files),
 				l.Int("unreadable", len(r.Unreadable)), l.Int("gone", len(missing)))
 		}

@@ -444,11 +444,12 @@ function place(item: Item, order: number, vp: UpdateLayoutPayload): LayoutItem[]
     return closed;
 }
 
-/** Stretches the row to screenWidth, unless doing so would make it too tall */
+/**
+ * Stretches the row to screenWidth. Never too tall: place closes a row short of the
+ * width only when it can fill it (rowCanFillScreen), else past the width (shrunk).
+ */
 function closeRow(row: LayoutItem[], vp: UpdateLayoutPayload): LayoutItem[] {
-    const fullHeight = fullRowHeight(row, vp);
-    const maxHeight = maxRowHeight(row, vp);
-    const height = Math.min(fullHeight, maxHeight);
+    const height = fullRowHeight(row, vp);
 
     let x = 0;
     for (const itm of row) {
@@ -460,11 +461,9 @@ function closeRow(row: LayoutItem[], vp: UpdateLayoutPayload): LayoutItem[] {
         itm.scale = height / itm.height;
         x += itm.w + GUTTER;
     }
-    if (height === fullHeight) {
-        // Rounding: the last item absorbs the remainder so the row is exactly full
-        const last = row.at(-1)!;
-        last.w = vp.screenWidth - last.x;
-    }
+    // Rounding: the last item absorbs the remainder so the row is exactly full
+    const last = row.at(-1)!;
+    last.w = vp.screenWidth - last.x;
 
     state.y += height + GUTTER;
     state.rowNum++;

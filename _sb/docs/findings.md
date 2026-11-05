@@ -37,6 +37,9 @@ Rewritten 2026-10-04 (PR #25) from the full log — the history is in git.
   or two photos a row, and a lone portrait closed its row stretched to the full
   width — a poster. The target comes from the width (a small DPR bias), and a
   sparse row is capped: the next photo joins it and the row shrinks instead.
+  The cap is the condition of closing a row short of the width, never a clamp on
+  the closed row (that row would end short of the right edge): every closed row
+  fills the width (`closeRow`'s own clamp, never reached, was removed).
 - **A big jump warms its window first** (#45): a side-panel jump reads and mounts
   the target window before it moves the scroll, so placeholders are there on
   arrival; one jump in flight, the latest wins, a user's scroll cancels it.

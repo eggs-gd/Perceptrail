@@ -36,14 +36,14 @@ type Config interface {
 var builtin = []api.Perceptor{date.Perceptor, size.Perceptor, duration.Perceptor}
 
 // The loaded perceptors (enabled in the config), the core ones first, and the
-// storage of each that keeps data (its Schema), by perceptor name
+// storage of each that keeps data (its Schema), by perceptor name; cfg is the
+// config Load was given (nil: not loaded yet)
 var (
 	mu         sync.RWMutex
 	perceptors []api.Perceptor
 	stores     map[string]*model.PerceptorStore
 	cfg        Config
 	logger     *l.Logger
-	loaded     bool
 )
 
 // Load loads every perceptor once, at start: the built-in ones, then the external
@@ -51,7 +51,7 @@ var (
 func Load(config Config, log *l.Logger) error {
 	mu.Lock()
 	defer mu.Unlock()
-	if loaded {
+	if cfg != nil { // loaded: its config is kept
 		return nil
 	}
 	cfg, logger = config, log
@@ -65,7 +65,6 @@ func Load(config Config, log *l.Logger) error {
 		}
 		perceptors = append(perceptors, p)
 	}
-	loaded = true
 	openStores()
 
 	logger.Info("Perceptors loaded", l.Int("built in", len(builtin)), l.Int("external", len(external)), l.Int("running", len(perceptors)))
