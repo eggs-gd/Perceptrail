@@ -1,0 +1,79 @@
+@startuml Perceptor platform
+' The perceptor platform: what a perceptor reads decides where it runs;
+' how it computes (rules, an ML model, an LLM) is its own.
+' Green: built. Yellow: planned.
+
+left to right direction
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam rectangle {
+  RoundCorner 14
+  BorderColor #555555
+}
+skinparam card {
+  BorderColor #888888
+}
+
+rectangle "**Library**\na folder, Apple Photos, Immich" as Lib #F4F4F4 {
+  card "media\n(photos, videos,\nLive Photos)" as Media
+  card "derivatives\n(a RAW's JPEG,\nedits, its previews)" as Deriv
+  card "sidecars\n(.xmp, .aae)" as Side
+  card "the library's\nown metadata\n(Photos DB, API)" as Src
+}
+
+rectangle "**Import** (one pass)\nfiles grouped into an asset,\nevery file's tags read once" as Import #DFF3DF
+
+rectangle "**The asset**\nits files + its tags\n(the metadata package)" as Asset #DFF3DF
+
+rectangle "**Render**\nthe derivatives missing:\nstills, a video any\nbrowser plays" as Render #DFF3DF
+
+rectangle "**Pixels**\nour renditions,\nthe library's own" as Pixels #DFF3DF
+
+rectangle "**Perceptors that read tags**\nin the import pass\n\ndate, size, duration, geo" as PTags #DFF3DF
+
+rectangle "**Perceptors that read pixels**\nafter render, at their own pace\n\ncolour; faces, objects\n(detection)" as PPix #FFF6CC
+
+rectangle "**Perceptors that read both**\n\nthe best shot of a series\n(exposure + sharpness)" as PBoth #FFF6CC
+
+database "**Perceptor data**\neach perceptor's values,\nkept by the core" as Data #DFF3DF
+
+rectangle "**Derived perceptors**\nread other perceptors' data,\na pass after them\n\nface clusters; trips (geo + date);\na sheet an LLM builds from\nevery tag and value" as PDer #FFF6CC
+
+rectangle "**The sheet**\neach perceptor's order\nand sections" as Sheet #DFF3DF
+
+rectangle "**UI plugins**\non one or several perceptors\n\na map (geo); names for faces;\ntrips with these people\n(geo + faces)" as UI #FFF6CC
+
+rectangle "**The host's functions**\nany perceptor may call\n\ninfer (an ML model),\nllm, ..." as Host #FFF6CC
+
+Media --> Import
+Deriv --> Import
+Side --> Import
+Src --> Import
+Import --> Asset
+
+Asset --> PTags : tags
+Asset --> Render
+Render --> Pixels
+Asset --> PBoth : tags
+Pixels --> PPix
+Pixels --> PBoth
+
+PTags --> Data
+PPix --> Data
+PBoth --> Data
+Data --> PDer
+PDer --> Data
+
+Data --> Sheet
+Data --> UI
+
+PPix ..> Host
+PDer ..> Host
+PBoth ..> Host
+
+legend right
+  <back:#DFF3DF> built </back>   <back:#FFF6CC> planned </back>
+  solid: data flows; dashed: a call
+endlegend
+
+@enduml

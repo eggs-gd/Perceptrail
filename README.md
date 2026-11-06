@@ -36,10 +36,13 @@ install and the config may still change.
 
 ## Planned
 
-- **ML**: faces first, then the **trail** — from a photo to the nearest one you have
-  not seen, then the nearest to that; colour, objects.
-- A perceptor's own UI (a map for places), what other tools wrote into sidecars
-  (ratings, keywords, faces), metadata editing, batch operations.
+- **Perceptors that see the photo**: colour first, then faces and objects; the
+  **trail** — from a photo to the nearest one you have not seen, then the nearest
+  to that. Perceptors over other perceptors' data: trips, face clusters, a sheet
+  an LLM builds.
+- **UI plugins** on the perceptors' data (a map for places, names for faces), what
+  other tools wrote into sidecars (ratings, keywords, faces), metadata editing,
+  batch operations.
 - Hardware video encoding (VAAPI / QSV, NVENC, VideoToolbox).
 - PostgreSQL beside SQLite.
 
