@@ -76,7 +76,7 @@ One line each; the details are in the READMEs and the PRs.
   migrations it had nothing to do for. · #62 `VERSION` 0.2 · #63 the release PR's
   CodeQL alerts fixed before the release. · #64 the demo's tag stripping without a
   regex, as CodeQL reads it. · #65 a photo broken, then repaired, comes back as its
-  own item. · #66 the layout worker tested as its page and the sync see it. · #67 the viewer's `<picture>` sources tested. · #68 the README credits HomeGallery, its inspiration. · #69 the landing's link preview without a literal `\n`. · #70 the small hand-set flags derived; `closeRow`'s dead clamp gone; the layout tests quiet. · #72 render's input: the files its pixels are read from (a RAW's JPEG edited alone renders again).
+  own item. · #66 the layout worker tested as its page and the sync see it. · #67 the viewer's `<picture>` sources tested. · #68 the README credits HomeGallery, its inspiration. · #69 the landing's link preview without a literal `\n`. · #70 the small hand-set flags derived; `closeRow`'s dead clamp gone; the layout tests quiet. · #72 render's input: the files its pixels are read from (a RAW's JPEG edited alone renders again). · #73 the perceptor platform by what a perceptor reads: the diagram, the next milestone.
 
 ## 0.2.0 — the first release
 
@@ -98,10 +98,51 @@ not play, big originals slow the grid. Open:
 Then the release (AGENTS.md "Git workflow"); until then everything stays in
 `develop`.
 
-## The next milestone — ML
+## The next milestone — the perceptor platform
 
-The first pixel perceptor (faces) on goMLer, with the relative perceptors (the
-trail) it opens (Later: the perceptor platform).
+![The perceptor platform](../diagrams/Perceptor%20platform.svg)
+
+([`Perceptor platform.puml`](../puml/Perceptor%20platform.puml))
+
+**What a perceptor reads decides where it runs; how it computes is its own.** The
+library comes in as media with its derivatives, sidecars and the library's own
+metadata; the import makes an asset of them (its files and tags), render makes the
+derivatives missing (pixels any browser shows). Then the perceptors, by what they
+read:
+
+- **tags** — in the import pass, on its one exiftool read (date, size, geo: built);
+- **pixels** — after render, at their own pace, a slug of the work queue each
+  (colour; face and object detection);
+- **both** (the best shot of a series: exposure and sharpness);
+- **other perceptors' data** — derived, a pass after the ones they depend on, due
+  again when those values change (face clusters, trips from geo and date, a sheet
+  an LLM builds from every tag and value).
+
+**ML is not a kind of perceptor**: rules, an ML model or an LLM are how one
+computes. The host gives what is heavy as functions any perceptor may call
+(`infer` on a model — goMLer when the first model needs it, `llm`); a derived
+perceptor with an LLM may read no pixels at all.
+
+**A perceptor gives data and the sheet** — its values, its order and sections; it
+has no UI. **A UI is a plugin of its own kind**, on the client, on one perceptor's
+data or several (a map on geo; names for faces; trips with these people — geo and
+faces), the way a derived perceptor combines them on the server.
+
+The steps, each with something to show:
+
+- [ ] **The first pixel perceptor — colour** (deterministic, no ML): the pixel
+      stage (render's renditions → the perceptor → its store, its input the
+      pixels' fingerprint), the view (rainbow and / or similar — to decide).
+- [ ] **UI plugins — a map for geo**: the plugin's manifest (the perceptors it
+      reads, its slot: a view, the item's panel), the perceptor data it is given,
+      its bundle loaded by the gallery.
+- [ ] **WebAssembly instead of Go plugins** (Later: the perceptor platform): every
+      perceptor's packaging; its protocol's `Describe` declares the data UI plugins
+      and derived perceptors read.
+- [ ] **Faces as similarity** — detection (a pixel perceptor with `infer`), the
+      trail by face; names and editing later, a UI plugin.
+- [ ] **Derived perceptors** — the stage (dependencies, input from their values),
+      groups among them (Design: perceptor groups); an LLM's sheet as one.
 
 ## After 0.2.0 — the order to be decided
 
@@ -219,11 +260,12 @@ the resources differ (IO and exiftool, CPU / GPU, ML); roles later
   kind (photo: libvips; video: ffmpeg; Live Photo), hardware inside. Commit
   (class Now): discard if the item was deleted or its fingerprint changed
   meanwhile, else the renditions, `Ready`, the queue's row done.
-- **Pixel perceptors (ML)**: `feed → pixels → ml → commit`. Pixels from the render
-  chain or the provider (Photos would mean asking in bulk — local thumbnails may do
-  for faces). Maybe a service of its own (goMLer).
-- **Group perceptors** (journeys, face clusters, series, duplicates): `feed → group
-  → commit`, over what changed.
+- **Pixel perceptors**: `feed → pixels → perceptor → commit`. Pixels from the
+  render chain or the provider (Photos would mean asking in bulk — local
+  thumbnails may do for faces). A model's inference is a host function (goMLer),
+  not a stage of its own.
+- **Derived perceptors** (journeys, face clusters, series, duplicates, an LLM's
+  sheet): `feed → derive → commit`, over the values that changed.
 - **Maintenance**: `find → prune` — renditions of deleted items, perceptor values,
   orphans.
 - **API providers**: see Providers.
@@ -254,7 +296,8 @@ A stable core first.
 - Server → client events (New / Updated / Processed Item) per
   [`Client flow.puml`](../puml/Client%20flow.puml): a push would carry the same delta
   the client asks for now (`/items?since=`).
-- ML as a separate service (goMLer) per [`ML Flow.puml`](../puml/ML%20Flow.puml).
+- Inference as a separate service (goMLer) per [`ML Flow.puml`](../puml/ML%20Flow.puml):
+  what the host's `infer` calls (the next milestone).
 - [ ] **Plugins anyone can build: WebAssembly instead of Go plugins** (idea,
       2026-10-05). A Go `.so` is a piece of the same binary — the same toolchain,
       the very same versions of every shared package, cgo, Linux / macOS, no
@@ -276,10 +319,10 @@ A stable core first.
         sections (as `OrderByValue`), the host orders; only one cheap call per
         item crosses the boundary (tags → value); code for `Order` only where it
         is special (the Hilbert curve, the trail), streamed in pages;
-      - **goMLer** hosts the pixel perceptors the same way: the plugin
-        pre/post-processes, inference (ONNX Runtime / GPU) is a host function
-        (`load_model`, `infer` — as WASI-NN, which wazero lacks); Python ML, if
-        ever, as an external worker over gRPC or the bus. gontroller ↔ goMLer
+      - **inference is a host function** any perceptor may call, whatever it
+        reads: the plugin pre/post-processes, goMLer runs the model (ONNX Runtime
+        / GPU; `load_model`, `infer` — as WASI-NN, which wazero lacks); Python ML,
+        if ever, as an external worker over gRPC or the bus. gontroller ↔ goMLer
         talk as services (gRPC / MQTT), not per plugin;
       - steps: a spike (`exif_geo` as wasm under wazero, the cost of a call per
         item, the size), protocol v1 (`Describe` → `Process` → `Order` where
@@ -292,13 +335,14 @@ A stable core first.
       deterministic), mean lightness and chroma (greys apart). Views: **rainbow**
       (absolute, by the dominant hue, sections by the colours present) and/or
       **similar colours** (relative, the trail by histogram distance). To decide.
-- [ ] **Relative perceptors (the trail)** with the first ML perceptor (faces): from
-      the anchor to the nearest unseen photo, then the nearest to that, both ways;
-      shared with the colour trail.
-- [ ] **A perceptor's own UI** — there is none today: a perceptor gives an order and
-      sections, the gallery draws them all the same. Slots (`item-panel`, `view`)
-      where a perceptor brings its UI (map, faces); the first feature on them:
-      **geo on a map** — the markers from `exif_geo`'s coordinates, a view of its own.
+- [ ] **Relative perceptors (the trail)**: from the anchor to the nearest unseen
+      photo, then the nearest to that, both ways — by colour, then by face
+      (similarity, no UI).
+- [ ] **UI plugins** — there is no UI of a perceptor's today: it gives an order and
+      sections, the gallery draws them all the same. A UI plugin is a kind of its
+      own (the next milestone): it reads one perceptor's data or several and brings
+      its UI into a slot (`view`, `item-panel`); the first: **geo on a map** — the
+      markers from `exif_geo`'s coordinates, a view of its own.
 - Reprocessing on a plugin version change; fsnotify instead of the periodic walk.
 - Several codecs / formats at once (`codecs: [h264, av1]`, `formats: [avif, webp]`)
   — the asset contract is ready, but each is another encode: N× disk and time.
@@ -489,7 +533,8 @@ the same DB queue.
 
 ## Design: perceptor groups
 
-Per-item values (`ProcessingMode` Single) are done (`api.NewStore[T]`, see the
+Group perceptors are derived ones (the next milestone): they read other perceptors'
+data. Per-item values (`ProcessingMode` Single) are done (`api.NewStore[T]`, see the
 [perceptors README](../../perceptors/readme.md)). **Groups** — later:
 
 - Group perceptors produce groups of photos with data of their own: face clusters,
@@ -508,7 +553,7 @@ Per-item values (`ProcessingMode` Single) are done (`api.NewStore[T]`, see the
 
 The server owns what the gallery cannot display correctly or identify a photo
 without, and what makes no sense to implement differently. Anything that adds its
-own navigation axis or its own UI is a perceptor.
+own navigation axis is a perceptor; its own UI is a UI plugin.
 
 - **Core:** date (+ zone), size (+ orientation), media type, file identity and
   grouping, embedded preview, basic capture info (display only), user XMP / IPTC

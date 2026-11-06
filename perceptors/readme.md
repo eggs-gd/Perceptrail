@@ -1,10 +1,10 @@
 # perceptors
 
 Perceptors are plugins that add new navigation and analysis axes to Perceptrail
-(geo, faces, objects, colour, …). The idea: a perceptor may bring not only data but
-also its own UI to the client (a map, face management) — see the
-[roadmap](../_sb/docs/roadmap.md#later-the-perceptor-platform) and
-[ML Flow](../_sb/puml/ML%20Flow.puml).
+(geo, faces, objects, colour, …). A perceptor gives data and the sheet (its values,
+order and sections), no UI; a UI is a plugin of its own kind on one perceptor's
+data or several (a map, face management) — see the
+[roadmap](../_sb/docs/roadmap.md#the-next-milestone--the-perceptor-platform).
 
 The basics (date, size) are not here but in the core:
 `gontroller/internal/perceptor/date`, `size`, `duration` (their contract: `builtin.Perceptor`). What lives here can be implemented differently

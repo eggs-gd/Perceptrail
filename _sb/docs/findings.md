@@ -179,6 +179,15 @@ Rewritten 2026-10-04 (PR #25) from the full log — the history is in git.
   marked for rework, not `Dirty` — that would hide them).
 - `rows.Err()` after reading a store: an SQLite error mid-read only ends `Next()` —
   a partial map looked whole.
+- **The platform by what a perceptor reads, not by ML** (the owner, 2026-11-06):
+  tags (the import pass), pixels (after render), both, or other perceptors' data
+  (a pass after them) — that decides where it runs; rules, a model or an LLM are
+  how it computes, and the heavy ones are the host's functions. Rejected: "ML" as a
+  kind and a milestone of its own (faces on goMLer first) — colour reads pixels
+  with no model, an LLM's sheet reads only tags and values. **Rejected: a
+  perceptor bringing its own UI** — a UI is a plugin of its own kind over one
+  perceptor's data or several (geo + faces: trips with these people), as a derived
+  perceptor combines them on the server. Faces start as similarity, no UI.
 - **Geo is not one axis**: west → east puts Krakow next to Cape Town — a Hilbert
   curve; regions and cities ordered by their first point on it, so each is one span
   of the sheet. Sections from the place's time zone until there is a geocoder.
